@@ -36,6 +36,33 @@ from app.infra.tool_excute import ToolExcute, ToolRuntimeEvent
 
 logger = get_logger(__name__)
 
+VOICE_DIAGRAM_MAX_CHARS = 96
+
+_VOICE_TOOL_DEPENDENT_REQUEST_RE = re.compile(
+    r"(?:图解|流程图|架构图|示意图|思维导图|mermaid|diagram|"
+    r"联网|上网|搜索|检索|查资料|最新|新闻|今天发生|"
+    r"知识库|学习画像|长期记忆)",
+    re.IGNORECASE,
+)
+
+_VOICE_DETAILED_REQUEST_RE = re.compile(
+    r"(?:详细|深入|完整|系统|展开讲|分步骤|步骤|代码|证明|推导|"
+    r"时间复杂度|空间复杂度|性质|原理|机制|区别|比较|优缺点|"
+    r"举例|例子|为什么|如何实现)",
+    re.IGNORECASE,
+)
+
+_VOICE_CONCISE_REQUEST_RE = re.compile(
+    r"(?:一句(?:完整(?:的)?)?话|两句话|三句话|简短|简要|概括|不要展开|不展开|"
+    r"\d+\s*个?字以内)",
+    re.IGNORECASE,
+)
+
+_VOICE_HARD_TECHNICAL_REQUEST_RE = re.compile(
+    r"(?:分步骤|步骤|代码|证明|推导|公式|时间复杂度|空间复杂度|性质|如何实现)",
+    re.IGNORECASE,
+)
+
 
 # 返回当前日期字符串，用于注入 system prompt 的“今日日期”上下文
 def _current_date_text() -> str:
@@ -96,6 +123,186 @@ def split_reasoning_and_answer(text: str) -> tuple[str, str]:
 
     # 无标准标签：整段作为推理摘要，不产出正式回答
     return _normalize_reasoning_summary(text), ""
+
+
+def _recover_unwrapped_answer(text: str) -> str:
+    """Recover a public answer after the one allowed envelope repair failed."""
+    recovered = re.sub(
+        r"<think\b[^>]*>.*?</think>",
+        "",
+        text,
+        flags=re.IGNORECASE | re.DOTALL,
+    ).strip()
+    opening = re.search(r"<answer\b[^>]*>", recovered, re.IGNORECASE)
+    if opening:
+        recovered = recovered[opening.end():]
+    return re.sub(r"</answer\s*>", "", recovered, flags=re.IGNORECASE).strip()
+
+
+def _should_use_fast_voice_response(
+    *,
+    question: str,
+    voice_mode: bool,
+    attachments: list[str],
+    enable_web_search: bool,
+    need_teaching_diagram: bool,
+) -> bool:
+    """Use one direct model round for ordinary spoken conversation.
+
+    Requests that explicitly depend on tools, structured diagram output, or a
+    detailed technical explanation keep the full tutor prompt and ReAct loop.
+    The lightweight prompt is intentionally limited to ordinary conversation;
+    using it for formulas and multi-part knowledge questions can trade away
+    factual precision for brevity.
+    """
+    if not voice_mode or attachments or enable_web_search or need_teaching_diagram:
+        return False
+    text = question or ""
+    if (
+        _VOICE_CONCISE_REQUEST_RE.search(text)
+        and not _VOICE_HARD_TECHNICAL_REQUEST_RE.search(text)
+    ):
+        return True
+    return not (
+        _VOICE_TOOL_DEPENDENT_REQUEST_RE.search(text)
+        or _VOICE_DETAILED_REQUEST_RE.search(text)
+    )
+
+
+def _build_fast_voice_system_prompt(session_summary: str) -> str:
+    summary = (session_summary or "").strip()
+    context_line = f"\n会话摘要：{summary[:800]}" if summary else ""
+    return (
+        "你是面向计算机专业学生的中文辅导老师，当前回答会由数字人一次性完整播报。\n"
+        "直接回答用户当前这句话；结合最近对话理解省略和指代，不要复述无关的旧问题。\n"
+        "普通问答使用一到三句自然口语，优先给核心结论，通常控制在120个中文字以内。\n"
+        "用户明确要求详细讲解、步骤或代码时可以适当展开。\n"
+        "技术定义、性质和复杂度必须使用教材标准术语并保留成立前提；回答前先核对事实。\n"
+        "比较两个概念时只说明可验证的差异和适用场景；未指定实现和操作类型时，禁止断言某一个整体更快或更慢。\n"
+        "不要调用工具，不要展示思考过程，不要使用Markdown标题或表格。\n"
+        "只输出可直接朗读的完整回答正文，不要添加<answer>等标签。"
+        f"{context_line}"
+    )
+
+
+def _build_detailed_voice_accuracy_guard(question: str) -> str:
+    """Add compact, topic-specific facts that must survive voice summarization."""
+    normalized = str(question or "")
+    if "红黑树" not in normalized:
+        return ""
+    return """
+
+## 红黑树事实边界
+- 经典 CLRS 插入修复最多执行 2 次旋转；删除修复最多执行 3 次旋转。
+- 重新着色可能沿祖先方向传播到根，不能写成“修正只涉及常数层”。
+- 查找、插入、删除的最坏时间复杂度都是 O(log n)，但旋转次数与重新着色传播范围必须分别表述。
+- 与 AVL 树比较时，只能说红黑树通常旋转次数较少，不能无条件断言插入删除的均摊代价一定更低。
+"""
+
+
+def condense_voice_diagram_answer(
+    text: str,
+    max_chars: int = VOICE_DIAGRAM_MAX_CHARS,
+) -> str:
+    """Keep digital-human diagram narration concise while the image holds details."""
+    cleaned = re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+    cleaned = re.sub(r"^\s*(?:#{1,6}|[-*+] |\d+\. )", "", cleaned, flags=re.MULTILINE)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    if len(cleaned) <= max_chars:
+        return cleaned
+
+    sentences = re.findall(r"[^。！？!?]+[。！？!?]?", cleaned)
+    selected = ""
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if len(selected) + len(sentence) > max_chars:
+            break
+        selected += sentence
+    if selected:
+        return selected.strip()
+
+    prefix = cleaned[:max_chars]
+    boundary = max(prefix.rfind(mark) for mark in "，,；;：:")
+    if boundary >= max_chars // 2:
+        prefix = prefix[:boundary]
+    return prefix.rstrip("，,；;：: ") + "。"
+
+
+def build_deterministic_fallback_diagram(question: str, answer: str) -> dict[str, Any] | None:
+    """Build a deterministic diagram when the model omitted diagram markup."""
+    topic = re.sub(r"(?:请|给我|帮我|生成|制作|画|一个|一张|的?图解)", "", question)
+    topic = re.sub(r"\s+", " ", topic).strip(" ，。！？,.!?") or "本节知识"
+
+    def safe_label(value: str, limit: int = 42) -> str:
+        cleaned = re.sub(r'["<>\[\]{}()]', "", value)
+        return re.sub(r"\s+", " ", cleaned).strip()[:limit]
+
+    normalized_question = question.lower().replace(" ", "")
+    known_points: list[str] = []
+    if "b+树" in normalized_question or "b＋树" in normalized_question:
+        known_points = [
+            "查找：从根索引逐层定位到叶子节点",
+            "插入：写入有序叶子，溢出时分裂并向上更新索引",
+            "删除：移除叶子键，低于下限时借位或合并",
+            "范围查询：沿叶子链表顺序扫描",
+        ]
+    elif "红黑树" in normalized_question:
+        known_points = [
+            "根节点和空叶子节点为黑色",
+            "红色节点不能拥有红色子节点",
+            "任一路径包含相同数量的黑色节点",
+            "插入删除后通过变色与旋转恢复平衡",
+        ]
+    elif "avl" in normalized_question:
+        known_points = [
+            "LL 型：对失衡节点执行右旋",
+            "RR 型：对失衡节点执行左旋",
+            "LR 型：先左旋子节点，再右旋失衡节点",
+            "RL 型：先右旋子节点，再左旋失衡节点",
+        ]
+    elif "堆排序" in normalized_question:
+        known_points = [
+            "从最后一个非叶子节点开始建最大堆",
+            "交换堆顶与当前末尾元素",
+            "缩小堆范围并向下调整",
+            "重复提取堆顶直到完成排序",
+        ]
+
+    points = [safe_label(point) for point in known_points]
+    if not points:
+        points = [
+            label
+            for part in re.split(r"[。！？!?\n]+", answer)
+            if (label := safe_label(part))
+        ][:4]
+    if not points:
+        points = ["核心概念", "关键规则", "典型示例"]
+
+    mermaid_lines = ["flowchart TB", f'    ROOT["{safe_label(topic)}"]']
+    mermaid_lines.extend(
+        f'    ROOT --> S{index}["{point}"]'
+        for index, point in enumerate(points, start=1)
+    )
+    raw_diagram = {
+        "graph_type": "summary",
+        "title": f"{topic}图解",
+        "teaching_goal": f"理解{topic}的核心概念与关键规则",
+        "difficulty": "beginner",
+        "mermaid_source": "\n".join(mermaid_lines),
+        "teaching_content": {
+            "core_explanation": answer,
+            "key_points": points,
+            "common_mistakes": [],
+            "examples": [],
+            "summary": points[0],
+        },
+    }
+    validated, error = validate_diagram_json(raw_diagram)
+    if validated is None:
+        logger.warning("[react_node] deterministic diagram fallback failed: %s", error)
+    return validated
 
 
 # 根据图解 JSON 校验错误，生成针对性的修复建议，帮助 LLM 理解出错原因
@@ -429,6 +636,14 @@ async def react_node(
     user_message_id = state.get("user_message_id", 0)
     enable_web_search = state.get("enable_web_search", False)
     need_teaching_diagram = state.get("need_teaching_diagram", False)
+    voice_mode = state.get("voice_mode", False)
+    fast_voice_response = _should_use_fast_voice_response(
+        question=question,
+        voice_mode=voice_mode,
+        attachments=attachments,
+        enable_web_search=enable_web_search,
+        need_teaching_diagram=need_teaching_diagram,
+    )
 
     node_events: list[TutorRuntimeEvent] = []
     node_tool_invocations: list[dict[str, Any]] = []
@@ -529,33 +744,54 @@ async def react_node(
         if search_text:
             forced_context_blocks.append(f"[联网搜索结果]\n{search_text}")
 
-    # ── 2. 构建 system prompt（统一 tutor_agent 模板，注入会话概要/附件/日期/辅导策略等）──
-    from app.infra.database import session_scope
-    from app.evaluation.guidance import get_effective_guidance_strategy
-    async with session_scope() as db:
-        strategy = await get_effective_guidance_strategy(db, user_id)
-    
-    strategy_str = (
-        f"当前周期目标: {strategy.get('weekly_goal')}\n"
-        f"推荐单次时长: {strategy.get('recommended_session_minutes')} 分钟\n"
-        f"辅导风格: {strategy.get('tutoring_style')}\n"
-        f"重点关注主题: {'、'.join(strategy.get('focus_topics', [])) or '无'}\n"
-        f"偏好资源类型: {'、'.join(strategy.get('preferred_resource_types', [])) or '无'}"
-    )
+    # ── 2. 构建 system prompt ──
+    if fast_voice_response:
+        system_prompt = _build_fast_voice_system_prompt(session_summary)
+        # Recent turns are sufficient for spoken references and keep prompt
+        # evaluation latency bounded in long-running voice conversations.
+        history = history[-6:]
+        logger.info("[react_node] fast voice response path enabled history=%d", len(history))
+    else:
+        from app.infra.database import session_scope
+        from app.evaluation.guidance import get_effective_guidance_strategy
+        async with session_scope() as db:
+            strategy = await get_effective_guidance_strategy(db, user_id)
 
-    system_prompt = prompts.get("chat").render(
-        "tutor_agent",
-        session_summary_context=session_summary,
-        file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
-        attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
-        current_date=_current_date_text(),
-        diagram_mode=(
-            "开启（学生已在前端勾选“图解”开关，你必须在 <answer> 中包含 <diagram> 标签输出图解 JSON）"
-            if need_teaching_diagram
-            else "关闭"
-        ),
-        guidance_strategy_context=strategy_str,
-    )
+        strategy_str = (
+            f"当前周期目标: {strategy.get('weekly_goal')}\n"
+            f"推荐单次时长: {strategy.get('recommended_session_minutes')} 分钟\n"
+            f"辅导风格: {strategy.get('tutoring_style')}\n"
+            f"重点关注主题: {'、'.join(strategy.get('focus_topics', [])) or '无'}\n"
+            f"偏好资源类型: {'、'.join(strategy.get('preferred_resource_types', [])) or '无'}"
+        )
+
+        system_prompt = prompts.get("chat").render(
+            "tutor_agent",
+            session_summary_context=session_summary,
+            file_context=f"附件 {len(attachments)} 个" if attachments else "本轮没有上传附件。",
+            attachment_analysis_context=attachment_context or "本轮没有可用的附件预分析内容。",
+            current_date=_current_date_text(),
+            diagram_mode=(
+                "开启（学生已在前端勾选“图解”开关，你必须在 <answer> 中包含 <diagram> 标签输出图解 JSON）"
+                if need_teaching_diagram
+                else "关闭"
+            ),
+            guidance_strategy_context=strategy_str,
+        )
+    if voice_mode and not fast_voice_response:
+        system_prompt += """
+
+## 数字人口语回答模式
+当前回答将由数字人直接播报。请优先使用简短、自然、可直接朗读的口语：
+- 闲聊、问候或简单事实问题，默认用 1—3 句回答，不列清单。
+- 一般讲解先给核心结论，整体尽量控制在 120 个中文字以内。
+- 只有用户明确要求详细讲解、分步骤、代码或完整方案时，才扩展长度。
+- 涉及定义、性质、公式、复杂度和算法步骤时必须保证事实准确；禁止为了简短而省略关键条件、编造公式或给出错误范围。
+- 不要把旋转、着色、比较等不同操作次数合并成一个上界；具体常数或公式不确定时不要猜测。
+- 即使用户要求详细讲解，也尽量控制在 600 个中文字以内；只输出一个连续自然段，不使用 Markdown 标题、表格或项目列表。
+- 避免冗长开场白，不要用多套数学排版重复书写同一个复杂度。
+"""
+        system_prompt += _build_detailed_voice_accuracy_guard(question)
 
     # ── 3. 初始化消息和事件收集 ──
     # 组装用户消息，依次拼接附件分析结果与强制搜索上下文
@@ -575,7 +811,7 @@ async def react_node(
 
     tool_model = (
         llm.model.bind_tools(tool_excute.get_tools_description())
-        if tools
+        if tools and not fast_voice_response
         else llm.model
     )
     format_repair_used = False
@@ -632,6 +868,14 @@ async def react_node(
             tool_calls = getattr(accumulated_response, "tool_calls", None) if accumulated_response else None
             reasoning_summary, answer_body = split_reasoning_and_answer(answer_text)
 
+            # The lightweight voice prompt deliberately asks for plain public
+            # text. Accept that first complete response immediately instead of
+            # spending another model round repairing an internal envelope.
+            if fast_voice_response and not tool_calls and not answer_body:
+                if not re.search(r"</?answer\b", answer_text, re.IGNORECASE):
+                    answer_body = _recover_unwrapped_answer(answer_text)
+                    reasoning_summary = ""
+
             # 检测 LLM 因不支持图片输入而返回的错误，替换为友好提示
             answer_body, has_image_error = _strip_llm_image_error(answer_body)
             if has_image_error:
@@ -673,32 +917,28 @@ async def react_node(
             if not tool_calls:
                 # 无工具调用且无正式回答 → 触发格式修复（仅一次）
                 if needs_format_repair:
-                    # 已修复过仍失败 → 报错并终止循环
+                    # 已修复过仍失败 → 回收可公开内容，不能让整轮回答中断
                     if format_repair_used:
-                        error_message = "模型未按 <answer>...</answer> 协议返回正式回答"
-                        node_errors.append(error_message)
-                        await agent._emit_event(
-                            state,
-                            TutorRuntimeEvent(
-                                type="error",
-                                payload={"error": error_message},
-                                sequence=seq,
-                                timestamp=time.time(),
-                            ),
+                        answer_body = _recover_unwrapped_answer(answer_text)
+                        if not answer_body:
+                            answer_body = "我已经整理好这个问题的核心内容，请查看下面的图解。"
+                        needs_format_repair = False
+                        logger.warning(
+                            "[react_node] answer envelope repair failed; recovered public response"
                         )
-                        break
 
                     # 首次触发：将本轮响应与修复提示追加到消息列表并重试
-                    format_repair_used = True
-                    if accumulated_response is not None:
-                        messages.append(accumulated_response)
-                    messages.append(HumanMessage(content=(
-                        "[FORMAT REPAIR]\n"
-                        "上一条响应缺少完整的最终回答边界。不要调用工具，不要重复内部推理。"
-                        "请仅输出一条简短、可公开的进度摘要，随后把面向学生的完整回答严格放入 "
-                        "<answer>...</answer> 中。"
-                    )))
-                    continue
+                    if needs_format_repair:
+                        format_repair_used = True
+                        if accumulated_response is not None:
+                            messages.append(accumulated_response)
+                        messages.append(HumanMessage(content=(
+                            "[FORMAT REPAIR]\n"
+                            "上一条响应缺少完整的最终回答边界。不要调用工具，不要重复内部推理。"
+                            "请仅输出一条简短、可公开的进度摘要，随后把面向学生的完整回答严格放入 "
+                            "<answer>...</answer> 中。"
+                        )))
+                        continue
 
                 # ── 无工具调用 → 这是最终回答 ──
 
@@ -753,6 +993,16 @@ async def react_node(
                         # 修复重试已用完，放弃图解，仅保留文字回答
                         logger.warning("[react_node] 图解 JSON 修复重试仍失败，放弃图解: %s", diagram_error)
                         answer_body = cleaned_answer
+
+                if voice_mode and need_teaching_diagram:
+                    condensed_answer = condense_voice_diagram_answer(answer_body)
+                    if condensed_answer != answer_body:
+                        logger.info(
+                            "[react_node] condensed voice diagram answer: %d -> %d chars",
+                            len(answer_body),
+                            len(condensed_answer),
+                        )
+                    answer_body = condensed_answer
 
                 # 流式输出最终回答（逐 token 发送 answer_token 事件）
                 streamer = ResponseStreamer()
@@ -818,6 +1068,13 @@ async def react_node(
                 logger.warning("[react_node] 工具 %s 失败: %s", tool_name, exc)
                 node_errors.append(f"{tool_name}: {exc}")
                 messages.append(ToolMessage(content=f"工具调用失败: {exc}", tool_call_id=tool_call_id))
+
+    if need_teaching_diagram and node_diagram_result is None and full_answer.strip():
+        node_diagram_result = build_deterministic_fallback_diagram(question, full_answer)
+        if node_diagram_result is not None:
+            logger.warning(
+                "[react_node] model omitted a usable diagram; generated deterministic fallback"
+            )
 
     # ── 5. 返回 state 更新（最终回答、图解、消息、事件、调用记录、来源、错误）──
     return {

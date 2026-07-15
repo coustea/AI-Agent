@@ -29,10 +29,12 @@ const props = defineProps<{
 
 .stream-markdown {
   min-width: 0;
-  color: inherit;
-  font-size: 0.96rem;
+  color: #1e293b;
+  font-size: 16px;
   line-height: 1.78;
   overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 .stream-markdown :deep(.stream-caret) {

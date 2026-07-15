@@ -549,6 +549,11 @@ class AvatarController:
             self._current_estimated_duration = None
 
         logger.info("Sentence queue processing completed")
+        # A request can be enqueued in the tiny window after the loop's empty
+        # check but before this task is marked done. Restart so it is not stranded.
+        if not self.sentence_queue.empty():
+            logger.info("Avatar queue received a late request; restarting playback")
+            self._playback_task = asyncio.create_task(self._process_queue())
 
     # 带重试机制的 TTS 发送：发送失败时重试，成功后不重试
     async def _speak_with_retry(self, text: str, speech_rate: float = 1.0) -> bool:

@@ -26,6 +26,8 @@ from app.avatar.bridge.state import MessageType
 from app.avatar.services import AvatarController
 from app.avatar.services.audio_ingress import AudioIngress
 from app.avatar.services.streaming_asr import AdaptiveVADController, StreamingASRSession
+from app.chat.agent.nodes import build_deterministic_fallback_diagram
+from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import chat, get_chat_usecases
 from app.config import ASR_VAD_EOS
@@ -37,7 +39,13 @@ AUDIO_QUEUE_MAX_CHUNKS = 512
 AUDIO_MESSAGE_MAX_BYTES = 64 * 1024
 ASR_AUDIO_FRAME_BYTES = 1280
 CHAT_STREAM_IDLE_TIMEOUT_SECONDS = 75.0
+DIAGRAM_STREAM_IDLE_TIMEOUT_SECONDS = 30.0
+DIAGRAM_STREAM_TOTAL_TIMEOUT_SECONDS = 30.0
 ASR_READY_TIMEOUT_SECONDS = 15.0
+# Give the browser one short render window after publishing the final
+# transcript. This makes the visible order deterministic: transcript first,
+# then turn_start/thinking, even when a quick reply finishes almost instantly.
+ASR_TRANSCRIPT_RENDER_GRACE_SECONDS = 0.12
 
 _TRANSIENT_ASR_ERROR_MARKERS = (
     "connectionreseterror",
@@ -53,6 +61,8 @@ _PROGRAMMING_CONTEXT = re.compile(
     r"(?:Python|Java|C\+\+|编程|程序|代码|开发|语法|算法|数据结构)",
     re.IGNORECASE,
 )
+_ENGLISH_HOW_ONLY = re.compile(r"^\s*how[.!?。！？]?\s*$", re.IGNORECASE)
+_CHINESE_TEXT = re.compile(r"[\u3400-\u9fff]")
 
 
 def normalize_asr_technical_terms(text: str, previous_text: str = "") -> str:
@@ -61,6 +71,8 @@ def normalize_asr_technical_terms(text: str, previous_text: str = "") -> str:
     context = f"{previous_text} {normalized}"
     if _PROGRAMMING_CONTEXT.search(context):
         normalized = normalized.replace("阵法", "语法")
+    if _ENGLISH_HOW_ONLY.fullmatch(normalized) and _CHINESE_TEXT.search(previous_text):
+        normalized = "好"
     return normalized
 
 
@@ -193,7 +205,6 @@ class RealtimeBridge:
 
         # Turn tracking - 用于串线保护
         self._current_turn_id: Optional[str] = None
-
         # Adaptive VAD controller
         self._vad_controller = AdaptiveVADController(base_vad_eos=ASR_VAD_EOS)
 
@@ -1157,6 +1168,7 @@ class RealtimeBridge:
                             if vad_session_id:
                                 result_event["vad_session_id"] = vad_session_id
                             await self._send_to_frontend(result_event)
+                            await asyncio.sleep(ASR_TRANSCRIPT_RENDER_GRACE_SECONDS)
                             # 如果当前有 turn 正在执行（锁被持有），将文本追加到 pending buffer
                             # 而不是创建新 turn，避免前端 turn_id 过滤导致事件丢失
                             if self._turn_lock.locked():
@@ -1311,6 +1323,8 @@ class RealtimeBridge:
         enable_search: bool = False,
     ):
         """执行一轮完整的对话 turn：调用 chat 服务 → 流式处理事件 → 触发 Avatar 播报。"""
+        turn_started_at = time.perf_counter()
+        turn_id = self._current_turn_id
         # 合并附件 URL 并去重
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()
@@ -1335,12 +1349,58 @@ class RealtimeBridge:
         await self._send_digital_human_state("thinking", "Processing user input")
 
         full_response = ""
+        tts_pending_text = ""
+        tts_has_queued_content = False
+        first_llm_text_at: float | None = None
+        first_tts_queued_at: float | None = None
         event_count = 0
         stream_failed = False
         fail_reason = ""
         last_diagram_payload = None
         diagram_forwarded = False
         try:
+            async def _queue_complete_tts_response() -> None:
+                """Submit the complete answer to Avatar as one uninterrupted TTS request."""
+                nonlocal tts_pending_text, tts_has_queued_content, first_tts_queued_at
+                controller = self._avatar_controller
+                if controller is None:
+                    return
+                speech_text = _clean_text_for_tts(tts_pending_text)
+                tts_pending_text = ""
+                if not speech_text:
+                    return
+                await controller.speak(
+                    speech_text,
+                    speech_rate=self._speech_rate,
+                    turn_id=turn_id,
+                )
+                tts_has_queued_content = True
+                first_tts_queued_at = time.perf_counter()
+                logger.info(
+                    "[BridgeLatency] complete Avatar response queued in %.3fs turn_id=%s chars=%d",
+                    first_tts_queued_at - turn_started_at,
+                    turn_id,
+                    len(speech_text),
+                )
+
+            async def _forward_assistant_chunk(content: str, *, append_to_response: bool = True) -> None:
+                """Forward text tokens while buffering one complete TTS utterance."""
+                nonlocal full_response, tts_pending_text, first_llm_text_at
+                if not content:
+                    return
+                if first_llm_text_at is None:
+                    first_llm_text_at = time.perf_counter()
+                    logger.info(
+                        "[BridgeLatency] first LLM text in %.3fs turn_id=%s",
+                        first_llm_text_at - turn_started_at,
+                        turn_id,
+                    )
+                if append_to_response:
+                    full_response += content
+                if self.frontend_ws:
+                    await self._send_event_with_turn_id("assistant_chunk", content=content)
+                tts_pending_text += content
+
             async def _consume_stream_events():
                 """消费 chat 服务的 SSE 事件流，转发 token/status/error/diagram 事件。"""
                 nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
@@ -1354,13 +1414,18 @@ class RealtimeBridge:
                     attachments=merged_attachments,
                     need_teaching_diagram=need_diagram,
                     enable_web_search=enable_search,
+                    voice_mode=True,
                 )
                 try:
                     while True:
                         try:
                             event = await asyncio.wait_for(
                                 anext(event_stream),
-                                timeout=CHAT_STREAM_IDLE_TIMEOUT_SECONDS,
+                                timeout=(
+                                    DIAGRAM_STREAM_IDLE_TIMEOUT_SECONDS
+                                    if need_diagram
+                                    else CHAT_STREAM_IDLE_TIMEOUT_SECONDS
+                                ),
                             )
                         except StopAsyncIteration:
                             break
@@ -1384,9 +1449,7 @@ class RealtimeBridge:
                             # 流式 token → 修复编码后转发给前端
                             content = self._repair_text_encoding(str(payload or ""))
                             if content:
-                                full_response += content
-                                if self.frontend_ws:
-                                    await self._send_event_with_turn_id("assistant_chunk", content=content)
+                                await _forward_assistant_chunk(content)
 
                         elif event_type == "status":
                             # 状态事件 → 转发给前端
@@ -1420,9 +1483,7 @@ class RealtimeBridge:
                                     str(payload.get("full_response", "") or payload.get("response", "") or "")
                                 )
                                 if maybe_text and not full_response:
-                                    full_response = maybe_text
-                                    if self.frontend_ws:
-                                        await self._send_event_with_turn_id("assistant_chunk", content=full_response)
+                                    await _forward_assistant_chunk(maybe_text)
                                 resources = payload.get("resources")
                                 diagram_payload = None
                                 if isinstance(resources, dict):
@@ -1439,8 +1500,21 @@ class RealtimeBridge:
                     if callable(aclose):
                         await aclose()
 
-            # 每收到一个事件都会重置空闲超时，长回复可以持续流式执行。
-            await _consume_stream_events()
+            # Diagram turns have a total response budget as well as the per-event
+            # idle timeout. Repeated format/diagram repairs must not keep a
+            # digital-human turn in the thinking state indefinitely.
+            try:
+                if need_diagram:
+                    await asyncio.wait_for(
+                        _consume_stream_events(),
+                        timeout=DIAGRAM_STREAM_TOTAL_TIMEOUT_SECONDS,
+                    )
+                else:
+                    await _consume_stream_events()
+            except asyncio.TimeoutError as exc:
+                stream_failed = True
+                fail_reason = "回答生成长时间没有进展，请重试"
+                raise RuntimeError(fail_reason) from exc
         except asyncio.CancelledError:
             stream_failed = True
             fail_reason = "cancelled"
@@ -1454,17 +1528,46 @@ class RealtimeBridge:
             stream_failed = True
             fail_reason = str(exc)
             logger.exception("[Bridge] stream failed user=%s session=%s", self.user_id, self.session_id)
-            if self.frontend_ws:
+            diagram_timeout_fallback = need_diagram and "长时间没有进展" in fail_reason
+            if self.frontend_ws and not diagram_timeout_fallback:
                 await self._send_event_with_turn_id("error", content=f"数字人回答失败: {fail_reason}")
         finally:
+            generated_timeout_response = False
+            if (
+                need_diagram
+                and "长时间没有进展" in fail_reason
+                and last_diagram_payload is None
+            ):
+                if not full_response.strip():
+                    full_response = "已经为你生成了这张图解，展示了核心概念和关键关系。"
+                    generated_timeout_response = True
+                fallback_diagram = build_deterministic_fallback_diagram(
+                    user_text,
+                    full_response,
+                )
+                if fallback_diagram is not None:
+                    try:
+                        last_diagram_payload = await ensure_teaching_diagram_png_payload(
+                            fallback_diagram,
+                            username=self.username or f"user_{self.user_id}",
+                            session_id=self.session_id,
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "[Bridge] timed-out diagram fallback rendering failed: %s",
+                            exc,
+                        )
+
             if not full_response.strip():
                 full_response = (
                     "抱歉，刚才的回答生成超时了，请再说一次。"
                     if "长时间没有进展" in fail_reason
                     else "抱歉，刚才没有生成有效回答，请再说一次。"
                 )
-                if self.frontend_ws:
-                    await self._send_event_with_turn_id("assistant_chunk", content=full_response)
+                generated_timeout_response = True
+
+            if generated_timeout_response:
+                await _forward_assistant_chunk(full_response, append_to_response=False)
 
             logger.info(
                 "[Bridge] stream ended events=%d full_response_len=%d failed=%s",
@@ -1473,31 +1576,22 @@ class RealtimeBridge:
                 stream_failed,
             )
 
+            # The user requested one uninterrupted utterance: only now, after the
+            # complete answer is available, submit a single TTS request.
+            await _queue_complete_tts_response()
+
             # 流结束后始终发送完成标记
             if self.frontend_ws:
                 if last_diagram_payload is not None and not diagram_forwarded:
                     await self._send_event_with_turn_id("diagram", data=last_diagram_payload)
                 await self._send_event_with_turn_id("assistant_complete")
 
-            # 触发数字人 TTS 播报（异步执行，不阻塞响应）
-            # 清理 Markdown 格式标记，避免 TTS 朗读特殊字符或跳段
-            tts_text = _clean_text_for_tts(full_response.strip())
-            if tts_text and self._avatar_controller:
+            if tts_has_queued_content:
                 logger.info(
-                    "[Bridge] trigger avatar speak len=%s (original=%s, cleaned=%s) ws_alive=%s",
-                    len(tts_text),
+                    "[Bridge] queued complete Avatar speech response_len=%s ws_alive=%s total_queue_time=%.3fs",
                     len(full_response.strip()),
-                    len(tts_text),
                     bool(self.frontend_ws),
-                )
-                # 不在这里发送 speaking 状态，等 tts_start 回调时再发送
-                self._spawn_background(
-                    self._avatar_controller.speak(
-                        tts_text,
-                        speech_rate=self._speech_rate,
-                        turn_id=self._current_turn_id,
-                    ),
-                    label="avatar-speech",
+                    (first_tts_queued_at or time.perf_counter()) - turn_started_at,
                 )
 
     # 向前端 WebSocket 发送 JSON 消息（如果连接已关闭则静默忽略）

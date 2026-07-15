@@ -8,7 +8,9 @@ small image payload for SSE/history metadata.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from html import escape
@@ -497,8 +499,47 @@ def build_mermaid_source(diagram: dict[str, Any]) -> str:
     """Return model-authored Mermaid, or convert legacy structured diagrams."""
     source = _text_block(diagram.get("mermaid_source"))
     if source:
-        return source
+        return _sanitize_mermaid_source(source)
     return _legacy_diagram_to_mermaid(diagram)
+
+
+def _sanitize_mermaid_source(source: str) -> str:
+    """Repair harmless punctuation that commonly breaks flowchart parsing.
+
+    Models sometimes append a prose colon after a completed node declaration,
+    for example ``A --> B[LL 型]:``.  Mermaid treats that trailing colon as a
+    new token and rejects the whole diagram, although the intended graph is
+    otherwise unambiguous.
+    """
+    first_line = source.lstrip().splitlines()[0] if source.strip() else ""
+    if not re.match(r"^(?:flowchart|graph)\b", first_line, re.IGNORECASE):
+        return source.strip()
+
+    sanitized = re.sub(
+        r"(?P<node>(?:\[[^\]\n]*\]|\([^\)\n]*\)|\{[^}\n]*\}))\s*[:：]\s*$",
+        r"\g<node>",
+        source.strip(),
+        flags=re.MULTILINE,
+    )
+
+    def normalize_nested_label(match: re.Match[str]) -> str:
+        label = match.group("label")
+        label = label.replace("\\n", "<br/>")
+        label = label.replace('"', "").replace("`", "")
+        label = re.sub(r"\s+", " ", label).strip()
+        label = label.replace("[", "").replace("]", "")
+        return f'{match.group("node_id")}["{_mermaid_text(label)}"]'
+
+    # Models occasionally combine Mermaid's stadium shape with several quoted
+    # fragments, e.g. ``LL(["title"\n"detail"])``.  Mermaid cannot parse the
+    # nested quotes, so retain the full label as one ordinary rounded-safe node.
+    sanitized = re.sub(
+        r"(?P<node_id>[A-Za-z_][A-Za-z0-9_-]*)\(\[(?P<label>.+)\]\)\s*$",
+        normalize_nested_label,
+        sanitized,
+        flags=re.MULTILINE,
+    )
+    return sanitized
 
 
 def _legacy_diagram_to_mermaid(diagram: dict[str, Any]) -> str:
@@ -700,7 +741,24 @@ async def render_teaching_diagram_png(
     mermaid_source = build_mermaid_source(diagram)
     html = build_diagram_image_document(diagram, width=width, height=height)
     screenshot = screenshotter or _screenshot_html_to_png
-    png_bytes = await screenshot(html, width, height)
+    render_mode = "mermaid"
+    try:
+        png_bytes = await screenshot(html, width, height)
+    except Exception as exc:
+        # Model-authored Mermaid is useful when valid, but it must never be a
+        # single point of failure for diagram delivery. The structured teaching
+        # fields can always be rendered as a self-contained HTML infographic.
+        logger.warning(
+            "[diagram] Mermaid render failed; using structured HTML fallback: %s",
+            exc,
+        )
+        render_mode = "structured"
+        fallback_html = build_teaching_diagram_html(
+            diagram,
+            width=width,
+            height=height,
+        )
+        png_bytes = await screenshot(fallback_html, width, height)
     if not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
         raise ValueError("diagram renderer did not return PNG bytes")
     pixel_width, pixel_height = _png_dimensions(png_bytes, fallback=(width, height))
@@ -721,6 +779,7 @@ async def render_teaching_diagram_png(
         "subtitle": _text(diagram.get("subtitle")) or None,
         "graph_type": _text(diagram.get("graph_type")) or "diagram",
         "mermaid_source": mermaid_source,
+        "render_mode": render_mode,
         "image_url": url_builder(filename),
         "filename": filename,
         "mime_type": "image/png",
@@ -750,7 +809,8 @@ async def ensure_teaching_diagram_png_payload(
 
     try:
         return await renderer(source, username=username, session_id=session_id)
-    except Exception:
+    except Exception as exc:
+        logger.warning("[diagram] PNG delivery failed: %s", exc)
         if diagram.get("kind") == "fallback":
             return diagram
         return {
@@ -762,37 +822,47 @@ async def ensure_teaching_diagram_png_payload(
 
 
 async def _screenshot_html_to_png(html: str, width: int, height: int) -> bytes:
-    from playwright.async_api import async_playwright
+    # FastAPI's Windows development loop may use SelectorEventLoop, where
+    # asyncio subprocess creation is unsupported. Playwright async launch then
+    # fails before Chromium starts. Run its synchronous API in a worker thread;
+    # this uses the normal Windows process launcher and keeps the request loop
+    # responsive while the PNG is rendered.
+    return await asyncio.to_thread(_screenshot_html_to_png_sync, html, width, height)
 
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(headless=True)
+
+def _screenshot_html_to_png_sync(html: str, width: int, height: int) -> bytes:
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
         try:
-            page = await browser.new_page(
+            page = browser.new_page(
                 viewport={"width": width, "height": height},
                 device_scale_factor=PNG_DEVICE_SCALE_FACTOR,
             )
-            await page.set_content(html, wait_until="networkidle")
-            await page.add_script_tag(path=str(_mermaid_runtime_path()))
-            await page.evaluate("window.renderTeachingMermaid()")
-            await page.wait_for_function(
-                "document.documentElement.dataset.mermaidReady === 'true' || "
-                "Boolean(document.documentElement.dataset.mermaidError)",
-                timeout=15_000,
-            )
-            render_error = await page.evaluate(
-                "document.documentElement.dataset.mermaidError || ''"
-            )
-            if render_error:
-                raise ValueError(f"Mermaid render failed: {render_error}")
+            page.set_content(html, wait_until="networkidle")
+            if page.locator('[data-renderer="mermaid"]').count():
+                page.add_script_tag(path=str(_mermaid_runtime_path()))
+                page.evaluate("window.renderTeachingMermaid()")
+                page.wait_for_function(
+                    "document.documentElement.dataset.mermaidReady === 'true' || "
+                    "Boolean(document.documentElement.dataset.mermaidError)",
+                    timeout=15_000,
+                )
+                render_error = page.evaluate(
+                    "document.documentElement.dataset.mermaidError || ''"
+                )
+                if render_error:
+                    raise ValueError(f"Mermaid render failed: {render_error}")
             canvas = page.locator("#diagram-canvas")
-            rendered_height = await canvas.evaluate(
+            rendered_height = canvas.evaluate(
                 """element => Math.ceil(element.getBoundingClientRect().height)"""
             )
             if isinstance(rendered_height, int) and rendered_height > height:
-                await page.set_viewport_size({"width": width, "height": rendered_height})
-            return await canvas.screenshot(type="png")
+                page.set_viewport_size({"width": width, "height": rendered_height})
+            return canvas.screenshot(type="png")
         finally:
-            await browser.close()
+            browser.close()
 
 
 def _png_dimensions(data: bytes, *, fallback: tuple[int, int]) -> tuple[int, int]:
