@@ -47,10 +47,11 @@ export const VAD_BACKEND_READY_TIMEOUT_MS = 16_000
 export const VAD_WEBSOCKET_OPEN_TIMEOUT_MS = 5_000
 export { ASR_TARGET_SAMPLE_RATE }
 export const ASR_SPEECH_START_RMS = 0.007
-export const ASR_SPEECH_CONFIRM_MS = 160
-export const ASR_SILENCE_END_MS = 680
+export const ASR_SPEECH_CONFIRM_MS = 240
+// 520ms keeps natural intra-sentence pauses while cutting end-of-utterance latency.
+export const ASR_SILENCE_END_MS = 520
 export const ASR_PRE_SPEECH_CHUNKS = 8
-export const ASR_EMPTY_RESTART_DELAY_MS = 300
+export const ASR_EMPTY_RESTART_DELAY_MS = 600
 export const AVATAR_OUTPUT_ACTIVE_RMS = 0.004
 export const AVATAR_OUTPUT_SILENCE_MS = 450
 export const AVATAR_OUTPUT_MAX_DRAIN_MS = 8_000
@@ -66,6 +67,8 @@ export class AsrVoiceActivityGate {
     private candidateDurationMs = 0
     private silenceDurationMs = 0
     private active = false
+    private activePeakRms = 0
+    private lastUtterancePeakRms = 0
 
     update(rms: number, durationMs: number): AsrVoiceActivityDecision {
         const safeRms = Number.isFinite(rms) ? Math.max(0, rms) : 0
@@ -74,6 +77,7 @@ export class AsrVoiceActivityGate {
         if (!this.active) {
             const startThreshold = Math.max(ASR_SPEECH_START_RMS, this.noiseFloorRms * 3)
             if (safeRms >= startThreshold) {
+                this.activePeakRms = Math.max(this.activePeakRms, safeRms)
                 this.candidateDurationMs += safeDurationMs
                 if (this.candidateDurationMs >= ASR_SPEECH_CONFIRM_MS) {
                     this.active = true
@@ -82,13 +86,17 @@ export class AsrVoiceActivityGate {
                 }
             } else {
                 this.candidateDurationMs = 0
-                if (safeRms < ASR_SPEECH_START_RMS) {
-                    this.noiseFloorRms = this.noiseFloorRms * 0.94 + safeRms * 0.06
-                }
+                this.activePeakRms = 0
+                // Learn steady room/microphone noise even when it is above the
+                // absolute minimum. Previously 0.008~0.012 RMS noise was never
+                // learned, so a short fan/keyboard spike repeatedly looked like
+                // speech after every continuous-listening restart.
+                this.noiseFloorRms = this.noiseFloorRms * 0.94 + safeRms * 0.06
             }
             return { speechActive: false, speechStarted: false, speechEnded: false }
         }
 
+        this.activePeakRms = Math.max(this.activePeakRms, safeRms)
         const releaseThreshold = Math.max(0.0045, this.noiseFloorRms * 1.8)
         if (safeRms >= releaseThreshold) {
             this.silenceDurationMs = 0
@@ -105,11 +113,27 @@ export class AsrVoiceActivityGate {
         return { speechActive: true, speechStarted: false, speechEnded: false }
     }
 
-    reset(): void {
-        this.noiseFloorRms = 0.004
+    reset(preserveNoiseFloor = false): void {
+        if (this.activePeakRms > 0) {
+            this.lastUtterancePeakRms = this.activePeakRms
+        }
+        if (!preserveNoiseFloor) {
+            this.noiseFloorRms = 0.004
+            this.lastUtterancePeakRms = 0
+        }
         this.candidateDurationMs = 0
         this.silenceDurationMs = 0
         this.active = false
+        this.activePeakRms = 0
+    }
+
+    markFalsePositive(): void {
+        if (this.lastUtterancePeakRms > 0) {
+            this.noiseFloorRms = Math.max(
+                this.noiseFloorRms,
+                Math.min(0.03, this.lastUtterancePeakRms * 0.75),
+            )
+        }
     }
 }
 
@@ -563,16 +587,22 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         } else if (type === 'assistant_chunk') {
             updateCache(data.content || '', true) // 实时追加到缓存
             bufferedAssistantText += data.content || ''
+            // 数字人模式以真正开口为响应起点，不用首个 LLM 文本片段
+            // 提前结束“思考”状态，避免文本显示与数字人口型脱节。
             if (isSpeaking.value) startAssistantReveal()
         } else if (type === 'status') {
             callbacks?.onStatus?.(data.data || {})
         } else if (type === 'assistant_complete') {
-            pendingAssistantComplete = true
-            // assistant_complete only means LLM text generation has finished.
-            // Keep showing the thinking/preparing state until Avatar playback
-            // actually starts, otherwise the gap spent preparing TTS is shown as
-            // "preparing speech recognition" during continuous conversations.
-            if (isSpeaking.value) startAssistantReveal()
+            // The complete sentence is now available. Show it immediately as
+            // one subtitle instead of withholding all text until the Avatar
+            // transport reports tts_start. TTS is still submitted only once by
+            // the backend, so this does not reintroduce segmented speech.
+            endThinking(turn_id)
+            clearAssistantRevealTimer()
+            flushBufferedAssistantTextImmediately()
+            pendingAssistantComplete = false
+            callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
+            updateCache('', false)
         } else if (type === 'avatar_speaking') {
             clearAvatarStopWait()
             isSpeaking.value = true
@@ -601,13 +631,14 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 cleanupAudioInput(continuousVadOptions === null)
             } else {
                 clearPendingAudioChunks()
-                voiceActivityGate.reset()
+                voiceActivityGate.reset(true)
                 syncVadListeningState()
             }
         } else if (type === 'asr_empty') {
             if (!isCurrentVadSessionEvent(data)) return
             vadSession.complete(getVadSessionId(data))
             syncVadListeningState()
+            voiceActivityGate.markFalsePositive()
             callbacks?.onStatus?.({
                 stage: 'asr_empty',
                 message: '未识别到有效语音，正在重新倾听',
@@ -925,7 +956,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         preSpeechAudioChunks.length = 0
         droppedAudioChunks = 0
         pendingAudioEnd = false
-        voiceActivityGate.reset()
+        voiceActivityGate.reset(true)
         if (audioFlushTimer) {
             clearTimeout(audioFlushTimer)
             audioFlushTimer = null
@@ -1201,7 +1232,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         setSpeechDetected(false)
         vadSession.releaseCapture()
         syncVadListeningState()
-        voiceActivityGate.reset()
+        voiceActivityGate.reset(!closeAudioContext)
         preSpeechAudioChunks.length = 0
     }
 
@@ -1387,6 +1418,15 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     function clearHistory(): void {
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: 'clear_history' }))
+        }
+    }
+
+    function switchSession(sessionId?: string): void {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'switch_session',
+                session_id: sessionId?.trim() || '',
+            }))
         }
     }
 
@@ -1603,6 +1643,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         setContinuousVoice,
         stopSpeaking,
         clearHistory,
+        switchSession,
         setSpeechRate,
         setNeedDiagram,
         enableAudio,

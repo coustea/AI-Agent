@@ -32,6 +32,7 @@ class TutorAgentInput(BaseModel):
     session_summary: str = ""
     enable_web_search: bool = False
     need_teaching_diagram: bool = False
+    voice_mode: bool = False
 
 
 # ── 流式事件类型（简化后）──
