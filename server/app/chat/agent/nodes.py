@@ -749,27 +749,30 @@ async def react_node(
 
     # ── 1b. diagram_mode="required": skip LLM, directly call diagram tool ──
     if diagram_required:
-        diagram_result = await execute_tutor_tool(
-            tool_name=GENERATE_TEACHING_DIAGRAM_TOOL_NAME,
-            arguments={"focus": question},
-            tool_call_id="direct-diagram",
-        )
-        raw_payload = diagram_result.result_payload
-        if raw_payload is not None:
-            validated, diagram_error = validate_diagram_json(raw_payload)
-            if validated is not None:
-                node_diagram_result = validated
+        try:
+            diagram_result = await execute_tutor_tool(
+                tool_name=GENERATE_TEACHING_DIAGRAM_TOOL_NAME,
+                arguments={"focus": question},
+                tool_call_id="direct-diagram-required",
+            )
+            raw_payload = diagram_result.result_payload
+            if raw_payload is not None:
+                validated, diagram_error = validate_diagram_json(raw_payload)
+                if validated is not None:
+                    node_diagram_result = validated
+                else:
+                    node_errors.append(f"diagram validation failed: {diagram_error}")
+                    logger.warning("[react_node] required diagram validation failed: %s", diagram_error)
             else:
-                raise RuntimeError(
-                    f"diagram generation failed validation: {diagram_error}"
-                )
-        else:
-            raise RuntimeError("diagram generation returned no payload")
+                node_errors.append("diagram generation returned no payload")
+                logger.warning("[react_node] required diagram tool returned no payload")
+        except Exception as exc:
+            node_errors.append(f"diagram generation failed: {exc}")
+            logger.warning("[react_node] required diagram tool exception: %s", exc)
 
-        if voice_mode:
-            condensed = condense_voice_diagram_answer(question)
-            full_answer = condensed
-        # Return immediately with diagram only — no answer_token events.
+        if voice_mode and node_diagram_result is not None:
+            full_answer = condense_voice_diagram_answer(question)
+        # Return immediately — no answer_token events, no fallback to text.
         return {
             "final_answer": full_answer,
             "diagram_result": node_diagram_result,
@@ -1105,11 +1108,16 @@ async def react_node(
                             # Break outer ReAct loop — no further LLM rounds.
                             break
                         else:
-                            raise RuntimeError(
-                                f"diagram generation failed validation: {diagram_error}"
-                            )
+                            node_errors.append(f"diagram validation failed: {diagram_error}")
+                            logger.warning("[react_node] auto diagram validation failed: %s", diagram_error)
                     else:
-                        raise RuntimeError("diagram generation returned no payload")
+                        node_errors.append("diagram generation returned no payload")
+                        logger.warning("[react_node] auto diagram tool returned no payload")
+                    # Diagram tool failed — do not fall back to text. Let the
+                    # error propagate through the existing tool error path.
+                    tool_result_text = f"图解生成失败: {node_errors[-1]}" if node_errors else "图解生成失败"
+                    messages.append(ToolMessage(content=tool_result_text, tool_call_id=tool_call_id))
+                    continue
 
                 # 将工具返回文本封装为 ToolMessage 加入上下文
                 tool_result_text = str((result.invocation or {}).get("result_text", "") or "")
@@ -1128,7 +1136,9 @@ async def react_node(
                 full_answer = condensed_answer
             break
 
-    if diagram_required and node_diagram_result is None and full_answer.strip():
+    # Deterministic fallback only in auto mode — required mode already handled
+    # by the direct tool call above and should not silently produce a diagram.
+    if not diagram_required and node_diagram_result is None and full_answer.strip():
         node_diagram_result = build_deterministic_fallback_diagram(question, full_answer)
         if node_diagram_result is not None:
             logger.warning(
