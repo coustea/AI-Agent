@@ -1,10 +1,25 @@
 import { createApp, nextTick } from 'vue'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { TeachingDiagramImage as TeachingDiagramImagePayload } from '@/features/chat/types/chat'
 import TeachingDiagramImage from './TeachingDiagramImage.vue'
 
 const mountedApps: Array<{ unmount: () => void }> = []
 
-const mount = (props: { title: string; image_url: string }, onExpand?: () => void) => {
+const createDiagram = (overrides: Partial<TeachingDiagramImagePayload> = {}): TeachingDiagramImagePayload => ({
+  kind: 'image',
+  title: 'TCP 图解',
+  image_url: '/diagram.png',
+  ...overrides,
+})
+
+const mount = (
+  props: {
+    diagram: TeachingDiagramImagePayload
+    compact?: boolean
+    showDownload?: boolean
+  },
+  onExpand?: (diagram: TeachingDiagramImagePayload) => void,
+) => {
   const target = document.createElement('div')
   document.body.append(target)
   const app = createApp(TeachingDiagramImage, { ...props, onExpand })
@@ -16,8 +31,8 @@ const mount = (props: { title: string; image_url: string }, onExpand?: () => voi
 afterEach(() => mountedApps.splice(0).forEach(app => app.unmount()))
 
 describe('TeachingDiagramImage', () => {
-  it('renders a PNG image and offers it for download', () => {
-    const target = mount({ title: 'TCP 图解', image_url: '/diagram.png' })
+  it('renders a PNG image and offers it for download when enabled', () => {
+    const target = mount({ diagram: createDiagram(), showDownload: true })
     const image = target.querySelector('img')
     const download = target.querySelector('a[download]')
 
@@ -25,20 +40,24 @@ describe('TeachingDiagramImage', () => {
     expect(download?.getAttribute('href')).toBe('/diagram.png')
   })
 
-  it('does not render an img for fallback payloads', async () => {
-    const target = mount({ title: 'fallback', image_url: '' })
+  it('does not render an img when image_url is empty', async () => {
+    const target = mount({ diagram: createDiagram({ title: 'fallback', image_url: '' }) })
     await nextTick()
 
     expect(target.querySelector('img')).toBeNull()
   })
 
-  it('emits expand when the PNG preview is clicked', async () => {
-    let expanded = 0
-    const target = mount({ title: 'TCP 图解', image_url: '/diagram.png' }, () => { expanded++ })
+  it('emits expand with the diagram when the compact preview is clicked', async () => {
+    const diagram = createDiagram()
+    let expandedDiagram: TeachingDiagramImagePayload | undefined
+    const target = mount(
+      { diagram, compact: true },
+      payload => { expandedDiagram = payload },
+    )
 
     target.querySelector('img')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     await nextTick()
 
-    expect(expanded).toBe(1)
+    expect(expandedDiagram).toBe(diagram)
   })
 })
