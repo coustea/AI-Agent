@@ -72,7 +72,7 @@ async def _events_for_final_payload(monkeypatch: pytest.MonkeyPatch, delivery) -
             username="alice",
             session_id="s1",
             user_input="解释 TCP",
-            need_teaching_diagram=True,
+            diagram_mode="required",
         )
     ], memory_service
 
@@ -156,7 +156,7 @@ async def test_runtime_sse_completion_includes_persisted_assistant_message_id(
         user_input="解释 TCP",
         attachments=[],
         enable_web_search=False,
-        need_teaching_diagram=True,
+        diagram_mode="required",
     )
 
     completion = next(event for event in emitted if event["event"] == "message.completed")
