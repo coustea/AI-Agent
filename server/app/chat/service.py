@@ -20,6 +20,7 @@ from app.chat.context_builder import ChatContextBuilder, build_user_content
 from app.chat.emitter import ChatEvents, ChatRuntimeEventMapper, SSE_EVENT_MAP, build_workflow_activity_payload
 from app.chat.agent.background import run_background_memory_jobs
 from app.chat.events import record_dialogue_event
+from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.schemas import DiagramMode, TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
@@ -256,6 +257,11 @@ async def chat(
                 sources = sse_data.get("sources", [])
 
                 if diagram_result is not None:
+                    diagram_result = await ensure_teaching_diagram_png_payload(
+                        diagram_result,
+                        username=username,
+                        session_id=effective_session,
+                    )
                     # 图解数据通过单独事件发送，前端在回答后立即渲染
                     yield {"event": "diagram", "data": diagram_result}
 

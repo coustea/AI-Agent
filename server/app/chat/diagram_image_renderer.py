@@ -807,18 +807,24 @@ async def ensure_teaching_diagram_png_payload(
     if not isinstance(source, dict):
         return diagram
 
-    try:
-        return await renderer(source, username=username, session_id=session_id)
-    except Exception as exc:
-        logger.warning("[diagram] PNG delivery failed: %s", exc)
-        if diagram.get("kind") == "fallback":
-            return diagram
-        return {
-            "kind": "fallback",
-            "diagram": source,
-            "render_error": "图片生成暂时失败",
-            "retryable": True,
-        }
+    for attempt in range(2):
+        try:
+            return await renderer(source, username=username, session_id=session_id)
+        except Exception as exc:
+            logger.warning(
+                "[diagram] PNG delivery attempt %d/2 failed: %s",
+                attempt + 1,
+                exc,
+            )
+
+    if diagram.get("kind") == "fallback":
+        return diagram
+    return {
+        "kind": "fallback",
+        "diagram": source,
+        "render_error": "图片生成暂时失败",
+        "retryable": True,
+    }
 
 
 async def _screenshot_html_to_png(html: str, width: int, height: int) -> bytes:

@@ -91,9 +91,34 @@ async def test_chat_emits_png_payload_for_final_diagram(monkeypatch: pytest.Monk
             diagram, username=username, session_id=session_id, renderer=png_renderer,
         )
 
-    events, _ = await _events_for_final_payload(monkeypatch, delivery)
+    events, memory_service = await _events_for_final_payload(monkeypatch, delivery)
 
     assert next(event for event in events if event["event"] == "diagram")["data"] == image
+    assert memory_service.saved_messages[0]["usage_metadata"]["diagram"] == image
+
+
+@pytest.mark.asyncio
+async def test_png_delivery_retries_exactly_once_before_succeeding() -> None:
+    from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
+
+    calls = 0
+
+    async def flaky_renderer(diagram: dict, *, username: str, session_id: str) -> dict:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise TimeoutError("first screenshot timed out")
+        return {"kind": "image", "title": diagram["title"], "image_url": "/diagram.png"}
+
+    delivered = await ensure_teaching_diagram_png_payload(
+        _diagram(),
+        username="alice",
+        session_id="s1",
+        renderer=flaky_renderer,
+    )
+
+    assert calls == 2
+    assert delivered["kind"] == "image"
 
 
 @pytest.mark.asyncio
@@ -161,6 +186,64 @@ async def test_runtime_sse_completion_includes_persisted_assistant_message_id(
 
     completion = next(event for event in emitted if event["event"] == "message.completed")
     assert completion["data"]["saved_message_id"] == 99
+
+
+@pytest.mark.asyncio
+async def test_runtime_sse_maps_delivered_diagram_to_diagram_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.chat.service as service
+
+    emitted: list[dict] = []
+    image = {"kind": "image", "title": "TCP", "image_url": "/diagram.png"}
+
+    class FakeEvents:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def open(self) -> None:
+            return None
+
+        async def send(self, *, event: str, message: str, data: dict | None = None) -> None:
+            emitted.append({"event": event, "message": message, "data": data or {}})
+
+    class FakeMemoryService:
+        async def upsert_activity(self, **kwargs) -> None:
+            return None
+
+    async def completed_chat(**kwargs):
+        yield {"event": "diagram", "data": image}
+        yield {"event": "done", "data": {"session_id": "s1", "saved_message_id": 99}}
+
+    class FakeSessionScope:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *args) -> None:
+            return None
+
+    async def record_dialogue(**kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(service, "ChatEvents", FakeEvents)
+    monkeypatch.setattr(service, "get_chat_memory_service", FakeMemoryService)
+    monkeypatch.setattr(service, "chat", completed_chat)
+    monkeypatch.setattr(service, "session_scope", FakeSessionScope)
+    monkeypatch.setattr(service, "record_dialogue_event", record_dialogue)
+
+    await service.run_chat_agent(
+        user_message_id=10,
+        user_id=7,
+        username="alice",
+        session_id="s1",
+        user_input="解释 TCP",
+        attachments=[],
+        enable_web_search=False,
+        diagram_mode="required",
+    )
+
+    ready = next(event for event in emitted if event["event"] == "diagram.ready")
+    assert ready["data"] == image
 
 
 @pytest.mark.asyncio
