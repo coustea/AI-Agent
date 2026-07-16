@@ -1275,22 +1275,116 @@ button:focus-visible, .btn:focus-visible {
 
 /* ConfirmDialog specific styling (compact card size) */
 .p-confirmdialog {
-  max-width: 360px !important;
+  max-width: 380px !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1) !important;
+  z-index: 100000 !important;
 }
 
-/* Button contrast: make cancel button in ConfirmDialog a ghost/text button */
+/* Force dialog mask to have a high z-index and premium backdrop blur */
+.p-dialog-mask, .p-overlay-mask {
+  z-index: 99999 !important;
+  background-color: rgba(15, 23, 42, 0.4) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+/* Hide close button in top right */
+.p-confirmdialog .p-dialog-header-actions,
+.p-confirmdialog .p-dialog-close-button {
+  display: none !important;
+}
+
+/* Center-align header */
+.p-confirmdialog .p-dialog-header {
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 24px 24px 8px 24px !important;
+  border: none !important;
+}
+
+.p-confirmdialog .p-dialog-title {
+  font-size: var(--text-lg) !important;
+  font-weight: var(--weight-bold) !important;
+  color: var(--color-text-strong) !important;
+  width: 100% !important;
+  text-align: center !important;
+}
+
+/* Center-align content */
+.p-confirmdialog .p-dialog-content {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  padding: 8px 24px 20px 24px !important;
+  font-size: var(--text-sm) !important;
+  color: var(--color-text-secondary) !important;
+  border: none !important;
+}
+
+.p-confirmdialog .p-dialog-content .p-confirmdialog-message {
+  text-align: center !important;
+  width: 100% !important;
+  line-height: var(--leading-normal) !important;
+}
+
+/* Buttons side-by-side, equal width */
+.p-confirmdialog .p-dialog-footer {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px 24px 24px 24px !important;
+  border: none !important;
+  width: 100% !important;
+}
+
+.p-confirmdialog .p-dialog-footer button {
+  flex: 1 !important;
+  margin: 0 !important;
+  padding: 10px 16px !important;
+  font-size: var(--text-sm) !important;
+  font-weight: var(--weight-semibold) !important;
+  border-radius: 8px !important;
+  height: auto !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.2s ease !important;
+}
+
+/* Reject (Cancel) button styling: sleek secondary border button */
+.p-confirmdialog .p-dialog-footer .p-confirmdialog-reject,
 .p-confirmdialog .p-dialog-footer .p-button-secondary,
 .p-confirmdialog .p-dialog-footer .p-button-text {
-  background: transparent !important;
-  border: none !important;
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
   color: var(--color-text-secondary) !important;
   box-shadow: none !important;
 }
 
+.p-confirmdialog .p-dialog-footer .p-confirmdialog-reject:hover,
 .p-confirmdialog .p-dialog-footer .p-button-secondary:hover,
 .p-confirmdialog .p-dialog-footer .p-button-text:hover {
   background: var(--color-bg) !important;
+  border-color: var(--color-border-hover) !important;
   color: var(--color-text-strong) !important;
+}
+
+/* Accept (Confirm) button styling */
+.p-confirmdialog .p-dialog-footer .p-confirmdialog-accept,
+.p-confirmdialog .p-dialog-footer .p-button-danger {
+  background: var(--color-danger) !important;
+  border: 1px solid var(--color-danger) !important;
+  color: #FFFFFF !important;
+}
+
+.p-confirmdialog .p-dialog-footer .p-confirmdialog-accept:hover,
+.p-confirmdialog .p-dialog-footer .p-button-danger:hover {
+  background: #B3304E !important;
+  border-color: #B3304E !important;
 }
 
 /* Top-center Toast Custom styling (resembles Element Message) */
@@ -1333,5 +1427,10 @@ button:focus-visible, .btn:focus-visible {
   font-size: var(--text-base) !important;
   width: auto !important;
   height: auto !important;
+}
+
+/* Radix UI Dropdown Menu Content styling overrides: Ensure it floats on top of the navbar and other page elements */
+[data-slot="dropdown-menu-content"] {
+  z-index: 2000 !important;
 }
 
