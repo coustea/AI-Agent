@@ -17,114 +17,35 @@ export interface GuidanceStrategy {
   reason: string
 }
 
-// ---------------------------------------------------------------------------
-// 评估事实快照结构 —— 与后端 app/evaluation/facts.py 的 AssessmentFacts 对齐
-// ---------------------------------------------------------------------------
-
-export interface FactsWindow {
-  days: number
-  start: string
-  end: string
-}
-
-export interface FactsDailyMinutes {
-  date: string
-  minutes: number
-}
-
-export interface FactsModuleCount {
-  module: string
-  count: number
-}
-
-export interface FactsActivity {
-  active_days: number
-  total_minutes: number
-  daily_minutes: FactsDailyMinutes[]
-  module_distribution: FactsModuleCount[]
-}
-
-export interface FactsResourceFeedback {
-  helpful: number
-  not_helpful: number
-}
-
-export interface FactsResourceUsage {
-  generated: number
-  viewed: number
-  completed: number
-  feedback: FactsResourceFeedback
-}
-
-export interface FactsLearningPath {
-  nodes_started: number
-  nodes_completed: number
-  completion_rate: number
-}
-
-export interface FactsTopicPractice {
-  topic: string
-  submitted: number
-  correct: number
-  accuracy: number
-  enough_evidence: boolean
-}
-
-export interface FactsPractice {
-  submitted: number
-  correct: number
-  accuracy: number
-  by_topic: FactsTopicPractice[]
-}
-
-export interface FactsTopics {
-  encountered: string[]
-}
-
-export interface FactsDataQuality {
-  has_activity: boolean
-  insufficient_topics: string[]
-}
-
-export interface AssessmentFacts {
-  window: FactsWindow
-  activity: FactsActivity
-  resource_usage: FactsResourceUsage
-  learning_path: FactsLearningPath
-  practice: FactsPractice
-  topics: FactsTopics
-  data_quality: FactsDataQuality
-}
-
-// 学习评估报告 — 与后端 models.py LearningAssessmentReport 对齐
-export interface LearningAssessmentReport {
-  id: number
-  user_id: number
-  range_days: 3 | 7 | 14
-  window_start: string
-  window_end: string
-  status: 'generating' | 'ready' | 'failed'
-  facts_snapshot?: AssessmentFacts | null
-  report_markdown?: string | null
-  generated_at?: string | null
-  failure_code?: string | null
-  created_at: string
-  updated_at: string
-}
-
-// 历史报告列表响应
-export interface ReportsHistoryResponse {
-  items: Omit<LearningAssessmentReport, 'facts_snapshot' | 'report_markdown'>[]
-  total: number
-  page: number
-  page_size: number
-}
-
 // 辅导策略 API 响应
 export interface GuidanceStrategyResponse {
   guidance_strategy: Partial<GuidanceStrategy> | null
   guidance_updated_at: string | null
-  last_assessment_report_id: number | null
+  last_assessment_id: number | null
+}
+
+// 学习评估 — 与后端 models.py LearningAssessment 对齐
+export interface LearningAssessment {
+  id: number
+  user_id: number
+  trigger_source: 'profile_update' | 'manual'
+  range_days: 3 | 7 | 14
+  window_start: string
+  window_end: string
+  status: 'generating' | 'ready' | 'failed'
+  assessment: string | null
+  generated_at: string | null
+  failure_code: string | null
+  created_at: string
+  updated_at: string
+}
+
+// 历史评估列表响应
+export interface AssessmentsHistoryResponse {
+  items: Omit<LearningAssessment, 'assessment'>[]
+  total: number
+  page: number
+  page_size: number
 }
 
 /**

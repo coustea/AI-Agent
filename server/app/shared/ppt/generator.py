@@ -46,9 +46,9 @@ from app.shared.ppt.visual_planner import VisualPlanner
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
 _LOGIC_MODEL_MAX_TOKENS = 3_600
-_SECTION_MAX_TOKENS = 2_400
+_SECTION_MAX_TOKENS = 4_000
 _PRESENTATION_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_SECTION_COUNT = 3
+_SECTION_COUNT = 2
 _MAX_SOURCE_MATERIALS = 10
 _MAX_SOURCE_MATERIAL_CHARS = 2_400
 _MAX_SOURCE_CONTEXT_CHARS = 12_000
@@ -64,9 +64,6 @@ _PROMPT_VARIABLES: dict[str, frozenset[str]] = {
             "neighbor_context",
             "section",
         }
-    ),
-    "visual_plan": frozenset(
-        {"storyboard", "course_profile", "visual_families"}
     ),
 }
 
@@ -209,7 +206,7 @@ class PPTGenerator:
     ) -> None:
         self._llm = llm or get_llm()
         self._renderer = renderer or PPTHTMLRenderer()
-        self._planner = planner or VisualPlanner(llm=self._llm)
+        self._planner = planner or VisualPlanner()
 
     async def generate(
         self,
@@ -232,9 +229,9 @@ class PPTGenerator:
             storyboard = self._compile_storyboard(context, logic_model)
             self._validate_storyboard_logic(storyboard, logic_model)
 
-            stage = "visual_planning"
-            await self._progress(progress, "视觉规划智能体正在为每页选择领域模型…", 40)
-            visuals = await self._planner.plan(storyboard, logic_model.course_domain)
+            stage = "compiling_visuals"
+            await self._progress(progress, "正在编译每页的教学图解…", 40)
+            visuals = self._planner.plan(storyboard)
 
             stage = "composing_sections"
             await self._progress(progress, "三个视觉编排智能体正在按全局逻辑完成页面…", 48)

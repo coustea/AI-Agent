@@ -56,8 +56,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'exam_map', max_depth: 3, leaf_detail: 'annotated', show_relations: true },
     code: { programming_language: 'python', output_style: 'challenge', focus: 'application', include_tests: true },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { narrative_style: 'review', density: 'detailed', emphasis: ['core_concepts', 'pitfalls'], include_speaker_notes: true },
-    cartoon: { visual_density: 'intensive', pace: 'balanced', target_duration_seconds: 240, voice: 'teacher' },
+    ppt: { narrative_style: 'review', density: 'detailed', emphasis: ['core_concepts', 'pitfalls'] },
+    cartoon: { lesson_depth: 'deep', visual_density: 'intensive', voice: 'teacher' },
   },
   daily_review: {
     content: { structure: 'progressive', depth_level: 'quick', focus_mode: 'weak_points', include_examples: true },
@@ -65,8 +65,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { narrative_style: 'review', density: 'concise', emphasis: ['core_concepts', 'pitfalls'], include_speaker_notes: true },
-    cartoon: { visual_density: 'moderate', pace: 'fast', target_duration_seconds: 120, voice: 'teacher' },
+    ppt: { narrative_style: 'review', density: 'concise', emphasis: ['core_concepts', 'pitfalls'] },
+    cartoon: { lesson_depth: 'standard', visual_density: 'moderate', voice: 'teacher' },
   },
   project_practice: {
     content: { structure: 'case_driven', depth_level: 'deep', focus_mode: 'full_coverage', include_examples: true },
@@ -74,8 +74,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'keyword', show_relations: false },
     code: { programming_language: 'python', output_style: 'reference', focus: 'application', include_tests: true },
     reading: { coverage: 'broad', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
-    ppt: { narrative_style: 'case_driven', density: 'detailed', emphasis: ['core_concepts', 'cases', 'derivation'], include_speaker_notes: true },
-    cartoon: { visual_density: 'intensive', pace: 'calm', target_duration_seconds: 240, voice: 'coach' },
+    ppt: { narrative_style: 'case_driven', density: 'detailed', emphasis: ['core_concepts', 'cases', 'derivation'] },
+    cartoon: { lesson_depth: 'deep', visual_density: 'intensive', voice: 'coach' },
   },
   self_study: {
     content: { structure: 'progressive', depth_level: 'deep', focus_mode: 'key_concepts', include_examples: true },
@@ -83,8 +83,8 @@ export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
     mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'brief_note', show_relations: true },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts', 'pitfalls'], include_speaker_notes: true },
-    cartoon: { visual_density: 'rich', pace: 'balanced', target_duration_seconds: 180, voice: 'teacher' },
+    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts', 'pitfalls'] },
+    cartoon: { lesson_depth: 'standard', visual_density: 'rich', voice: 'teacher' },
   },
 }
 

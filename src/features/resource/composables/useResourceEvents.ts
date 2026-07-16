@@ -19,6 +19,8 @@ export interface ResourceEventHandlers {
   onArtifactReady?: (event: ResourceEvent) => void
   onCompleted?: (event: ResourceEvent) => void
   onFailed?: (error: Error, event: ResourceEvent) => void
+  // SSE 连接永久断开（后端不可达），与 generation.failed 业务失败不同
+  onDisconnected?: () => void
 }
 
 // 资源事件 SSE 接口基础路径
@@ -134,6 +136,10 @@ export function useResourceEvents() {
       const willRetry = eventSource.readyState !== EventSource.CLOSED
       if (connectionStatus.value !== 'completed' && connectionStatus.value !== 'failed') {
         connectionStatus.value = willRetry ? 'reconnecting' : 'failed'
+      }
+      // 连接永久断开（后端不可达），触发断线回调
+      if (!willRetry) {
+        handlers.onDisconnected?.()
       }
     }
 

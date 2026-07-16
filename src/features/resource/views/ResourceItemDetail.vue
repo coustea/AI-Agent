@@ -33,6 +33,11 @@
 
       <div class="detail-layout">
         <aside class="resource-rail" aria-label="本次生成的资源">
+          <div class="rail-heading">
+            <span>资源目录</span>
+            <strong>{{ resourceCards.length }} 项</strong>
+          </div>
+
           <nav>
             <button
               v-for="card in resourceCards"
@@ -46,6 +51,7 @@
               <span class="rail-indicator"></span>
               <span class="rail-copy">
                 <strong>{{ getArtifactLabel(card.type) }}</strong>
+                <small>{{ card.format }}</small>
               </span>
               <PhArrowRight v-if="card.type !== activeCard.type" :size="15" />
             </button>
@@ -53,7 +59,24 @@
         </aside>
 
         <main class="resource-viewer">
+          <header class="viewer-heading">
+            <div class="viewer-title">
+              <span>当前资源</span>
+              <h1>{{ activeCard.title }}</h1>
+              <p>{{ activeCard.summary }}</p>
+            </div>
 
+            <dl class="viewer-meta">
+              <div>
+                <dt>资源类型</dt>
+                <dd>{{ getArtifactLabel(activeCard.type) }}</dd>
+              </div>
+              <div>
+                <dt>内容格式</dt>
+                <dd>{{ activeCard.format }}</dd>
+              </div>
+            </dl>
+          </header>
 
           <section class="viewer-content" :class="`viewer-${activeCard.type}`">
             <ArtifactRenderer
@@ -155,15 +178,15 @@ function goToResourceList() {
 
 <style scoped>
 .resource-item-page {
-  --page-background: #f5f7fb;
-  --surface: #ffffff;
-  --surface-soft: #f8fafc;
-  --border: #dfe6ef;
-  --border-strong: #c1ccda;
-  --text: #172033;
-  --text-secondary: #536176;
-  --text-muted: #8a96a7;
-  --blue: #2563eb;
+  --page-background: var(--color-bg);
+  --surface: var(--color-surface);
+  --surface-soft: var(--color-surface-hover);
+  --border: var(--color-border);
+  --border-strong: var(--color-border-hover);
+  --text: var(--color-text-strong);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --blue: var(--color-primary-text);
 
   min-height: 100%;
   background: var(--page-background);
@@ -265,17 +288,33 @@ function goToResourceList() {
 
 .detail-layout {
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr);
+  grid-template-columns: 220px minmax(0, 1fr);
   min-height: calc(100vh - 66px);
 }
 
 .resource-rail {
-  padding: 32px 14px;
+  padding: 24px 14px;
   border-right: 1px solid var(--border);
   background: var(--surface-soft);
 }
 
-.resource-rail nav { display: grid; gap: 5px; }
+.rail-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin: 0 10px 12px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rail-heading strong {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.resource-rail nav { display: grid; gap: 4px; }
 
 .rail-item {
   display: flex;
@@ -295,6 +334,12 @@ function goToResourceList() {
 .rail-item:hover { background: #eef4ff; }
 .rail-item:active { transform: scale(0.98); }
 .rail-item.active { border-color: #bbd2fb; background: #f8fbff; color: var(--blue); }
+.rail-item:focus-visible,
+.back-link:focus-visible,
+.page-state button:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
 
 .rail-indicator {
   width: 6px;
@@ -321,11 +366,77 @@ function goToResourceList() {
   background: var(--surface);
 }
 
+.viewer-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 32px;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 28px 40px 22px;
+  border-bottom: 1px solid var(--border);
+}
+
+.viewer-title {
+  min-width: 0;
+  max-width: 720px;
+}
+
+.viewer-title > span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.viewer-title h1 {
+  margin: 0;
+  color: var(--text);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+
+.viewer-title p {
+  margin: 8px 0 0;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+.viewer-meta {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 18px;
+  margin: 4px 0 0;
+}
+
+.viewer-meta div {
+  min-width: 72px;
+}
+
+.viewer-meta dt {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.viewer-meta dd {
+  margin: 4px 0 0;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 750;
+}
+
 .viewer-content {
-  max-width: 800px;
+  max-width: 1000px;
   min-height: 100%;
   margin: 0 auto;
-  padding: clamp(24px, 4vw, 56px) clamp(20px, 3vw, 40px);
+  padding: 28px 40px 64px;
 }
 
 .viewer-mindmap,
@@ -350,9 +461,12 @@ function goToResourceList() {
   .header-separator { display: none; }
   .detail-layout { display: block; }
   .resource-rail { overflow-x: auto; padding: 10px 14px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .rail-heading { display: none; }
   .resource-rail nav { display: flex; min-width: max-content; }
   .rail-item { width: auto; min-width: 132px; }
   .resource-viewer { background: var(--surface); }
-  .viewer-content { padding: 24px 16px; min-height: 100%; }
+  .viewer-heading { align-items: flex-start; flex-direction: column; gap: 16px; padding: 22px 16px 18px; }
+  .viewer-meta { gap: 24px; margin: 0; }
+  .viewer-content { padding: 24px 16px 48px; min-height: 100%; }
 }
 </style>

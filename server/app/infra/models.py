@@ -378,9 +378,9 @@ class UserProfile(SQLModel, table=True):
         default=None,
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True)
     )
-    last_assessment_report_id: int | None = Field(
+    last_assessment_id: int | None = Field(
         default=None,
-        foreign_key="learning_assessment_reports.id"
+        foreign_key="learning_assessments.id"
     )
 
     created_at: datetime = Field(
@@ -427,37 +427,35 @@ class UserProfileDimension(SQLModel, table=True):
     )
 
 
-class LearningAssessmentReport(SQLModel, table=True):
-    """学习效果评估报告表 — 记录用户单次评估报告。"""
-    __tablename__ = "learning_assessment_reports"
+class LearningAssessment(SQLModel, table=True):
+    """学习评估表 — 画像更新或手动触发时生成。
+
+    LLM 输出两部分：assessment（评估文案）和 guidance_strategy（辅导策略）。
+    guidance_strategy 同步写入 UserProfile 表，作为当前生效策略。
+    """
+    __tablename__ = "learning_assessments"
     __table_args__ = (
-        Index("ix_reports_user_created", "user_id", "created_at"),
-        Index("ix_reports_user_status", "user_id", "status"),
+        Index("ix_assessments_user_created", "user_id", "created_at"),
+        Index("ix_assessments_user_status", "user_id", "status"),
         Index(
-            "uq_reports_user_generating",
+            "uq_assessments_user_generating",
             "user_id",
             postgresql_where=text("status = 'generating'"),
             unique=True,
         ),
-        CheckConstraint("range_days IN (3, 7, 14)", name="chk_reports_range_days"),
-        CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_reports_status"),
-        CheckConstraint("window_end > window_start", name="chk_reports_window_order"),
-        CheckConstraint(
-            "(status = 'ready' AND facts_snapshot IS NOT NULL) OR "
-            "(status = 'failed' AND failure_code IS NOT NULL) OR "
-            "(status = 'generating')",
-            name="chk_reports_state_consistency"
-        )
+        CheckConstraint("range_days IN (3, 7, 14)", name="chk_assessments_range_days"),
+        CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_assessments_status"),
+        CheckConstraint("window_end > window_start", name="chk_assessments_window_order"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True, foreign_key="users.id")
+    trigger_source: str = Field(max_length=20, description="触发来源: profile_update / manual")
     range_days: int = Field()
     window_start: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     window_end: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     status: str = Field(max_length=16, default="generating")
-    facts_snapshot: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
-    report_markdown: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    assessment: str | None = Field(default=None, sa_column=Column(Text, nullable=True), description="LLM 生成的学习评估文案")
     generated_at: datetime | None = Field(
         default=None,
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True)
@@ -980,7 +978,7 @@ REGISTERED_MODELS = (
     ChatLongTermMemory,
     UserProfile,
     UserProfileDimension,
-    LearningAssessmentReport,
+    LearningAssessment,
     GeneratedResource,
     GeneratedResourceItem,
     GeneratedResourceAgentRun,

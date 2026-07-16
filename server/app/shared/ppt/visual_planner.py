@@ -1,131 +1,145 @@
-"""Strict LLM boundary for assigning renderer-neutral visuals to content slides."""
+"""Deterministically compile semantic slide briefs into renderer-safe visuals.
+
+The teaching model owns the knowledge graph and the section model owns copy.
+Visual IR is a rendering contract, so it must not be another large LLM output
+surface. Keeping this compiler deterministic removes cross-slide identity,
+union-schema, index, and JSON-size failures from the generation path.
+"""
 
 from __future__ import annotations
 
-import json
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict, Field, model_validator
-
-from app.infra.llm import get_llm
-from app.infra.prompts import prompts
-from app.shared.ppt.contract import (
-    CourseDomain,
-    SlideKind,
-    visual_family_values,
+from app.shared.ppt.contract import LogicRelation, SlideKind
+from app.shared.ppt.models import PPTStoryboard, SlideBrief
+from app.shared.ppt.visual_ir import (
+    AlgorithmFramesVisual,
+    HierarchyVisual,
+    MappingVisual,
+    TableMatrixVisual,
+    TimelineVisual,
+    VisualModel,
 )
-from app.shared.ppt.models import PPTStoryboard
-from app.shared.ppt.profiles import course_profile
-from app.shared.ppt.visual_ir import VisualModel
 
 
-_VISUAL_PLAN_MAX_TOKENS = 4_800
 _META_KINDS = {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}
 
 
-class VisualPlanModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
-
-
-class VisualPlanSlide(VisualPlanModel):
-    slide_id: str = Field(pattern=r"^s[0-9]{2}$")
-    visual: VisualModel
-
-
-class VisualPlanDraft(VisualPlanModel):
-    slides: list[VisualPlanSlide] = Field(min_length=1, max_length=15)
-
-    @model_validator(mode="after")
-    def validate_unique_slide_ids(self) -> "VisualPlanDraft":
-        slide_ids = [slide.slide_id for slide in self.slides]
-        if len(slide_ids) != len(set(slide_ids)):
-            raise ValueError("visual plan slide ids must be unique")
-        return self
-
-
 class VisualPlanner:
-    """Plan exactly one Visual IR payload for every non-meta storyboard slide."""
+    """Compile one valid visual from every content-slide semantic brief."""
 
-    def __init__(self, *, llm: Any | None = None) -> None:
-        self._llm = llm or get_llm()
+    def plan(self, storyboard: PPTStoryboard) -> dict[str, VisualModel]:
+        visuals: dict[str, VisualModel] = {}
+        for brief in storyboard.slides:
+            if brief.kind in _META_KINDS:
+                continue
+            visuals[brief.id] = self._compile_visual(brief)
+        return visuals
 
-    async def plan(
-        self,
-        storyboard: PPTStoryboard,
-        domain: CourseDomain,
-    ) -> dict[str, VisualModel]:
-        from app.shared.ppt.generator import PPTGenerationError
+    @classmethod
+    def _compile_visual(cls, brief: SlideBrief) -> VisualModel:
+        relation = brief.logic_relation
+        if relation is None:
+            raise ValueError(f"content slide {brief.id} is missing its logic relation")
+        if relation in {
+            LogicRelation.PREREQUISITE,
+            LogicRelation.DECOMPOSES,
+            LogicRelation.SUMMARIZES,
+        }:
+            return cls._hierarchy(brief)
+        if relation is LogicRelation.CAUSES:
+            return cls._timeline(brief)
+        if relation is LogicRelation.CONTRASTS:
+            return cls._mapping(brief)
+        if relation in {LogicRelation.DERIVES, LogicRelation.APPLIES}:
+            return cls._algorithm_frames(brief)
+        if relation in {LogicRelation.SUPPORTS, LogicRelation.VERIFIES}:
+            return cls._evidence_table(brief)
+        raise ValueError(f"unsupported logic relation: {relation.value}")
 
-        content_slides = [
-            slide for slide in storyboard.slides if slide.kind not in _META_KINDS
-        ]
-        expected_ids = [slide.id for slide in content_slides]
-        profile = course_profile(domain)
-        profile_payload = {
-            "course_domain": domain.value,
-            "name": profile.name_zh,
-            "planning_guidance": profile.planning_guidance,
-            "preferred_families": [
-                family.value for family in profile.preferred_families
+    @staticmethod
+    def _text(value: str, limit: int) -> str:
+        text = " ".join(value.split())
+        return text[:limit] or "当前知识点"
+
+    @classmethod
+    def _hierarchy(cls, brief: SlideBrief) -> HierarchyVisual:
+        return HierarchyVisual(
+            kind="hierarchy",
+            nodes=[
+                {"label": cls._text(brief.title, 64), "parent_index": None},
+                {"label": cls._text(brief.content_focus, 64), "parent_index": 0},
+                {"label": cls._text(brief.claim, 64), "parent_index": 0},
             ],
-            "representative_models": list(profile.representative_models),
-        }
-        storyboard_payload = [
-            {
-                "slide_id": slide.id,
-                "kind": slide.kind.value,
-                "title": slide.title,
-                "teaching_goal": slide.teaching_goal,
-                "content_focus": slide.content_focus,
-                "question": slide.question,
-                "claim": slide.claim,
-                "bridge": slide.bridge,
-                "logic_relation": (
-                    slide.logic_relation.value if slide.logic_relation else None
-                ),
-            }
-            for slide in content_slides
-        ]
-
-        try:
-            prompt = prompts.get("ppt").render(
-                "visual_plan",
-                storyboard=json.dumps(
-                    storyboard_payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ),
-                course_profile=json.dumps(
-                    profile_payload,
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ),
-                visual_families=visual_family_values(),
-            )
-            draft = await self._llm.ainvoke_json(
-                VisualPlanDraft,
-                prompt,
-                temperature=0.08,
-                max_tokens=_VISUAL_PLAN_MAX_TOKENS,
-            )
-        except PPTGenerationError:
-            raise
-        except Exception as exc:
-            raise PPTGenerationError("visual_planning", str(exc)) from exc
-
-        actual_ids = [slide.slide_id for slide in draft.slides]
-        expected = set(expected_ids)
-        actual = set(actual_ids)
-        missing = sorted(expected - actual)
-        unexpected = sorted(actual - expected)
-        duplicates = sorted(
-            slide_id for slide_id in actual if actual_ids.count(slide_id) > 1
         )
-        if missing or unexpected or duplicates or len(actual_ids) != len(expected_ids):
-            raise PPTGenerationError(
-                "visual_planning",
-                "视觉计划与内容页不一致: "
-                f"missing={missing} unexpected={unexpected} duplicate={duplicates}",
-            )
-        return {slide.slide_id: slide.visual for slide in draft.slides}
 
+    @classmethod
+    def _timeline(cls, brief: SlideBrief) -> TimelineVisual:
+        return TimelineVisual(
+            kind="timeline",
+            lanes=[{"label": "条件"}, {"label": "结果"}],
+            events=[
+                {
+                    "lane_index": 0,
+                    "start": 0.0,
+                    "end": 1.0,
+                    "label": cls._text(brief.content_focus, 64),
+                },
+                {
+                    "lane_index": 1,
+                    "start": 1.0,
+                    "end": 2.0,
+                    "label": cls._text(brief.claim, 64),
+                },
+            ],
+        )
+
+    @classmethod
+    def _mapping(cls, brief: SlideBrief) -> MappingVisual:
+        return MappingVisual(
+            kind="mapping",
+            mode="relation",
+            left_set_label="判断条件",
+            right_set_label="对应结论",
+            left_elements=[cls._text(brief.question, 64)],
+            right_elements=[cls._text(brief.claim, 64)],
+            pairs=[{"source_index": 0, "target_index": 0}],
+        )
+
+    @classmethod
+    def _algorithm_frames(cls, brief: SlideBrief) -> AlgorithmFramesVisual:
+        return AlgorithmFramesVisual(
+            kind="algorithm_frames",
+            frames=[
+                {
+                    "title": "输入",
+                    "cells": [cls._text(brief.question, 48)],
+                    "highlighted_cell_indices": [0],
+                },
+                {
+                    "title": "推导",
+                    "cells": [cls._text(brief.content_focus, 48)],
+                    "highlighted_cell_indices": [0],
+                },
+                {
+                    "title": "结论",
+                    "cells": [cls._text(brief.claim, 48)],
+                    "highlighted_cell_indices": [0],
+                },
+            ],
+        )
+
+    @classmethod
+    def _evidence_table(cls, brief: SlideBrief) -> TableMatrixVisual:
+        return TableMatrixVisual(
+            kind="table_matrix",
+            headers=["依据", "结论"],
+            rows=[
+                {
+                    "cells": [
+                        cls._text(brief.content_focus, 48),
+                        cls._text(brief.claim, 48),
+                    ]
+                }
+            ],
+            highlighted_row_indices=[0],
+            highlighted_column_indices=[1],
+        )

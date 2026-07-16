@@ -2,7 +2,11 @@
   <section class="visualizer-left">
     <header class="visualizer-header">
       <div class="visualizer-title">
-        <h2>{{ selectedAlgorithm?.name || '算法可视化' }}</h2>
+        <div class="visualizer-title-row">
+          <span class="visualizer-kicker">{{ domainLabel }}</span>
+          <span v-if="hasEvents" class="trace-badge">轨迹已就绪</span>
+        </div>
+        <h2>{{ selectedAlgorithm?.name || '选择一个算法开始' }}</h2>
         <p>{{ selectedAlgorithmDescription }}</p>
       </div>
 
@@ -35,6 +39,7 @@
         class="visualizer-empty-state"
       >
         <div class="empty-preview">
+          <span class="preview-label">示例数组</span>
           <div class="preview-bars">
             <div
               v-for="bar in previewBars"
@@ -81,7 +86,7 @@
         <div class="progress-track">
           <div
             class="progress-fill"
-            :style="{ width: progressPercent }"
+            :style="{ transform: `scaleX(${progressScale})` }"
           />
         </div>
       </div>
@@ -161,6 +166,10 @@ const selectedAlgorithmDescription = computed(() => {
   )
 })
 
+const domainLabel = computed(() => {
+  return props.selectedAlgorithm ? getDomainLabel(props.selectedAlgorithm.domain) : '算法实验'
+})
+
 // 可视化器状态文本
 const visualizerStatusText = computed(() => {
   if (props.generating) return '运行中'
@@ -169,9 +178,9 @@ const visualizerStatusText = computed(() => {
 })
 
 // 播放进度百分比
-const progressPercent = computed(() => {
-  if (!hasEvents.value) return '0%'
-  return `${(((props.currentStepIndex + 1) / props.events.length) * 100).toFixed(1)}%`
+const progressScale = computed(() => {
+  if (!hasEvents.value) return 0
+  return Math.min(1, Math.max(0, (props.currentStepIndex + 1) / props.events.length))
 })
 
 // 主操作按钮的文字标签
@@ -215,6 +224,34 @@ const primaryIcon = computed(() => {
 
 .visualizer-title {
   min-width: 0;
+}
+
+.visualizer-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+
+.visualizer-kicker,
+.trace-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  border-radius: var(--radius-pill);
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+}
+
+.visualizer-kicker {
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+}
+
+.trace-badge {
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .visualizer-title h2 {
@@ -267,11 +304,7 @@ const primaryIcon = computed(() => {
   flex: 1 1 0%;
   min-height: 0;
   overflow: hidden;
-  background:
-    linear-gradient(rgba(70, 184, 180, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(70, 184, 180, 0.08) 1px, transparent 1px),
-    var(--color-bg);
-  background-size: 28px 28px;
+  background: var(--color-bg);
 }
 
 .canvas-loading {
@@ -317,9 +350,20 @@ const primaryIcon = computed(() => {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  position: relative;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-xs);
+}
+
+.preview-label {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
 }
 
 .preview-bars {
@@ -463,10 +507,13 @@ const primaryIcon = computed(() => {
 }
 
 .progress-fill {
+  width: 100%;
   height: 100%;
   border-radius: inherit;
   background: var(--color-primary);
-  transition: width 0.3s ease;
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--transition-fast);
 }
 
 @keyframes spin {

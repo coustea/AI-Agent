@@ -110,7 +110,7 @@
 
           <!-- 第一阶段：规划调度 -->
           <section class="workflow-stage planning-stage">
-            <div class="stage-heading stage-heading-centered">
+            <div class="stage-heading">
               <span class="stage-index">01</span>
 
               <div>
@@ -125,8 +125,9 @@
 
             <article
                 ref="planningNodeRef"
-                class="planning-agent-card"
+                class="agent-card planning-agent-card"
                 :class="[
+                getAgentToneClass(planningNode.id),
                 `status-${planningNode.status}`,
                 {
                   'is-selected': selectedDagNodeId === planningNode.id,
@@ -134,55 +135,64 @@
               ]"
                 @click="handleAgentClick(planningNode.id)"
             >
-              <div class="planning-pulse-ring ring-one"></div>
-              <div class="planning-pulse-ring ring-two"></div>
+              <div class="agent-card-running-line"></div>
 
-              <div class="planning-card-header">
-                <div class="planning-icon">
+              <header class="agent-card-header">
+                <div class="agent-icon">
                   <component
                       :is="getWorkflowIcon(planningNode.id)"
-                      class="h-5 w-5"
+                      class="h-4 w-4"
                   />
                 </div>
 
-                <div class="planning-identity">
-                  <span>ORCHESTRATOR</span>
-                  <strong>教学计划智能体</strong>
-                  <p>Planning Agent</p>
+                <div class="agent-identity">
+                  <strong>{{ getWorkflowTitle(planningNode.id) }}</strong>
+                  <span>{{ getAgentRoleName(planningNode.id) }}</span>
                 </div>
 
                 <span
-                    class="node-status-badge"
+                    class="node-status-badge compact"
                     :class="`status-${planningNode.status}`"
                 >
                   <i></i>
                   {{ getNodeStatusLabel(planningNode) }}
                 </span>
+              </header>
+
+              <div class="agent-current-task">
+                <span>{{ getNodePhaseLabel(planningNode) }}</span>
+                <p>{{ getNodeMessage(planningNode) }}</p>
               </div>
 
-              <div class="planning-message">
-                <span>当前任务</span>
-                <strong>{{ getNodeMessage(planningNode) }}</strong>
+              <div
+                  class="agent-execution-chain"
+                  aria-label="智能体执行步骤"
+              >
+                <template
+                    v-for="(step, index) in getAgentExecutionSteps(planningNode)"
+                    :key="step.label"
+                >
+                  <div
+                      class="execution-step"
+                      :class="step.state"
+                  >
+                    <i></i>
+                    <span>{{ step.label }}</span>
+                  </div>
+
+                  <b
+                      v-if="index < getAgentExecutionSteps(planningNode).length - 1"
+                  ></b>
+                </template>
               </div>
 
-              <div class="planning-dispatch-grid">
-                <div>
-                  <span>基础任务</span>
-                  <strong>{{ parallelPoolNodes.length }} 个并行任务</strong>
-                </div>
-
-                <div>
-                  <span>多模态任务</span>
-                  <strong>{{ aggregationNodes.length }} 个合成任务</strong>
-                </div>
-
-                <div>
-                  <span>运行事件</span>
-                  <strong>{{ getNodeEventCount(planningNode) }} 条</strong>
-                </div>
+              <div class="agent-event-preview">
+                <span>最新事件</span>
+                <p>{{ getLatestNodeEvent(planningNode) }}</p>
+                <em>{{ getNodeEventCount(planningNode) }} 条事件</em>
               </div>
 
-              <footer class="planning-footer">
+              <footer class="agent-card-footer">
                 <span>{{ getNodeStageLabel(planningNode) }}</span>
 
                 <div class="node-progress-track">
@@ -434,9 +444,9 @@
             <strong>并行结果回传</strong>
           </div>
 
-          <!-- 第三阶段：轻量协同交接，不再展示 Coordinator Agent 卡片 -->
+          <!-- 第三阶段：轻量协同交接，保留流程语义但不再使用外层卡片 -->
           <section class="workflow-stage coordination-stage">
-            <div class="stage-heading stage-heading-centered">
+            <div class="stage-heading">
               <span class="stage-index">03</span>
 
               <div>
@@ -450,12 +460,11 @@
             </div>
 
             <div
-                class="coordination-flow-strip"
+                class="coordination-flow"
                 :class="`status-${coordinatorNode.status}`"
             >
               <div class="coordination-flow-header">
                 <div>
-                  <span>COORDINATION PIPELINE</span>
                   <strong>{{ getNodeMessage(coordinatorNode) }}</strong>
                 </div>
 
@@ -583,16 +592,6 @@
                   </span>
                 </header>
 
-                <div class="aggregation-inputs">
-                  <span>接收上游上下文</span>
-
-                  <div>
-                    <em>教学计划</em>
-                    <em>基础资源</em>
-                    <em>个性化参数</em>
-                  </div>
-                </div>
-
                 <div class="agent-current-task">
                   <span>{{ getNodePhaseLabel(node) }}</span>
                   <p>{{ getNodeMessage(node) }}</p>
@@ -656,7 +655,7 @@
 
           <!-- 最终资源交付摘要，不再作为 Agent 卡片 -->
           <section class="workflow-stage delivery-stage">
-            <div class="stage-heading stage-heading-centered">
+            <div class="stage-heading">
               <span class="stage-index">
                 {{ showAggregationStage ? '05' : '04' }}
               </span>
@@ -2772,13 +2771,6 @@ function getNodeFullTimeline(
   margin-bottom: 17px;
 }
 
-.stage-heading-centered {
-  width: min(760px, 100%);
-  margin-right: auto;
-  margin-bottom: 16px;
-  margin-left: auto;
-}
-
 .stage-index {
   display: grid;
   width: 38px;
@@ -2869,78 +2861,6 @@ function getNodeFullTimeline(
   align-items: center;
 }
 
-.planning-agent-card {
-  position: relative;
-  width: min(440px, 100%);
-  min-height: 222px;
-  padding: 19px;
-  overflow: visible;
-  border: 1px solid #bdcff5;
-  border-radius: 17px;
-  background:
-      linear-gradient(
-          145deg,
-          rgba(255, 255, 255, 0.98),
-          rgba(245, 248, 255, 0.96)
-      );
-  box-shadow:
-      0 18px 44px rgba(59, 91, 170, 0.13),
-      0 0 0 5px rgba(79, 115, 232, 0.045);
-  cursor: pointer;
-  transition:
-      transform 200ms ease,
-      border-color 200ms ease,
-      box-shadow 200ms ease;
-}
-
-.planning-agent-card:hover,
-.planning-agent-card.is-selected {
-  transform: translateY(-3px);
-  border-color: #7596e8;
-  box-shadow:
-      0 22px 52px rgba(59, 91, 170, 0.18),
-      0 0 0 5px rgba(79, 115, 232, 0.08);
-}
-
-.planning-agent-card.status-running {
-  animation: planning-running 2.4s ease-in-out infinite;
-}
-
-.planning-pulse-ring {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  z-index: -1;
-  border: 1px solid rgba(79, 115, 232, 0.18);
-  border-radius: 24px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(-50%, -50%);
-}
-
-.planning-agent-card.status-running .planning-pulse-ring {
-  animation: planning-ring 2.5s ease-out infinite;
-}
-
-.planning-agent-card.status-running .ring-one {
-  inset: -12px;
-  transform: none;
-}
-
-.planning-agent-card.status-running .ring-two {
-  inset: -24px;
-  animation-delay: 0.8s;
-  transform: none;
-}
-
-.planning-card-header {
-  display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-}
-
-.planning-icon,
 .delivery-icon,
 .detail-agent-icon {
   display: grid;
@@ -2950,13 +2870,6 @@ function getNodeFullTimeline(
   border: 1px solid #cbdafa;
 }
 
-.planning-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-}
-
-.planning-identity span,
 .delivery-copy > span {
   display: block;
   color: #6e83af;
@@ -2965,20 +2878,12 @@ function getNodeFullTimeline(
   letter-spacing: 0.1em;
 }
 
-.planning-identity strong,
 .delivery-copy strong {
   display: block;
   margin-top: 3px;
   color: #1e2b41;
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 850;
-}
-
-.planning-identity p {
-  margin: 3px 0 0;
-  color: #748196;
-  font-size: 11px;
-  font-weight: 650;
 }
 
 .node-status-badge {
@@ -3048,18 +2953,8 @@ function getNodeFullTimeline(
   background: #d65050;
 }
 
-.planning-message {
-  margin-top: 15px;
-  padding: 11px 12px;
-  border: 1px solid #dce5f4;
-  border-radius: 10px;
-  background: rgba(247, 250, 255, 0.92);
-}
-
-.planning-message span,
 .agent-current-task > span,
 .agent-event-preview > span,
-.aggregation-inputs > span,
 .detail-io-grid span,
 .detail-metric-section > span {
   display: block;
@@ -3069,56 +2964,13 @@ function getNodeFullTimeline(
   letter-spacing: 0.04em;
 }
 
-.planning-message strong {
-  display: block;
-  margin-top: 5px;
-  overflow: hidden;
-  color: #34445e;
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 1.5;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.planning-dispatch-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.planning-dispatch-grid > div {
-  padding: 9px 10px;
-  border: 1px solid #e1e7ef;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.8);
-}
-
-.planning-dispatch-grid span {
-  display: block;
-  color: #8490a2;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.planning-dispatch-grid strong {
-  display: block;
-  margin-top: 4px;
-  color: #41516a;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.planning-footer,
 .agent-card-footer {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 13px;
+  margin-top: 9px;
 }
 
-.planning-footer > span,
 .agent-card-footer > span {
   color: #2f8b70;
   font-size: 11px;
@@ -3126,7 +2978,6 @@ function getNodeFullTimeline(
   white-space: nowrap;
 }
 
-.planning-footer > b,
 .agent-card-footer > b {
   min-width: 33px;
   color: #66758a;
@@ -3296,8 +3147,10 @@ function getNodeFullTimeline(
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, 220px), 1fr)
+    minmax(260px, 320px)
   );
+  grid-auto-rows: 250px;
+  justify-content: center;
   gap: 15px;
   width: 100%;
 }
@@ -3310,9 +3163,11 @@ function getNodeFullTimeline(
 
   position: relative;
   display: flex;
-  min-height: 242px;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
   flex-direction: column;
-  padding: 14px;
+  padding: 12px;
   overflow: hidden;
   border: 1px solid #d6dee9;
   border-radius: 14px;
@@ -3322,13 +3177,23 @@ function getNodeFullTimeline(
           rgba(255, 255, 255, 0.98),
           rgba(249, 251, 254, 0.96)
       );
-  box-shadow: 0 8px 24px rgba(20, 34, 55, 0.055);
+  box-shadow: none;
   cursor: pointer;
   transition:
       transform 190ms ease,
       border-color 190ms ease,
       box-shadow 190ms ease,
       background-color 190ms ease;
+}
+
+.planning-agent-card {
+  width: min(320px, 100%);
+  height: 250px;
+  flex: 0 0 250px;
+}
+
+.planning-agent-card.status-running {
+  animation: none;
 }
 
 .agent-card.tone-blue,
@@ -3398,9 +3263,7 @@ function getNodeFullTimeline(
 .agent-card.is-selected {
   transform: translateY(-4px);
   border-color: var(--agent-accent-border);
-  box-shadow:
-      0 16px 34px var(--agent-accent-glow),
-      0 0 0 2px var(--agent-accent-soft);
+  box-shadow: 0 0 0 2px var(--agent-accent-soft);
 }
 
 .agent-card.status-running {
@@ -3411,9 +3274,7 @@ function getNodeFullTimeline(
           #ffffff,
           var(--agent-accent-soft)
       );
-  box-shadow:
-      0 14px 32px var(--agent-accent-glow),
-      inset 3px 0 0 var(--agent-accent);
+  box-shadow: inset 0 2px 0 var(--agent-accent);
 }
 
 .agent-card.status-success,
@@ -3502,9 +3363,9 @@ function getNodeFullTimeline(
 }
 
 .agent-current-task {
-  min-height: 61px;
-  margin-top: 11px;
-  padding: 10px 11px;
+  min-height: 48px;
+  margin-top: 8px;
+  padding: 7px 9px;
   border: 1px solid #e1e7ef;
   border-radius: 9px;
   background: #f8fafc;
@@ -3516,14 +3377,14 @@ function getNodeFullTimeline(
 
 .agent-current-task p {
   display: -webkit-box;
-  margin: 5px 0 0;
+  margin: 3px 0 0;
   overflow: hidden;
   color: #4e5e77;
   font-size: 11px;
   font-weight: 650;
   line-height: 1.5;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
 .agent-execution-chain {
@@ -3531,7 +3392,7 @@ function getNodeFullTimeline(
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .execution-step {
@@ -3600,15 +3461,17 @@ function getNodeFullTimeline(
 }
 
 .agent-event-preview {
-  position: relative;
-  min-height: 58px;
-  margin-top: 11px;
-  padding: 10px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 31px;
+  margin-top: 7px;
+  padding: 7px 0 0;
   border-top: 1px solid #e6eaf0;
 }
 
 .agent-event-preview p {
-  margin: 5px 65px 0 0;
+  margin: 0 8px;
   overflow: hidden;
   color: #5f6e84;
   font-size: 10px;
@@ -3618,9 +3481,7 @@ function getNodeFullTimeline(
 }
 
 .agent-event-preview em {
-  position: absolute;
-  right: 10px;
-  bottom: 10px;
+  position: static;
   color: #8995a6;
   font-size: 9px;
   font-style: normal;
@@ -3628,8 +3489,8 @@ function getNodeFullTimeline(
 }
 
 .agent-card-footer {
-  margin-top: auto;
-  padding-top: 10px;
+  margin-top: 7px;
+  padding-top: 7px;
 }
 
 .agent-card-footer > span {
@@ -3730,30 +3591,9 @@ function getNodeFullTimeline(
   align-items: center;
 }
 
-.coordination-flow-strip {
+.coordination-flow {
   width: min(920px, 100%);
-  padding: 17px 18px;
-  border: 1px solid #cedae8;
-  border-radius: 13px;
-  background: rgba(255, 255, 255, 0.84);
-  box-shadow: 0 8px 22px rgba(27, 46, 72, 0.055);
-}
-
-.coordination-flow-strip.status-running {
-  border-color: #8dbec8;
-  box-shadow:
-      0 10px 26px rgba(37, 141, 155, 0.11),
-      inset 3px 0 0 #2c909e;
-}
-
-.coordination-flow-strip.status-success {
-  border-color: #b9ddcf;
-  background: rgba(247, 253, 250, 0.92);
-}
-
-.coordination-flow-strip.status-failed {
-  border-color: #eabcbc;
-  background: rgba(255, 247, 247, 0.92);
+  padding: 0 18px;
 }
 
 .coordination-flow-header {
@@ -3763,17 +3603,9 @@ function getNodeFullTimeline(
   gap: 20px;
 }
 
-.coordination-flow-header > div:first-child > span {
-  display: block;
-  color: #628793;
-  font-size: 10px;
-  font-weight: 850;
-  letter-spacing: 0.1em;
-}
-
 .coordination-flow-header > div:first-child > strong {
   display: block;
-  margin-top: 4px;
+  margin-top: 0;
   color: #34465b;
   font-size: 13px;
   font-weight: 750;
@@ -3800,8 +3632,8 @@ function getNodeFullTimeline(
 .coordination-steps {
   display: flex;
   align-items: stretch;
-  gap: 9px;
-  margin-top: 15px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .coordination-step {
@@ -3811,10 +3643,8 @@ function getNodeFullTimeline(
   min-width: 0;
   flex: 1;
   align-items: center;
-  padding: 10px 11px;
-  border: 1px solid #e0e7ef;
-  border-radius: 9px;
-  background: #f8fafc;
+  min-height: 40px;
+  padding: 0;
 }
 
 .coordination-step > span {
@@ -3855,8 +3685,7 @@ function getNodeFullTimeline(
 }
 
 .coordination-step.running {
-  border-color: #a9d1d8;
-  background: #f2fafb;
+  background: transparent;
 }
 
 .coordination-step.running > span {
@@ -3872,8 +3701,7 @@ function getNodeFullTimeline(
 }
 
 .coordination-step.success {
-  border-color: #bde0d3;
-  background: #f4fbf8;
+  background: transparent;
 }
 
 .coordination-step.success > span {
@@ -3887,8 +3715,7 @@ function getNodeFullTimeline(
 }
 
 .coordination-step.failed {
-  border-color: #edc1c1;
-  background: #fff6f6;
+  background: transparent;
 }
 
 .coordination-step.failed > span {
@@ -3918,7 +3745,7 @@ function getNodeFullTimeline(
 
 .coordination-progress-track {
   height: 4px;
-  margin-top: 14px;
+  margin-top: 12px;
   overflow: hidden;
   border-radius: 99px;
   background: #e5ebf1;
@@ -4028,41 +3855,13 @@ function getNodeFullTimeline(
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
-    minmax(min(100%, 290px), 1fr)
+    minmax(260px, 320px)
   );
+  grid-auto-rows: 250px;
+  justify-content: center;
   gap: 15px;
-  width: min(850px, 100%);
+  width: 100%;
   margin: 0 auto;
-}
-
-.aggregation-agent-card {
-  min-height: 265px;
-}
-
-.aggregation-inputs {
-  margin-top: 11px;
-  padding: 9px 10px;
-  border: 1px solid #e1e6ee;
-  border-radius: 9px;
-  background: #fafbfc;
-}
-
-.aggregation-inputs > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-
-.aggregation-inputs em {
-  padding: 4px 7px;
-  border: 1px solid var(--agent-accent-border);
-  border-radius: 5px;
-  color: var(--agent-accent);
-  background: var(--agent-accent-soft);
-  font-size: 9px;
-  font-style: normal;
-  font-weight: 700;
 }
 
 .delivery-stage {
@@ -5140,13 +4939,6 @@ function getNodeFullTimeline(
     justify-content: flex-start;
   }
 
-  .parallel-agent-grid {
-    grid-template-columns: repeat(
-      2,
-      minmax(0, 1fr)
-    );
-  }
-
   .coordination-steps {
     flex-direction: column;
   }
@@ -5243,27 +5035,35 @@ function getNodeFullTimeline(
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .parallel-agent-grid {
+    grid-auto-rows: 296px;
+  }
+
+  .aggregation-agent-grid {
+    grid-auto-rows: 296px;
+  }
+
+  .planning-agent-card {
+    width: 100%;
+    height: 296px;
+    flex-basis: 296px;
+  }
+
   .agent-link-svg {
     display: none;
   }
 
-  .planning-dispatch-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .planning-card-header,
   .agent-card-header {
     grid-template-columns: 42px minmax(0, 1fr);
   }
 
-  .planning-card-header > .node-status-badge,
   .agent-card-header > .node-status-badge {
     grid-column: 2;
     justify-self: start;
   }
 
   .agent-card {
-    min-height: 235px;
+    min-height: 0;
   }
 
   .coordination-flow-header {

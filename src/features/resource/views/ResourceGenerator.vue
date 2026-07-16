@@ -80,7 +80,7 @@ const {
   dagNodeStates, selectedDagNodeId, overallProgress, latestWorkflowMessage,
   generatedResources, generationError, planReady,
   activeResourceId, visibleWorkflowNodes, dagSelectedAgentIds,
-  submitInput, start, restore, pause, resume, dispose, selectDagNode,
+  submitInput, start, restore, pause, resume, dispose, readActiveResourceId, selectDagNode,
 } = useGeneration()
 
 // 监听阶段变化：进入 result 阶段后自动跳转到资源结果详情页
@@ -90,19 +90,27 @@ watch(currentPhase, (phase) => {
   }
 })
 
-// 组件挂载：从 URL query 恢复 prompt 或 resourceId 并恢复生成状态
+// 组件挂载：从 URL 或同一浏览会话的活跃任务恢复生成状态。
 onMounted(() => {
   const prompt = route.query.prompt
   if (prompt) naturalInput.value = String(prompt)
-  const resourceId = Number(route.query.resourceId)
-  if (Number.isInteger(resourceId) && resourceId > 0) {
+  const routeResourceId = Number(route.query.resourceId)
+  const resourceId = Number.isInteger(routeResourceId) && routeResourceId > 0
+    ? routeResourceId
+    : readActiveResourceId()
+  if (resourceId !== null) {
+    if (String(route.query.resourceId || '') !== String(resourceId)) {
+      void router.replace({
+        query: { ...route.query, resourceId: String(resourceId) },
+      })
+    }
     void restore(resourceId)
   }
 })
 // keep-alive 激活时恢复事件流，停用时暂停
 onActivated(() => { void resume() })
 onDeactivated(() => { pause() })
-// 组件销毁时释放 SSE 连接与轮询定时器
+// 组件销毁只释放当前页面的观察连接；后端任务和恢复标识保持不变。
 onBeforeUnmount(() => { dispose() })
 </script>
 

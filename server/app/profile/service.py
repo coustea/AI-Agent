@@ -271,7 +271,7 @@ class ProfileService:
 
         strategy = get_effective_guidance_strategy(profile)
         lines.append("\n## 当前自适应辅导策略")
-        lines.append(f"- 阶段关注目标：{strategy.get('weekly_goal')}")
+        lines.append(f"- 本期结论：{strategy.get('conclusion')}")
         lines.append(f"- 建议单次学习时长：{strategy.get('recommended_session_minutes')} 分钟")
         lines.append(f"- 推荐辅导风格：{strategy.get('tutoring_style')}")
 
@@ -279,9 +279,6 @@ class ProfileService:
         topics_str = "、".join(focus_topics) if focus_topics else "暂无"
         lines.append(f"- 重点学习主题：{topics_str}")
 
-        pref_types = strategy.get("preferred_resource_types", [])
-        types_str = "、".join(pref_types) if pref_types else "暂无"
-        lines.append(f"- 偏好学习资源类型：{types_str}")
         lines.append(f"- 策略制定依据：{strategy.get('reason')}")
 
         return "\n".join(lines)

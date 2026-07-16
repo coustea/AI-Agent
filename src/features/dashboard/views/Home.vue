@@ -94,7 +94,7 @@
               <Button
                   variant="ghost"
                   class="text-xs font-bold text-teal-655 hover:text-teal-700 p-0 cursor-pointer h-7 hover:bg-transparent"
-                  @click="goTo(profilePath)"
+                  @click="isGlobalProfileVisible = true"
               >
                 完整报告
               </Button>
@@ -481,6 +481,7 @@
         <p class="loading-label">正在同步学习控制台</p>
         <p class="loading-hint">读取画像、路径、资源与学习事件</p>
       </div>
+      <GlobalProfileDialog />
     </div>
   </main>
 </template>
@@ -510,6 +511,12 @@ import {
   type HomeActionItem,
   type RecentResourceItem,
 } from '@/features/dashboard/api/home'
+
+import {
+  isGlobalProfileVisible,
+} from '@/features/profile/model/useGlobalProfile'
+
+import GlobalProfileDialog from '@/features/profile/components/GlobalProfileDialog.vue'
 
 import { getRadarChartData } from '@/features/profile/model/profileViewModel'
 
@@ -750,13 +757,6 @@ const formatDateTime = (
 
   return `${formatDate(value)} ${time}`
 }
-
-const profilePath = computed(() => {
-  return (
-      profileRadarData.value?.radar?.path ||
-      '/profile'
-  )
-})
 
 const radarSource = computed<any>(() => {
   if (!profileRadarData.value) {

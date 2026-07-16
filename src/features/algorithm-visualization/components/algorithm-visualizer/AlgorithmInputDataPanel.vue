@@ -2,8 +2,8 @@
   <div class="input-data-panel">
     <div class="input-data-header">
       <div>
-        <h3>运行数据</h3>
-        <p>按字段填写即可，无需了解 JSON 格式。</p>
+        <h3>输入数据</h3>
+        <p>这些值会作为参数传给算法，无需了解 JSON 格式。</p>
       </div>
       <button
         type="button"
@@ -26,6 +26,7 @@
           :disabled="disabled"
           :class="{ invalid: fieldErrors[field.key] }"
           :placeholder="fieldPlaceholder(field.schema)"
+          :aria-describedby="`${field.key}-help`"
           rows="3"
           @input="updateField(field.key, field.schema, ($event.target as HTMLTextAreaElement).value)"
         />
@@ -45,9 +46,10 @@
           :disabled="disabled"
           :class="{ invalid: fieldErrors[field.key] }"
           :placeholder="fieldPlaceholder(field.schema)"
+          :aria-describedby="`${field.key}-help`"
           @input="updateField(field.key, field.schema, ($event.target as HTMLInputElement).value)"
         >
-        <span class="field-help">{{ fieldErrors[field.key] || fieldHelp(field.schema) }}</span>
+        <span :id="`${field.key}-help`" class="field-help">{{ fieldErrors[field.key] || fieldHelp(field.schema) }}</span>
       </label>
     </div>
   </div>
@@ -171,20 +173,22 @@ function fieldHelp(schema: InputSchema): string {
 </script>
 
 <style scoped>
-.input-data-panel { height: 100%; overflow: auto; padding: 16px; background: var(--color-surface); }
-.input-data-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
-.input-data-header h3 { margin: 0; color: var(--color-text-strong); font-size: 14px; font-weight: 800; }
-.input-data-header p, .field-help { margin: 4px 0 0; color: var(--color-text-muted); font-size: 12px; line-height: 1.5; }
-.reset-button { border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 5px 8px; background: var(--color-surface); color: var(--color-text-secondary); font-size: 12px; font-weight: 700; }
-.reset-button:hover:not(:disabled) { border-color: var(--color-primary); color: var(--color-primary-text); }
-.input-fields { display: grid; gap: 14px; }
-.input-field { display: grid; gap: 6px; }
-.field-label { color: var(--color-text-secondary); font-size: 12px; font-weight: 800; }
-.field-label b { margin-left: 6px; color: var(--color-destructive, #dc2626); font-size: 11px; }
-input, textarea, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--color-code-surface, var(--color-surface)); color: var(--color-text); font: inherit; font-size: 13px; outline: none; }
-textarea { resize: vertical; min-height: 72px; line-height: 1.55; }
+.input-data-panel { height: 100%; overflow: auto; padding: var(--space-5); background: var(--color-surface); }
+.input-data-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border-light); }
+.input-data-header h3 { margin: 0; color: var(--color-text-strong); font-size: var(--text-base); font-weight: var(--weight-bold); }
+.input-data-header p, .field-help { margin: 4px 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); }
+.reset-button { min-height: 36px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0 var(--space-3); background: var(--color-surface); color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.reset-button:hover:not(:disabled) { border-color: var(--color-primary); background: var(--color-surface-hover); color: var(--color-primary-text); }
+.reset-button:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.input-fields { display: grid; gap: var(--space-5); }
+.input-field { display: grid; gap: var(--space-2); }
+.field-label { color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.field-label b { margin-left: 6px; color: var(--color-danger); font-size: var(--text-xs); }
+input, textarea, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-sm); outline: none; transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast); }
+textarea { resize: vertical; min-height: 88px; line-height: var(--leading-normal); }
 input:focus, textarea:focus, select:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
-.invalid { border-color: var(--color-destructive, #dc2626); }
-.input-field:has(.invalid) .field-help { color: var(--color-destructive, #dc2626); }
+.invalid { border-color: var(--color-danger); background: var(--color-danger-soft); }
+.input-field:has(.invalid) .field-help { color: var(--color-danger); }
 input:disabled, textarea:disabled, select:disabled, .reset-button:disabled { cursor: not-allowed; opacity: .6; }
+@media (max-width: 620px) { .input-data-panel { padding: var(--space-4); } }
 </style>

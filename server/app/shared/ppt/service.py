@@ -162,16 +162,16 @@ class PPTService:
                 "slide_count": artifact.slide_count,
                 "file_size": artifact.path.stat().st_size,
                 "ppt_pipeline": {
-                    "version": "visual-ir-v2",
+                    "version": "deterministic-visual-v3",
                     "stages": [
                         "assembling_context",
                         "designing_logic",
                         "designing_story",
-                        "visual_planning",
+                        "compiling_visuals",
                         "composing_sections",
                         "rendering_html",
                     ],
-                    "composition_workers": 3,
+                    "section_workers": 2,
                 },
             },
         )

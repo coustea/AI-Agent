@@ -1,19 +1,17 @@
 # OUTPUT CONTRACT
 
-输出符合 `_StoryboardDraft` 的 JSON。严格按以下字段规范输出，不得添加或省略任何字段。
+输出符合 `_StoryboardDraft` 的 JSON。只输出本规范声明的字段；默认字段可省略，不得用 `null` 代替空值。
 
 ## 顶层结构
 
 ```json
 {
   "title": "课程标题",
-  "course": "计算机类本科课程",
   "scenes": [ ... ]
 }
 ```
 
 - `title`：1～72 字符
-- `course`：1～40 字符，默认 "计算机类本科课程"
 - `scenes`：{{scene_count}} 个场景，深度为 {{lesson_depth}}，信息密度为 {{density}}
 
 ## scenes 字段规范
@@ -28,7 +26,7 @@
 }
 ```
 
-- `title`：1～54 字符，面向学习者，不得出现 orient、model、trace、教学目标、学生能够等内部标签
+- `title`：1～28 字符，面向学习者，不得出现 orient、model、trace、教学目标、学生能够等内部标签
 - `teaching_goal`：1～100 字符，描述本场景的教学目标
 - `grammar`：只能选择以下四种之一：
   - `"concept"`：用类比、关键词和层次关系建立直觉，不做卡片列表

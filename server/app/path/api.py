@@ -51,7 +51,6 @@ SSE_HEADERS = {
 @router.post("")  # POST /api/v1/ai/path-plan — 创建学习路径
 async def create_path(
     request: PathRequest,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
@@ -60,12 +59,14 @@ async def create_path(
     run_id = str(uuid4())
     events = PathEvents(user_id=current_user.id, path_id=path_id, run_id=run_id)
     await events.open()
-    background_tasks.add_task(  # 后台异步执行路径生成（LLM 规划 + 节点创建）
-        run_generation_bg,
-        user_id=current_user.id,
-        path_id=path_id,
-        request=request,
-        run_id=run_id,
+    # 路径规划是独立任务，不能依赖创建页面仍保持 HTTP 连接。
+    asyncio.create_task(
+        run_generation_bg(
+            user_id=current_user.id,
+            path_id=path_id,
+            request=request,
+            run_id=run_id,
+        )
     )
     return HttpResponse.success(
         data={"id": path_id, "run_id": run_id, "status": "generating"},
@@ -584,10 +585,9 @@ async def get_continue_learning(
             "title": path.title,
             "overall_progress": path.overall_progress,
             "current_node_title": current_node.title if current_node else None,
-            "current_node_id": current_node.node_id if current_node else None,
+            "current_node_id": current_node.id if current_node else None,
             "updated_at": path.updated_at.isoformat() if path.updated_at else None,
             "last_learned_at": last_learned_at.isoformat() if last_learned_at else None,
         })
 
     return HttpResponse.success(data={"active_paths": result})
-

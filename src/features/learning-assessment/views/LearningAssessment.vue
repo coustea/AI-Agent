@@ -17,7 +17,7 @@
             {{ days }} 天
           </button>
         </div>
-        <Button class="generate-btn" :disabled="generating" @click="triggerReportGeneration">
+        <Button class="generate-btn" :disabled="generating" @click="triggerAssessmentGeneration">
           <Sparkles :size="16" />
           {{ generating ? '生成中' : '重新评估' }}
         </Button>
@@ -42,28 +42,28 @@
     </section>
 
     <!-- 无报告状态 -->
-    <section v-else-if="!activeReport" class="empty-state">
+    <section v-else-if="!activeAssessment && !dashboardData" class="empty-state">
       <FileCheck :size="32" class="empty-icon" />
-      <h2>暂无评估报告</h2>
-      <p>点击「重新评估」开始生成第一份学习效果评估报告</p>
+      <h2>暂无评估数据</h2>
+      <p>点击「重新评估」开始生成第一份学习效果评估</p>
     </section>
 
     <!-- 失败状态 -->
-    <section v-else-if="activeReport.status === 'failed'" class="error-state">
+    <section v-else-if="activeAssessment?.status === 'failed'" class="error-state">
       <AlertCircle :size="24" />
-      <h2>报告生成失败</h2>
-      <p>{{ activeReport.failure_code || '未知内部错误' }}</p>
-      <Button variant="outline" @click="triggerReportGeneration">重试</Button>
+      <h2>评估生成失败</h2>
+      <p>{{ activeAssessment.failure_code || '未知内部错误' }}</p>
+      <Button variant="outline" @click="triggerAssessmentGeneration">重试</Button>
     </section>
 
     <!-- 生成中状态 -->
-    <section v-else-if="activeReport.status !== 'ready'" class="loading-state">
+    <section v-else-if="activeAssessment?.status === 'generating'" class="loading-state">
       <div class="loading-spinner" />
-      <p>报告正在生成中...</p>
+      <p>评估正在生成中...</p>
     </section>
 
     <!-- 主内容 -->
-    <template v-else-if="facts">
+    <template v-else-if="dashboardData">
       <!-- 本期结论与策略 -->
       <section class="conclusion-section">
         <div class="conclusion-card">
@@ -72,11 +72,11 @@
             <h2>本期结论与策略调整</h2>
             <span class="window-badge">
               <Calendar :size="14" />
-              {{ activeReport.range_days }} 天
-              {{ formatDateRange(activeReport.window_start, activeReport.window_end) }}
+              {{ dashboardData.window.days }} 天
+              {{ formatDateRange(dashboardData.window.start, dashboardData.window.end) }}
             </span>
           </div>
-          <p class="conclusion-text">{{ guidanceStrategy?.conclusion || defaultConclusion }}</p>
+          <p class="conclusion-text">{{ activeAssessment?.assessment || guidanceStrategy?.conclusion || defaultConclusion }}</p>
           <div v-if="guidanceStrategy" class="strategy-highlights">
             <div class="highlight-item">
               <span class="highlight-label">重点主题</span>
@@ -93,6 +93,10 @@
               <strong class="highlight-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
             </div>
           </div>
+          <p v-if="guidanceStrategy?.reason" class="strategy-reason">
+            <span class="reason-label">策略依据</span>
+            {{ guidanceStrategy.reason }}
+          </p>
         </div>
       </section>
 
@@ -102,32 +106,32 @@
           <Clock :size="18" class="metric-icon" />
           <div class="metric-body">
             <span class="metric-label">学习时长</span>
-            <strong class="metric-value">{{ facts.activity.total_minutes }}</strong>
+            <strong class="metric-value">{{ Math.round(dashboardData.time_stats.total_seconds / 60) }}</strong>
             <span class="metric-unit">分钟</span>
           </div>
-          <span class="metric-sub">活跃 {{ facts.activity.active_days }} 天</span>
+          <span class="metric-sub">活跃 {{ dashboardData.time_stats.streak_days }} 天</span>
         </div>
         <div class="metric-card">
           <ListChecks :size="18" class="metric-icon" />
           <div class="metric-body">
             <span class="metric-label">练习正确率</span>
-            <strong class="metric-value">{{ percentLabel(facts.practice.accuracy) }}</strong>
+            <strong class="metric-value">{{ dashboardData.practice_chart.overall_accuracy }}%</strong>
           </div>
-          <span class="metric-sub">完成 {{ facts.practice.correct }}/{{ facts.practice.submitted }} 题</span>
+          <span class="metric-sub">完成 {{ dashboardData.practice_chart.total_correct }}/{{ dashboardData.practice_chart.total_submitted }} 题</span>
         </div>
         <div class="metric-card">
           <Route :size="18" class="metric-icon" />
           <div class="metric-body">
             <span class="metric-label">路径完成率</span>
-            <strong class="metric-value">{{ percentLabel(facts.learning_path.completion_rate) }}</strong>
+            <strong class="metric-value">{{ dashboardData.learning_path.completion_rate }}%</strong>
           </div>
-          <span class="metric-sub">完成 {{ facts.learning_path.nodes_completed }} 节点</span>
+          <span class="metric-sub">完成 {{ dashboardData.learning_path.nodes_completed }} 节点</span>
         </div>
         <div class="metric-card">
           <Target :size="18" class="metric-icon" />
           <div class="metric-body">
             <span class="metric-label">涉及主题</span>
-            <strong class="metric-value">{{ facts.topics.encountered.length }}</strong>
+            <strong class="metric-value">{{ dashboardData.evaluation_summary.weak_topics.length + dashboardData.evaluation_summary.focus_topics.length }}</strong>
             <span class="metric-unit">个</span>
           </div>
           <span class="metric-sub">{{ topicsSummary }}</span>
@@ -162,12 +166,12 @@
               <div class="bar-track">
                 <div
                   class="bar-fill"
-                  :style="{ width: `${topic.accuracy * 100}%` }"
-                  :class="{ weak: topic.accuracy < 0.6, moderate: topic.accuracy >= 0.6 && topic.accuracy < 0.8 }"
+                  :style="{ width: `${topic.accuracy}%` }"
+                  :class="{ weak: topic.accuracy < 60, moderate: topic.accuracy >= 60 && topic.accuracy < 80 }"
                 />
               </div>
-              <strong class="topic-accuracy" :class="{ weak: topic.accuracy < 0.6 }">
-                {{ topic.enough_evidence ? percentLabel(topic.accuracy) : '数据不足' }}
+              <strong class="topic-accuracy" :class="{ weak: topic.accuracy < 60 }">
+                {{ topic.submitted >= 5 ? `${topic.accuracy}%` : '数据不足' }}
               </strong>
             </div>
           </div>
@@ -208,31 +212,31 @@
         </Button>
       </section>
 
-      <!-- 历史报告 -->
+      <!-- 历史评估 -->
       <section class="history-section">
         <div class="section-header">
           <History :size="16" />
-          <h3>历史报告</h3>
-          <span class="history-count">{{ totalReports }} 份</span>
+          <h3>历史评估</h3>
+          <span class="history-count">{{ totalAssessments }} 份</span>
         </div>
         <div v-if="historyLoading" class="history-loading">加载中...</div>
-        <div v-else-if="reportsHistory.length === 0" class="history-empty">暂无历史报告</div>
+        <div v-else-if="assessmentsHistory.length === 0" class="history-empty">暂无历史评估</div>
         <div v-else class="history-grid">
           <button
-            v-for="report in reportsHistory.slice(0, 4)"
-            :key="report.id"
+            v-for="item in assessmentsHistory.slice(0, 4)"
+            :key="item.id"
             type="button"
-            :class="{ active: activeReport?.id === report.id }"
+            :class="{ active: activeAssessment?.id === item.id }"
             class="history-item"
-            @click="selectReport(report.id)"
+            @click="selectAssessment(item.id)"
           >
-            <strong>{{ report.range_days }} 天评估</strong>
-            <span>{{ formatDateRange(report.window_start, report.window_end) }}</span>
+            <strong>{{ item.range_days }} 天评估</strong>
+            <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
           </button>
         </div>
-        <div v-if="totalReports > 4" class="history-more">
+        <div v-if="totalAssessments > 4" class="history-more">
           <Button variant="ghost" size="sm" @click="showHistoryDrawer = true">
-            查看全部 {{ totalReports }} 份报告
+            查看全部 {{ totalAssessments }} 份评估
             <ChevronRight :size="14" />
           </Button>
         </div>
@@ -250,26 +254,26 @@
             </button>
           </header>
           <div class="drawer-body">
-            <template v-if="facts">
+            <template v-if="dashboardData">
               <!-- 资源与路径详情 -->
               <article class="detail-block">
                 <h4>资源使用统计</h4>
                 <div class="detail-grid">
                   <div class="detail-item">
                     <span>生成资源</span>
-                    <strong>{{ facts.resource_usage.generated }}</strong>
+                    <strong>{{ dashboardData.evaluation_summary.generated_resources }}</strong>
                   </div>
                   <div class="detail-item">
                     <span>浏览资源</span>
-                    <strong>{{ facts.resource_usage.viewed }}</strong>
+                    <strong>{{ dashboardData.evaluation_summary.viewed_resources }}</strong>
                   </div>
                   <div class="detail-item">
                     <span>完成资源</span>
-                    <strong>{{ facts.resource_usage.completed }}</strong>
+                    <strong>{{ dashboardData.evaluation_summary.completed_resources }}</strong>
                   </div>
                   <div class="detail-item">
-                    <span>有帮助反馈</span>
-                    <strong>{{ facts.resource_usage.feedback.helpful }}</strong>
+                    <span>学习事件</span>
+                    <strong>{{ dashboardData.evaluation_summary.event_count }}</strong>
                   </div>
                 </div>
               </article>
@@ -280,42 +284,42 @@
                 <div class="detail-grid">
                   <div class="detail-item">
                     <span>开始节点</span>
-                    <strong>{{ facts.learning_path.nodes_started }}</strong>
+                    <strong>{{ dashboardData.learning_path.nodes_started }}</strong>
                   </div>
                   <div class="detail-item">
                     <span>完成节点</span>
-                    <strong>{{ facts.learning_path.nodes_completed }}</strong>
+                    <strong>{{ dashboardData.learning_path.nodes_completed }}</strong>
                   </div>
                   <div class="detail-item">
                     <span>完成率</span>
-                    <strong>{{ percentLabel(facts.learning_path.completion_rate) }}</strong>
+                    <strong>{{ dashboardData.learning_path.completion_rate }}%</strong>
                   </div>
                 </div>
               </article>
 
-              <!-- 证据质量 -->
+              <!-- 薄弱主题 -->
               <article class="detail-block">
-                <h4>证据质量</h4>
+                <h4>薄弱与重点主题</h4>
                 <div class="detail-grid">
                   <div class="detail-item">
-                    <span>学习活动</span>
-                    <strong>{{ facts.data_quality.has_activity ? '已有记录' : '暂无记录' }}</strong>
+                    <span>薄弱主题</span>
+                    <strong>{{ dashboardData.evaluation_summary.weak_topics.length }} 个</strong>
                   </div>
                   <div class="detail-item">
-                    <span>样本不足主题</span>
-                    <strong>{{ facts.data_quality.insufficient_topics.length }} 个</strong>
+                    <span>重点主题</span>
+                    <strong>{{ dashboardData.evaluation_summary.focus_topics.length }} 个</strong>
                   </div>
                 </div>
-                <p v-if="facts.data_quality.insufficient_topics.length" class="detail-note">
-                  数据不足：{{ facts.data_quality.insufficient_topics.join('、') }}
+                <p v-if="dashboardData.evaluation_summary.weak_topics.length" class="detail-note">
+                  薄弱：{{ dashboardData.evaluation_summary.weak_topics.join('、') }}
                 </p>
               </article>
 
               <!-- 涉及主题标签 -->
-              <article v-if="facts.topics.encountered.length" class="detail-block">
-                <h4>涉及主题</h4>
+              <article v-if="dashboardData.evaluation_summary.focus_topics.length" class="detail-block">
+                <h4>重点主题</h4>
                 <div class="topic-tags">
-                  <span v-for="topic in facts.topics.encountered" :key="topic" class="topic-tag">
+                  <span v-for="topic in dashboardData.evaluation_summary.focus_topics" :key="topic" class="topic-tag">
                     {{ topic }}
                   </span>
                 </div>
@@ -340,16 +344,16 @@
             <div v-if="historyLoading" class="history-loading">加载中...</div>
             <div v-else class="history-full-list">
               <button
-                v-for="report in reportsHistory"
-                :key="report.id"
+                v-for="item in assessmentsHistory"
+                :key="item.id"
                 type="button"
-                :class="{ active: activeReport?.id === report.id }"
+                :class="{ active: activeAssessment?.id === item.id }"
                 class="history-full-item"
-                @click="selectReport(report.id); showHistoryDrawer = false"
+                @click="selectAssessment(item.id); showHistoryDrawer = false"
               >
-                <strong>{{ report.range_days }} 天评估</strong>
-                <span>{{ formatDateRange(report.window_start, report.window_end) }}</span>
-                <em>{{ statusLabel(report.status) }}</em>
+                <strong>{{ item.range_days }} 天评估</strong>
+                <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
+                <em>{{ statusLabel(item.status) }}</em>
               </button>
             </div>
             <div v-if="totalPages > 1" class="pagination">
@@ -371,7 +375,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
 import { RouterLink } from 'vue-router'
 import { Button } from '@/components/ui/button'
@@ -399,33 +403,38 @@ import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart } from 'echarts/charts'
 import { GridComponent, TooltipComponent } from 'echarts/components'
 import {
-  generateAssessmentReport,
-  getGuidanceStrategy,
-  getLatestReport,
-  getReportDetail,
-  getReportsHistory,
+  generateAssessment,
+  getLatestAssessment,
+  getAssessmentDetail,
+  getAssessmentsHistory,
 } from '@/features/learning-assessment/api/assessment'
+import {
+  getDashboard,
+} from '@/features/evaluation/api/evaluation'
 import type {
   ActionPlanItem,
-  AssessmentFacts,
-  FactsTopicPractice,
   GuidanceStrategy,
-  LearningAssessmentReport,
+  LearningAssessment,
 } from '@/features/learning-assessment/model/assessment'
+import type {
+  DashboardData,
+  DashboardPracticeTopic,
+} from '@/features/evaluation/api/evaluation'
 import { normalizeGuidanceStrategy } from '@/features/learning-assessment/model/assessment'
 
 use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
 
 const rangeOptions = [3, 7, 14] as const
 const selectedRange = ref<3 | 7 | 14>(7)
-const reportsHistory = ref<Omit<LearningAssessmentReport, 'facts_snapshot' | 'report_markdown'>[]>([])
-const activeReport = ref<LearningAssessmentReport | null>(null)
+const assessmentsHistory = ref<Omit<LearningAssessment, 'assessment'>[]>([])
+const activeAssessment = ref<LearningAssessment | null>(null)
+const dashboardData = ref<DashboardData | null>(null)
 const guidanceStrategy = ref<GuidanceStrategy | null>(null)
 const generating = ref(false)
 const historyLoading = ref(false)
 const initialLoading = ref(true)
 const currentPage = ref(1)
-const totalReports = ref(0)
+const totalAssessments = ref(0)
 const totalPages = ref(1)
 const currentStepIdx = ref(0)
 const pageSize = 10
@@ -433,36 +442,35 @@ const showDetailDrawer = ref(false)
 const showHistoryDrawer = ref(false)
 const generationSteps = ['聚合学习事实', '校验证据质量', '生成评估报告', '更新辅导策略']
 
-const facts = computed<AssessmentFacts | null>(() => activeReport.value?.facts_snapshot ?? null)
-
 const actionPlan = computed<ActionPlanItem[]>(() => guidanceStrategy.value?.action_plan ?? [])
 
 const defaultConclusion = computed(() => {
-  if (!facts.value) return '暂无学习数据，开始学习后将生成个性化评估。'
-  if (!facts.value.data_quality.has_activity) {
+  if (!dashboardData.value) return '暂无学习数据，开始学习后将生成个性化评估。'
+  const summary = dashboardData.value.evaluation_summary
+  if (summary.event_count === 0) {
     return '当前窗口暂无学习活动记录，建议先完成一次资源学习或练习。'
   }
   return '学习证据已形成，系统已记录到学习时长、模块使用和练习表现。'
 })
 
 const hasDailyData = computed(() => (
-  (facts.value?.activity.daily_minutes ?? []).some(item => item.minutes > 0)
+  (dashboardData.value?.time_stats.daily_breakdown ?? []).some(item => item.seconds > 0)
 ))
 
-const topicRows = computed<FactsTopicPractice[]>(() => (
-  [...(facts.value?.practice.by_topic ?? [])]
+const topicRows = computed<DashboardPracticeTopic[]>(() => (
+  [...(dashboardData.value?.practice_chart.by_topic ?? [])]
     .sort((a, b) => b.submitted - a.submitted)
 ))
 
 const topicsSummary = computed(() => {
-  const topics = facts.value?.topics.encountered ?? []
+  const topics = dashboardData.value?.evaluation_summary.weak_topics ?? []
   if (topics.length === 0) return '暂无主题'
   if (topics.length <= 3) return topics.join('、')
   return `${topics.slice(0, 3).join('、')} 等`
 })
 
 const lineOption = computed(() => {
-  const daily = facts.value?.activity.daily_minutes ?? []
+  const daily = dashboardData.value?.time_stats.daily_breakdown ?? []
   return {
     grid: { top: 24, right: 20, bottom: 32, left: 44 },
     tooltip: {
@@ -486,7 +494,7 @@ const lineOption = computed(() => {
       axisLabel: { color: '#6b7280', fontSize: 12 },
     },
     series: [{
-      data: daily.map(item => item.minutes),
+      data: daily.map(item => Number((item.seconds / 60).toFixed(1))),
       type: 'line',
       smooth: true,
       symbolSize: 6,
@@ -497,42 +505,53 @@ const lineOption = computed(() => {
   }
 })
 
-async function loadGuidanceStrategy(): Promise<void> {
+// 切换时间范围时重新加载看板数据
+watch(selectedRange, () => {
+  if (!initialLoading.value) {
+    void loadDashboard()
+  }
+})
+
+async function loadDashboard(): Promise<void> {
   try {
-    const response = await getGuidanceStrategy()
-    guidanceStrategy.value = normalizeGuidanceStrategy(response.data.data.guidance_strategy)
+    const response = await getDashboard(selectedRange.value)
+    dashboardData.value = response.data.data
+    // 从 dashboard 响应中提取 guidance_strategy，避免额外请求
+    if (dashboardData.value?.guidance_strategy) {
+      guidanceStrategy.value = normalizeGuidanceStrategy(dashboardData.value.guidance_strategy as Partial<GuidanceStrategy>)
+    }
   } catch (error) {
-    console.error('加载辅导策略失败', error)
+    console.error('加载看板数据失败', error)
   }
 }
 
-async function loadReportsHistory(page = 1): Promise<void> {
+async function loadAssessmentsHistory(page = 1): Promise<void> {
   historyLoading.value = true
   try {
-    const response = await getReportsHistory(page, pageSize)
-    reportsHistory.value = response.data.data.items
-    totalReports.value = response.data.data.total
+    const response = await getAssessmentsHistory(page, pageSize)
+    assessmentsHistory.value = response.data.data.items
+    totalAssessments.value = response.data.data.total
     totalPages.value = Math.max(1, Math.ceil(response.data.data.total / pageSize))
     currentPage.value = page
   } catch (error) {
-    console.error('加载历史评估报告失败', error)
+    console.error('加载历史评估失败', error)
     toast.error('历史记录加载失败')
   } finally {
     historyLoading.value = false
   }
 }
 
-async function selectReport(reportId: number): Promise<void> {
+async function selectAssessment(assessmentId: number): Promise<void> {
   try {
-    const response = await getReportDetail(reportId)
-    activeReport.value = response.data.data
+    const response = await getAssessmentDetail(assessmentId)
+    activeAssessment.value = response.data.data
   } catch (error) {
-    console.error('加载报告详情失败', error)
-    toast.error('报告详情加载失败')
+    console.error('加载评估详情失败', error)
+    toast.error('评估详情加载失败')
   }
 }
 
-async function triggerReportGeneration(): Promise<void> {
+async function triggerAssessmentGeneration(): Promise<void> {
   generating.value = true
   currentStepIdx.value = 0
   const timer = window.setInterval(() => {
@@ -540,19 +559,19 @@ async function triggerReportGeneration(): Promise<void> {
   }, 1000)
 
   try {
-    const response = await generateAssessmentReport(selectedRange.value)
-    activeReport.value = response.data.data
-    toast.success('学习效果评估报告已生成')
+    const response = await generateAssessment(selectedRange.value)
+    activeAssessment.value = response.data.data
+    toast.success('学习效果评估已生成')
     await Promise.all([
-      loadReportsHistory(1),
-      loadGuidanceStrategy(),
+      loadAssessmentsHistory(1),
+      loadDashboard(), // 同时刷新看板数据 + guidance_strategy
     ])
   } catch (error: any) {
     if (error?.response?.status === 409) {
-      toast.warning('已有报告生成中')
+      toast.warning('已有评估生成中')
     } else {
-      console.error('生成评估报告失败', error)
-      toast.error('生成报告失败')
+      console.error('生成评估失败', error)
+      toast.error('生成评估失败')
     }
   } finally {
     window.clearInterval(timer)
@@ -562,17 +581,13 @@ async function triggerReportGeneration(): Promise<void> {
 }
 
 function changePage(page: number): void {
-  void loadReportsHistory(page)
+  void loadAssessmentsHistory(page)
 }
 
-function statusLabel(status: LearningAssessmentReport['status']): string {
+function statusLabel(status: LearningAssessment['status']): string {
   if (status === 'ready') return '已就绪'
   if (status === 'generating') return '生成中'
   return '失败'
-}
-
-function percentLabel(value: number): string {
-  return `${Math.round(value * 100)}%`
 }
 
 function actionTypeLabel(type: ActionPlanItem['action_type']): string {
@@ -599,19 +614,19 @@ function formatDateRange(start: string, end: string): string {
 onMounted(async () => {
   initialLoading.value = true
   await Promise.all([
-    loadReportsHistory(1),
-    loadGuidanceStrategy(),
+    loadAssessmentsHistory(1),
+    loadDashboard(), // 同时获取看板数据 + guidance_strategy
   ])
 
   try {
-    const response = await getLatestReport()
+    const response = await getLatestAssessment()
     if (response.data.data) {
-      activeReport.value = response.data.data
-    } else if (reportsHistory.value[0]?.id !== undefined) {
-      await selectReport(reportsHistory.value[0].id)
+      activeAssessment.value = response.data.data
+    } else if (assessmentsHistory.value[0]?.id !== undefined) {
+      await selectAssessment(assessmentsHistory.value[0].id)
     }
   } catch (error) {
-    console.error('获取最新评估报告失败', error)
+    console.error('获取最新评估失败', error)
   } finally {
     initialLoading.value = false
   }
@@ -831,7 +846,7 @@ h1, h2, h3, h4, p {
 
 .strategy-highlights {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: var(--space-3);
 }
 
@@ -855,6 +870,28 @@ h1, h2, h3, h4, p {
   font-size: var(--text-sm);
   color: var(--color-text-strong);
   line-height: 1.3;
+}
+
+.strategy-reason {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border-light);
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  line-height: var(--leading-relaxed);
+}
+
+.reason-label {
+  display: inline-block;
+  margin-right: var(--space-1);
+  padding: 1px var(--space-1);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--weight-bold);
+  vertical-align: middle;
 }
 
 /* Metrics Section */

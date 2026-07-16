@@ -23,7 +23,7 @@ _VOICES = {
     "coach": "zh-CN-YunxiNeural",
 }
 _MIN_BEAT_MS = 3_200
-_MAX_BEAT_MS = 6_000
+_MAX_BEAT_MS = 10_000
 _AUDIO_TAIL_MS = 120
 
 
