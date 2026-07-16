@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { assignPersistedAssistantMessageId, normalizeTeachingDiagram } from './tutorUtils'
+import {
+  assignPersistedAssistantMessageId,
+  finalizeAssistantGeneration,
+  normalizeTeachingDiagram,
+} from './tutorUtils'
 
 describe('normalizeTeachingDiagram', () => {
   it('keeps a structured diagram when the server returns an image fallback', () => {
@@ -24,5 +28,36 @@ describe('assignPersistedAssistantMessageId', () => {
 
     expect(messageId).toBe(99)
     expect(message.id).toBe(99)
+  })
+})
+
+describe('finalizeAssistantGeneration', () => {
+  it('stops every running animation when answer generation completes', () => {
+    const message = {
+      id: 100001,
+      role: 'ai' as const,
+      content: '回答完成',
+      time: 'now',
+      teachingDiagramGenerating: true,
+      agentActivities: [
+        {
+          activity_id: 'thinking',
+          kind: 'workflow' as const,
+          status: 'running' as const,
+          title: '正在思考',
+        },
+        {
+          activity_id: 'tool',
+          kind: 'tool' as const,
+          status: 'done' as const,
+          title: '调用工具',
+        },
+      ],
+    }
+
+    finalizeAssistantGeneration(message, 'done')
+
+    expect(message.teachingDiagramGenerating).toBe(false)
+    expect(message.agentActivities.map(activity => activity.status)).toEqual(['done', 'done'])
   })
 })

@@ -328,18 +328,8 @@
                     :reviewing="wrongReviewing"
                     :review="wrongReview"
                     :openedAnalysis="openedWrongAnalysis"
-                    :drillQuestion="wrongDrillQuestion"
-                    :drillAnswer="wrongDrillAnswer"
-                    :drillSubmitted="wrongDrillSubmitted"
-                    :drillCorrect="wrongDrillCorrect"
-                    :drillReviewing="wrongDrillReviewing"
-                    :drillReview="wrongDrillReview"
                     @search-wrong="searchWrong"
                     @page-change="handleWrongPageChange"
-                    @pick-drill="pickWrongQuestion"
-                    @select-drill-option="selectWrongDrillOption"
-                    @update:drillAnswer="wrongDrillAnswer = $event"
-                    @submit-drill="submitWrongDrill"
                     @select-wrong-option="selectWrongOption"
                     @submit-wrong="submitWrongAnswer"
                     @toggle-wrong-analysis="toggleWrongAnalysis"
@@ -497,7 +487,6 @@ import { getProfileOnboarding } from '@/features/profile/api/profile'
 import { fetchQuizBankQuestions, fetchQuizReview, fetchQuizAnswerHistory, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult, type QuizAnswerHistoryItem } from '@/features/question-bank/api/quizBank'
 import {
   archiveWrongQuestion,
-  fetchRandomWrongQuestion,
   fetchWrongQuestions,
   removeWrongQuestion,
 } from '@/features/question-bank/api/wrongQuestions'
@@ -617,14 +606,6 @@ const wrongCorrect = ref<Record<string, boolean>>({})
 const wrongReviewing = ref<Record<string, boolean>>({})
 const wrongReview = ref<Record<string, QuizReviewResult | null>>({})
 const openedWrongAnalysis = ref<Set<string>>(new Set())
-
-// 错题再练状态
-const wrongDrillQuestion = ref<Question | null>(null)
-const wrongDrillAnswer = ref<AnswerValue>('')
-const wrongDrillSubmitted = ref(false)
-const wrongDrillCorrect = ref(false)
-const wrongDrillReviewing = ref(false)
-const wrongDrillReview = ref<QuizReviewResult | null>(null)
 
 // 首页推荐答题状态
 const portalAnswers = ref<Record<string, AnswerValue>>({})
@@ -1001,7 +982,6 @@ function switchModule(key: string) {
 
   if (key === 'wrong') {
     void loadWrongBook()
-    void pickWrongQuestion()
   } else if (key === 'search') {
     resetQuestionBankFilters()
     clearQuestionHighlight()
@@ -1308,22 +1288,6 @@ async function jumpToChallengeQuestion() {
   }
 }
 
-// 随机抽取一道错题用于再练
-async function pickWrongQuestion() {
-  try {
-    const result = await fetchRandomWrongQuestion()
-    wrongDrillQuestion.value = result ? normalizeWrongQuestion(result) : null
-  } catch {
-    wrongDrillQuestion.value = wrongQuestions.value[0] || null
-  }
-
-  wrongDrillAnswer.value = ''
-  wrongDrillSubmitted.value = false
-  wrongDrillCorrect.value = false
-  wrongDrillReviewing.value = false
-  wrongDrillReview.value = null
-}
-
 // 题库选项选择
 function selectBankOption(question: Question, key: string) {
   if (bankSubmitted.value[question.id]) return
@@ -1448,26 +1412,6 @@ async function submitWrongAnswer(question: Question) {
   saveAttempt(1, result.correct ? 1 : 0)
   await submitQuestionAttempt(question, wrongAnswers.value[question.id], result.correct, result.review?.score)
   wrongReviewing.value[question.id] = false
-}
-
-// 提交错题再练的答案
-async function submitWrongDrill() {
-  if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
-
-  wrongDrillReviewing.value = true
-  const result = await gradeQuestion(wrongDrillQuestion.value, wrongDrillAnswer.value)
-  wrongDrillSubmitted.value = true
-  wrongDrillCorrect.value = result.correct
-  wrongDrillReview.value = result.review
-  saveAttempt(1, result.correct ? 1 : 0)
-  await submitQuestionAttempt(wrongDrillQuestion.value, wrongDrillAnswer.value, result.correct, result.review?.score)
-  wrongDrillReviewing.value = false
-}
-
-// 错题再练选项选择
-function selectWrongDrillOption(key: string) {
-  if (!wrongDrillQuestion.value || wrongDrillSubmitted.value) return
-  wrongDrillAnswer.value = updateOptionAnswer(wrongDrillQuestion.value, wrongDrillAnswer.value, key)
 }
 
 // 切换题库题目的解析展开/收起

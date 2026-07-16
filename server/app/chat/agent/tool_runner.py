@@ -32,6 +32,13 @@ class ToolExecutionResult:
     sources: list[dict[str, Any]] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
+    @property
+    def result_payload(self) -> Any:
+        """Return the raw tool payload recorded in the invocation."""
+        if self.invocation is None:
+            return None
+        return self.invocation.get("result_payload")
+
 
 # 辅导工具执行器：负责真正调用工具、持久化消息、构造证据与来源
 class TutorToolRunner:

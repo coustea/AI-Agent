@@ -85,6 +85,14 @@ export const finalizeRunningAgentActivities = (
   ))
 )
 
+export const finalizeAssistantGeneration = (
+  message: ChatMsg,
+  status: Extract<AgentActivity['status'], 'done' | 'failed'>,
+): void => {
+  message.agentActivities = finalizeRunningAgentActivities(message.agentActivities, status)
+  message.teachingDiagramGenerating = false
+}
+
 const SUPPORTED_DIAGRAM_TYPES = new Set([
   'comparison',
   'flowchart',

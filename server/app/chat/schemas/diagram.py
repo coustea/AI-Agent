@@ -532,6 +532,19 @@ class TeachingDiagram(BaseModel):
     ]] = None
     teaching_content: TeachingContent
 
+    @model_validator(mode="before")
+    @classmethod
+    def discard_legacy_visual_content_for_mermaid(cls, data: Any) -> Any:
+        """Mermaid is authoritative; ignore incompatible legacy visual payloads."""
+        if not isinstance(data, dict):
+            return data
+        mermaid_source = data.get("mermaid_source")
+        if not isinstance(mermaid_source, str) or not mermaid_source.strip():
+            return data
+        normalized = dict(data)
+        normalized["visual_content"] = None
+        return normalized
+
     # 校验器：确保 graph_type 与 visual_content 的实际类型匹配
     @model_validator(mode="after")
     def validate_payload_type(self) -> "TeachingDiagram":
