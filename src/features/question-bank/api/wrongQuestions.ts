@@ -74,14 +74,6 @@ export async function archiveWrongQuestion(wrongId: number): Promise<void> {
   await http.post(`/ai/wrong/${wrongId}/archive`)
 }
 
-// 获取随机一道错题用于再练
-export async function fetchRandomWrongQuestion(subject?: string): Promise<WrongQuestion | null> {
-  const response = await http.get('/ai/wrong/random', {
-    params: subject ? { subject } : undefined,
-  })
-  return response.data.data ? normalizeWrongQuestion(response.data.data) : null
-}
-
 // 标准化错题数据字段
 function normalizeWrongQuestion(item: Record<string, any>): WrongQuestion {
   return {

@@ -1,91 +1,5 @@
 <template>
   <div class="wrong-shell">
-    <section class="drill-section">
-      <div class="section-head">
-        <div>
-          <span class="section-kicker">随机错题再练</span>
-          <h3>再练一题</h3>
-        </div>
-        <button class="text-btn" type="button" @click="$emit('pick-drill')">换一题</button>
-      </div>
-
-      <div v-if="drillQuestion" class="drill-card">
-        <div class="drill-meta">
-          <span>{{ drillQuestion.subject }}</span>
-          <span>{{ drillQuestion.type }}</span>
-        </div>
-
-        <div class="drill-stem" v-html="renderInline(drillQuestion.content)"></div>
-
-        <div v-if="isOptionQuestion(drillQuestion)" class="drill-options">
-          <button
-            v-for="(text, key) in getOptions(drillQuestion)"
-            :key="key"
-            type="button"
-            :class="[
-              'drill-option',
-              {
-                selected: isDrillSelected(String(key)),
-                correct: drillSubmitted && isCorrectOption(drillQuestion, String(key)),
-                wrong: drillSubmitted && isDrillSelected(String(key)) && !isCorrectOption(drillQuestion, String(key)),
-              },
-            ]"
-            :disabled="drillSubmitted"
-            @click="$emit('select-drill-option', String(key))"
-          >
-            <span class="drill-option-key">{{ key }}</span>
-            <span class="drill-option-text" v-html="renderInline(text as string)"></span>
-          </button>
-        </div>
-
-        <textarea
-          v-else
-          :value="drillAnswer"
-          class="drill-answer"
-          rows="4"
-          placeholder="输入你的答案"
-          :disabled="drillSubmitted"
-          @input="$emit('update:drillAnswer', ($event.target as HTMLTextAreaElement).value)"
-        ></textarea>
-
-        <div class="drill-actions">
-          <button
-            v-if="!drillSubmitted"
-            class="primary-btn"
-            type="button"
-            :disabled="!hasDrillAnswer || drillReviewing"
-            @click="$emit('submit-drill')"
-          >
-            <span v-if="drillReviewing" class="reviewing-spinner"></span>
-            {{ drillReviewing ? pendingAnswerLabel(drillQuestion.type) : '提交答案' }}
-          </button>
-          <button v-else class="secondary-btn" type="button" @click="$emit('pick-drill')">再练一题</button>
-        </div>
-
-        <div v-if="drillReviewing" class="reviewing-banner">
-          <span class="reviewing-spinner-lg"></span>
-          <span class="reviewing-text">{{ pendingAnswerMessage(drillQuestion.type) }}</span>
-        </div>
-
-        <div v-if="drillSubmitted" class="drill-result">
-          <strong>{{ drillScoreText }}</strong>
-          <span v-if="drillReview?.score != null" class="score-badge" :class="drillScoreClass">
-            {{ drillReview.score }}分
-          </span>
-          <p>参考答案：{{ formatAnswer(drillQuestion.answer) }}</p>
-          <p v-if="drillReview?.feedback" class="drill-feedback">{{ drillReview.feedback }}</p>
-          <div v-if="drillReview?.improvement_hints?.length" class="improvement-hints">
-            <strong>改进建议</strong>
-            <ul>
-              <li v-for="hint in drillReview.improvement_hints" :key="hint">{{ hint }}</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div v-else class="simple-empty">暂无可重练的错题。</div>
-    </section>
-
     <section class="list-section">
       <div class="section-head">
         <div>
@@ -161,12 +75,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
-import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
 import { summarizeQuestionText } from '@/features/question-bank/model/questionText'
 
-// 组件属性：错题列表、再练题状态、筛选过滤
-const props = defineProps<{
+// 组件属性：错题列表与筛选过滤
+defineProps<{
   questions: any[]
   total: number
   loading: boolean
@@ -181,60 +93,18 @@ const props = defineProps<{
   reviewing: Record<string, boolean>
   review: Record<string, any>
   openedAnalysis: Set<string>
-  drillQuestion: any | null
-  drillAnswer: any
-  drillSubmitted: boolean
-  drillCorrect: boolean
-  drillReviewing: boolean
-  drillReview: any | null
 }>()
 
-// 事件：搜索、翻页、再练操作、归档、移除
+// 事件：搜索、翻页、归档、移除
 defineEmits<{
   (e: 'search-wrong'): void
   (e: 'page-change', page: number): void
-  (e: 'pick-drill'): void
-  (e: 'select-drill-option', key: string): void
-  (e: 'update:drillAnswer', value: string): void
-  (e: 'submit-drill'): void
   (e: 'select-wrong-option', question: any, key: string): void
   (e: 'submit-wrong', question: any): void
   (e: 'toggle-wrong-analysis', id: string): void
   (e: 'archive-wrong', question: any): void
   (e: 'remove-wrong', question: any): void
 }>()
-
-// 再练题是否已有答案
-const hasDrillAnswer = computed(() => {
-  const ans = props.drillAnswer
-  if (Array.isArray(ans)) return ans.length > 0
-  return !!ans && String(ans).trim().length > 0
-})
-
-// 再练题得分对应颜色样式
-const drillScoreClass = computed(() => {
-  const score = props.drillReview?.score
-  if (score == null) return props.drillCorrect ? 'success' : 'danger'
-  if (score >= 80) return 'success'
-  if (score >= 60) return 'warning'
-  return 'danger'
-})
-
-// 再练题得分对应文本
-const drillScoreText = computed(() => {
-  const score = props.drillReview?.score
-  if (score == null) return props.drillCorrect ? '已掌握' : '仍需复习'
-  if (score >= 80) return '回答优秀'
-  if (score >= 60) return '基本正确，部分不足'
-  return '仍需复习'
-})
-
-function isDrillSelected(key: string) {
-  const ans = props.drillAnswer
-  if (!ans) return false
-  if (Array.isArray(ans)) return ans.includes(key)
-  return ans === key
-}
 
 function isOptionQuestion(question: any) {
   return ['选择题', '单选题', '判断题'].includes(question.type)
@@ -243,17 +113,6 @@ function isOptionQuestion(question: any) {
 function getOptions(question: any) {
   if (question.type === '判断题') return { A: '正确', B: '错误' }
   return question.options || {}
-}
-
-function isCorrectOption(question: any, key: string) {
-  let ansText = String(question.answer || '').trim()
-  if (question.type === '判断题') {
-    const upper = ansText.toUpperCase()
-    if (upper === 'A' || ['TRUE', 'T', '正确', '对'].some((item) => upper.includes(item))) ansText = 'A'
-    else if (upper === 'B' || ['FALSE', 'F', '错误', '错'].some((item) => upper.includes(item))) ansText = 'B'
-  }
-  const correctKeys = ansText.split(/[、,，\s]+/).map((item) => item.trim().toUpperCase()).filter(Boolean)
-  return correctKeys.includes(key)
 }
 
 function formatAnswer(ans: string) {
