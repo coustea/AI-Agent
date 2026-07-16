@@ -315,6 +315,7 @@ async def run_chat_agent(
     )
     await events.send(event="message.started", message=started["message"], data=started)
     failed = False
+    completion_data: dict[str, Any] = {}
     try:
         # 逐个转发对话事件；只要有一次失败即标记 failed
         async for event in chat(
@@ -327,6 +328,8 @@ async def run_chat_agent(
             enable_web_search=enable_web_search,
             need_teaching_diagram=need_teaching_diagram,
         ):
+            if event.get("event") == "done" and isinstance(event.get("data"), dict):
+                completion_data = event["data"]
             failed = await _publish_chat_runtime_event(events, event) or failed
         if failed:
             # 失败：持久化失败活动并发送 message.failed
@@ -359,7 +362,7 @@ async def run_chat_agent(
             )
             # 图解数据通过 chat() 生成器的 diagram 事件发送，
             # 由 ChatRuntimeEventMapper 自动转换为 diagram.ready 前端事件
-            await events.send(event="message.completed", message="回答完成", data={})
+            await events.send(event="message.completed", message="回答完成", data=completion_data)
             # 记录对话埋点事件（与压缩任务异步解耦）
             try:
                 async with session_scope() as db:

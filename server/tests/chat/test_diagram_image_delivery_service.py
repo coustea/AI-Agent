@@ -108,6 +108,62 @@ async def test_chat_done_payload_identifies_the_persisted_assistant_message(monk
 
 
 @pytest.mark.asyncio
+async def test_runtime_sse_completion_includes_persisted_assistant_message_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.chat.service as service
+
+    emitted: list[dict] = []
+
+    class FakeEvents:
+        def __init__(self, **kwargs) -> None:
+            pass
+
+        async def open(self) -> None:
+            return None
+
+        async def send(self, *, event: str, message: str, data: dict | None = None) -> None:
+            emitted.append({"event": event, "message": message, "data": data or {}})
+
+    class FakeMemoryService:
+        async def upsert_activity(self, **kwargs) -> None:
+            return None
+
+    async def completed_chat(**kwargs):
+        yield {"event": "done", "data": {"session_id": "s1", "saved_message_id": 99}}
+
+    class FakeSessionScope:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, *args) -> None:
+            return None
+
+    async def record_dialogue(**kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(service, "ChatEvents", FakeEvents)
+    monkeypatch.setattr(service, "get_chat_memory_service", FakeMemoryService)
+    monkeypatch.setattr(service, "chat", completed_chat)
+    monkeypatch.setattr(service, "session_scope", FakeSessionScope)
+    monkeypatch.setattr(service, "record_dialogue_event", record_dialogue)
+
+    await service.run_chat_agent(
+        user_message_id=10,
+        user_id=7,
+        username="alice",
+        session_id="s1",
+        user_input="解释 TCP",
+        attachments=[],
+        enable_web_search=False,
+        need_teaching_diagram=True,
+    )
+
+    completion = next(event for event in emitted if event["event"] == "message.completed")
+    assert completion["data"]["saved_message_id"] == 99
+
+
+@pytest.mark.asyncio
 async def test_chat_emits_structured_fallback_when_png_rendering_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 
