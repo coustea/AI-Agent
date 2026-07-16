@@ -752,7 +752,7 @@ import {
   getDocumentIconColor,
   formatFileSize,
   formatRelativeTime,
-  finalizeRunningAgentActivities,
+  finalizeAssistantGeneration,
   getInputToolStateKey,
   isInsideOpenFence,
   takeNextStreamUnit,
@@ -1259,11 +1259,10 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   }
 
   if (event.event === 'message.completed' || event.event === 'message.failed') {
-    aiMsg.agentActivities = finalizeRunningAgentActivities(
-      aiMsg.agentActivities,
+    finalizeAssistantGeneration(
+      aiMsg,
       event.event === 'message.failed' ? 'failed' : 'done',
     )
-    aiMsg.teachingDiagramGenerating = false
     return
   }
 
@@ -2215,6 +2214,7 @@ const switchSession = async (sessionId: string) => {
       },
       onDone: (data) => {
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        if (aiMsg) finalizeAssistantGeneration(aiMsg, 'done')
         const persistedMessageId = aiMsg
           ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
           : aiMsgId
@@ -2229,7 +2229,7 @@ const switchSession = async (sessionId: string) => {
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
-          aiMsg.teachingDiagramGenerating = false
+          finalizeAssistantGeneration(aiMsg, 'failed')
           if (!aiMsg.content) {
             aiMsg.content = "生成失败，请重试。"
           }
@@ -2701,6 +2701,7 @@ const handleSend = async () => {
       },
       onDone: (data) => {
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        if (aiMsg) finalizeAssistantGeneration(aiMsg, 'done')
         const persistedMessageId = aiMsg
           ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
           : aiMsgId
@@ -2715,7 +2716,7 @@ const handleSend = async () => {
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
         if (aiMsg) {
-          aiMsg.teachingDiagramGenerating = false
+          finalizeAssistantGeneration(aiMsg, 'failed')
           if (!aiMsg.content) aiMsg.content = '连接中断，请刷新页面后重试。'
         }
         stopTeachingDiagramGeneratingForCurrentAi()
