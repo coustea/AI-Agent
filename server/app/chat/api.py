@@ -23,6 +23,7 @@ from app.chat.emitter import (
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.video import get_chat_video_service
 from app.chat.diagram_image_renderer import render_teaching_diagram_png
+from app.chat.schemas import DiagramMode
 from app.chat.service import get_chat_usecases, run_chat_agent
 from app.infra.database import get_session
 from app.infra.logging import get_logger
@@ -33,6 +34,17 @@ logger = get_logger(__name__)
 
 # 聊天路由集合，统一挂载在 /api/v1/ai/chat/ 下
 router = APIRouter()
+
+
+def resolve_diagram_mode(
+    *,
+    diagram_mode: DiagramMode | None,
+    need_teaching_diagram: bool | None,
+) -> DiagramMode:
+    """Resolve the canonical mode while preserving the legacy form field."""
+    if diagram_mode is not None:
+        return diagram_mode
+    return "required" if need_teaching_diagram is True else "auto"
 
 
 @router.post("/chat/videos")
@@ -154,7 +166,8 @@ async def create_mentor_chat_message(
     user_input: str = Form(default=""),
     session_id: str | None = Form(default=None),
     attachments: str | None = Form(default=None),
-    need_teaching_diagram: bool = Form(default=False),
+    diagram_mode: DiagramMode | None = Form(default=None),
+    need_teaching_diagram: bool | None = Form(default=None),
     enable_web_search: bool = Form(default=False),
     current_user: User = Depends(get_current_user_flexible),
 ):
@@ -230,7 +243,7 @@ async def create_mentor_chat_message(
         user_input=effective_message,
         attachments=[str(item.get("url") or "") for item in parsed_attachments],
         enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
+        diagram_mode=resolve_diagram_mode(diagram_mode=diagram_mode, need_teaching_diagram=need_teaching_diagram),
     )
 
     logger.info(

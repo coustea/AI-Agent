@@ -465,8 +465,8 @@ class PathService:
             logger.info("[PathService] 调用 PPTService.generate_for_path")
             return await services["ppt"].generate_for_path(request)
         elif resource_type == "cartoon":
-            logger.info("[PathService] 调用 CartoonService.generate_for_path")
-            return await services["cartoon"].generate_for_path(request)
+            logger.info("[PathService] 调用 PathCartoonAdapter.generate")
+            return await services["cartoon"].generate(request)
         elif resource_type == "mindmap":
             logger.info("[PathService] 调用 MindmapAgent.generate_for_path")
             return await services["mindmap"].generate_for_path(request)
@@ -482,11 +482,11 @@ class PathService:
     def _init_resource_services() -> dict:
         """预创建资源生成服务实例。"""
         from app.shared.ppt import PPTService
-        from app.shared.cartoon import CartoonService
+        from app.path.cartoon import PathCartoonAdapter
         from app.resource.agents import AGENT_REGISTRY
         return {
             "ppt": PPTService(),
-            "cartoon": CartoonService(),
+            "cartoon": PathCartoonAdapter(),
             "mindmap": AGENT_REGISTRY["mindmap"](),
             "code": AGENT_REGISTRY["code"](),
             "reading": AGENT_REGISTRY["reading"](),

@@ -2,18 +2,24 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal, Protocol, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, create_model, model_validator
 
 from app.shared.ppt.contract import (
+    CourseDomain,
     LayoutKind,
     LogicNodeRole,
     LogicRelation,
     SlideKind,
-    VisualKind,
     layout_supports_relation,
 )
+from app.shared.ppt.visual_ir import VisualModel
+
+
+PRESENTATION_TITLE_MAX_LENGTH = 54
+CONTENT_TITLE_MAX_LENGTH = 24
+SPEAKER_NOTES_MAX_LENGTH = 600
 
 
 class PPTModel(BaseModel):
@@ -35,7 +41,6 @@ class PPTPreferences(PPTModel):
     emphasis: list[Literal["core_concepts", "cases", "pitfalls", "derivation"]] = Field(
         default_factory=lambda: ["core_concepts"], min_length=1, max_length=4
     )
-    include_speaker_notes: bool = True
 
 
 class ResourcePPT(PPTModel):
@@ -76,7 +81,10 @@ class PPTGenerationContext(PPTModel):
     """两个业务入口归一化后交给共享 PPT 引擎的唯一内部契约。"""
 
     source: Literal["resource", "path"]
-    topic: str = Field(min_length=1, max_length=160)
+    # ``topic`` is a display-ready lesson subject, not the user's complete
+    # learning request.  The latter belongs to ``learning_goal`` and may be
+    # much longer than a slide title.
+    topic: str = Field(min_length=1, max_length=PRESENTATION_TITLE_MAX_LENGTH)
     learner_profile: str = Field(default="", max_length=1_600)
     learning_goal: str = Field(min_length=1, max_length=1_200)
     prerequisites: list[str] = Field(default_factory=list, max_length=12)
@@ -87,21 +95,21 @@ class PPTGenerationContext(PPTModel):
 
 class LogicChapter(PPTModel):
     id: str = Field(pattern=r"^c[0-9]{2}$")
-    title: str = Field(min_length=2, max_length=32)
-    question: str = Field(min_length=8, max_length=96)
-    outcome: str = Field(min_length=8, max_length=120)
+    title: str = Field(min_length=1, max_length=32)
+    question: str = Field(min_length=1, max_length=96)
+    outcome: str = Field(min_length=1, max_length=120)
     node_ids: list[str] = Field(min_length=1, max_length=8)
 
 
 class LogicNode(PPTModel):
     id: str = Field(pattern=r"^l[0-9]{2}$")
     chapter_id: str = Field(pattern=r"^c[0-9]{2}$")
+    title: str = Field(min_length=2, max_length=CONTENT_TITLE_MAX_LENGTH)
     role: LogicNodeRole
-    question: str = Field(min_length=8, max_length=96)
-    claim: str = Field(min_length=8, max_length=120)
+    question: str = Field(min_length=1, max_length=96)
+    claim: str = Field(min_length=1, max_length=120)
     evidence: list[str] = Field(default_factory=list, max_length=4)
-    output: str = Field(min_length=8, max_length=120)
-    importance: Literal["core", "supporting", "example"] = "core"
+    output: str = Field(min_length=1, max_length=120)
 
 
 class LogicEdge(PPTModel):
@@ -111,11 +119,63 @@ class LogicEdge(PPTModel):
     bridge: str = Field(min_length=4, max_length=96)
 
 
+class LogicDraftNode(PPTModel):
+    """LLM-owned teaching content for one logical step.
+
+    Internal graph identifiers deliberately do not belong here.  They are a
+    renderer concern and are assigned after the model has supplied the
+    teaching sequence, which prevents a presentational identifier typo from
+    invalidating an otherwise complete lesson plan.
+    """
+
+    title: str = Field(min_length=2, max_length=CONTENT_TITLE_MAX_LENGTH)
+    role: LogicNodeRole
+    question: str = Field(min_length=1, max_length=96)
+    claim: str = Field(min_length=1, max_length=120)
+    evidence: list[Annotated[str, Field(min_length=2, max_length=80)]] = Field(
+        min_length=1,
+        max_length=4,
+    )
+    output: str = Field(min_length=1, max_length=120)
+
+
+class LogicDraftChapter(PPTModel):
+    """One continuous teaching chapter in the LLM-owned draft.
+
+    A chapter question and outcome are deterministic views of its first and
+    last teaching nodes.  Keeping duplicate versions in the LLM payload made
+    the JSON larger and allowed the two descriptions to disagree.
+    """
+
+    title: str = Field(min_length=1, max_length=32)
+    nodes: list[LogicDraftNode] = Field(min_length=1, max_length=8)
+
+
+class DeckLogicDraft(PPTModel):
+    """The LLM contract before deterministic graph identity is assigned.
+
+    The model owns only the ordered chapter/node teaching content.  The deck's
+    central question, thesis, graph identities and chapter summaries are all
+    compiler-owned projections of that sequence.
+    """
+
+    course_domain: CourseDomain
+    chapters: list[LogicDraftChapter] = Field(min_length=2, max_length=5)
+
+    @model_validator(mode="after")
+    def validate_teaching_graph(self) -> "DeckLogicDraft":
+        node_count = sum(len(chapter.nodes) for chapter in self.chapters)
+        if not 5 <= node_count <= 16:
+            raise ValueError("logic draft must contain 5 to 16 ordered nodes")
+        return self
+
+
 class DeckLogicModel(PPTModel):
-    central_question: str = Field(min_length=8, max_length=120)
-    thesis: str = Field(min_length=8, max_length=160)
-    learner_before: list[str] = Field(default_factory=list, max_length=6)
-    learner_after: list[str] = Field(min_length=1, max_length=6)
+    """Canonical backend-owned teaching DAG for one presentation."""
+
+    course_domain: CourseDomain
+    central_question: str = Field(min_length=1, max_length=120)
+    thesis: str = Field(min_length=1, max_length=160)
     chapters: list[LogicChapter] = Field(min_length=2, max_length=5)
     nodes: list[LogicNode] = Field(min_length=5, max_length=16)
     edges: list[LogicEdge] = Field(min_length=4, max_length=24)
@@ -145,11 +205,8 @@ class DeckLogicModel(PPTModel):
                 raise ValueError(f"logic node {node.id} references an unknown chapter")
             if chapter_by_node[node.id] != node.chapter_id:
                 raise ValueError(f"logic node {node.id} is assigned to the wrong chapter")
-            if node.importance == "core" and not node.evidence and node.role not in {
-                LogicNodeRole.QUESTION,
-                LogicNodeRole.CONCLUSION,
-            }:
-                raise ValueError(f"core logic node {node.id} needs evidence")
+            if not node.evidence:
+                raise ValueError(f"logic node {node.id} needs evidence")
 
         adjacency: dict[str, list[str]] = {node_id: [] for node_id in node_ids}
         undirected: dict[str, set[str]] = {node_id: set() for node_id in node_ids}
@@ -198,22 +255,28 @@ class DeckLogicModel(PPTModel):
 
 
 class SlideBrief(PPTModel):
+    """Renderer-neutral storyboard assignment for one slide."""
+
     id: str = Field(pattern=r"^s[0-9]{2}$")
     kind: SlideKind
     title: str = Field(min_length=1, max_length=54)
-    teaching_goal: str = Field(min_length=12, max_length=150)
-    content_focus: str = Field(min_length=12, max_length=180)
+    teaching_goal: str = Field(min_length=1, max_length=150)
+    content_focus: str = Field(min_length=1, max_length=180)
     chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
     logic_node_ids: list[str] = Field(default_factory=list, max_length=3)
     question: str = Field(default="", max_length=96)
     claim: str = Field(default="", max_length=120)
     bridge: str = Field(default="", max_length=96)
     logic_relation: LogicRelation | None = None
-    visual_kind: VisualKind
     layout: LayoutKind
+    density: Literal["concise", "standard", "detailed"] = "standard"
 
     @model_validator(mode="after")
     def validate_logic_mapping(self) -> "SlideBrief":
+        if self.kind is not SlideKind.COVER and len(self.title) > CONTENT_TITLE_MAX_LENGTH:
+            raise ValueError(
+                f"non-cover title must not exceed {CONTENT_TITLE_MAX_LENGTH} characters"
+            )
         if self.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
             if not self.chapter_id or not self.logic_node_ids or not self.question or not self.claim:
                 raise ValueError("content slide needs chapter, logic nodes, question, and claim")
@@ -226,106 +289,92 @@ class SlideBrief(PPTModel):
         return self
 
 
+class _StoryArcSlide(Protocol):
+    id: str
+    kind: SlideKind
+
+
+def _validate_canonical_story_arc(
+    slides: Sequence[_StoryArcSlide],
+    owner: str,
+) -> None:
+    meta_counts = {
+        kind: sum(slide.kind is kind for slide in slides)
+        for kind in (SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY)
+    }
+    if any(count != 1 for count in meta_counts.values()):
+        raise ValueError(f"{owner} must contain exactly one cover, roadmap, and summary")
+    if slides[0].kind is not SlideKind.COVER:
+        raise ValueError(f"{owner} must start with cover")
+    if slides[1].kind is not SlideKind.ROADMAP:
+        raise ValueError(f"{owner} must place roadmap second")
+    if slides[-1].kind is not SlideKind.SUMMARY:
+        raise ValueError(f"{owner} must end with summary")
+    if len({slide.id for slide in slides}) != len(slides):
+        raise ValueError(f"{owner} slide ids must be unique")
+
+
 class PPTStoryboard(PPTModel):
-    title: str = Field(min_length=1, max_length=72)
+    """Canonical teaching arc compiled before visual planning."""
+
+    title: str = Field(min_length=1, max_length=PRESENTATION_TITLE_MAX_LENGTH)
     language: str = "zh-CN"
-    visual_direction: str = Field(min_length=24, max_length=300)
-    slides: list[SlideBrief] = Field(min_length=10, max_length=18)
+    visual_direction: str = Field(min_length=1, max_length=300)
+    slides: list[SlideBrief] = Field(min_length=7, max_length=18)
 
     @model_validator(mode="after")
     def validate_story_arc(self) -> "PPTStoryboard":
-        if self.slides[0].kind is not SlideKind.COVER or self.slides[-1].kind is not SlideKind.SUMMARY:
-            raise ValueError("storyboard must start with cover and end with summary")
-        if len({slide.id for slide in self.slides}) != len(self.slides):
-            raise ValueError("storyboard slide ids must be unique")
+        _validate_canonical_story_arc(self.slides, "storyboard")
         return self
 
 
 class SlidePoint(PPTModel):
-    label: str = Field(min_length=1, max_length=24)
-    detail: str = Field(min_length=8, max_length=72)
+    """One bounded visible teaching point."""
+
+    label: str = Field(min_length=1, max_length=12)
+    detail: str = Field(min_length=1, max_length=48)
 
 
-class VisualMetric(PPTModel):
-    label: str = Field(min_length=1, max_length=24)
-    value: str = Field(min_length=1, max_length=32)
-    detail: str = Field(default="", max_length=56)
+class SlideContentDraft(PPTModel):
+    """Bounded teaching copy shared by every slide composition request."""
 
-
-class DiagramNode(PPTModel):
-    id: str = Field(pattern=r"^n[0-9]{1,2}$")
-    label: str = Field(min_length=1, max_length=24)
-    detail: str = Field(default="", max_length=48)
-    tone: Literal["primary", "secondary", "accent", "muted", "warning"] = "primary"
-
-
-class DiagramEdge(PPTModel):
-    source_id: str = Field(pattern=r"^n[0-9]{1,2}$")
-    target_id: str = Field(pattern=r"^n[0-9]{1,2}$")
-    label: str = Field(default="", max_length=24)
-
-
-class DiagramModel(PPTModel):
-    layout: Literal["hierarchy", "flow", "network", "comparison"] = "flow"
-    nodes: list[DiagramNode] = Field(min_length=2, max_length=8)
-    edges: list[DiagramEdge] = Field(default_factory=list, max_length=12)
+    lead: str = Field(default="", max_length=72)
+    points: list[SlidePoint] = Field(default_factory=list, max_length=3)
+    speaker_notes: str = Field(default="", max_length=SPEAKER_NOTES_MAX_LENGTH)
 
     @model_validator(mode="after")
-    def validate_graph(self) -> "DiagramModel":
-        node_ids = {node.id for node in self.nodes}
-        if len(node_ids) != len(self.nodes):
-            raise ValueError("diagram node ids must be unique")
-        for edge in self.edges:
-            if edge.source_id not in node_ids or edge.target_id not in node_ids:
-                raise ValueError("diagram edge references an unknown node")
-            if edge.source_id == edge.target_id:
-                raise ValueError("diagram edges cannot loop to the same node")
-        return self
-
-
-class VisualSpec(PPTModel):
-    kind: VisualKind
-    title: str = Field(default="", max_length=48)
-    caption: str = Field(default="", max_length=84)
-    metrics: list[VisualMetric] = Field(default_factory=list, max_length=5)
-    code_language: str = Field(default="", max_length=20)
-    code: str = Field(default="", max_length=1_600)
-    formula: str = Field(default="", max_length=300)
-    formula_steps: list[str] = Field(default_factory=list, max_length=5)
-    model: DiagramModel | None = None
-
-    @model_validator(mode="after")
-    def validate_visual_payload(self) -> "VisualSpec":
-        if self.kind is VisualKind.MODEL and self.model is None:
-            raise ValueError("model visual requires a structured diagram model")
-        if self.kind is not VisualKind.MODEL and self.model is not None:
-            raise ValueError("only model visuals may declare a diagram model")
+    def validate_teaching_payload(self) -> "SlideContentDraft":
+        if not self.lead and not self.points:
+            raise ValueError("slide needs a visible teaching statement or points")
         return self
 
 
 class PPTSlide(PPTModel):
+    """Composed slide copy paired with optional renderer-neutral Visual IR."""
+
     id: str = Field(pattern=r"^s[0-9]{2}$")
     kind: SlideKind
     title: str = Field(min_length=1, max_length=54)
-    eyebrow: str = Field(default="", max_length=28)
     subtitle: str = Field(default="", max_length=84)
-    lead: str = Field(default="", max_length=96)
     chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
     logic_node_ids: list[str] = Field(default_factory=list, max_length=3)
     question: str = Field(default="", max_length=96)
     claim: str = Field(default="", max_length=120)
     bridge: str = Field(default="", max_length=96)
     logic_relation: LogicRelation | None = None
-    points: list[SlidePoint] = Field(default_factory=list, max_length=4)
-    visual: VisualSpec
     layout: LayoutKind
-    takeaway: str = Field(default="", max_length=96)
-    speaker_notes: str = Field(default="", max_length=600)
+    density: Literal["concise", "standard", "detailed"] = "standard"
+    lead: str = Field(default="", max_length=72)
+    points: list[SlidePoint] = Field(default_factory=list, max_length=3)
+    speaker_notes: str = Field(default="", max_length=SPEAKER_NOTES_MAX_LENGTH)
+    visual: VisualModel | None = None
 
     @model_validator(mode="after")
-    def validate_teaching_payload(self) -> "PPTSlide":
-        if not self.lead and not self.points and not self.visual.code and not self.visual.formula and self.visual.model is None:
-            raise ValueError("slide needs a teaching statement, points, code, formula, or diagram model")
+    def validate_logic_mapping(self) -> "PPTSlide":
+        if self.kind is not SlideKind.COVER and len(self.title) > CONTENT_TITLE_MAX_LENGTH:
+            raise ValueError(
+                f"non-cover title must not exceed {CONTENT_TITLE_MAX_LENGTH} characters"
+            )
         if self.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
             if not self.chapter_id or not self.logic_node_ids or not self.question or not self.claim:
                 raise ValueError("content slide needs its assigned logic mapping")
@@ -335,26 +384,53 @@ class PPTSlide(PPTModel):
             raise ValueError(
                 f"layout {self.layout.value} does not support relation {self.logic_relation.value}"
             )
+        meta_kinds = {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}
+        if self.kind in meta_kinds and self.visual is not None:
+            raise ValueError("cover, roadmap and summary slides own their visual model in the renderer")
+        if self.kind not in meta_kinds and self.visual is None:
+            raise ValueError("non-meta slide requires a visual payload")
         return self
 
 
-class PPTSection(PPTModel):
-    slides: list[PPTSlide] = Field(min_length=1, max_length=6)
+def section_draft_contract(briefs: list[SlideBrief]) -> type[PPTModel]:
+    """Return one uniform bounded-copy schema for a storyboard section.
+
+    Args:
+        briefs: Ordered storyboard briefs in the section.
+
+    Returns:
+        A strict Pydantic model requiring one copy draft per brief.
+
+    Raises:
+        ValueError: If the section has no slide briefs.
+    """
+
+    if not briefs:
+        raise ValueError("section needs at least one slide brief")
+
+    return create_model(
+        "PPTSectionDraft_" + "_".join(brief.id for brief in briefs),
+        __base__=PPTModel,
+        __module__=__name__,
+        slides=(
+            list[SlideContentDraft],
+            Field(min_length=len(briefs), max_length=len(briefs)),
+        ),
+    )
 
 
 class PPTDeck(PPTModel):
-    title: str = Field(min_length=1, max_length=72)
+    """Validated presentation whose content slides cover the teaching DAG."""
+
+    title: str = Field(min_length=1, max_length=PRESENTATION_TITLE_MAX_LENGTH)
     language: str = "zh-CN"
-    visual_direction: str = Field(min_length=24, max_length=300)
+    visual_direction: str = Field(min_length=1, max_length=300)
     logic_model: DeckLogicModel
-    slides: list[PPTSlide] = Field(min_length=10, max_length=18)
+    slides: list[PPTSlide] = Field(min_length=7, max_length=18)
 
     @model_validator(mode="after")
     def validate_story_arc(self) -> "PPTDeck":
-        if self.slides[0].kind is not SlideKind.COVER or self.slides[-1].kind is not SlideKind.SUMMARY:
-            raise ValueError("deck must start with cover and end with summary")
-        if len({slide.id for slide in self.slides}) != len(self.slides):
-            raise ValueError("deck slide ids must be unique")
+        _validate_canonical_story_arc(self.slides, "deck")
         known_chapters = {chapter.id for chapter in self.logic_model.chapters}
         known_nodes = {node.id for node in self.logic_model.nodes}
         covered_nodes: set[str] = set()
@@ -384,7 +460,5 @@ class PPTArtifact(PPTModel):
     title: str = Field(min_length=1)
     path: Path
     generated_at: datetime
-    template_id: str = "computer-teaching-studio"
-    template_name: str = "计算机课程教学工作室"
     slide_count: int
     html_url: str = ""

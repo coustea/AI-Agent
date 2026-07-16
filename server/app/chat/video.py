@@ -14,10 +14,11 @@ from sqlmodel import select
 
 from app.chat.context_builder import build_user_content
 from app.chat.memory.service import get_chat_memory_service
+from app.config import static_url, user_chat_video_dir
 from app.infra.database import session_scope
 from app.infra.models import ChatMessage, ChatSession
 from app.infra.tool_excute import Tool, ToolExcute
-from app.shared.cartoon.service import CartoonService
+from app.shared.cartoon import CartoonBrief, CartoonPipeline
 
 
 class GenerateChatVideoArgs(BaseModel):
@@ -29,8 +30,8 @@ class GenerateChatVideoArgs(BaseModel):
 class ChatVideoService:
     """Persist and execute an explicit cartoon task attached to one user message."""
 
-    def __init__(self, *, cartoon_service: CartoonService | None = None) -> None:
-        self._cartoon_service = cartoon_service or CartoonService()
+    def __init__(self, *, pipeline: CartoonPipeline | None = None) -> None:
+        self._pipeline = pipeline or CartoonPipeline()
 
     async def create_task(
         self,
@@ -81,17 +82,23 @@ class ChatVideoService:
         )
 
         async def generate_chat_video(topic: str) -> dict[str, Any]:
-            artifact = await self._cartoon_service.generate_for_chat(
-                topic=topic,
-                username=username,
-                session_id=session_id,
-                message_id=user_message_id,
+            artifact = await self._pipeline.generate(
+                CartoonBrief(
+                    learning_need=topic.strip()[:500],
+                    instruction_context={
+                        "entry": "chat",
+                        "teaching_goal": "用概念、模型、操作推演和证据组织动态讲解",
+                    },
+                    source_materials=[topic.strip()[:500]],
+                ),
+                user_chat_video_dir(username, session_id, user_message_id),
             )
             return {
                 "title": artifact.title,
-                "video_url": artifact.video_url,
-                "preview_url": artifact.preview_url,
-                "duration_seconds": artifact.duration_seconds,
+                "video_url": static_url(artifact.video_path),
+                "preview_url": static_url(artifact.html_path),
+                "captions_url": static_url(artifact.caption_path),
+                "duration_seconds": round(artifact.duration_ms / 1_000, 2),
                 "scene_count": artifact.scene_count,
             }
 

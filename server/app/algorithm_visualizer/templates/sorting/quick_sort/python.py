@@ -1,5 +1,9 @@
-def quick_sort(nums, left, right):
+def quick_sort(arr):
     """快速排序：按枢轴分区后递归处理两侧。"""
+    return _quick_sort(list(arr), 0, len(arr) - 1)
+
+
+def _quick_sort(nums, left, right):
     if left >= right:
         return nums
 
@@ -15,6 +19,6 @@ def quick_sort(nums, left, right):
             i += 1
             j -= 1
 
-    quick_sort(nums, left, j)
-    quick_sort(nums, i, right)
+    _quick_sort(nums, left, j)
+    _quick_sort(nums, i, right)
     return nums

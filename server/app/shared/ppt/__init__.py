@@ -1,5 +1,6 @@
 from app.shared.ppt.generator import PPTGenerationError, PPTGenerator
 from app.shared.ppt.models import (
+    DeckLogicDraft,
     DeckLogicModel,
     LogicChapter,
     LogicEdge,
@@ -9,19 +10,19 @@ from app.shared.ppt.models import (
     PPTDeck,
     PPTGenerationContext,
     PPTPreferences,
-    PPTSection,
     PPTSlide,
     PPTSource,
     PPTStoryboard,
     ResourcePPT,
     SlideBrief,
     SlidePoint,
-    VisualMetric,
-    VisualSpec,
 )
 from app.shared.ppt.service import PPTService
+from app.shared.ppt.visual_ir import VisualModel
+from app.shared.ppt.visual_planner import VisualPlanner
 
 __all__ = [
+    "DeckLogicDraft",
     "DeckLogicModel",
     "LogicChapter",
     "LogicEdge",
@@ -32,7 +33,6 @@ __all__ = [
     "PPTGenerationContext",
     "PPTGenerator",
     "PPTPreferences",
-    "PPTSection",
     "PPTService",
     "PPTSlide",
     "PPTSource",
@@ -41,6 +41,6 @@ __all__ = [
     "ResourcePPT",
     "SlideBrief",
     "SlidePoint",
-    "VisualMetric",
-    "VisualSpec",
+    "VisualModel",
+    "VisualPlanner",
 ]

@@ -3,13 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 import html
-import math
 import os
 import tempfile
 from pathlib import Path
 
-from app.shared.ppt.contract import SlideKind, VisualRenderMode, visual_component
-from app.shared.ppt.models import DeckLogicModel, DiagramModel, PPTDeck, PPTSlide, VisualSpec
+from app.shared.ppt.contract import SLIDE_KIND_LABELS, SlideKind
+from app.shared.ppt.models import DeckLogicModel, PPTDeck, PPTSlide
+from app.shared.ppt.visual_renderers import render_visual
 
 
 @dataclass(frozen=True)
@@ -29,105 +29,6 @@ def _render_points(slide: PPTSlide) -> str:
         for point in slide.points
     )
     return f'<div class="points points-{len(slide.points)}">{cards}</div>'
-
-
-def _diagram_positions(model: DiagramModel) -> dict[str, tuple[float, float]]:
-    nodes = model.nodes
-    if model.layout == "flow":
-        columns = min(4, len(nodes))
-        rows = math.ceil(len(nodes) / columns)
-        return {
-            node.id: (
-                120 + (index % columns) * 760 / max(1, columns - 1),
-                280 if rows == 1 else 170 + (index // columns) * 220,
-            )
-            for index, node in enumerate(nodes)
-        }
-    if model.layout == "comparison":
-        split = max(1, math.ceil(len(nodes) / 2))
-        return {
-            node.id: (270 if index < split else 730, 110 + (index % split) * 340 / max(1, split - 1))
-            for index, node in enumerate(nodes)
-        }
-    if model.layout == "network":
-        positions = {nodes[0].id: (500, 280)}
-        for index, node in enumerate(nodes[1:]):
-            angle = -math.pi / 2 + 2 * math.pi * index / max(1, len(nodes) - 1)
-            positions[node.id] = (500 + 320 * math.cos(angle), 280 + 180 * math.sin(angle))
-        return positions
-
-    children: dict[str, list[str]] = {node.id: [] for node in nodes}
-    incoming: set[str] = set()
-    for edge in model.edges:
-        children[edge.source_id].append(edge.target_id)
-        incoming.add(edge.target_id)
-    roots = [node.id for node in nodes if node.id not in incoming] or [nodes[0].id]
-    levels: list[list[str]] = []
-    pending, seen = roots, set()
-    while pending:
-        level = [node_id for node_id in pending if node_id not in seen]
-        if not level:
-            break
-        levels.append(level)
-        seen.update(level)
-        pending = [child for node_id in level for child in children[node_id] if child not in seen]
-    levels.extend([[node.id] for node in nodes if node.id not in seen])
-    return {
-        node_id: (100 + column * 800 / max(1, len(levels) - 1), 100 + row * 360 / max(1, len(level) - 1))
-        for column, level in enumerate(levels)
-        for row, node_id in enumerate(level)
-    }
-
-
-def _edge_endpoints(
-    source: tuple[float, float],
-    target: tuple[float, float],
-) -> tuple[float, float, float, float]:
-    source_x, source_y = source
-    target_x, target_y = target
-    delta_x = target_x - source_x
-    delta_y = target_y - source_y
-    if not delta_x and not delta_y:
-        return source_x, source_y, target_x, target_y
-    scale = 1 / max(abs(delta_x) / 92, abs(delta_y) / 46)
-    offset_x = delta_x * scale
-    offset_y = delta_y * scale
-    return source_x + offset_x, source_y + offset_y, target_x - offset_x, target_y - offset_y
-
-
-def _render_model(model: DiagramModel, *, marker_id: str, label: str) -> str:
-    positions = _diagram_positions(model)
-    rendered_edges: list[str] = []
-    for edge in model.edges:
-        x1, y1, x2, y2 = _edge_endpoints(positions[edge.source_id], positions[edge.target_id])
-        edge_label = ""
-        if edge.label:
-            edge_label = (
-                f'<text x="{(x1 + x2) / 2:.1f}" y="{(y1 + y2) / 2 - 14:.1f}">'
-                f'{_escape(edge.label)}</text>'
-            )
-        rendered_edges.append(
-            f'<g class="diagram-edge"><line x1="{x1:.1f}" y1="{y1:.1f}" '
-            f'x2="{x2:.1f}" y2="{y2:.1f}" marker-end="url(#{marker_id})"/>{edge_label}</g>'
-        )
-    edges = "".join(rendered_edges)
-    nodes = "".join(
-        f'<g class="diagram-node tone-{node.tone}" transform="translate({positions[node.id][0]:.1f} {positions[node.id][1]:.1f})"><rect x="-92" y="-46" width="184" height="92" rx="18"/>'
-        '<foreignObject x="-82" y="-38" width="164" height="76">'
-        '<div xmlns="http://www.w3.org/1999/xhtml" class="diagram-node-copy">'
-        f'<strong>{_escape(node.label)}</strong>'
-        + (f'<span>{_escape(node.detail)}</span>' if node.detail else "")
-        + "</div></foreignObject>"
-        + "</g>"
-        for node in model.nodes
-    )
-    return (
-        f'<svg class="diagram" viewBox="0 0 1000 560" role="img" aria-label="{_escape(label)}">'
-        f'<defs><marker id="{marker_id}" markerWidth="9" markerHeight="9" refX="7" '
-        'refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z"/></marker></defs>'
-        f'{nodes}{edges}</svg>'
-    )
-
 
 
 def _render_logic_overview(logic_model: DeckLogicModel, *, summary: bool) -> str:
@@ -185,61 +86,45 @@ def _render_chapter_rail(logic_model: DeckLogicModel, active_chapter: str | None
     return f'<nav class="chapter-rail" aria-label="课程章节进度">{items}</nav>'
 
 
-def _render_visual(visual: VisualSpec, *, slide_id: str) -> str:
-    mode = visual_component(visual.kind).render_mode
-    if mode is VisualRenderMode.CODE:
-        return (
-            '<section class="code-panel"><div class="code-head"><i></i><i></i><i></i>'
-            f'<b>{_escape(visual.code_language or "example")}</b></div><pre><code>{_escape(visual.code)}</code></pre></section>'
-        )
-    if mode is VisualRenderMode.FORMULA:
-        steps = "".join(f'<li>{_escape(step)}</li>' for step in visual.formula_steps)
-        return f'<section class="formula-panel"><div class="formula">{_escape(visual.formula)}</div><ol>{steps}</ol></section>'
-    if mode is VisualRenderMode.METRICS:
-        metrics = "".join(
-            f'<article><strong>{_escape(metric.value)}</strong><b>{_escape(metric.label)}</b><p>{_escape(metric.detail)}</p></article>'
-            for metric in visual.metrics
-        )
-        return f'<section class="metrics">{metrics}</section>'
-    if mode is VisualRenderMode.MODEL:
-        if visual.model is None:
-            raise ValueError("model visual is missing its structured diagram")
-        label = visual.title or visual.caption or "逻辑关系图"
-        return (
-            f'<div class="diagram-wrap">{_render_model(visual.model, marker_id=f"arrow-{slide_id}", label=label)}'
-            f'<p class="visual-caption">{_escape(visual.caption)}</p></div>'
-        )
-    raise RuntimeError(f"Unsupported visual render mode: {mode}")
-
-
 def _render_slide(
     slide: PPTSlide,
     index: int,
     total: int,
     logic_model: DeckLogicModel,
 ) -> str:
-    eyebrow_html = f'<div class="eyebrow">{_escape(slide.eyebrow or slide.kind.value)}</div>'
-    if slide.kind == "cover" or slide.kind.value == "cover":
-        eyebrow_html = f'<div class="author-badge">Presented by Mentorly</div>{eyebrow_html}'
+    label = SLIDE_KIND_LABELS[slide.kind]
+    eyebrow = f'<div class="eyebrow">{_escape(label)}</div>'
+    if slide.kind is SlideKind.COVER:
+        eyebrow = f'<div class="author-badge">Presented by Mentorly</div>{eyebrow}'
 
     subtitle = f'<p class="subtitle">{_escape(slide.subtitle)}</p>' if slide.subtitle else ""
     question = f'<p class="logic-question">{_escape(slide.question)}</p>' if slide.question else ""
     lead = f'<p class="lead">{_escape(slide.lead)}</p>' if slide.lead else ""
-    conclusion = slide.takeaway or slide.claim
     takeaway = (
-        f'<footer><span>本页结论</span><strong>{_escape(conclusion)}</strong></footer>'
-        if conclusion
+        f'<footer><span>本页结论</span><strong>{_escape(slide.claim)}</strong></footer>'
+        if slide.claim
         else '<footer class="empty-footer"></footer>'
     )
+
     if slide.kind is SlideKind.ROADMAP:
         visual = _render_logic_overview(logic_model, summary=False)
+        visual_kind = "logic-overview"
         meta_class = " has-meta-visual"
     elif slide.kind is SlideKind.SUMMARY:
         visual = _render_logic_overview(logic_model, summary=True)
+        visual_kind = "logic-overview"
         meta_class = " has-meta-visual"
-    else:
-        visual = _render_visual(slide.visual, slide_id=slide.id)
+    elif slide.kind is SlideKind.COVER:
+        visual = ""
+        visual_kind = "cover"
         meta_class = ""
+    else:
+        if slide.visual is None:
+            raise ValueError(f"content slide {slide.id} is missing its visual payload")
+        visual = render_visual(slide.visual, slide.id)
+        visual_kind = slide.visual.kind
+        meta_class = ""
+
     active = " active" if index == 0 else ""
     chapter_rail = (
         ""
@@ -247,13 +132,18 @@ def _render_slide(
         else _render_chapter_rail(logic_model, slide.chapter_id)
     )
     notes = "\n\n".join(
-        part for part in (f"承接：{slide.bridge}" if slide.bridge else "", slide.speaker_notes) if part
+        part
+        for part in (
+            f"承接：{slide.bridge}" if slide.bridge else "",
+            slide.speaker_notes,
+        )
+        if part
     )
     return f'''<section class="slide layout-{slide.layout.value} kind-{slide.kind.value}{meta_class}{active}" data-notes="{_escape(notes)}" data-chapter="{_escape(slide.chapter_id or "")}">
   <div class="shell">
-    <header>{eyebrow_html}<div class="page">{index + 1:02d}<i></i>{total:02d}</div><h1>{_escape(slide.title)}</h1>{subtitle}</header>
+    <header>{eyebrow}<div class="page">{index + 1:02d}<i></i>{total:02d}</div><h1>{_escape(slide.title)}</h1>{subtitle}</header>
     {chapter_rail}
-    <div class="slide-main"><section class="copy">{question}{lead}{_render_points(slide)}</section><section class="visual visual-{slide.visual.kind.value}">{visual}</section></div>
+    <div class="slide-main"><section class="copy">{question}{lead}{_render_points(slide)}</section><section class="visual visual-{_escape(visual_kind)}">{visual}</section></div>
     {takeaway}
   </div>
 </section>'''

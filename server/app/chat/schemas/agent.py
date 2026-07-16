@@ -4,24 +4,30 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+
+DiagramMode = Literal["auto", "required"]
 
 
 # TutorRequestContext：当前用户消息的辅导请求上下文（用于工具构建）
 class TutorRequestContext(BaseModel):
     """当前用户消息的辅导请求上下文。"""
+    model_config = ConfigDict(extra="forbid")
+
     user_id: int
     username: str  # 用户名，用于文件路径构建
     session_id: str
     user_input: str = ""
     attachments: list[str] = Field(default_factory=list)
     enable_web_search: bool = False
-    need_teaching_diagram: bool = False
+    diagram_mode: DiagramMode = "auto"
 
 
 # TutorAgentInput：TutorAgent 的输入（ChatService 组装后传入 chat()）
 class TutorAgentInput(BaseModel):
     """TutorAgent 的输入 — ChatService 构建，传入 TutorAgent.chat()。"""
+    model_config = ConfigDict(extra="forbid")
+
     user_id: int
     username: str  # 用户名，用于文件路径构建
     session_id: str
@@ -31,7 +37,7 @@ class TutorAgentInput(BaseModel):
     history_messages: list[Any] = Field(default_factory=list)
     session_summary: str = ""
     enable_web_search: bool = False
-    need_teaching_diagram: bool = False
+    diagram_mode: DiagramMode = "auto"
     voice_mode: bool = False
 
 

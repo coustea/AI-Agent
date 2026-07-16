@@ -18,7 +18,7 @@ from app.resource.schemas.quiz import (
     validate_quiz_payload,
 )
 from app.resource.catalog import BASE_RESOURCE_AGENT_IDS
-from app.shared.cartoon.schemas import CartoonResourceMetadata
+from app.shared.cartoon.models import CartoonResourceMetadata
 
 if TYPE_CHECKING:
     from app.resource.schemas import AgentResult, ResourceInput

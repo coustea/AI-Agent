@@ -160,14 +160,14 @@ class PPTService:
                 "html_file_path": str(artifact.path),
                 "html_url": artifact.html_url,
                 "slide_count": artifact.slide_count,
-                "style_name": artifact.template_name,
-                "template_id": artifact.template_id,
                 "file_size": artifact.path.stat().st_size,
                 "ppt_pipeline": {
-                    "version": "storyboard-parallel-svg-v1",
+                    "version": "visual-ir-v2",
                     "stages": [
                         "assembling_context",
+                        "designing_logic",
                         "designing_story",
+                        "visual_planning",
                         "composing_sections",
                         "rendering_html",
                     ],

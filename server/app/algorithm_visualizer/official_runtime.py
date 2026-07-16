@@ -1,22 +1,34 @@
-"""Deterministic execution and state observation for official templates."""
+"""Deterministic execution and state observation for official templates.
+
+The runtime compiles only the trusted template source, enables
+``sys.settrace`` only for that filename, and collects semantic events
+through per-visualizer-type observation adapters.  It replaces the legacy
+``_bind_arguments``, ``_build_linked_list``, ``_build_tree``,
+``_build_graph``, and ``_StateAdapter`` with a simple contract:
+``entry(**validated_input)``.
+"""
 
 from __future__ import annotations
 
 import copy
 import io
 import importlib.util
-import inspect
 import json
-import math
 import sys
 from contextlib import redirect_stdout
 from dataclasses import dataclass
-from pathlib import Path
 from types import FrameType, ModuleType
-from typing import Any, Callable
+from typing import Any
 
+from pydantic import JsonValue
+
+from app.algorithm_visualizer.official_adapters import get_adapter
+from app.algorithm_visualizer.official_adapters.structures import (
+    LinkedListAdapter,
+    TreeAdapter,
+)
 from app.algorithm_visualizer.template_registry import TemplateSpec, get_template_spec
-from app.algorithm_visualizer.tracer_sdks.python_tracer import VisualTracer
+from app.algorithm_visualizer.trace_builder import TraceBuilder, TraceEvent
 
 
 class OfficialRuntimeError(RuntimeError):
@@ -25,74 +37,97 @@ class OfficialRuntimeError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class OfficialExecution:
-    result: Any
-    events: list[dict[str, Any]]
+    """Result of running one official template with validated input."""
+
+    events: list[TraceEvent]
+    result: JsonValue
+    summary: str
 
 
-@dataclass(frozen=True, slots=True)
-class _Snapshot:
-    structure: dict[str, Any]
-    targets: list[Any]
-    message: str
-
-
-def run_official_template(
-    algorithm_key: str,
+def execute_official_template(
+    spec: TemplateSpec,
     input_data: dict[str, Any],
 ) -> OfficialExecution:
-    spec = get_template_spec(algorithm_key)
-    tracer = VisualTracer(spec.visualizer_type)
-    result = run_registered_template(algorithm_key, input_data, tracer)
-    return OfficialExecution(result=result, events=tracer.events)
+    """Execute a registered template and return its semantic trace.
 
+    Args:
+        spec: The template specification from the registry.
+        input_data: Validated input matching ``spec.input_model``.
 
-def run_registered_template(
-    algorithm_key: str,
-    input_data: dict[str, Any],
-    tracer: VisualTracer,
-) -> Any:
-    spec = get_template_spec(algorithm_key)
+    Returns:
+        An OfficialExecution with events, result, and summary.
+
+    Raises:
+        OfficialRuntimeError: when the template cannot be loaded or its
+            entry function is missing.
+    """
     module = _load_source_module(spec)
     entry = getattr(module, spec.entry_point, None)
     if not callable(entry):
         raise OfficialRuntimeError(
-            f"模板 {algorithm_key} 缺少入口函数 {spec.entry_point}"
+            f"模板 {spec.key} 缺少入口函数 {spec.entry_point}"
         )
 
-    args, kwargs = _bind_arguments(spec, module, entry, copy.deepcopy(input_data))
-    adapter = _StateAdapter(spec, module, input_data, args, kwargs)
+    adapter = get_adapter(spec.visualizer_type, copy.deepcopy(input_data))
+    builder = TraceBuilder(
+        visualizer_type=spec.visualizer_type,
+        max_events=spec.max_events,
+    )
+
+    # Pre-register linked-list and tree structures for identity tracking.
+    _pre_register_structures(adapter, module, input_data)
+
     first_line = max(1, entry.__code__.co_firstlineno)
-    initial = adapter.initial()
-    tracer.snapshot(
-        _initial_event_type(spec, initial),
-        initial.structure,
-        targets=initial.targets,
-        message=initial.message,
+    initial_structure, initial_targets = adapter.initial()
+    initial_event_type = _initial_event_type(spec, initial_structure)
+    builder.add(
+        initial_event_type,
+        initial_structure,
+        targets=initial_targets,
+        message="初始化可视化状态",
         line=first_line,
     )
 
-    last_fingerprint = _snapshot_fingerprint(initial)
-    last_snapshot = initial
+    last_fingerprint = _snapshot_fingerprint(initial_structure, initial_targets)
+    last_structure = initial_structure
+    last_targets = initial_targets
     snapshot_count = 0
     source_path = str(spec.source_path.resolve())
+    line_event_count = 0
+    max_line_events = 50_000
 
     def observe(frame: FrameType, event: str, arg: object):
-        nonlocal last_fingerprint, last_snapshot, snapshot_count
-        if frame.f_code.co_filename != source_path or event not in {"line", "return"}:
+        nonlocal last_fingerprint, last_structure, last_targets
+        nonlocal snapshot_count, line_event_count
+
+        if frame.f_code.co_filename != source_path:
             return observe
-        snapshot = adapter.capture(frame.f_locals, arg if event == "return" else None)
-        event_type, snapshot = _describe_step(spec, last_snapshot, snapshot)
-        fingerprint = _snapshot_fingerprint(snapshot)
-        if fingerprint != last_fingerprint and snapshot_count < 600:
-            tracer.snapshot(
+        if event == "line":
+            line_event_count += 1
+            if line_event_count > max_line_events:
+                return None  # Stop tracing this file
+        if event not in {"line", "return"}:
+            return observe
+
+        structure, targets = adapter.capture(
+            frame.f_locals,
+            arg if event == "return" else None,
+        )
+        fingerprint = _snapshot_fingerprint(structure, targets)
+        if fingerprint != last_fingerprint and snapshot_count < spec.max_events:
+            event_type = _describe_step(
+                spec, last_structure, structure, targets
+            )
+            builder.add(
                 event_type,
-                snapshot.structure,
-                targets=snapshot.targets,
-                message=snapshot.message,
+                structure,
+                targets=targets,
+                message=_line_message(frame.f_locals),
                 line=frame.f_lineno,
             )
             last_fingerprint = fingerprint
-            last_snapshot = snapshot
+            last_structure = structure
+            last_targets = targets
             snapshot_count += 1
         return observe
 
@@ -100,42 +135,66 @@ def run_registered_template(
     try:
         sys.settrace(observe)
         with redirect_stdout(io.StringIO()):
-            result = entry(*args, **kwargs)
+            result = entry(**input_data)
     finally:
         sys.settrace(previous_trace)
 
-    final_snapshot = adapter.capture({}, result)
-    final_fingerprint = _snapshot_fingerprint(final_snapshot)
+    # Final snapshot from the return value.
+    final_structure, final_targets = adapter.capture({}, result)
+    final_fingerprint = _snapshot_fingerprint(final_structure, final_targets)
     if final_fingerprint != last_fingerprint:
-        tracer.snapshot(
+        builder.add(
             "snapshot",
-            final_snapshot.structure,
-            targets=final_snapshot.targets,
-            message=final_snapshot.message,
+            final_structure,
+            targets=final_targets,
+            message="算法完成一次有效执行",
             line=first_line,
         )
-        last_snapshot = final_snapshot
+        last_structure = final_structure
     elif snapshot_count == 0:
-        tracer.snapshot(
+        builder.add(
             "snapshot",
-            last_snapshot.structure,
-            targets=last_snapshot.targets,
+            last_structure,
+            targets=last_targets,
             message="算法完成一次有效执行",
             line=first_line,
         )
 
-    tracer.snapshot(
+    builder.add(
         "finish",
-        last_snapshot.structure,
+        last_structure,
         message="算法执行完成",
         line=first_line,
     )
-    return _to_jsonable(result)
 
+    jsonable_result = _to_jsonable(result)
+    event_count = builder.step
+    return OfficialExecution(
+        events=builder.events,
+        result=jsonable_result,
+        summary=f"执行成功，共产生 {event_count} 步可视化操作。",
+    )
+
+
+def run_official_template(
+    algorithm_key: str,
+    input_data: dict[str, Any],
+) -> OfficialExecution:
+    """Convenience wrapper: look up a spec by key and execute it."""
+    spec = get_template_spec(algorithm_key)
+    return execute_official_template(spec, input_data)
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
 
 def _load_source_module(spec: TemplateSpec) -> ModuleType:
+    """Compile the trusted template source as an isolated module."""
     module_name = f"_algorithm_template_{spec.key}_{spec.version[-12:]}"
-    module_spec = importlib.util.spec_from_file_location(module_name, spec.source_path)
+    module_spec = importlib.util.spec_from_file_location(
+        module_name, spec.source_path
+    )
     if module_spec is None or module_spec.loader is None:
         raise OfficialRuntimeError(f"无法加载模板源码: {spec.source_path}")
     module = importlib.util.module_from_spec(module_spec)
@@ -143,68 +202,40 @@ def _load_source_module(spec: TemplateSpec) -> ModuleType:
     return module
 
 
-def _bind_arguments(
-    spec: TemplateSpec,
+def _pre_register_structures(
+    adapter: object,
     module: ModuleType,
-    entry: Callable[..., Any],
-    data: dict[str, Any],
-) -> tuple[list[Any], dict[str, Any]]:
-    signature = inspect.signature(entry)
-    kwargs: dict[str, Any] = {}
-    graph = _build_graph(data) if "edges" in data else None
-    root = _build_tree(module, data.get("arr", []))
-    head = _build_linked_list(module, data.get("arr", []))
+    input_data: dict[str, Any],
+) -> None:
+    """Pre-build linked-list and tree structures for identity tracking.
 
-    aliases = {
-        "nums": ("arr",),
-        "prices": ("arr",),
-        "s": ("text", "string"),
-        "source": ("start",),
-        "node": ("start",),
-        "perm_list": ("arr",),
-        "candidates": ("arr",),
-    }
-
-    for name, parameter in signature.parameters.items():
-        if name in data:
-            kwargs[name] = data[name]
-            continue
-        if name in {"root", "tree"} and root is not None:
-            kwargs[name] = root
-            continue
-        if name == "head" and head is not None:
-            kwargs[name] = head
-            continue
-        if name == "node" and spec.visualizer_type == "linked-list" and head is not None:
-            kwargs[name] = head
-            continue
-        if name == "graph" and graph is not None:
-            kwargs[name] = graph
-            continue
-        matched = next((data[key] for key in aliases.get(name, ()) if key in data), None)
-        if matched is not None:
-            kwargs[name] = matched
-            continue
-        if name in {"lo", "left"} and "arr" in data:
-            kwargs[name] = 0
-            continue
-        if name in {"hi", "right"} and "arr" in data:
-            kwargs[name] = len(data["arr"]) - 1
-            continue
-        if name == "n" and "arr" in data:
-            kwargs[name] = len(data["arr"])
-            continue
-        if parameter.default is not inspect.Parameter.empty:
-            continue
-        raise OfficialRuntimeError(
-            f"模板 {spec.key} 的输入缺少入口参数: {name}"
-        )
-    return [], kwargs
+    For linked-list and tree templates, the entry function constructs
+    ListNode/TreeNode objects internally.  We need to track these by
+    object identity, so we build them from the same input data using
+    the same helper functions defined in the template source.
+    """
+    if isinstance(adapter, LinkedListAdapter):
+        head = _build_linked_list_from_module(module, input_data.get("arr", []))
+        if head is not None:
+            adapter.set_head(head)
+    elif isinstance(adapter, TreeAdapter):
+        root = _build_tree_from_module(module, input_data.get("arr", []))
+        if root is not None:
+            adapter.set_root(root)
 
 
-def _build_linked_list(module: ModuleType, values: Any) -> Any:
+def _build_linked_list_from_module(
+    module: ModuleType,
+    values: object,
+) -> object | None:
+    """Build a linked list using the template's own ListNode class."""
     if not isinstance(values, list) or not values:
         return None
+    # Use the template's _build_linked_list helper if available.
+    builder = getattr(module, "_build_linked_list", None)
+    if callable(builder):
+        return builder(values)
+    # Fallback: construct manually using the template's ListNode.
     node_class = getattr(module, "ListNode", None) or getattr(module, "Node", None)
     if node_class is None:
         return None
@@ -216,9 +247,18 @@ def _build_linked_list(module: ModuleType, values: Any) -> Any:
     return head
 
 
-def _build_tree(module: ModuleType, values: Any) -> Any:
+def _build_tree_from_module(
+    module: ModuleType,
+    values: object,
+) -> object | None:
+    """Build a binary tree using the template's own TreeNode class."""
     if not isinstance(values, list) or not values:
         return None
+    # Use the template's _build_tree helper if available.
+    builder = getattr(module, "_build_tree", None)
+    if callable(builder):
+        return builder(values)
+    # Fallback: construct manually using the template's TreeNode.
     node_class = getattr(module, "TreeNode", None) or getattr(module, "Node", None)
     if node_class is None:
         return None
@@ -236,220 +276,16 @@ def _build_tree(module: ModuleType, values: Any) -> Any:
     return nodes[0]
 
 
-def _build_graph(data: dict[str, Any]) -> dict[int, list[Any]]:
-    num_nodes = int(data.get("num_nodes", 0))
-    edges = data.get("edges", [])
-    if not num_nodes and edges:
-        num_nodes = max(max(int(edge[0]), int(edge[1])) for edge in edges) + 1
-    graph: dict[int, list[Any]] = {index: [] for index in range(num_nodes)}
-    weighted = any(isinstance(edge, list) and len(edge) > 2 for edge in edges)
-    for edge in edges:
-        source, target = int(edge[0]), int(edge[1])
-        value: Any = (target, edge[2]) if weighted else target
-        graph[source].append(value)
-        if data.get("directed") is not True:
-            reverse: Any = (source, edge[2]) if weighted else source
-            graph[target].append(reverse)
-    return graph
-
-
-class _StateAdapter:
-    def __init__(
-        self,
-        spec: TemplateSpec,
-        module: ModuleType,
-        input_data: dict[str, Any],
-        args: list[Any],
-        kwargs: dict[str, Any],
-    ) -> None:
-        self.spec = spec
-        self.module = module
-        self.input_data = copy.deepcopy(input_data)
-        self.bound_values = [*args, *kwargs.values()]
-        self._object_ids: dict[int, str] = {}
-        linked_head = next(
-            (value for value in self.bound_values if hasattr(value, "next")),
-            None,
-        )
-        self._linked_node_objects, self._linked_object_ids = _collect_linked_nodes(
-            linked_head
-        )
-        self._last_structure = self._initial_structure()
-
-    def initial(self) -> _Snapshot:
-        return _Snapshot(
-            structure=copy.deepcopy(self._last_structure),
-            targets=[],
-            message="初始化可视化状态",
-        )
-
-    def capture(self, local_values: dict[str, Any], result: Any = None) -> _Snapshot:
-        capture_method = getattr(self, f"_capture_{self.spec.visualizer_type.replace('-', '_')}")
-        structure, targets = capture_method(local_values, result)
-        self._last_structure = structure
-        return _Snapshot(
-            structure=copy.deepcopy(structure),
-            targets=targets,
-            message=_line_message(local_values),
-        )
-
-    def _initial_structure(self) -> dict[str, Any]:
-        visualizer_type = self.spec.visualizer_type
-        if visualizer_type == "array":
-            return {"array": _initial_array(self.input_data)}
-        if visualizer_type == "stack-queue":
-            mode = "queue" if "queue" in self.spec.key else "stack"
-            return {
-                "mode": mode,
-                "items": [],
-                "pointers": [],
-                "currentValue": "",
-            }
-        if visualizer_type == "linked-list":
-            return {
-                "nodes": _linked_nodes(
-                    self._linked_node_objects,
-                    self._linked_object_ids,
-                    set(),
-                ),
-                "pointers": [],
-            }
-        if visualizer_type == "tree":
-            root = next(
-                (value for value in self.bound_values if hasattr(value, "left") or hasattr(value, "right")),
-                None,
-            )
-            nodes, self._object_ids = _tree_nodes(root)
-            if not nodes:
-                nodes = _fallback_tree_nodes(self.input_data)
-            return {"nodes": nodes}
-        if visualizer_type == "graph":
-            return {"nodes": _graph_nodes(self.input_data)}
-        return _initial_table(self.input_data)
-
-    def _capture_array(self, local_values: dict[str, Any], result: Any):
-        values = _find_scalar_list(local_values)
-        if values is None and isinstance(result, (list, tuple)):
-            values = list(result)
-        array = _numeric_array(values) if values is not None else self._last_structure["array"]
-        return {"array": array}, _array_targets(
-            self.spec.key,
-            local_values,
-            len(array),
-        )
-
-    def _capture_stack_queue(self, local_values: dict[str, Any], result: Any):
-        mode = self._last_structure["mode"]
-        values = _find_sequence(local_values, ("stack", "queue", "deque", "dq", "q"))
-        if values is None:
-            values = [item.get("label") for item in self._last_structure["items"]]
-        items = [
-            {"id": f"item-{index}", "label": str(value), "tone": "default"}
-            for index, value in enumerate(values)
-        ]
-        pointers = []
-        if items:
-            pointers.append(
-                {
-                    "label": "top" if mode == "stack" else "front",
-                    "itemIndex": len(items) - 1 if mode == "stack" else 0,
-                    "tone": "accent",
-                }
-            )
-        return {
-            "mode": mode,
-            "items": items,
-            "pointers": pointers,
-            "currentValue": str(local_values.get("char", "")),
-        }, []
-
-    def _capture_linked_list(self, local_values: dict[str, Any], result: Any):
-        pointers: list[dict[str, Any]] = []
-        active_ids: set[str] = set()
-        for label in ("prev", "current", "curr", "head", "next_node"):
-            node = local_values.get(label)
-            node_id = self._linked_object_ids.get(id(node))
-            if node_id is not None:
-                node_index = next(
-                    index
-                    for index, item in enumerate(self._linked_node_objects)
-                    if item is node
-                )
-                pointers.append(
-                    {
-                        "label": label,
-                        "nodeId": node_id,
-                        "nodeIndex": node_index,
-                        "tone": "accent",
-                    }
-                )
-                active_ids.add(node_id)
-        if not pointers and result is not None:
-            node_id = self._linked_object_ids.get(id(result))
-            if node_id is not None:
-                active_ids.add(node_id)
-        return {
-            "nodes": _linked_nodes(
-                self._linked_node_objects,
-                self._linked_object_ids,
-                active_ids,
-            ),
-            "pointers": pointers,
-        }, list(active_ids)
-
-    def _capture_tree(self, local_values: dict[str, Any], result: Any):
-        nodes = copy.deepcopy(self._last_structure["nodes"])
-        targets = []
-        for name in ("node", "root", "current"):
-            value = local_values.get(name)
-            node_id = self._object_ids.get(id(value))
-            if node_id is not None:
-                targets.append(node_id)
-                for node in nodes:
-                    if node["id"] == node_id:
-                        node["tone"] = "visited"
-        return {"nodes": nodes}, targets
-
-    def _capture_graph(self, local_values: dict[str, Any], result: Any):
-        nodes = copy.deepcopy(self._last_structure["nodes"])
-        visited = local_values.get("visited")
-        distance = local_values.get("distance")
-        visited_values = set()
-        if isinstance(visited, set):
-            visited_values = visited
-        elif isinstance(visited, list):
-            visited_values = {index for index, value in enumerate(visited) if value}
-        targets = _integer_targets(local_values, len(nodes))
-        for node in nodes:
-            node_index = int(node["id"])
-            if node_index in visited_values or node_index in targets:
-                node["tone"] = "visited"
-            if isinstance(distance, list) and node_index < len(distance):
-                value = distance[node_index]
-                node["distance"] = "∞" if isinstance(value, float) and math.isinf(value) else value
-        return {"nodes": nodes}, [str(target) for target in targets]
-
-    def _capture_dp_table(self, local_values: dict[str, Any], result: Any):
-        table = _find_table(local_values)
-        if table is None and isinstance(result, list):
-            table = result
-        if table is None:
-            return copy.deepcopy(self._last_structure), []
-        values = table if table and isinstance(table[0], list) else [table]
-        width = max((len(row) for row in values), default=1)
-        highlighted = _table_highlights(local_values, values)
-        return {
-            "headers": [str(index) for index in range(width)],
-            "values": _to_jsonable(values),
-            "highlighted": highlighted,
-        }, _table_targets(local_values, values)
-
-
-def _initial_event_type(spec: TemplateSpec, snapshot: _Snapshot) -> str:
+def _initial_event_type(
+    spec: TemplateSpec,
+    structure: dict[str, object],
+) -> str:
+    """Return the correct init event type for a visualizer."""
     if spec.visualizer_type == "array":
         return "init_array"
     if spec.visualizer_type == "stack-queue":
-        return "init_queue" if snapshot.structure["mode"] == "queue" else "init_stack"
+        mode = structure.get("mode", "stack")
+        return "init_queue" if mode == "queue" else "init_stack"
     return {
         "linked-list": "init_list",
         "tree": "init_tree",
@@ -458,390 +294,22 @@ def _initial_event_type(spec: TemplateSpec, snapshot: _Snapshot) -> str:
     }[spec.visualizer_type]
 
 
-def _initial_array(data: dict[str, Any]) -> list[Any]:
-    for key in ("arr", "nums", "prices", "points", "intervals"):
-        if isinstance(data.get(key), list):
-            return _numeric_array(data[key])
-    for key in ("text", "s", "pattern"):
-        if isinstance(data.get(key), str):
-            return [ord(char) for char in data[key]]
-    numeric = [value for value in data.values() if isinstance(value, (int, float))]
-    return numeric or [0]
-
-
-def _numeric_array(values: list[Any]) -> list[Any]:
-    numeric: list[Any] = []
-    for value in values:
-        if isinstance(value, bool):
-            numeric.append(int(value))
-        elif isinstance(value, (int, float)):
-            numeric.append(value)
-        elif isinstance(value, str) and len(value) == 1:
-            numeric.append(ord(value))
-        elif isinstance(value, (list, tuple)):
-            numeric.append(len(value))
-    return numeric or [0]
-
-
-def _find_scalar_list(local_values: dict[str, Any]) -> list[Any] | None:
-    for key in ("nums", "arr", "prices", "result", "output", "dp"):
-        value = local_values.get(key)
-        if isinstance(value, list) and (not value or not isinstance(value[0], list)):
-            return list(value)
-    return None
-
-
-def _find_sequence(local_values: dict[str, Any], names: tuple[str, ...]) -> list[Any] | None:
-    for name in names:
-        value = local_values.get(name)
-        if isinstance(value, (list, tuple)):
-            return list(value)
-        if value is not None and value.__class__.__name__ == "deque":
-            return list(value)
-    return None
-
-
-def _array_targets(
-    algorithm_key: str,
-    local_values: dict[str, Any],
-    length: int,
-) -> list[int]:
-    def valid_index(value: Any) -> bool:
-        return (
-            isinstance(value, int)
-            and not isinstance(value, bool)
-            and 0 <= value < length
-        )
-
-    if algorithm_key == "bubble_sort":
-        index = local_values.get("index")
-        if valid_index(index) and valid_index(index + 1):
-            return [index, index + 1]
-
-    if algorithm_key == "selection_sort":
-        minimum = local_values.get("minimum")
-        index = local_values.get("index")
-        if valid_index(minimum) and valid_index(index):
-            return [minimum, index] if minimum != index else [minimum]
-        if valid_index(minimum):
-            return [minimum]
-        return []
-
-    if algorithm_key == "insertion_sort":
-        position = local_values.get("position")
-        if valid_index(position) and valid_index(position + 1):
-            return [position, position + 1]
-
-    if algorithm_key == "quick_sort":
-        left_cursor = local_values.get("i")
-        right_cursor = local_values.get("j")
-        if valid_index(left_cursor) and valid_index(right_cursor):
-            return [left_cursor, right_cursor]
-
-    return _integer_targets(local_values, length)
-
-
-def _integer_targets(local_values: dict[str, Any], length: int) -> list[int]:
-    targets = []
-    for name in (
-        "i",
-        "j",
-        "left",
-        "right",
-        "lo",
-        "hi",
-        "mid",
-        "middle",
-        "index",
-        "position",
-        "minimum",
-        "start",
-        "end",
-    ):
-        value = local_values.get(name)
-        if isinstance(value, int) and not isinstance(value, bool) and 0 <= value < length:
-            if value not in targets:
-                targets.append(value)
-    return targets[:4]
-
-
-def _nodes_from_values(values: Any) -> list[dict[str, Any]]:
-    if not isinstance(values, list):
-        values = list(values) if isinstance(values, tuple) else []
-    return [
-        {"id": f"node-{index}", "label": str(value), "tone": "default"}
-        for index, value in enumerate(values)
-    ]
-
-
-def _linked_values(root: Any) -> tuple[list[Any], dict[int, int]]:
-    values = []
-    indexes: dict[int, int] = {}
-    current = root
-    while current is not None and hasattr(current, "next") and id(current) not in indexes and len(values) < 100:
-        indexes[id(current)] = len(values)
-        values.append(getattr(current, "val", getattr(current, "value", "?")))
-        current = current.next
-    return values, indexes
-
-
-def _collect_linked_nodes(root: Any) -> tuple[list[Any], dict[int, str]]:
-    nodes: list[Any] = []
-    object_ids: dict[int, str] = {}
-    current = root
-    while (
-        current is not None
-        and hasattr(current, "next")
-        and id(current) not in object_ids
-        and len(nodes) < 100
-    ):
-        object_ids[id(current)] = f"node-{len(nodes)}"
-        nodes.append(current)
-        current = current.next
-    return nodes, object_ids
-
-
-def _linked_nodes(
-    node_objects: list[Any],
-    object_ids: dict[int, str],
-    active_ids: set[str],
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "id": object_ids[id(node)],
-            "label": str(getattr(node, "val", getattr(node, "value", "?"))),
-            "next": object_ids.get(id(getattr(node, "next", None))),
-            "tone": "visited" if object_ids[id(node)] in active_ids else "default",
-        }
-        for node in node_objects
-    ]
-
-
-def _tree_nodes(root: Any) -> tuple[list[dict[str, Any]], dict[int, str]]:
-    nodes: list[dict[str, Any]] = []
-    object_ids: dict[int, str] = {}
-
-    def visit(node: Any) -> str | None:
-        if node is None or id(node) in object_ids:
-            return object_ids.get(id(node))
-        node_id = f"node-{len(object_ids)}"
-        object_ids[id(node)] = node_id
-        item = {
-            "id": node_id,
-            "label": str(getattr(node, "val", getattr(node, "value", "?"))),
-            "tone": "default",
-        }
-        nodes.append(item)
-        left_id = visit(getattr(node, "left", None))
-        right_id = visit(getattr(node, "right", None))
-        if left_id is not None:
-            item["left"] = left_id
-        if right_id is not None:
-            item["right"] = right_id
-        return node_id
-
-    visit(root)
-    return nodes, object_ids
-
-
-def _heap_nodes(values: Any) -> list[dict[str, Any]]:
-    if not isinstance(values, list):
-        return []
-    nodes = _nodes_from_values([value for value in values if value is not None])
-    for index, node in enumerate(nodes):
-        children = []
-        for child_index in (2 * index + 1, 2 * index + 2):
-            if child_index < len(nodes):
-                children.append(nodes[child_index]["id"])
-        if children:
-            node["children"] = children
-    return nodes
-
-
-def _fallback_tree_nodes(data: dict[str, Any]) -> list[dict[str, Any]]:
-    if isinstance(data.get("arr"), list):
-        return _heap_nodes(data["arr"])
-    if isinstance(data.get("candidates"), list):
-        return _heap_nodes(["root", *data["candidates"]])
-    if isinstance(data.get("words"), list):
-        return _trie_nodes(data["words"])
-    if isinstance(data.get("char_freq"), list):
-        values = [f"{item[0]}:{item[1]}" for item in data["char_freq"] if len(item) >= 2]
-        return _heap_nodes(values)
-    if isinstance(data.get("n"), int):
-        return _recursion_nodes(data["n"])
-    return []
-
-
-def _trie_nodes(words: list[Any]) -> list[dict[str, Any]]:
-    nodes = [{"id": "node-0", "label": "root", "tone": "default", "children": []}]
-    prefixes = {"": "node-0"}
-    for raw_word in words:
-        word = str(raw_word)
-        prefix = ""
-        for char in word:
-            parent_prefix = prefix
-            prefix += char
-            if prefix in prefixes:
-                continue
-            node_id = f"node-{len(nodes)}"
-            prefixes[prefix] = node_id
-            nodes.append(
-                {
-                    "id": node_id,
-                    "label": char,
-                    "tone": "default",
-                    "children": [],
-                }
-            )
-            parent_id = prefixes[parent_prefix]
-            parent = next(node for node in nodes if node["id"] == parent_id)
-            parent["children"].append(node_id)
-    return nodes
-
-
-def _recursion_nodes(n: int) -> list[dict[str, Any]]:
-    nodes: list[dict[str, Any]] = []
-
-    def build(value: int, depth: int) -> str:
-        node_id = f"node-{len(nodes)}"
-        node = {
-            "id": node_id,
-            "label": str(value),
-            "tone": "default",
-            "children": [],
-        }
-        nodes.append(node)
-        if value > 1 and depth < 5:
-            node["children"].append(build(value - 1, depth + 1))
-            if value > 2:
-                node["children"].append(build(value - 2, depth + 1))
-        return node_id
-
-    build(max(0, n), 0)
-    return nodes
-
-
-def _graph_nodes(data: dict[str, Any]) -> list[dict[str, Any]]:
-    graph = _build_graph(data)
-    nodes = []
-    for node_id, adjacent in graph.items():
-        edges = []
-        for item in adjacent:
-            if isinstance(item, tuple):
-                edges.append({"to": str(item[0]), "weight": item[1]})
-            else:
-                edges.append({"to": str(item)})
-        nodes.append(
-            {"id": str(node_id), "label": str(node_id), "tone": "default", "edges": edges}
-        )
-    return nodes
-
-
-def _initial_table(data: dict[str, Any]) -> dict[str, Any]:
-    if isinstance(data.get("grid"), list):
-        values = copy.deepcopy(data["grid"])
-    elif isinstance(data.get("maze"), list):
-        values = copy.deepcopy(data["maze"])
-    else:
-        size = int(data.get("n", data.get("capacity", 5))) + 1
-        values = [[0 for _ in range(max(1, min(size, 100)))]]
-    width = max((len(row) for row in values), default=1)
-    return {
-        "headers": [str(index) for index in range(width)],
-        "values": values,
-        "highlighted": [],
-    }
-
-
-def _find_table(local_values: dict[str, Any]) -> list[Any] | None:
-    for key in ("dp", "table", "grid", "matrix", "board", "visited"):
-        value = local_values.get(key)
-        if isinstance(value, list):
-            return copy.deepcopy(value)
-    return None
-
-
-def _table_targets(local_values: dict[str, Any], values: list[list[Any]]) -> list[Any]:
-    if not values:
-        return []
-    row = next(
-        (
-            local_values.get(name)
-            for name in ("i", "r", "row", "index")
-            if isinstance(local_values.get(name), int)
-        ),
-        None,
-    )
-    col = next(
-        (
-            local_values.get(name)
-            for name in ("j", "c", "col", "current_capacity")
-            if isinstance(local_values.get(name), int)
-        ),
-        None,
-    )
-    if row is None or col is None:
-        return []
-    return [{"row": row, "col": col}]
-
-
-def _table_highlights(
-    local_values: dict[str, Any],
-    values: list[list[Any]],
-) -> list[dict[str, Any]]:
-    targets = _table_targets(local_values, values)
-    if not targets:
-        return []
-    row = targets[0]["row"]
-    col = targets[0]["col"]
-    highlighted = [{"row": row, "col": col, "tone": "active"}]
-    if row <= 0:
-        return highlighted
-    highlighted.append({"row": row - 1, "col": col, "tone": "dependency"})
-    weight = local_values.get("weight")
-    if isinstance(weight, int) and col >= weight:
-        highlighted.append(
-            {"row": row - 1, "col": col - weight, "tone": "dependency"}
-        )
-    return highlighted
-
-
-def _line_message(local_values: dict[str, Any]) -> str:
-    names = [
-        name
-        for name in (
-            "i",
-            "j",
-            "left",
-            "right",
-            "middle",
-            "position",
-            "minimum",
-            "char",
-            "node",
-            "current",
-            "current_capacity",
-        )
-        if name in local_values
-    ]
-    return "执行算法步骤" if not names else f"更新状态：{', '.join(names)}"
-
-
 def _describe_step(
     spec: TemplateSpec,
-    previous: _Snapshot,
-    current: _Snapshot,
-) -> tuple[str, _Snapshot]:
+    previous_structure: dict[str, object],
+    current_structure: dict[str, object],
+    current_targets: list[object],
+) -> str:
+    """Classify an array step as swap, write, compare, or snapshot."""
     if spec.visualizer_type != "array":
-        return "snapshot", current
+        return "snapshot"
 
-    previous_array = previous.structure.get("array")
-    current_array = current.structure.get("array")
+    previous_array = previous_structure.get("array")
+    current_array = current_structure.get("array")
     if not isinstance(previous_array, list) or not isinstance(current_array, list):
-        return "snapshot", current
+        return "snapshot"
     if len(previous_array) != len(current_array):
-        return "write", current
+        return "write"
 
     changed = [
         index
@@ -854,39 +322,41 @@ def _describe_step(
             and previous_array[changed[0]] == current_array[changed[1]]
             and previous_array[changed[1]] == current_array[changed[0]]
         )
-        if is_swap:
-            left, right = changed
-            return "swap", _Snapshot(
-                structure=current.structure,
-                targets=changed,
-                message=f"交换位置 {left} 与 {right}",
-            )
-        return "write", _Snapshot(
-            structure=current.structure,
-            targets=changed,
-            message="写入新的数组状态",
-        )
+        return "swap" if is_swap else "write"
 
-    if len(current.targets) == 2 and current.targets[0] != current.targets[1]:
-        left, right = current.targets
-        return "compare", _Snapshot(
-            structure=current.structure,
-            targets=current.targets,
-            message=f"比较位置 {left} 与 {right}",
-        )
-    return "snapshot", current
+    if len(current_targets) == 2 and current_targets[0] != current_targets[1]:
+        return "compare"
+    return "snapshot"
 
 
-def _snapshot_fingerprint(snapshot: _Snapshot) -> str:
+def _snapshot_fingerprint(
+    structure: dict[str, object],
+    targets: list[object],
+) -> str:
+    """Produce a deterministic fingerprint for deduplication."""
     return json.dumps(
-        {"structure": snapshot.structure, "targets": snapshot.targets},
+        {"structure": structure, "targets": targets},
         ensure_ascii=False,
         sort_keys=True,
         default=str,
     )
 
 
-def _to_jsonable(value: Any) -> Any:
+def _line_message(local_values: dict[str, object]) -> str:
+    """Build a short human-readable message from active local variables."""
+    names = [
+        name
+        for name in (
+            "i", "j", "left", "right", "middle", "position", "minimum",
+            "char", "node", "current", "current_capacity",
+        )
+        if name in local_values
+    ]
+    return "执行算法步骤" if not names else f"更新状态：{', '.join(names)}"
+
+
+def _to_jsonable(value: object) -> object:
+    """Recursively convert a value to a JSON-compatible representation."""
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
     if isinstance(value, dict):

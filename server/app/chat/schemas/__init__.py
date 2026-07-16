@@ -12,12 +12,14 @@ from app.chat.schemas.evidence import (
 )
 
 from app.chat.schemas.agent import (
+    DiagramMode,
     TutorRequestContext,
     TutorAgentInput,
     TutorRuntimeEvent,
 )
 
 __all__ = [
+    "DiagramMode",
     "Evidence", "EvidenceSet",
     "UploadResponse", "ChatMessageItem", "normalize_tool_result",
     "TutorRequestContext", "TutorAgentInput", "TutorRuntimeEvent",

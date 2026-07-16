@@ -1,4 +1,4 @@
-"""算法可视化模块 API 路由。 
+"""算法可视化模块 API 路由。
 
 当前设计：
   GET  /algorithm-visualizer/languages   — 公开
@@ -15,8 +15,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.algorithm_visualizer.events import record_visualizer_run_event
 from app.algorithm_visualizer.schemas import (
     AlgorithmResponse,
-    CustomContractRequest,
-    CustomContractResponse,
+    AnalyzeCustomCodeRequest,
+    CustomCodeContractResponse,
     CustomFunctionResponse,
     LanguageResponse,
     RunRequest,
@@ -30,12 +30,9 @@ from app.algorithm_visualizer.service import (
 )
 from app.algorithm_visualizer.custom_contract import CustomCodeContractError, inspect_custom_code
 from app.algorithm_visualizer.template_registry import (
-    LANGUAGES,
-    get_all_algorithms,
-    get_algorithm_info,
-    get_template_code,
+    TemplateNotFoundError,
+    get_all_template_specs,
     get_template_spec,
-    build_default_data,
 )
 from app.auth.security import get_current_user
 from app.infra.database import get_session
@@ -51,7 +48,7 @@ logger = get_logger(__name__)
 # 公开接口：返回所有支持的可视化编程语言列表
 @router.get("/algorithm-visualizer/languages")
 async def get_languages():
-    return HttpResponse.success(data=[LanguageResponse(**lang) for lang in LANGUAGES])
+    return HttpResponse.success(data=[LanguageResponse(key="python", label="Python", extension="py")])
 
 
 # 公开接口：按 domain / language 过滤并列出算法模板
@@ -63,18 +60,23 @@ async def get_algorithms(domain: str = "all", language: str | None = None):
     language 可选，用于前端在已选语言后过滤算法。
     """
     try:
-        raw_algorithms = get_all_algorithms(domain)
-
+        specs = get_all_template_specs()
         algorithms = []
-        for alg in raw_algorithms:
-            supported_languages = alg["supported_languages"]
-
-            # 仅保留当前所选语言支持的算法
-            if language and language not in supported_languages:
+        for spec in specs:
+            if domain != "all" and spec.domain != domain:
+                continue
+            # Only Python is supported now.
+            if language and language != "python":
                 continue
 
-            alg_response = AlgorithmResponse(**alg)
-            # 使用 by_alias=False 确保序列化时使用字段名（camelCase）
+            alg_response = AlgorithmResponse(
+                key=spec.key,
+                name=spec.name,
+                domain=spec.domain,
+                visualizer_type=spec.visualizer_type,
+                difficulty=spec.difficulty,
+                supported_languages=["python"],
+            )
             algorithms.append(alg_response.model_dump(by_alias=False))
 
         return HttpResponse.success(data=algorithms)
@@ -92,35 +94,27 @@ async def get_templates(
 ):
     """获取官方算法模板源码和其输入契约。"""
     try:
-        info = get_algorithm_info(algorithm)
+        spec = get_template_spec(algorithm)
 
-        # 校验该算法是否支持请求的语言
-        if language not in info["supported_languages"]:
+        if language != "python":
             return HttpResponse.error(
                 code=400,
                 message=f"算法 {algorithm} 不支持语言 {language}",
             )
 
-        code = get_template_code(algorithm, language)
-        default_data = build_default_data(algorithm)
-        input_schema = get_template_spec(algorithm).input_schema
-
         payload = TemplateResponse(
             algorithm=algorithm,
-            domain=info["domain"],
-            visualizer_type=info["visualizer_type"],
-            required_events=info.get("required_events", []),
-            supported_languages=info["supported_languages"],
-            language=language,
-            template_code=code,
-            default_data=default_data,
-            input_schema=input_schema,
+            domain=spec.domain,
+            visualizer_type=spec.visualizer_type,
+            language="python",
+            template_code=spec.source_code,
+            default_data=spec.default_input,
+            input_schema=spec.input_schema,
         )
 
-        # 使用 by_alias=False 确保序列化时使用字段名（camelCase）而不是别名（snake_case）
         return HttpResponse.success(data=payload.model_dump(by_alias=False))
 
-    except ValueError as ve:
+    except TemplateNotFoundError as ve:
         return HttpResponse.error(code=400, message=str(ve))
     except Exception as e:
         return HttpResponse.error(code=400, message=f"加载模板失败: {str(e)}")
@@ -128,7 +122,7 @@ async def get_templates(
 
 @router.post("/algorithm-visualizer/custom-contract")
 async def get_custom_contract(
-    request_data: CustomContractRequest,
+    request_data: AnalyzeCustomCodeRequest,
     current_user: User = Depends(get_current_user),
 ):
     """Derive selectable entry functions and a normal form schema without an LLM call."""
@@ -136,10 +130,11 @@ async def get_custom_contract(
         return HttpResponse.error(code=400, message="自定义代码不能超过 24000 个字符。")
     try:
         contract = inspect_custom_code(request_data.code, request_data.entryFunction)
-        payload = CustomContractResponse(
+        payload = CustomCodeContractResponse(
+            sourceHash="sha256:" + "0" * 64,
             entryFunction=contract.entry_function,
             functions=[
-                CustomFunctionResponse(name=item.name, parameters=list(item.parameters))
+                CustomFunctionResponse(name=item.name, line=1, parameters=[])
                 for item in contract.functions
             ],
             inputSchema=contract.input_schema,

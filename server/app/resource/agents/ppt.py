@@ -178,8 +178,8 @@ class PPTAgent(BaseResourceAgent):
         title = artifact.title
         path = artifact.path
         logger.info(
-            "Agent[%s] 生成完成: slides=%d style=%s size_bytes=%d",
-            self.agent_id, artifact.slide_count, artifact.template_name,
+            "Agent[%s] 生成完成: slides=%d size_bytes=%d",
+            self.agent_id, artifact.slide_count,
             path.stat().st_size,
         )
         return AgentResult(
@@ -194,14 +194,14 @@ class PPTAgent(BaseResourceAgent):
                 "html_file_path": str(path),
                 "html_url": artifact.html_url,
                 "slide_count": artifact.slide_count,
-                "style_name": artifact.template_name,
-                "template_id": artifact.template_id,
                 "file_size": path.stat().st_size,
                 "ppt_pipeline": {
-                    "version": "storyboard-parallel-svg-v1",
+                    "version": "visual-ir-v2",
                     "stages": [
                         "assembling_context",
+                        "designing_logic",
                         "designing_story",
+                        "visual_planning",
                         "composing_sections",
                         "rendering_html",
                     ],

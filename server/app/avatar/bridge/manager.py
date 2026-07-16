@@ -1412,7 +1412,7 @@ class RealtimeBridge:
                     session_id=self.session_id,
                     user_input=user_text,
                     attachments=merged_attachments,
-                    need_teaching_diagram=need_diagram,
+                    diagram_mode="required" if need_diagram else "auto",
                     enable_web_search=enable_search,
                     voice_mode=True,
                 )

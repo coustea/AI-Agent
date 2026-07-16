@@ -17,12 +17,11 @@ from uuid import uuid4
 
 from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
-from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.emitter import ChatEvents, ChatRuntimeEventMapper, SSE_EVENT_MAP, build_workflow_activity_payload
 from app.chat.agent.background import run_background_memory_jobs
 from app.chat.events import record_dialogue_event
 from app.chat.memory.service import get_chat_memory_service
-from app.chat.schemas import TutorAgentInput
+from app.chat.schemas import DiagramMode, TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.schemas import ChatMessageItem
 from app.config import MAX_UPLOAD_FILES_PER_REQUEST
@@ -103,7 +102,7 @@ async def chat(
     user_input: str,
     attachments: list[str] | None = None,
     enable_web_search: bool = False,
-    need_teaching_diagram: bool = False,
+    diagram_mode: DiagramMode = "auto",
     voice_mode: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """执行一次辅导对话，所有派生记录关联当前 UserMessage。"""
@@ -164,7 +163,7 @@ async def chat(
             voice_mode
             and not merged_attachments
             and not enable_web_search
-            and not need_teaching_diagram
+            and diagram_mode == "auto"
         )
         else None
     )
@@ -227,7 +226,7 @@ async def chat(
         history_messages=history_messages,
         session_summary=session_summary,
         enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
+        diagram_mode=diagram_mode,
         voice_mode=voice_mode,
     )
 
@@ -257,23 +256,7 @@ async def chat(
                 sources = sse_data.get("sources", [])
 
                 if diagram_result is not None:
-                    try:
-                        diagram_result = await ensure_teaching_diagram_png_payload(
-                            diagram_result,
-                            username=username,
-                            session_id=effective_session,
-                        )
-                    except Exception as exc:
-                        logger.warning("[chat] 图解 PNG 渲染失败，跳过图解输出: %s", exc)
-                        diagram_result = None
-
-                # 图解数据通过单独事件发送，前端在回答后立即渲染
-                if diagram_result is not None:
-                    diagram_result = await ensure_teaching_diagram_png_payload(
-                        diagram_result,
-                        username=username,
-                        session_id=effective_session,
-                    )
+                    # 图解数据通过单独事件发送，前端在回答后立即渲染
                     yield {"event": "diagram", "data": diagram_result}
 
                 yield {
@@ -304,9 +287,10 @@ async def chat(
         return
 
     # ── 4. 持久化助手回复（含图解、来源等元数据） ──
-    # 若正常产出，则保存助手消息并记录工具/来源/图解元数据
+    # 若正常产出（文字回答或图解），则保存助手消息并记录工具/来源/图解元数据
+    has_output = bool(full_answer.strip()) or diagram_result is not None
     saved_message_id: int | None = None
-    if not has_error and full_answer:
+    if not has_error and has_output:
         usage_meta: dict[str, Any] = {}
         if sources:
             usage_meta["sources"] = sources
@@ -318,12 +302,15 @@ async def chat(
         if diagram_result:
             usage_meta["diagram"] = diagram_result
 
+        assistant_content = (
+            [{"type": "text", "text": full_answer}] if full_answer.strip() else []
+        )
         saved = await memory_svc.save_message(
             user_id=user_id,
             session_id=effective_session,
             user_message_id=user_message_id,
             role="assistant",
-            content=[{"type": "text", "text": full_answer}],
+            content=assistant_content,
             usage_metadata=usage_meta or None,
         )
         saved_message_id = saved.id
@@ -336,7 +323,7 @@ async def chat(
 
     # ── 5. 最终内容校准：确保前端显示与数据库一致 ──
     # 用完整回答覆盖前端已流式显示的内容
-    if not has_error and full_answer:
+    if not has_error and full_answer.strip():
         yield {
             "event": "content_replace",
             "data": {"content": full_answer},
@@ -345,29 +332,32 @@ async def chat(
     # ── 6. 返回最终结果 ──
     # 发送 done 事件，附带完整回答与工具调用信息
     if not has_error:
+        completion_data: dict[str, Any] = {
+            "session_id": effective_session,
+            "saved_message_id": saved_message_id,
+            "full_response": full_answer,
+            "tool_calls": [
+                {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
+                for inv in tool_invocations
+            ],
+        }
+        if diagram_result is not None:
+            completion_data["diagram"] = diagram_result
         yield {
             "event": "done",
-            "data": {
-                "session_id": effective_session,
-                "saved_message_id": saved_message_id,
-                "full_response": full_answer,
-                "tool_calls": [
-                    {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
-                    for inv in tool_invocations
-                ],
-            },
+            "data": completion_data,
         }
 
     # ── 5. 后台记忆任务 ──
     # 对话成功后触发长期记忆与压缩等后台任务
-    if full_answer:
+    if has_output:
         uc._spawn_background(
             run_background_memory_jobs(
                 uc._memory_service,
                 user_id=user_id,
                 session_id=effective_session,
                 user_message=current_message,
-                assistant_reply=full_answer,
+                assistant_reply=full_answer or "内容已生成并保存",
             ),
             label="post_turn",
         )
@@ -392,7 +382,7 @@ async def run_chat_agent(
     user_input: str,
     attachments: list[str],
     enable_web_search: bool,
-    need_teaching_diagram: bool,
+    diagram_mode: DiagramMode,
 ) -> None:
     """后台执行一次辅导，并通过 ChatEvents 推送运行状态。
 
@@ -431,7 +421,7 @@ async def run_chat_agent(
             user_input=user_input,
             attachments=attachments or None,
             enable_web_search=enable_web_search,
-            need_teaching_diagram=need_teaching_diagram,
+            diagram_mode=diagram_mode,
         ):
             failed = await _publish_chat_runtime_event(events, event) or failed
         if failed:

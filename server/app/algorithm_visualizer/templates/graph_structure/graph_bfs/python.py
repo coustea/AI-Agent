@@ -1,19 +1,30 @@
 from collections import deque
 
 
-def bfs_all_components(graph):
+def _build_undirected_graph(num_nodes, edges):
+    """从节点数和边列表构建无向图邻接表。"""
+    graph = {i: [] for i in range(num_nodes)}
+    for edge in edges:
+        u, v = edge[0], edge[1]
+        graph[u].append(v)
+        graph[v].append(u)
+    return graph
+
+
+def bfs_all_components(num_nodes, edges, start=0):
     """广度优先搜索：从每个未访问节点向外逐层扩展。"""
+    graph = _build_undirected_graph(num_nodes, edges)
     visited = set()
     order = []
-    for start in graph:
-        if start in visited:
+    for node in graph:
+        if node in visited:
             continue
-        queue = deque([start])
-        visited.add(start)
+        queue = deque([node])
+        visited.add(node)
         while queue:
-            node = queue.popleft()
-            order.append(node)
-            for neighbor in graph[node]:
+            current = queue.popleft()
+            order.append(current)
+            for neighbor in graph[current]:
                 if neighbor not in visited:
                     visited.add(neighbor)
                     queue.append(neighbor)

@@ -14,11 +14,13 @@ export type ResourceContent = Record<string, unknown> | unknown[] | string | nul
 
 export interface CartoonResourceMetadata extends Record<string, unknown> {
   agent_id: 'cartoon'
-  schema_version: 'cartoon/v7'
+  schema_version: 'cartoon/v8'
   engine: 'hyperframes'
   has_audio: true
+  quality_passed: true
   video_url: string
   preview_url: string
+  captions_url: string
   duration_seconds: number
   scene_count: number
 }

@@ -57,7 +57,7 @@ class TutorAgent:
             "question": input.question,
             "attachments": input.attachments,
             "enable_web_search": input.enable_web_search,
-            "need_teaching_diagram": input.need_teaching_diagram,
+            "diagram_mode": input.diagram_mode,
             "voice_mode": input.voice_mode,
             "history_messages": input.history_messages,
             "session_summary": input.session_summary,

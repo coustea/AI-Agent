@@ -8,9 +8,9 @@ from app.algorithm_visualizer.custom_instrumenter import CustomInstrumentationEr
 from app.algorithm_visualizer.custom_contract import CustomCodeContractError, inspect_custom_code
 from app.algorithm_visualizer.custom_runtime import CustomRuntimeError, run_custom_program
 from app.algorithm_visualizer.input_validation import InputValidationError, validate_input_data
-from app.algorithm_visualizer.official_runtime import OfficialRuntimeError, run_official_template
-from app.algorithm_visualizer.template_registry import get_template_spec
-from app.algorithm_visualizer.trace_validation import TraceValidationError, validate_trace_events
+from app.algorithm_visualizer.official_runtime import OfficialRuntimeError, execute_official_template
+from app.algorithm_visualizer.template_registry import TemplateNotFoundError, get_template_spec
+from app.algorithm_visualizer.trace_validation import InvalidTraceError, validate_trace_events
 
 _MAX_COLLECTION_SIZE = 128
 _MAX_TEXT_LENGTH = 4096
@@ -43,34 +43,41 @@ def run_official_visualization(
 
     try:
         spec = get_template_spec(algorithm)
-    except ValueError as exc:
-        raise VisualizerRunError(str(exc), "UNSUPPORTED_ALGORITHM") from exc
+    except TemplateNotFoundError as exc:
+        raise VisualizerRunError(str(exc), "TEMPLATE_NOT_FOUND") from exc
+
+    # Validate input against the registered input_model.
+    try:
+        validated = spec.input_model.model_validate(input_data)
+        input_data = validated.model_dump(mode="json")
+    except Exception as exc:
+        raise VisualizerRunError(str(exc), "INVALID_TEMPLATE_INPUT") from exc
 
     try:
-        validate_input_data(input_data, spec.input_schema)
         _validate_runtime_limits(spec.key, input_data)
     except InputValidationError as exc:
-        raise VisualizerRunError(str(exc), "INVALID_INPUT") from exc
+        raise VisualizerRunError(str(exc), "INVALID_TEMPLATE_INPUT") from exc
 
     try:
-        execution = run_official_template(spec.key, input_data)
+        execution = execute_official_template(spec, input_data)
+        dict_events = _trace_events_to_dicts(execution.events)
         validate_trace_events(
-            execution.events,
+            dict_events,
             spec.visualizer_type,
             source_line_count=len(spec.source_code.splitlines()),
         )
-    except (OfficialRuntimeError, TraceValidationError, TypeError, ValueError) as exc:
+    except (OfficialRuntimeError, InvalidTraceError, TypeError, ValueError) as exc:
         raise VisualizerRunError(str(exc), "OFFICIAL_RUNTIME_ERROR") from exc
 
     return {
         "domain": spec.domain,
         "algorithm": spec.key,
         "visualizerType": spec.visualizer_type,
-        "language": spec.language,
+        "language": "python",
         "executionMode": "official",
-        "events": execution.events,
+        "events": dict_events,
         "result": execution.result,
-        "summary": f"执行成功，共产生 {len(execution.events)} 步可视化操作。",
+        "summary": execution.summary,
     }
 
 
@@ -114,7 +121,7 @@ async def run_custom_visualization(
             # must be meaningful in that source rather than in the LLM rewrite.
             source_line_count=len(code.splitlines()),
         )
-    except (InputValidationError, CustomCodeContractError, CustomInstrumentationError, CustomRuntimeError, TraceValidationError) as exc:
+    except (InputValidationError, CustomCodeContractError, CustomInstrumentationError, CustomRuntimeError, InvalidTraceError) as exc:
         raise VisualizerRunError(str(exc), "CUSTOM_VISUALIZATION_ERROR") from exc
 
     return {
@@ -128,6 +135,39 @@ async def run_custom_visualization(
         "stdout": execution.stdout or None,
         "summary": f"AI 已完成插装并执行，共产生 {len(execution.events)} 步可视化操作。",
     }
+
+
+def _trace_events_to_dicts(events: list[Any]) -> list[dict[str, Any]]:
+    """Convert TraceEvent dataclass instances to JSON-compatible dicts."""
+    result: list[dict[str, Any]] = []
+    for event in events:
+        entry: dict[str, Any] = {
+            "id": event.id,
+            "step": event.step,
+            "type": event.type,
+            "visualizerType": event.visualizer_type,
+            "state": {"structure": _to_jsonable(event.state)},
+            "targets": _to_jsonable(event.targets),
+        }
+        if event.line is not None:
+            entry["line"] = event.line
+        if event.message is not None:
+            entry["message"] = event.message
+        result.append(entry)
+    return result
+
+
+def _to_jsonable(value: Any) -> Any:
+    """Recursively convert a value to a JSON-compatible representation."""
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, dict):
+        return {str(key): _to_jsonable(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_to_jsonable(item) for item in value]
+    if hasattr(value, "val"):
+        return getattr(value, "val")
+    return str(value)
 
 
 def _validate_runtime_limits(algorithm: str, input_data: dict[str, Any]) -> None:
