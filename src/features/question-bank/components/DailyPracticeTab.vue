@@ -16,6 +16,7 @@
               <span class="meta-tag subject-tag">{{ question.subject }}</span>
               <span class="meta-tag type-tag">{{ question.type }}</span>
               <span v-if="question.difficulty" class="meta-tag difficulty-tag">{{ question.difficulty }}</span>
+              <span v-if="answerHistoryMap?.has(question.id)" class="meta-tag done-tag">做过</span>
             </div>
           </div>
         </div>
@@ -70,7 +71,7 @@
               @click="$emit('submit-daily', question)"
             >
               <span v-if="reviewing[question.id]" class="reviewing-spinner"></span>
-              {{ reviewing[question.id] ? 'AI 评阅中' : '提交答案' }}
+              {{ reviewing[question.id] ? pendingAnswerLabel(question.type) : '提交答案' }}
             </button>
             <button
               v-if="submitted[question.id]"
@@ -85,7 +86,7 @@
 
         <div v-if="reviewing[question.id]" class="reviewing-banner">
           <span class="reviewing-spinner-lg"></span>
-          <span class="reviewing-text">AI 正在评阅你的答案，请稍候...</span>
+          <span class="reviewing-text">{{ pendingAnswerMessage(question.type) }}</span>
         </div>
 
         <div v-if="submitted[question.id] && openedAnalysis.has(question.id)" class="analysis-box">
@@ -116,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
 
 // 每日练习题目类型
 interface DailyQuestion {
@@ -141,6 +143,7 @@ const props = defineProps<{
   openedAnalysis: Set<string>
   submittedCount: number
   correctCount: number
+  answerHistoryMap?: Map<string, { question_id: string; is_correct: boolean; attempts: number }>
 }>()
 
 // 事件：换题、选择选项、提交、切换解析
@@ -321,6 +324,11 @@ function renderInline(text: string) {
 .difficulty-tag {
   background: #dff2ff;
   color: #3487c7;
+}
+
+.done-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 
 .question-content {

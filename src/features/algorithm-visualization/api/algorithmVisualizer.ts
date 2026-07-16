@@ -3,10 +3,10 @@ import type { ApiResponse } from '@/shared/api/http'
 import type {
   AlgorithmInfo,
   CodeLanguage,
+  CustomCodeContract,
   LanguageInfo,
   RunResult,
   TemplateData,
-  VisualizerType,
 } from '@/features/algorithm-visualization/types'
 
 // 获取支持语言列表
@@ -28,16 +28,25 @@ export function fetchTemplate(algorithm: string, language: CodeLanguage) {
   })
 }
 
-// 运行可视化，超时 60s（后端需 LLM 插装 + 沙箱执行）
+// 解析用户函数签名，生成无需 JSON 的运行参数表单；不调用 LLM。
+export function fetchCustomCodeContract(code: string, entryFunction?: string) {
+  return http.post<ApiResponse<CustomCodeContract>>('/ai/algorithm-visualizer/custom-contract', {
+    code,
+    ...(entryFunction ? { entryFunction } : {}),
+  })
+}
+
+// 运行注册的官方模板；源码只用于展示和步骤定位，不参与请求执行。
 export function runVisualization(data: {
-  domain: string
-  algorithm: string
-  visualizerType: VisualizerType
+  mode: 'official' | 'custom'
+  algorithm?: string
   language: CodeLanguage
-  code: string
-  inputData?: string
+  inputData?: Record<string, unknown>
+  code?: string
+  visualizerType?: string
+  entryFunction?: string
 }) {
   return http.post<ApiResponse<RunResult>>('/ai/algorithm-visualizer/run', data, {
-    timeout: 60000,
+    timeout: 15000,
   })
 }

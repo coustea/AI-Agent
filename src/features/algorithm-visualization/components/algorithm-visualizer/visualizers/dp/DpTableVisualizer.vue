@@ -4,6 +4,7 @@
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>默认</span>
         <span class="legend-item"><i class="legend-dot active"></i>当前</span>
+        <span class="legend-item"><i class="legend-dot dependency"></i>依赖</span>
         <span class="legend-item"><i class="legend-dot success"></i>已完成</span>
       </div>
 
@@ -22,14 +23,23 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEvent } from '@/features/algorithm-visualization/types'
+import type { HighlightedCell, TraceEvent } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[] }>()
 
 // DP 表的表头、数值网格、高亮单元格坐标
 const headers = computed<string[]>(() => { const raw = props.currentEvent?.state?.structure?.headers; return Array.isArray(raw) ? raw : [] })
 const values = computed<Array<Array<string | number>>>(() => { const raw = props.currentEvent?.state?.structure?.values; return Array.isArray(raw) ? raw : [] })
-const highlighted = computed(() => { const raw = props.currentEvent?.state?.structure?.highlighted; return Array.isArray(raw) ? raw : [] })
+const highlighted = computed<HighlightedCell[]>(() => {
+  const raw = props.currentEvent?.state?.structure?.highlighted
+  if (Array.isArray(raw) && raw.length > 0) return raw as HighlightedCell[]
+  const target = props.currentEvent?.targets?.find(item => (
+    typeof item === 'object' && item !== null && 'row' in item && 'col' in item
+  )) as { row?: unknown; col?: unknown } | undefined
+  return typeof target?.row === 'number' && typeof target.col === 'number'
+    ? [{ row: target.row, col: target.col, tone: 'active' }]
+    : []
+})
 
 // 获取单元格的颜色主题（在 highlighted 列表中查找）
 function getCellTone(row: number, col: number) {
@@ -85,6 +95,11 @@ function getCellTone(row: number, col: number) {
 .legend-dot.active {
   background: var(--color-primary-soft);
   border: 1px solid var(--color-primary);
+}
+
+.legend-dot.dependency {
+  background: var(--color-warning-soft);
+  border: 1px solid var(--color-warning);
 }
 
 .legend-dot.success {
@@ -143,6 +158,12 @@ function getCellTone(row: number, col: number) {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
   color: var(--color-primary-text);
+}
+
+.dp-cell.dependency {
+  border-color: var(--color-warning);
+  background: var(--color-warning-soft);
+  color: var(--color-text-strong);
 }
 
 .dp-cell.success {

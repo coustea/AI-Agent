@@ -21,7 +21,9 @@ from app.chat.emitter import (
     has_active_chat_channel,
 )
 from app.chat.memory.service import get_chat_memory_service
+from app.chat.video import get_chat_video_service
 from app.chat.diagram_image_renderer import render_teaching_diagram_png
+from app.chat.schemas import DiagramMode
 from app.chat.service import get_chat_usecases, run_chat_agent
 from app.infra.database import get_session
 from app.infra.logging import get_logger
@@ -32,6 +34,71 @@ logger = get_logger(__name__)
 
 # 聊天路由集合，统一挂载在 /api/v1/ai/chat/ 下
 router = APIRouter()
+
+
+def resolve_diagram_mode(
+    *,
+    diagram_mode: DiagramMode | None,
+    need_teaching_diagram: bool | None,
+) -> DiagramMode:
+    """Resolve the canonical mode while preserving the legacy form field."""
+    if diagram_mode is not None:
+        return diagram_mode
+    return "required" if need_teaching_diagram is True else "auto"
+
+
+@router.post("/chat/videos")
+async def create_chat_video(
+    background_tasks: BackgroundTasks,
+    topic: str = Form(...),
+    session_id: str | None = Form(default=None),
+    current_user: User = Depends(get_current_user_flexible),
+):
+    """Create a cartoon task only after an explicit user action in chat."""
+    normalized_topic = topic.strip()
+    if not normalized_topic:
+        return HttpResponse.error(code=400, message="请输入视频主题")
+
+    effective_session = session_id or get_chat_usecases().default_session_id(current_user.id)
+    service = get_chat_video_service()
+    try:
+        task = await service.create_task(
+            user_id=current_user.id,
+            session_id=effective_session,
+            topic=normalized_topic,
+        )
+    except (ValueError, PermissionError) as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+    except Exception:
+        logger.exception("[ChatAPI] 创建视频任务失败")
+        return HttpResponse.error(code=500, message="视频任务创建失败，请稍后重试")
+
+    background_tasks.add_task(
+        service.run_task,
+        user_id=current_user.id,
+        username=current_user.username,
+        session_id=effective_session,
+        user_message_id=task["user_message_id"],
+        topic=normalized_topic,
+    )
+    return HttpResponse.success(data=task, status_code=202)
+
+
+@router.get("/chat/sessions/{session_id}/videos/{user_message_id}")
+async def get_chat_video(
+    session_id: str,
+    user_message_id: int,
+    current_user: User = Depends(get_current_user_flexible),
+):
+    """Poll a persisted explicit video task; this is independent of chat SSE."""
+    video = await get_chat_video_service().get_task(
+        user_id=current_user.id,
+        session_id=session_id,
+        user_message_id=user_message_id,
+    )
+    if video is None:
+        return HttpResponse.error(code=404, message="视频任务不存在或无权限")
+    return HttpResponse.success(data={"user_message_id": user_message_id, "video": video})
 
 
 async def _get_owned_assistant_message(
@@ -99,7 +166,8 @@ async def create_mentor_chat_message(
     user_input: str = Form(default=""),
     session_id: str | None = Form(default=None),
     attachments: str | None = Form(default=None),
-    need_teaching_diagram: bool = Form(default=False),
+    diagram_mode: DiagramMode | None = Form(default=None),
+    need_teaching_diagram: bool | None = Form(default=None),
     enable_web_search: bool = Form(default=False),
     current_user: User = Depends(get_current_user_flexible),
 ):
@@ -143,6 +211,7 @@ async def create_mentor_chat_message(
     try:
         user_message = await uc.create_user_message(
             user_id=current_user.id,
+            username=current_user.username,
             session_id=effective_session,
             text=effective_message,
             attachments=parsed_attachments,
@@ -174,7 +243,7 @@ async def create_mentor_chat_message(
         user_input=effective_message,
         attachments=[str(item.get("url") or "") for item in parsed_attachments],
         enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
+        diagram_mode=resolve_diagram_mode(diagram_mode=diagram_mode, need_teaching_diagram=need_teaching_diagram),
     )
 
     logger.info(

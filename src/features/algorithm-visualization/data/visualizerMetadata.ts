@@ -1,4 +1,4 @@
-import type { AlgorithmInfo, VisualizerType } from '@/features/algorithm-visualization/types'
+import type { AlgorithmInfo, CodeLanguage, VisualizerType } from '@/features/algorithm-visualization/types'
 
 // 算法分类分组
 export interface AlgorithmCategoryGroup {
@@ -12,16 +12,9 @@ export const DOMAIN_LABELS: Record<string, string> = {
   sorting: '排序算法',
   searching: '搜索算法',
   base_data_structure: '基础数据结构',
-  linear_structure: '线性结构',
   tree_structure: '树结构',
   graph_structure: '图结构',
-  string_structure: '字符串',
-  recursion_backtrack: '递归与回溯',
   dynamic_programming: '动态规划',
-  greedy: '贪心算法',
-  divide_conquer: '分治算法',
-  bit_manipulation: '位运算',
-  math: '数学算法',
 }
 
 // 可视化器类型的中文标签
@@ -32,6 +25,11 @@ export const VISUALIZER_LABELS: Record<VisualizerType, string> = {
   tree: '树结构可视化',
   graph: '图结构可视化',
   'dp-table': '动态规划表格',
+}
+
+// 代码语言的中文标签映射（未来扩展时添加 java, cpp, javascript 等）
+export const LANGUAGE_LABELS: Record<CodeLanguage, string> = {
+  python: 'Python',
 }
 
 const DOMAIN_ORDER = Object.keys(DOMAIN_LABELS)
@@ -56,6 +54,14 @@ export function getVisualizerLabel(type?: VisualizerType | string) {
 // 生成算法模板的描述文本
 export function getAlgorithmDescription(categoryLabel: string, algorithmName: string) {
   return `${categoryLabel}模板，用于生成${algorithmName}的可视化执行过程。`
+}
+
+// 获取支持语言的可读标签
+export function getLanguageLabel(languages?: CodeLanguage[] | string[]) {
+  if (!languages || languages.length === 0) return '所有语言'
+  return languages
+    .map((lang) => LANGUAGE_LABELS[lang as CodeLanguage] ?? lang)
+    .join(' / ')
 }
 
 // 按领域分类对算法列表进行分组并排序

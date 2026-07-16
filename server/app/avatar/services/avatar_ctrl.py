@@ -11,6 +11,7 @@ import asyncio
 import base64
 import binascii
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -33,6 +34,20 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 SERVER_DIR = Path(__file__).resolve().parents[3]
+AVATAR_INLINE_BACKGROUND_MAX_BASE64_BYTES = 60 * 1024
+
+
+def estimate_speech_duration(text: str, speech_rate: float = 1.0) -> float:
+    """Estimate playback time when the Avatar provider omits TTS lifecycle events."""
+    rate = max(0.8, min(1.5, float(speech_rate)))
+    cjk_count = len(re.findall(r"[\u3400-\u9fff]", text))
+    latin_words = len(re.findall(r"[A-Za-z0-9]+(?:['-][A-Za-z0-9]+)*", text))
+    sentence_pauses = len(re.findall(r"[。！？!?]", text))
+    clause_pauses = len(re.findall(r"[，,；;：:]", text))
+
+    spoken_seconds = cjk_count / 4.8 + latin_words / 2.7
+    pause_seconds = sentence_pauses * 0.32 + clause_pauses * 0.14
+    return max(1.8, min(180.0, 1.0 + (spoken_seconds + pause_seconds) / rate))
 
 
 # 标准化背景图编码格式：移除点号前缀，jpeg 统一为 jpg
@@ -116,6 +131,17 @@ def _validated_background_config() -> tuple[str, str] | None:
         encoding,
     )
     compact_image = "".join(image.split())
+
+    # The Avatar provider caps a complete WebSocket text message at 64 KiB.
+    # Leave room for the start command envelope and omit oversized inline images.
+    if len(compact_image.encode("ascii", errors="ignore")) > AVATAR_INLINE_BACKGROUND_MAX_BASE64_BYTES:
+        logger.warning(
+            "Avatar background ignored: inline base64 exceeds provider message limit "
+            "(bytes=%d, max=%d)",
+            len(compact_image),
+            AVATAR_INLINE_BACKGROUND_MAX_BASE64_BYTES,
+        )
+        return None
 
     try:
         raw = base64.b64decode(compact_image, validate=True)
@@ -217,6 +243,7 @@ class AvatarController:
         self._event_callback = None
         # 当前播报的 turn_id — 用于回调时绑定正确的 turn
         self._current_speak_turn_id: Optional[str] = None
+        self._current_estimated_duration: float | None = None
 
     # 检查 WebSocket 是否已关闭（兼容不同 websockets 版本）
     @property
@@ -330,16 +357,22 @@ class AvatarController:
 
                 elif event_type == "tts_start":
                     # TTS 开始播报 — 使用当前播报的 turn_id
-                    self.is_speaking = True
                     turn_id = self._current_speak_turn_id
-                    await callback("tts_start", avatar_data, turn_id)
+                    if not self.is_speaking:
+                        self.is_speaking = True
+                        event_data = dict(avatar_data)
+                        if self._current_estimated_duration is not None:
+                            event_data["estimated_duration"] = self._current_estimated_duration
+                        await callback("tts_start", event_data, turn_id)
                     logger.debug(f"Avatar started speaking (turn_id: {turn_id})")
 
                 elif event_type == "tts_end":
                     # TTS 播报结束 — 使用当前播报的 turn_id
+                    was_speaking = self.is_speaking
                     self.is_speaking = False
                     turn_id = self._current_speak_turn_id
-                    await callback("tts_end", avatar_data, turn_id)
+                    if was_speaking:
+                        await callback("tts_end", avatar_data, turn_id)
                     logger.debug(f"Avatar finished speaking (turn_id: {turn_id})")
 
             # 循环正常退出 = 服务端关闭了连接
@@ -367,6 +400,7 @@ class AvatarController:
         self.is_ready = False
         self.is_speaking = False
         self.ws = None
+        self._current_estimated_duration = None
 
         if was_ready:
             logger.warning("[AvatarCtrl] Connection lost while was ready — notifying bridge for reconnect")
@@ -435,6 +469,8 @@ class AvatarController:
             sentence, speech_rate, turn_id = await self.sentence_queue.get()
             # 设置当前播报的 turn_id
             self._current_speak_turn_id = turn_id
+            estimated_duration = estimate_speech_duration(sentence, speech_rate)
+            self._current_estimated_duration = estimated_duration
 
             # 安全检查：如果还在播报中，先等待结束（最多 5 秒）
             # 防止两个 TTS 重叠导致"两个声音"
@@ -453,44 +489,71 @@ class AvatarController:
                 logger.error(
                     f"Sentence failed after {self.MAX_RETRIES} retries: {sentence[:30]}..."
                 )
+                if self._event_callback:
+                    await self._event_callback(
+                        "tts_end",
+                        {
+                            "event_type": "tts_end",
+                            "fallback": True,
+                            "reason": "dispatch_failed",
+                        },
+                        turn_id,
+                )
                 self._current_speak_turn_id = None
+                self._current_estimated_duration = None
                 continue
 
             logger.debug(f"Avatar speech dispatched: {sentence[:30]}... (turn_id: {turn_id})")
 
-            # Wait for tts_start event (max 5 seconds)
-            wait_start_count = 50  # 5 seconds at 0.1s per iteration
-            while not self.is_speaking and wait_start_count > 0:
-                await asyncio.sleep(0.1)
-                wait_start_count -= 1
-
+            # The provider can play audio without emitting tts_start/tts_end. Start a
+            # local lifecycle after dispatch so the frontend cannot remain stuck.
             if not self.is_speaking:
-                # tts_start not received within timeout
-                logger.warning(
-                    f"tts_start timeout (5s) for: {sentence[:30]}... - skipping sentence"
-                )
-                # Don't immediately send next sentence - wait to avoid overlap
-                await asyncio.sleep(1.5)
-                self._current_speak_turn_id = None
-                continue
+                self.is_speaking = True
+                if self._event_callback:
+                    await self._event_callback(
+                        "tts_start",
+                        {
+                            "event_type": "tts_start",
+                            "fallback": True,
+                            "estimated_duration": estimated_duration,
+                        },
+                        turn_id,
+                    )
 
-            # Wait for tts_end event (max 60 seconds)
-            wait_end_timeout = 600  # 60 seconds at 0.1s per iteration
-            while self.is_speaking and wait_end_timeout > 0:
-                await asyncio.sleep(0.1)
-                wait_end_timeout -= 1
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + estimated_duration
+            while self.is_speaking and loop.time() < deadline:
+                await asyncio.sleep(min(0.1, max(0.0, deadline - loop.time())))
 
             if self.is_speaking:
                 logger.warning(
-                    f"Avatar speech timeout (60s), forcing end: {sentence[:30]}..."
+                    "Avatar omitted tts_end; using estimated completion after %.1fs: %s...",
+                    estimated_duration,
+                    sentence[:30],
                 )
                 self.is_speaking = False
+                if self._event_callback:
+                    await self._event_callback(
+                        "tts_end",
+                        {
+                            "event_type": "tts_end",
+                            "fallback": True,
+                            "estimated_duration": estimated_duration,
+                        },
+                        turn_id,
+                    )
 
             logger.debug(f"Sentence completed: {sentence[:30]}... (turn_id: {turn_id})")
             # 清除当前播报的 turn_id
             self._current_speak_turn_id = None
+            self._current_estimated_duration = None
 
         logger.info("Sentence queue processing completed")
+        # A request can be enqueued in the tiny window after the loop's empty
+        # check but before this task is marked done. Restart so it is not stranded.
+        if not self.sentence_queue.empty():
+            logger.info("Avatar queue received a late request; restarting playback")
+            self._playback_task = asyncio.create_task(self._process_queue())
 
     # 带重试机制的 TTS 发送：发送失败时重试，成功后不重试
     async def _speak_with_retry(self, text: str, speech_rate: float = 1.0) -> bool:
@@ -577,6 +640,8 @@ class AvatarController:
         # 取消正在执行的播放任务
         if self._playback_task and not self._playback_task.done():
             self._playback_task.cancel()
+        self._current_speak_turn_id = None
+        self._current_estimated_duration = None
 
         if not self.ws or self._ws_closed:
             return

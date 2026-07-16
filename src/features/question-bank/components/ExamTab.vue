@@ -122,7 +122,7 @@
             {
               active: currentExamIndex === index,
               submitted: examSubmitted,
-              'analysis-question': isSubjectiveQuestion(question),
+              'analysis-question': requiresAiReview(question.type),
             },
           ]"
         >
@@ -136,12 +136,12 @@
               v-if="examSubmitted"
               :class="[
                 'result-badge',
-                isSubjectiveQuestion(question)
+                requiresAiReview(question.type)
                   ? examScoreClass(question)
                   : (isExamCorrect(question) ? 'success' : 'danger'),
               ]"
             >
-              {{ isSubjectiveQuestion(question) ? examScoreText(question) : (isExamCorrect(question) ? '正确' : '错误') }}
+              {{ requiresAiReview(question.type) ? examScoreText(question) : (isExamCorrect(question) ? '正确' : '错误') }}
             </div>
           </div>
 
@@ -276,6 +276,18 @@
             </div>
           </div>
         </article>
+
+        <div v-if="!examSubmitted" class="exam-bottom-submit">
+          <button
+            class="btn-primary"
+            type="button"
+            :disabled="examReviewing"
+            :aria-busy="examReviewing"
+            @click="$emit('request-submit-exam')"
+          >
+            {{ examReviewing ? examPendingLabel() : '交卷' }}
+          </button>
+        </div>
       </div>
 
       <aside class="exam-sidebar">
@@ -284,7 +296,7 @@
 
           <div v-if="examReviewing" class="reviewing-overlay" aria-live="polite">
             <span class="reviewing-spinner-lg"></span>
-            <span class="reviewing-text">试卷已提交，AI 正在评阅...</span>
+            <span class="reviewing-text">{{ examPendingMessage() }}</span>
           </div>
 
           <div v-else-if="examSubmitted" class="score-display">
@@ -352,7 +364,7 @@
             :aria-busy="examReviewing"
             @click="$emit('request-submit-exam')"
           >
-            {{ examReviewing ? '评阅中，请稍候...' : '交卷' }}
+            {{ examReviewing ? examPendingLabel() : '交卷' }}
           </button>
           <button v-else class="btn-secondary full-width sidebar-submit" type="button" @click="$emit('back-workspace')">
             完成查看
@@ -364,6 +376,7 @@
 </template>
 
 <script setup lang="ts">
+import { requiresAiReview } from '@/features/question-bank/model/grading'
 
 type AnswerValue = string | string[] | undefined
 
@@ -459,9 +472,16 @@ function isOptionQuestion(question: ExamQuestion) {
   return ['选择题', '单选题', '判断题'].includes(question.type)
 }
 
-// 判断是否分析题
-function isSubjectiveQuestion(question: ExamQuestion) {
-  return ['分析题'].includes(question.type)
+function examUsesAiReview() {
+  return props.examPaper.some((question) => requiresAiReview(question.type))
+}
+
+function examPendingLabel() {
+  return examUsesAiReview() ? 'AI 评阅中，请稍候...' : '提交中，请稍候...'
+}
+
+function examPendingMessage() {
+  return examUsesAiReview() ? '试卷已提交，AI 正在评阅...' : '试卷正在提交，请稍候...'
 }
 
 // 获取选项映射表
@@ -949,6 +969,18 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   flex-direction: column;
   gap: 16px;
   min-width: 0;
+}
+
+.exam-bottom-submit {
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 0 24px;
+}
+
+.exam-bottom-submit .btn-primary {
+  min-width: 160px;
+  min-height: 44px;
+  font-size: 14px;
 }
 
 .exam-question,
@@ -1881,6 +1913,10 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
 }
 
 @media (max-width: 640px) {
+  .exam-bottom-submit .btn-primary {
+    width: 100%;
+  }
+
   .head-actions,
   .field-row.compact-grid,
   .count-chip-row {

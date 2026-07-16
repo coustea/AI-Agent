@@ -14,7 +14,7 @@
       <div>
         <p class="eyebrow">{{ styleLabel }}</p>
         <h3>{{ artifact.title }}</h3>
-        <p>{{ durationLabel }} · {{ artifact.width }} × {{ artifact.height }}</p>
+        <p>{{ metadataLabel }}</p>
       </div>
       <a
         class="download-button"
@@ -48,6 +48,7 @@ type VideoArtifactView = {
   durationMs: number
   width: number
   height: number
+  sceneCount: number
   style: string
 }
 
@@ -70,7 +71,15 @@ function parseArtifact(value: unknown): VideoArtifactView | null {
   const record = asRecord(candidate)
   if (!record) return null
   const nested = asRecord(record.metadata)
-  const source = nested?.public_url || nested?.video_url ? nested : record
+  const content = asRecord(record.content)
+  const contentMetadata = asRecord(content?.metadata)
+  const source = nested?.public_url || nested?.video_url
+    ? nested
+    : contentMetadata?.public_url || contentMetadata?.video_url
+      ? contentMetadata
+      : content?.public_url || content?.video_url
+        ? content
+        : record
   const publicUrl = source.public_url ?? source.video_url
   if (typeof publicUrl !== 'string' || !publicUrl.endsWith('.mp4')) return null
 
@@ -84,6 +93,7 @@ function parseArtifact(value: unknown): VideoArtifactView | null {
     ),
     width: Number(record.width ?? source.width ?? 1920),
     height: Number(record.height ?? source.height ?? 1080),
+    sceneCount: Number(record.scene_count ?? source.scene_count ?? 0),
     style: String(record.style ?? source.style ?? '')
   }
 }
@@ -96,6 +106,17 @@ const durationLabel = computed(() => {
   const minutes = Math.floor(seconds / 60)
   const remaining = String(seconds % 60).padStart(2, '0')
   return `${minutes}:${remaining}`
+})
+
+const metadataLabel = computed(() => {
+  const value = artifact.value
+  const details = [durationLabel.value]
+  const sceneCount = value?.sceneCount ?? 0
+  if (sceneCount > 0) {
+    details.push(`${sceneCount} 个场景`)
+  }
+  details.push(`${value?.width ?? 1920} × ${value?.height ?? 1080}`)
+  return details.join(' · ')
 })
 
 // 视频风格的中文标签映射

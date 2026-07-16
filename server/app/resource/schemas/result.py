@@ -2,7 +2,6 @@
 
 - AgentResult     — 统一的 Agent 输出结果（成功/失败、内容、元数据）
 - ResourceInput   — 多智能体资源生成输入
-- NodeInput       — 路径规划节点资源生成输入
 """
 
 from __future__ import annotations
@@ -11,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.resource.schemas.plan import DownstreamContext
+from app.resource.schemas.plan import DownstreamContext, ResourcePlan
 from app.resource.schemas.request import LearningScenario
 
 
@@ -41,32 +40,6 @@ class ResourceInput(BaseModel):
     learning_scenario: LearningScenario = "self_study"
     agent_name: str = ""
     agent_config: dict[str, Any] = Field(default_factory=dict)
-    teaching_plan: str | None = None  # Markdown 格式的协同计划
+    teaching_plan: ResourcePlan | None = None
     profile: dict[str, Any] = Field(default_factory=dict)  # 学习者画像
     upstream_handoffs: dict[str, DownstreamContext] = Field(default_factory=dict)
-
-
-class NodeInput(BaseModel):
-    """路径规划当前节点资源生成输入。"""
-    model_config = ConfigDict(extra="forbid")
-
-    path_id: int
-    node_id: int
-    node_key: str
-    path_title: str
-    path_goal: str
-    stage_id: str | None = None
-    node_title: str
-    difficulty: str | None = None
-    mastery_target: str | None = None
-    prerequisites: list[str] = Field(default_factory=list)
-    knowledge_points: list[str] = Field(default_factory=list)
-    weak_knowledge_points: list[str] = Field(default_factory=list)
-    generation_focus: list[str] = Field(default_factory=list)
-    tutorial_title: str
-    tutorial_summary: str | None = None
-    tutorial_markdown: str
-    profile: dict[str, Any] = Field(default_factory=dict)  # 学习者画像
-    existing_resources: dict[str, AgentResult] = Field(default_factory=dict)
-    agent_config: dict[str, Any] = Field(default_factory=dict)
-    username: str = ""  # 用户名，用于文件路径构建

@@ -145,43 +145,82 @@
 }
 
 .markdown-renderer .code-block-wrapper {
-  background: var(--markdown-code-surface);
-  border: 1px solid var(--markdown-border);
-  border-radius: 0.65rem;
+  --code-gutter: 3.75rem;
+
+  background: #ffffff;
+  border: 1px solid color-mix(in srgb, var(--markdown-border) 88%, #ffffff);
+  border-radius: 0.8rem;
+  box-shadow: 0 10px 26px rgb(25 45 72 / 7%);
   margin: 1em 0;
   overflow: hidden;
 }
 
 .markdown-renderer .code-block-header {
   align-items: center;
-  background: var(--markdown-code-header);
-  border-bottom: 1px solid var(--markdown-border);
+  background: linear-gradient(90deg, #f7faff 0%, #ffffff 58%);
+  border-bottom: 1px solid color-mix(in srgb, var(--markdown-border) 78%, #ffffff);
   color: var(--markdown-muted);
   display: flex;
   font-size: 0.75rem;
   justify-content: space-between;
-  min-height: 2.35rem;
-  padding: 0 0.75rem 0 1rem;
+  min-height: 2.6rem;
+  padding: 0 0.55rem 0 0.85rem;
+}
+
+.markdown-renderer .code-block-meta,
+.markdown-renderer .code-block-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.55rem;
 }
 
 .markdown-renderer .code-block-language {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-weight: 600;
+  letter-spacing: 0.035em;
   text-transform: uppercase;
 }
 
-.markdown-renderer .code-block-copy {
+.markdown-renderer .code-block-language::before {
+  background: var(--markdown-accent);
+  border-radius: 50%;
+  content: '';
+  height: 0.42rem;
+  width: 0.42rem;
+}
+
+.markdown-renderer .code-block-lines {
+  color: var(--markdown-muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown-renderer .code-block-copy,
+.markdown-renderer .code-block-wrap {
   background: transparent;
-  border: 0;
-  border-radius: 0.35rem;
+  border: 1px solid transparent;
+  border-radius: 0.4rem;
   color: inherit;
   cursor: pointer;
   font: inherit;
-  padding: 0.35rem 0.55rem;
+  padding: 0.3rem 0.5rem;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
-.markdown-renderer .code-block-copy:hover {
-  background: color-mix(in srgb, currentColor 10%, transparent);
+.markdown-renderer .code-block-copy:hover,
+.markdown-renderer .code-block-wrap:hover {
+  background: #eef5ff;
+  border-color: #c9dcf8;
+  color: var(--markdown-accent);
+}
+
+.markdown-renderer .code-block-copy:focus-visible,
+.markdown-renderer .code-block-wrap:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--markdown-accent) 70%, transparent);
+  outline-offset: 2px;
 }
 
 .markdown-renderer .code-block-scroll {
@@ -190,12 +229,12 @@
 }
 
 .markdown-renderer .code-block-wrapper pre {
-  background: var(--markdown-code-surface) !important;
+  background: #ffffff !important;
   border: 0;
   border-radius: 0;
   margin: 0;
   min-width: max-content;
-  padding: 1rem 0;
+  padding: 0.9rem 0;
 }
 
 .markdown-renderer .code-block-wrapper pre code {
@@ -210,32 +249,47 @@
   counter-increment: code-line;
   display: inline-block;
   min-height: 1.65em;
-  padding: 0 1rem 0 0;
+  padding: 0 1.15rem 0 0;
   width: 100%;
 }
 
 .markdown-renderer .code-line::before {
+  background: #f8fafc;
+  border-right: 1px solid #edf1f5;
   color: var(--markdown-muted);
   content: counter(code-line);
   display: inline-block;
-  margin-right: 1rem;
+  margin-right: 0.9rem;
   opacity: 0.65;
-  padding-left: 0.5rem;
+  padding-right: 0.75rem;
   text-align: right;
   user-select: none;
-  width: 3.25rem;
+  width: var(--code-gutter);
+}
+
+.markdown-renderer .code-block-wrapper.is-wrapped .code-block-scroll {
+  overflow-x: hidden;
+}
+
+.markdown-renderer .code-block-wrapper.is-wrapped pre {
+  min-width: 0;
+}
+
+.markdown-renderer .code-block-wrapper.is-wrapped .code-line {
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }
 
 .markdown-renderer pre.shiki[data-theme='dark'],
 .markdown-renderer pre.shiki[data-theme='dark'] span {
-  background-color: var(--shiki-light-bg, var(--markdown-code-surface)) !important;
+  background-color: #ffffff !important;
   color: var(--shiki-light, currentColor) !important;
 }
 
 .dark .markdown-renderer pre.shiki[data-theme='light'],
 .dark .markdown-renderer pre.shiki[data-theme='light'] span {
-  background-color: var(--shiki-dark-bg, var(--markdown-code-surface)) !important;
-  color: var(--shiki-dark, currentColor) !important;
+  background-color: #ffffff !important;
+  color: var(--shiki-light, currentColor) !important;
 }
 
 .markdown-renderer .katex-display {
@@ -279,8 +333,17 @@
   }
 
   .markdown-renderer .code-line::before {
-    margin-right: 0.75rem;
-    width: 2.75rem;
+    margin-right: 0.65rem;
+    width: 2.8rem;
+  }
+
+  .markdown-renderer .code-block-wrapper {
+    --code-gutter: 2.8rem;
+  }
+
+  .markdown-renderer .code-block-wrap,
+  .markdown-renderer .code-block-lines {
+    display: none;
   }
 }
 

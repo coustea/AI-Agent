@@ -7,6 +7,10 @@ export interface BaseInfoData {
   global_learning_goal: string | null
   programming_languages: string[]
   courses: string[]
+  foundational_level: string | null
+  learning_style: string | null
+  content_depth: string | null
+  weak_points: string[]
 }
 
 export interface DimensionValue {
@@ -31,7 +35,7 @@ export type ProfileDimensionKey =
 export interface ProfileData {
   user_id: number | null
   module: string | null
-  base_info: BaseInfoData  // 来源从 profile JSON 改为 User 表
+  base_info: BaseInfoData
   dimensions: Record<ProfileDimensionKey, DimensionValue>
   profile_score_json: {
     overall_score: number
@@ -41,7 +45,6 @@ export interface ProfileData {
   updated_at: string | null
 }
 
-// 向后兼容别名
 export type GlobalDimensionValue = DimensionValue
 
 export interface ProfileOnboardingData {
@@ -68,15 +71,16 @@ export interface ProfileOnboardingUpdate {
   global_learning_goal: string
   programming_languages: string[]
   courses: string[]
+  foundational_level: 'beginner' | 'entry' | 'proficient' | 'master' | ''
+  learning_style: 'theory_first' | 'practice_first' | 'case_driven' | ''
+  content_depth: 'quick_overview' | 'systematic_deep' | ''
+  weak_points: string[]
 }
 
 export interface ProfileOnboardingUpdateResult {
   inference_ok: boolean
 }
 
-
-
-// 判断 onboarding 是否填写完整（学校/专业/年级/时间/目标/课程均需有值）
 export function isProfileOnboardingComplete(baseInfo: BaseInfoData | null | undefined): boolean {
   if (!baseInfo) return false
 
@@ -87,6 +91,9 @@ export function isProfileOnboardingComplete(baseInfo: BaseInfoData | null | unde
     baseInfo.daily_study_time &&
     baseInfo.global_learning_goal &&
     Array.isArray(baseInfo.courses) &&
-    baseInfo.courses.length > 0,
+    baseInfo.courses.length > 0 &&
+    baseInfo.foundational_level &&
+    baseInfo.learning_style &&
+    baseInfo.content_depth,
   )
 }

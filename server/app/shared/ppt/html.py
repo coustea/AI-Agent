@@ -1,1298 +1,271 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 import html
 import os
-import re
 import tempfile
 from pathlib import Path
 
-from app.shared.ppt.models import PPTSlide
-from app.shared.ppt.templates import ResolvedPPT, ResolvedPPTSlide
+from app.shared.ppt.contract import SLIDE_KIND_LABELS, SlideKind
+from app.shared.ppt.models import DeckLogicModel, PPTDeck, PPTSlide
+from app.shared.ppt.visual_renderers import render_visual
 
 
-BASE_CSS = r"""
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+@dataclass(frozen=True)
+class PPTPublication:
+    generated_at: datetime
 
-html,
-body {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-  background: var(--stage-bg, #eef1f5);
-}
 
-body {
-  font-family:
-    var(
-      --font-family,
-      "Noto Sans SC",
-      "Microsoft YaHei",
-      sans-serif
-    );
-  color: var(--text, #172033);
-  user-select: none;
-}
+def _escape(value: object) -> str:
+    return html.escape(str(value), quote=True)
 
-.deck-viewport {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-}
 
-.deck-stage {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: 1920px;
-  height: 1080px;
-  overflow: hidden;
-  transform-origin: 0 0;
-  background: var(--slide-bg, #ffffff);
-}
-
-.slide {
-  position: absolute;
-  inset: 0;
-  width: 1920px;
-  height: 1080px;
-  overflow: hidden;
-  visibility: hidden;
-  opacity: 0;
-  pointer-events: none;
-  background: var(--slide-bg, #ffffff);
-}
-
-.slide.active,
-.slide.visible {
-  z-index: 1;
-  visibility: visible;
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.slide-shell {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  padding: 74px 104px 70px;
-}
-
-.slide-header {
-  position: relative;
-  z-index: 2;
-}
-
-.eyebrow {
-  font-size: 18px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--muted, #667085);
-}
-
-.slide-title {
-  max-width: 1500px;
-  margin-top: 12px;
-  font-size: 54px;
-  line-height: 1.18;
-  letter-spacing: -0.035em;
-}
-
-[data-title-size="compact"] .slide-title {
-  font-size: 46px;
-}
-
-.slide-subtitle {
-  max-width: 1200px;
-  margin-top: 14px;
-  font-size: 25px;
-  line-height: 1.5;
-  color: var(--muted, #667085);
-}
-
-.slide-content {
-  position: relative;
-  height: 760px;
-  margin-top: 38px;
-}
-
-.slide-index {
-  position: absolute;
-  right: 104px;
-  top: 82px;
-  font-size: 18px;
-  color: var(--muted, #667085);
-}
-
-.hero-statement {
-  max-width: 1420px;
-  font-size: 48px;
-  line-height: 1.34;
-  font-weight: 650;
-  letter-spacing: -0.025em;
-}
-
-.question-text {
-  max-width: 1500px;
-  font-size: 58px;
-  line-height: 1.28;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-}
-
-.point-list {
-  display: grid;
-  gap: 24px;
-  max-width: 1540px;
-  margin-top: 42px;
-}
-
-.point-row {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  gap: 38px;
-  padding: 18px 0;
-  border-bottom:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.point-label {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--accent, #3157d5);
-}
-
-.point-detail {
-  font-size: 25px;
-  line-height: 1.55;
-}
-
-.process {
-  display: grid;
-  grid-template-columns:
-    repeat(
-      var(--count, 5),
-      minmax(0, 1fr)
-    );
-  gap: 0;
-  align-items: start;
-  margin-top: 80px;
-}
-
-.process-step {
-  position: relative;
-  min-height: 250px;
-  padding: 0 30px 0 42px;
-  border-left:
-    2px solid
-    var(--line, #d9dee8);
-}
-
-.step-key {
-  font-size: 18px;
-  font-weight: 750;
-  color: var(--accent, #3157d5);
-}
-
-.step-title {
-  margin-top: 18px;
-  font-size: 28px;
-  line-height: 1.25;
-}
-
-.step-detail {
-  margin-top: 18px;
-  font-size: 21px;
-  line-height: 1.55;
-  color: var(--muted, #667085);
-}
-
-.comparison-table {
-  width: 100%;
-  margin-top: 34px;
-  border-collapse: collapse;
-  table-layout: fixed;
-  font-size: 20px;
-}
-
-.comparison-table th {
-  padding: 18px 20px;
-  text-align: left;
-  border-bottom:
-    2px solid
-    var(--text, #172033);
-  font-size: 21px;
-}
-
-.comparison-table td {
-  padding: 19px 20px;
-  vertical-align: top;
-  border-bottom:
-    1px solid
-    var(--line, #d9dee8);
-  line-height: 1.45;
-}
-
-.misconception-list {
-  display: grid;
-  gap: 28px;
-  margin-top: 30px;
-}
-
-.misconception-row {
-  display: grid;
-  grid-template-columns:
-    1fr 1.15fr 1.15fr;
-  gap: 0;
-  border-top:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.misconception-cell {
-  padding: 22px 28px 22px 0;
-  font-size: 21px;
-  line-height: 1.5;
-}
-
-.misconception-cell
-+ .misconception-cell {
-  padding-left: 28px;
-  border-left:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.cell-label {
-  display: block;
-  margin-bottom: 10px;
-  font-size: 15px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  color: var(--accent, #3157d5);
-}
-
-.knowledge-map {
-  position: relative;
-  display: grid;
-  grid-template-columns:
-    330px 1fr;
-  gap: 90px;
-  align-items: center;
-  height: 600px;
-}
-
-.map-center {
-  font-size: 38px;
-  line-height: 1.3;
-  font-weight: 720;
-}
-
-.map-branches {
-  display: grid;
-  gap: 24px;
-}
-
-.map-branch {
-  display: grid;
-  grid-template-columns:
-    230px 1fr;
-  gap: 30px;
-  align-items: center;
-  padding: 16px 0;
-  border-bottom:
-    1px solid
-    var(--line, #d9dee8);
-}
-
-.branch-label {
-  font-size: 23px;
-  font-weight: 700;
-  color: var(--accent, #3157d5);
-}
-
-.branch-keywords {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px 24px;
-  font-size: 22px;
-}
-
-.takeaway {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  padding-top: 18px;
-  border-top:
-    1px solid
-    var(--line, #d9dee8);
-  font-size: 22px;
-  font-weight: 650;
-  color: var(--accent, #3157d5);
-}
-
-.cover-content,
-.closing-content {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  height: 700px;
-}
-
-.cover-meta {
-  display: flex;
-  gap: 36px;
-  margin-top: 56px;
-  font-size: 20px;
-  color: var(--muted, #667085);
-}
-
-.keyword-line {
-  margin-top: 24px;
-  font-size: 20px;
-  color: var(--muted, #667085);
-}
-
-.deck-controls {
-  position: fixed;
-  left: 50%;
-  bottom: 22px;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  transform: translate(-50%, 12px);
-  border-radius: 999px;
-  background: rgba(10, 15, 25, 0.82);
-  color: #ffffff;
-  opacity: 0;
-  pointer-events: none;
-  backdrop-filter: blur(12px);
-  transition:
-    opacity 0.2s ease,
-    transform 0.2s ease;
-}
-
-body.controls-visible .deck-controls,
-.deck-controls:hover {
-  opacity: 0.92;
-  pointer-events: auto;
-  transform: translate(-50%, 0);
-}
-
-.deck-controls button {
-  width: 38px;
-  height: 32px;
-  border: 0;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  cursor: pointer;
-}
-
-.deck-counter {
-  min-width: 64px;
-  text-align: center;
-  font: 600 13px sans-serif;
-}
-
-.deck-progress {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 999;
-  height: 3px;
-  background: rgba(0, 0, 0, 0.08);
-  opacity: 0.38;
-}
-
-.deck-progress > span {
-  display: block;
-  width: 0;
-  height: 100%;
-  background: var(--accent, #3157d5);
-  transition: width 0.3s ease;
-}
-
-.speaker-notes-panel {
-  position: fixed;
-  right: 18px;
-  bottom: 72px;
-  z-index: 1002;
-  display: none;
-  width: min(580px, 42vw);
-  max-height: 36vh;
-  overflow: auto;
-  padding: 20px;
-  border-radius: 12px;
-  background: rgba(7, 11, 18, 0.94);
-  color: #eef2f8;
-  font: 16px/1.6 sans-serif;
-}
-
-.speaker-notes-panel.open {
-  display: block;
-}
-
-[data-step] {
-  opacity: 1;
-}
-
-@media print {
-  html,
-  body {
-    width: 1920px;
-    height: auto;
-    overflow: visible;
-  }
-
-  .deck-viewport,
-  .deck-stage {
-    position: static;
-    overflow: visible;
-    transform: none !important;
-  }
-
-  .deck-stage {
-    width: auto;
-    height: auto;
-  }
-
-  .slide {
-    position: relative;
-    display: block !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    break-after: page;
-  }
-
-  .deck-controls,
-  .deck-progress,
-  .speaker-notes-panel {
-    display: none !important;
-  }
-}
-
-@media (
-  prefers-reduced-motion: reduce
-) {
-  *,
-  *::before,
-  *::after {
-    animation-duration:
-      0.01ms !important;
-    transition-duration:
-      0.01ms !important;
-  }
-}
-"""
-
-
-CONTROLLER_JS = r"""
-class SlidePresentation {
-  constructor() {
-    this.stage =
-      document.getElementById(
-        "deckStage"
-      );
-
-    this.slides = [
-      ...document.querySelectorAll(
-        ".slide"
-      ),
-    ];
-
-    this.current = 0;
-    this.controlsTimer = null;
-
-    this.scale();
-    this.bind();
-    this.show(0);
-    this.revealControls();
-
-    window.addEventListener(
-      "resize",
-      () => this.scale()
-    );
-  }
-
-  scale() {
-    const factor = Math.min(
-      window.innerWidth / 1920,
-      window.innerHeight / 1080
-    );
-
-    const x =
-      (
-        window.innerWidth
-        - 1920 * factor
-      ) / 2;
-
-    const y =
-      (
-        window.innerHeight
-        - 1080 * factor
-      ) / 2;
-
-    this.stage.style.transform =
-      `translate(${x}px, ${y}px) scale(${factor})`;
-  }
-
-  revealControls() {
-    document.body.classList.add(
-      "controls-visible"
-    );
-
-    if (this.controlsTimer) {
-      clearTimeout(
-        this.controlsTimer
-      );
-    }
-
-    this.controlsTimer = setTimeout(
-      () => {
-        document.body.classList.remove(
-          "controls-visible"
-        );
-      },
-      1500
-    );
-  }
-
-  show(index) {
-    this.current = Math.max(
-      0,
-      Math.min(
-        index,
-        this.slides.length - 1
-      )
-    );
-
-    this.slides.forEach(
-      (slide, slideIndex) => {
-        const active =
-          slideIndex === this.current;
-
-        slide.classList.toggle(
-          "active",
-          active
-        );
-
-        slide.classList.toggle(
-          "visible",
-          active
-        );
-      }
-    );
-
-    document.getElementById(
-      "deckCounter"
-    ).textContent =
-      `${this.current + 1} / ${this.slides.length}`;
-
-    const percentage =
-      (
-        (this.current + 1)
-        / this.slides.length
-      ) * 100;
-
-    document.querySelector(
-      "#deckProgress span"
-    ).style.width =
-      `${percentage}%`;
-
-    const notesPanel =
-      document.getElementById(
-        "notesPanel"
-      );
-
-    notesPanel.textContent =
-      this.slides[
-        this.current
-      ].dataset.notes
-      || "暂无讲稿";
-
-    this.revealControls();
-  }
-
-  bind() {
-    document.addEventListener(
-      "mousemove",
-      () => this.revealControls()
-    );
-
-    document.addEventListener(
-      "touchstart",
-      () => this.revealControls(),
-      {
-        passive: true,
-      }
-    );
-
-    document.getElementById(
-      "prevSlide"
-    ).addEventListener(
-      "click",
-      () => this.show(
-        this.current - 1
-      )
-    );
-
-    document.getElementById(
-      "nextSlide"
-    ).addEventListener(
-      "click",
-      () => this.show(
-        this.current + 1
-      )
-    );
-
-    document.getElementById(
-      "notesToggle"
-    ).addEventListener(
-      "click",
-      () => {
-        document.getElementById(
-          "notesPanel"
-        ).classList.toggle(
-          "open"
-        );
-
-        this.revealControls();
-      }
-    );
-
-    document.getElementById(
-      "downloadDeck"
-    ).addEventListener(
-      "click",
-      () => this.download()
-    );
-
-    window.addEventListener(
-      "keydown",
-      event => {
-        this.revealControls();
-
-        if (
-          [
-            "ArrowRight",
-            "PageDown",
-            " ",
-          ].includes(event.key)
-        ) {
-          event.preventDefault();
-
-          this.show(
-            this.current + 1
-          );
-        }
-
-        if (
-          [
-            "ArrowLeft",
-            "PageUp",
-          ].includes(event.key)
-        ) {
-          event.preventDefault();
-
-          this.show(
-            this.current - 1
-          );
-        }
-
-        if (
-          event.key.toLowerCase()
-          === "n"
-        ) {
-          document.getElementById(
-            "notesPanel"
-          ).classList.toggle(
-            "open"
-          );
-        }
-      }
-    );
-  }
-
-  download() {
-    const source =
-      document.documentElement.outerHTML;
-
-    const blob = new Blob(
-      [source],
-      {
-        type: "text/html",
-      }
-    );
-
-    const url =
-      URL.createObjectURL(blob);
-
-    const link =
-      document.createElement("a");
-
-    link.href = url;
-    link.download =
-      `${document.title || "slides"}.html`;
-
-    link.click();
-
-    URL.revokeObjectURL(url);
-  }
-}
-
-new SlidePresentation();
-"""
-
-
-_SAFE_FILE_ID = re.compile(
-    r"^[A-Za-z0-9_-]+$"
-)
-
-
-def _escape(value: str) -> str:
-    return html.escape(
-        value,
-        quote=True,
-    )
-
-
-def _render_takeaway(
-    slide: PPTSlide,
-) -> str:
-    if not slide.takeaway:
+def _render_points(slide: PPTSlide) -> str:
+    if not slide.points:
         return ""
-
-    return (
-        '<p class="takeaway" data-step>'
-        f"{_escape(slide.takeaway)}"
-        "</p>"
-    )
-
-
-def _render_statement(
-    slide: PPTSlide,
-) -> str:
-    if not slide.statement:
-        return ""
-
-    return (
-        '<p class="hero-statement" data-step>'
-        f"{_escape(slide.statement)}"
-        "</p>"
-    )
-
-
-def _render_points(
-    slide: PPTSlide,
-) -> str:
-    rows = "".join(
-        (
-            '<div class="point-row" data-step>'
-            '<div class="point-label">'
-            f"{_escape(point.label)}"
-            "</div>"
-            '<div class="point-detail">'
-            f"{_escape(point.detail)}"
-            "</div>"
-            "</div>"
-        )
+    cards = "".join(
+        f'<article class="point"><h3>{_escape(point.label)}</h3><p>{_escape(point.detail)}</p></article>'
         for point in slide.points
     )
+    return f'<div class="points points-{len(slide.points)}">{cards}</div>'
 
+
+def _render_logic_overview(logic_model: DeckLogicModel, *, summary: bool) -> str:
+    relation_labels = {
+        "prerequisite": "前置",
+        "decomposes": "拆解",
+        "supports": "支撑",
+        "derives": "推导",
+        "causes": "因果",
+        "contrasts": "对比",
+        "applies": "应用",
+        "verifies": "验证",
+        "summarizes": "收束",
+    }
+    chapter_by_node = {
+        node_id: chapter.id for chapter in logic_model.chapters for node_id in chapter.node_ids
+    }
+    links: dict[tuple[str, str], str] = {}
+    for edge in logic_model.edges:
+        source_chapter = chapter_by_node[edge.source_id]
+        target_chapter = chapter_by_node[edge.target_id]
+        if source_chapter != target_chapter:
+            links.setdefault((source_chapter, target_chapter), relation_labels[edge.relation.value])
+
+    rendered_chapters: list[str] = []
+    for index, chapter in enumerate(logic_model.chapters):
+        relation_attribute = ""
+        if index < len(logic_model.chapters) - 1:
+            target_chapter = logic_model.chapters[index + 1]
+            relation = links.get((chapter.id, target_chapter.id), "推进")
+            relation_attribute = f' data-relation="{_escape(relation)}"'
+        rendered_chapters.append(
+            f'<article class="logic-stage"{relation_attribute}>'
+            f'<span>{index + 1:02d}</span><h3>{_escape(chapter.title)}</h3>'
+            f'<p>{_escape(chapter.outcome if summary else chapter.question)}</p>'
+            '</article>'
+        )
+    chapters = "".join(rendered_chapters)
+    mode = "已建立的答案" if summary else "需要解决的问题"
     return (
-        '<div class="point-list">'
-        f"{rows}"
-        "</div>"
+        f'<section class="logic-overview {"is-summary" if summary else ""}">'
+        f'<div class="logic-origin"><span>核心问题</span><strong>{_escape(logic_model.central_question)}</strong></div>'
+        f'<div class="logic-stages" aria-label="{mode}">{chapters}</div>'
+        f'<div class="logic-outcome"><span>{"最终结论" if summary else "学习目标"}</span>'
+        f'<strong>{_escape(logic_model.thesis)}</strong></div></section>'
     )
 
 
-def _render_process(
+def _render_chapter_rail(logic_model: DeckLogicModel, active_chapter: str | None) -> str:
+    items = "".join(
+        f'<span class="{"active" if chapter.id == active_chapter else ""}">'
+        f'<i>{index + 1:02d}</i>{_escape(chapter.title)}</span>'
+        for index, chapter in enumerate(logic_model.chapters)
+    )
+    return f'<nav class="chapter-rail" aria-label="课程章节进度">{items}</nav>'
+
+
+def _render_slide(
     slide: PPTSlide,
+    index: int,
+    total: int,
+    logic_model: DeckLogicModel,
 ) -> str:
-    steps = "".join(
-        (
-            '<article class="process-step" data-step>'
-            '<div class="step-key">'
-            f"{_escape(step.key)}"
-            "</div>"
-            '<h3 class="step-title">'
-            f"{_escape(step.title)}"
-            "</h3>"
-            '<p class="step-detail">'
-            f"{_escape(step.detail)}"
-            "</p>"
-            "</article>"
-        )
-        for step in slide.steps
+    label = SLIDE_KIND_LABELS[slide.kind]
+    eyebrow = f'<div class="eyebrow">{_escape(label)}</div>'
+    if slide.kind is SlideKind.COVER:
+        eyebrow = f'<div class="author-badge">Presented by Mentorly</div>{eyebrow}'
+
+    subtitle = f'<p class="subtitle">{_escape(slide.subtitle)}</p>' if slide.subtitle else ""
+    question = f'<p class="logic-question">{_escape(slide.question)}</p>' if slide.question else ""
+    lead = f'<p class="lead">{_escape(slide.lead)}</p>' if slide.lead else ""
+    takeaway = (
+        f'<footer><span>本页结论</span><strong>{_escape(slide.claim)}</strong></footer>'
+        if slide.claim
+        else '<footer class="empty-footer"></footer>'
     )
 
-    return (
-        '<div class="process" '
-        f'style="--count:{len(slide.steps)}">'
-        f"{steps}"
-        "</div>"
-    )
-
-
-def _render_table(
-    slide: PPTSlide,
-) -> str:
-    headers = "".join(
-        (
-            "<th>"
-            f"{_escape(value)}"
-            "</th>"
-        )
-        for value in slide.table.headers
-    )
-
-    rows = "".join(
-        (
-            "<tr>"
-            + "".join(
-                (
-                    "<td>"
-                    f"{_escape(value)}"
-                    "</td>"
-                )
-                for value in row
-            )
-            + "</tr>"
-        )
-        for row in slide.table.rows
-    )
-
-    return (
-        '<table class="comparison-table">'
-        "<thead>"
-        f"<tr>{headers}</tr>"
-        "</thead>"
-        f"<tbody>{rows}</tbody>"
-        "</table>"
-    )
-
-
-def _render_misconceptions(
-    slide: PPTSlide,
-) -> str:
-    rows = "".join(
-        (
-            '<article class="misconception-row" data-step>'
-            '<div class="misconception-cell">'
-            '<span class="cell-label">误区</span>'
-            f"{_escape(item.myth)}"
-            "</div>"
-            '<div class="misconception-cell">'
-            '<span class="cell-label">为什么错</span>'
-            f"{_escape(item.reason)}"
-            "</div>"
-            '<div class="misconception-cell">'
-            '<span class="cell-label">正确理解</span>'
-            f"{_escape(item.truth)}"
-            "</div>"
-            "</article>"
-        )
-        for item in slide.misconceptions
-    )
-
-    return (
-        '<div class="misconception-list">'
-        f"{rows}"
-        "</div>"
-    )
-
-
-def _render_knowledge_map(
-    slide: PPTSlide,
-) -> str:
-    branches = "".join(
-        (
-            '<div class="map-branch" data-step>'
-            '<div class="branch-label">'
-            f"{_escape(branch.label)}"
-            "</div>"
-            '<div class="branch-keywords">'
-            + "".join(
-                (
-                    "<span>"
-                    f"{_escape(keyword)}"
-                    "</span>"
-                )
-                for keyword in branch.keywords
-            )
-            + "</div>"
-            "</div>"
-        )
-        for branch in slide.branches
-    )
-
-    center_text = (
-        slide.statement
-        or slide.title
-    )
-
-    return (
-        '<div class="knowledge-map">'
-        '<div class="map-center">'
-        f"{_escape(center_text)}"
-        "</div>"
-        '<div class="map-branches">'
-        f"{branches}"
-        "</div>"
-        "</div>"
-    )
-
-
-def _render_cover(
-    slide: PPTSlide,
-) -> str:
-    meta = slide.cover_meta
-
-    meta_html = "".join(
-        (
-            "<span>"
-            f"{_escape(value)}"
-            "</span>"
-        )
-        for value in (
-            meta.presenter,
-            meta.organization,
-            meta.date,
-        )
-        if value
-    )
-
-    keywords = " · ".join(
-        meta.keywords
-    )
-
-    return (
-        '<div class="cover-content">'
-        '<p class="hero-statement" data-step>'
-        f"{_escape(slide.statement)}"
-        "</p>"
-        '<div class="cover-meta">'
-        f"{meta_html}"
-        "</div>"
-        '<p class="keyword-line">'
-        f"{_escape(keywords)}"
-        "</p>"
-        "</div>"
-    )
-
-
-def render_slide_body(
-    slide: PPTSlide,
-) -> str:
-    if slide.type == "cover":
-        return _render_cover(slide)
-
-    if slide.type in {
-        "agenda",
-        "mechanism_overview",
-    }:
-        body = _render_process(slide)
-
-    elif slide.type in {
-        "learning_goals",
-        "definition",
-        "knowledge_explain",
-    }:
-        body = (
-            _render_statement(slide)
-            + _render_points(slide)
-        )
-
-    elif slide.type == "hook_question":
-        question = (
-            slide.question
-            or slide.statement
-        )
-
-        body = (
-            '<p class="question-text" data-step>'
-            f"{_escape(question)}"
-            "</p>"
-            + _render_points(slide)
-        )
-
-    elif slide.type == "concept_boundary":
-        body = _render_statement(slide)
-
-        if slide.table.rows:
-            body += _render_table(slide)
-        else:
-            body += _render_points(slide)
-
-    elif slide.type == "comparison":
-        body = (
-            _render_statement(slide)
-            + _render_table(slide)
-        )
-
-    elif slide.type == "misconception":
-        body = _render_misconceptions(
-            slide
-        )
-
-    elif slide.type == "knowledge_map":
-        body = _render_knowledge_map(
-            slide
-        )
-
-    elif slide.type == "closing":
-        body = (
-            '<div class="closing-content">'
-            '<p class="hero-statement">'
-            f"{_escape(slide.statement)}"
-            "</p>"
-            "</div>"
-        )
-
+    if slide.kind is SlideKind.ROADMAP:
+        visual = _render_logic_overview(logic_model, summary=False)
+        visual_kind = "logic-overview"
+        meta_class = " has-meta-visual"
+    elif slide.kind is SlideKind.SUMMARY:
+        visual = _render_logic_overview(logic_model, summary=True)
+        visual_kind = "logic-overview"
+        meta_class = " has-meta-visual"
+    elif slide.kind is SlideKind.COVER:
+        visual = ""
+        visual_kind = "cover"
+        meta_class = ""
     else:
-        body = ""
+        if slide.visual is None:
+            raise ValueError(f"content slide {slide.id} is missing its visual payload")
+        visual = render_visual(slide.visual, slide.id)
+        visual_kind = slide.visual.kind
+        meta_class = ""
 
-    return (
-        body
-        + _render_takeaway(slide)
+    active = " active" if index == 0 else ""
+    chapter_rail = (
+        ""
+        if slide.kind in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}
+        else _render_chapter_rail(logic_model, slide.chapter_id)
     )
+    notes = "\n\n".join(
+        part
+        for part in (
+            f"承接：{slide.bridge}" if slide.bridge else "",
+            slide.speaker_notes,
+        )
+        if part
+    )
+    return f'''<section class="slide layout-{slide.layout.value} kind-{slide.kind.value}{meta_class}{active}" data-notes="{_escape(notes)}" data-chapter="{_escape(slide.chapter_id or "")}">
+  <div class="shell">
+    <header>{eyebrow}<div class="page">{index + 1:02d}<i></i>{total:02d}</div><h1>{_escape(slide.title)}</h1>{subtitle}</header>
+    {chapter_rail}
+    <div class="slide-main"><section class="copy">{question}{lead}{_render_points(slide)}</section><section class="visual visual-{_escape(visual_kind)}">{visual}</section></div>
+    {takeaway}
+  </div>
+</section>'''
+
+
+BASE_CSS = r'''
+:root{--paper:#f7f8fa;--surface:#fff;--ink:#142326;--muted:#52666b;--quiet:#77898d;--line:#d7e0e2;--accent:#158f8b;--accent-soft:#e8f5f4;--warm:#c77a16;--warning:#b84d43;--code-bg:#102c31;--code-head:#0a2024;--code-text:#f5fbfb;--radius:8px}
+*{box-sizing:border-box}html,body{width:100%;height:100%;margin:0;overflow:hidden;background:var(--paper)}
+body{font-family:Arial,"PingFang SC","Microsoft YaHei",sans-serif;color:var(--ink)}
+code,.cs-term{font-family:Menlo,Monaco,Consolas,monospace;color:var(--ink)}
+.viewport{position:fixed;inset:0;overflow:hidden}.stage{position:absolute;left:50%;top:50%;width:1920px;height:1080px}
+.slide{position:absolute;inset:0;width:1920px;height:1080px;visibility:hidden;opacity:0;overflow:hidden;background:var(--paper);transition:opacity .22s ease}
+.slide.active{visibility:visible;opacity:1}
+.shell{display:grid;grid-template-rows:auto auto minmax(0,1fr) auto;height:100%;padding:54px 104px 34px 88px}
+.kind-cover .shell,.kind-roadmap .shell,.kind-summary .shell{grid-template-rows:auto minmax(0,1fr) auto}
+header{position:relative;padding-left:22px;border-left:4px solid var(--accent)}
+.author-badge{margin-bottom:10px;color:var(--accent);font-size:17px;font-weight:800;text-transform:uppercase}
+.eyebrow{color:var(--accent);font-size:16px;font-weight:800}
+.page{position:absolute;right:0;top:2px;color:var(--quiet);font:700 16px/1 Menlo,Monaco,Consolas,monospace}
+.page i{display:inline-block;width:42px;height:1px;margin:0 12px 5px;background:var(--line)}
+h1{max-width:1380px;margin:12px 0 0;font-size:52px;line-height:1.12;letter-spacing:0;color:var(--ink)}
+.subtitle{max-width:1040px;margin:10px 0 0;color:var(--muted);font-size:21px;line-height:1.4}
+.chapter-rail{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:24px;margin-top:22px;border-bottom:1px solid var(--line)}
+.chapter-rail span{position:relative;padding:0 0 12px;color:var(--quiet);font-size:15px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chapter-rail span:after{content:"";position:absolute;right:0;bottom:-1px;left:0;height:3px;background:transparent}
+.chapter-rail span.active{color:var(--ink)}.chapter-rail span.active:after{background:var(--accent)}
+.chapter-rail i{margin-right:8px;color:var(--accent);font:700 13px Menlo,Monaco,Consolas,monospace;font-style:normal}
+.slide-main{display:grid;grid-template-columns:minmax(0,42fr) minmax(0,58fr);gap:54px;min-height:0;padding:28px 0 22px;align-items:stretch}
+.copy,.visual{min-width:0;min-height:0}.copy{align-self:center}.visual{height:100%}
+.logic-question{margin:0 0 16px;padding-left:14px;border-left:3px solid var(--warm);color:#7b4a0f;font-size:18px;font-weight:800;line-height:1.4}
+.lead{max-width:780px;margin:0 0 24px;font-size:29px;line-height:1.38;font-weight:750}
+.points{display:grid;grid-template-columns:1fr;gap:14px}
+.points-3,.points-4{grid-template-columns:repeat(2,minmax(0,1fr))}
+.point{min-width:0;min-height:108px;padding:20px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.point h3{margin:0 0 8px;color:var(--ink);font-size:21px;font-weight:800}
+.point p{margin:0;color:var(--muted);font-size:19px;line-height:1.45}
+.diagram-wrap{display:flex;flex-direction:column;justify-content:center;height:100%;min-height:0}
+.diagram{display:block;width:100%;height:100%;min-height:390px;overflow:visible}
+.diagram-edge{fill:none;stroke:var(--accent);stroke-width:3}.diagram-edge text{fill:#316d6a;font-size:16px;font-weight:700;text-anchor:middle;paint-order:stroke;stroke:var(--paper);stroke-width:6px}
+marker path{fill:var(--accent)}
+.diagram-node rect{fill:var(--surface);stroke:var(--accent);stroke-width:2;rx:8}
+.diagram-node.tone-secondary rect{fill:var(--accent-soft)}.diagram-node.tone-accent rect{fill:#fff8ea;stroke:var(--warm)}
+.diagram-node.tone-muted rect{fill:#eef1f2;stroke:#8b999d}.diagram-node.tone-warning rect{fill:#fff0ee;stroke:var(--warning)}
+.diagram-node-copy{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;color:var(--ink);text-align:center;line-height:1.2}
+.diagram-node-copy strong{font-size:18px}.diagram-node-copy span{margin-top:5px;color:var(--muted);font-size:14px}
+.visual-caption{margin:8px 0 0;color:var(--quiet);font-size:17px;line-height:1.4;text-align:center}
+.code-panel{height:100%;overflow:hidden;border-radius:var(--radius);background:var(--code-bg);box-shadow:0 12px 28px rgba(16,44,49,.16)}
+.code-head{display:flex;align-items:center;gap:8px;height:46px;padding:0 18px;background:var(--code-head)}
+.code-head i{width:10px;height:10px;border-radius:50%;background:#e56d62}.code-head i:nth-child(2){background:#e5b853}.code-head i:nth-child(3){background:#55bd91}
+.code-head b{margin-left:auto;color:#8bd4d0;font:700 14px Menlo,Monaco,Consolas,monospace;text-transform:uppercase}
+.code-panel pre{height:calc(100% - 46px);margin:0;padding:26px 30px;color:var(--code-text);font:21px/1.45 Menlo,Monaco,Consolas,monospace;white-space:pre-wrap;overflow:hidden}
+.code-panel pre code{padding:0;border:0;border-radius:0;background:transparent;color:var(--code-text);font:inherit;letter-spacing:0}
+.formula-panel{height:100%;padding:34px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.formula{padding:26px;border-left:5px solid var(--accent);background:var(--accent-soft);color:var(--ink);font:700 38px/1.35 Menlo,Monaco,Consolas,monospace;text-align:center}
+.formula-panel ol{margin:24px 0 0;padding-left:27px;color:var(--muted);font-size:20px;line-height:1.65}
+.metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;height:100%}
+.metrics article{display:flex;flex-direction:column;justify-content:center;min-height:145px;padding:22px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.metrics strong{color:var(--accent);font:700 46px/1 Menlo,Monaco,Consolas,monospace}.metrics b{margin-top:12px;font-size:21px}.metrics p{margin:8px 0 0;color:var(--muted);font-size:18px;line-height:1.4}
+footer{display:grid;grid-template-columns:118px minmax(0,1fr);gap:16px;align-items:start;min-height:62px;padding:16px 320px 0 0;border-top:1px solid var(--line)}
+footer span{color:var(--accent);font:800 14px Menlo,Monaco,Consolas,monospace}footer strong{color:var(--muted);font-size:18px;line-height:1.4}.empty-footer{visibility:hidden}
+.logic-overview{display:grid;grid-template-columns:minmax(220px,.8fr) minmax(0,3fr) minmax(240px,1fr);gap:26px;align-items:stretch;height:100%}
+.logic-origin,.logic-outcome{display:flex;flex-direction:column;justify-content:center;padding:26px;border-left:5px solid var(--accent);background:var(--surface)}
+.logic-origin span,.logic-outcome span{margin-bottom:12px;color:var(--accent);font-size:15px;font-weight:800}.logic-origin strong,.logic-outcome strong{font-size:24px;line-height:1.35}
+.logic-stages{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:42px;align-items:center;position:relative}
+.logic-stage{position:relative;min-height:190px;padding:22px 18px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface)}
+.logic-stage:not(:last-child):after{content:attr(data-relation) " \2192";position:absolute;z-index:2;right:-48px;top:50%;width:54px;color:var(--accent);font-size:13px;font-weight:800;text-align:center;transform:translateY(-50%)}
+.logic-stage span{color:var(--accent);font:800 14px Menlo,Monaco,Consolas,monospace}.logic-stage h3{margin:18px 0 10px;font-size:22px}.logic-stage p{margin:0;color:var(--muted);font-size:17px;line-height:1.45}
+.logic-overview.is-summary .logic-stage{border-top:4px solid var(--accent)}
+.has-meta-visual .slide-main{grid-template-columns:1fr}.has-meta-visual .copy{display:none}.has-meta-visual .visual{grid-column:1/-1}
+.layout-hero .slide-main{grid-template-columns:minmax(0,48fr) minmax(0,52fr);padding-top:38px}.layout-hero h1{max-width:1180px;font-size:76px}.layout-hero .lead{font-size:36px}
+.layout-route .slide-main,.layout-recap .slide-main{grid-template-columns:1fr}
+.layout-statement .slide-main{grid-template-columns:minmax(0,46fr) minmax(0,54fr)}
+.layout-diagram .slide-main{grid-template-columns:minmax(0,36fr) minmax(0,64fr)}
+.layout-sequence .slide-main{grid-template-columns:1fr;grid-template-rows:auto minmax(0,1fr);gap:18px}.layout-sequence .copy{display:grid;grid-template-columns:minmax(260px,.75fr) minmax(0,1.25fr);gap:28px;align-items:start}.layout-sequence .copy .points{grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}.layout-sequence .logic-question,.layout-sequence .lead{grid-column:1}.layout-sequence .points{grid-column:2;grid-row:1/3}
+.layout-comparison .slide-main{grid-template-columns:1fr 1fr}.layout-studio .slide-main{grid-template-columns:minmax(0,34fr) minmax(0,66fr)}.layout-mosaic .slide-main{grid-template-columns:minmax(0,56fr) minmax(0,44fr)}
+.deck-controls{position:fixed;z-index:5;right:10px;top:50%;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px;border:1px solid rgba(20,35,38,.12);border-radius:var(--radius);background:rgba(255,255,255,.9);box-shadow:0 6px 20px rgba(20,35,38,.1);backdrop-filter:blur(8px);transform:translateY(-50%)}
+.deck-controls button{width:36px;height:32px;border:0;border-radius:6px;background:transparent;color:var(--muted);font-size:18px;cursor:pointer}.deck-controls button:hover{background:var(--accent-soft);color:var(--ink)}.deck-controls button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.deck-counter{min-width:42px;padding:7px 0;color:var(--muted);font:700 13px Menlo,Monaco,Consolas,monospace;text-align:center;writing-mode:vertical-rl}
+.speaker-notes{position:fixed;z-index:4;right:76px;top:50%;width:380px;max-height:320px;padding:18px;border:1px solid var(--line);border-radius:var(--radius);background:var(--surface);color:var(--muted);font-size:15px;line-height:1.6;box-shadow:0 12px 30px rgba(20,35,38,.14);display:none;transform:translateY(-50%)}.speaker-notes.open{display:block}
+body.embedded .deck-controls,body.embedded .speaker-notes{display:none}
+'''
+
+
+CONTROLLER_JS = r'''
+class DeckController {
+  constructor() { this.slides = Array.from(document.querySelectorAll('.slide')); this.current = 0; this.counter = document.getElementById('deckCounter'); this.notes = document.getElementById('speakerNotes'); this.embedded = window.parent !== window; if (this.embedded) document.body.classList.add('embedded'); this.fit(); this.show(0, false); this.bind(); this.post('ready'); }
+  post(type) { if (this.embedded) window.parent.postMessage({ source: 'mentorly-ppt', type, current: this.current + 1, total: this.slides.length }, '*'); }
+  fit() { const scale = Math.min(innerWidth / 1920, innerHeight / 1080); document.getElementById('deckStage').style.transform = `translate(-50%, -50%) scale(${scale})`; }
+  show(index, notify = true) { this.current = Math.max(0, Math.min(index, this.slides.length - 1)); this.slides.forEach((slide, item) => slide.classList.toggle('active', item === this.current)); this.counter.textContent = `${this.current + 1} / ${this.slides.length}`; this.notes.textContent = this.slides[this.current].dataset.notes || '暂无讲稿'; if (notify) this.post('state'); }
+  bind() { addEventListener('resize', () => this.fit()); addEventListener('keydown', event => { if (['ArrowRight','PageDown',' '].includes(event.key)) { event.preventDefault(); this.show(this.current + 1); } if (['ArrowLeft','PageUp'].includes(event.key)) { event.preventDefault(); this.show(this.current - 1); } }); document.getElementById('prevSlide').addEventListener('click', () => this.show(this.current - 1)); document.getElementById('nextSlide').addEventListener('click', () => this.show(this.current + 1)); document.getElementById('notesToggle').addEventListener('click', () => document.getElementById('speakerNotes').classList.toggle('open')); let touchStartX = 0; addEventListener('touchstart', e => { touchStartX = e.changedTouches[0].screenX; }, {passive: true}); addEventListener('touchend', e => { const dx = e.changedTouches[0].screenX - touchStartX; if (dx > 50) this.show(this.current - 1); else if (dx < -50) this.show(this.current + 1); }, {passive: true}); addEventListener('message', event => { if (event.source !== window.parent) return; const data = event.data; if (!data || data.source !== 'mentorly-ppt' || data.type !== 'command') return; if (data.action === 'next') this.show(this.current + 1); if (data.action === 'previous') this.show(this.current - 1); if (data.action === 'goto') this.show(Number(data.page) - 1); if (data.action === 'state') this.post('state'); }); }
+}
+new DeckController();
+'''
 
 
 class PPTHTMLRenderer:
-    def render(
-        self,
-        deck: ResolvedPPT,
-    ) -> str:
-        slides_html = "\n".join(
-            self._render_slide(
-                resolved,
-                index,
-                len(deck.slides),
-            )
-            for index, resolved in enumerate(
-                deck.slides
-            )
+    def render(self, deck: PPTDeck, publication: PPTPublication) -> str:
+        slides = "".join(
+            _render_slide(slide, index, len(deck.slides), deck.logic_model)
+            for index, slide in enumerate(deck.slides)
         )
-
-        template_css = deck.template.css.replace(
-            "</style",
-            "<\\/style",
-        )
-
-        return f"""<!doctype html>
-<html lang="{_escape(deck.plan.language)}">
-<head>
-  <meta charset="utf-8">
-  <meta
-    name="viewport"
-    content="width=device-width,initial-scale=1"
-  >
-  <title>{_escape(deck.plan.title)}</title>
-  <style>
-    {BASE_CSS}
-    {template_css}
-  </style>
-</head>
-<body data-template="{_escape(deck.template.manifest.id)}">
-  <div class="deck-viewport">
-    <main
-      class="deck-stage"
-      id="deckStage"
-    >
-      {slides_html}
-    </main>
-  </div>
-
-  <div class="deck-progress">
-    <span id="deckProgress"></span>
-  </div>
-
-  <nav
-    class="deck-controls"
-    aria-label="演示控制"
-  >
-    <button
-      id="prevSlide"
-      aria-label="上一页"
-    >
-      ←
-    </button>
-
-    <span
-      class="deck-counter"
-      id="deckCounter"
-    ></span>
-
-    <button
-      id="nextSlide"
-      aria-label="下一页"
-    >
-      →
-    </button>
-
-    <button
-      id="notesToggle"
-      aria-label="显示讲稿"
-    >
-      N
-    </button>
-
-    <button
-      id="downloadDeck"
-      aria-label="下载 HTML"
-    >
-      ↓
-    </button>
-  </nav>
-
-  <div
-    class="speaker-notes-panel"
-    id="notesPanel"
-  ></div>
-
-  <script>
-    {CONTROLLER_JS}
-  </script>
-</body>
-</html>"""
-
-    def _render_slide(
-        self,
-        resolved: ResolvedPPTSlide,
-        index: int,
-        total: int,
-    ) -> str:
-        slide = resolved.spec
-        layout = resolved.layout
-
-        subtitle_html = ""
-
-        if slide.subtitle:
-            subtitle_html = (
-                '<p class="slide-subtitle">'
-                f"{_escape(slide.subtitle)}"
-                "</p>"
-            )
-
-        title_size = (
-            "compact"
-            if len(slide.title) > 24
-            else "normal"
-        )
-
-        active_class = (
-            " active visible"
-            if index == 0
-            else ""
-        )
-
-        notes = _escape(
-            slide.speaker_notes
-        )
-
-        return f"""
-<section
-  class="slide{active_class}"
-  data-type="{slide.type}"
-  data-layout="{_escape(layout.id)}"
-  data-skeleton="{_escape(layout.skeleton)}"
-  data-animation="{slide.animation}"
-  data-title-size="{title_size}"
-  data-notes="{notes}"
->
-  <div class="slide-shell">
-    <span class="slide-index">
-      {index + 1:02d} / {total:02d}
-    </span>
-
-    <header class="slide-header">
-      <div class="eyebrow">
-        {_escape(slide.eyebrow or layout.name)}
-      </div>
-
-      <h2 class="slide-title">
-        {_escape(slide.title)}
-      </h2>
-
-      {subtitle_html}
-    </header>
-
-    <div class="slide-content">
-      {render_slide_body(slide)}
-    </div>
-  </div>
-</section>
-"""
+        return f'''<!doctype html><html lang="{_escape(deck.language)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{_escape(deck.title)}</title><style>{BASE_CSS}</style></head><body><div class="viewport"><div class="stage" id="deckStage">{slides}</div></div><nav class="deck-controls"><button id="prevSlide" aria-label="上一页">←</button><span class="deck-counter" id="deckCounter"></span><button id="nextSlide" aria-label="下一页">→</button><button id="notesToggle" aria-label="讲稿">N</button></nav><aside class="speaker-notes" id="speakerNotes"></aside><script>{CONTROLLER_JS}</script></body></html>'''
 
 
 class PPTHTMLPublisher:
-    def __init__(
-        self,
-        output_dir: Path,
-    ) -> None:
+    def __init__(self, output_dir: Path) -> None:
         self.output_dir = output_dir
 
-    def publish(
-        self,
-        file_id: str,
-        content: str,
-    ) -> Path:
-        if not _SAFE_FILE_ID.fullmatch(
-            file_id
-        ):
-            raise ValueError(
-                "PPT file_id contains unsafe characters"
-            )
-
-        self.output_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        final_path = (
-            self.output_dir
-            / f"{file_id}.html"
-        )
-
+    def publish(self, file_id: str, content: str) -> Path:
+        if file_id != "slides":
+            raise ValueError("PPT publisher only accepts the canonical slides file")
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        final_path = self.output_dir / "slides.html"
         temporary_path: Path | None = None
-
         try:
-            with tempfile.NamedTemporaryFile(
-                mode="w",
-                encoding="utf-8",
-                dir=self.output_dir,
-                suffix=".tmp",
-                delete=False,
-            ) as handle:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.output_dir, suffix=".tmp", delete=False) as handle:
                 handle.write(content)
                 handle.flush()
-                os.fsync(
-                    handle.fileno()
-                )
-
-                temporary_path = Path(
-                    handle.name
-                )
-
-            os.replace(
-                temporary_path,
-                final_path,
-            )
-
+                os.fsync(handle.fileno())
+                temporary_path = Path(handle.name)
+            os.replace(temporary_path, final_path)
             return final_path
-
         finally:
-            if (
-                temporary_path is not None
-                and temporary_path.exists()
-            ):
+            if temporary_path is not None and temporary_path.exists():
                 temporary_path.unlink()

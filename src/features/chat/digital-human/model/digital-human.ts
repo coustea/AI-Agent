@@ -83,13 +83,18 @@ export interface ErrorMessage {
   content: string
 }
 
+export interface DigitalHumanErrorContext {
+  source: 'player'
+}
+
 export interface DigitalHumanCallbacks {
   onAssistantChunk?: (chunk: string, turn_id?: string) => void
   onAssistantComplete?: (turn_id?: string) => void
   onStatus?: (status: { stage?: string; message?: string }) => void
   onDiagram?: (diagram: unknown, turn_id?: string) => void
   onAsrResult?: (text: string) => void
-  onError?: (msg: string) => void
+  onAsrPartial?: (text: string) => void
+  onError?: (msg: string, context?: DigitalHumanErrorContext) => void
   onConnectionChange?: (connected: boolean) => void
   onAvatarReady?: (ready: boolean) => void
   onVadStateChange?: (listening: boolean) => void

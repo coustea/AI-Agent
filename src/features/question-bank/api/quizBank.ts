@@ -93,7 +93,7 @@ export async function fetchQuizBankQuestions(params?: {
   }
 }
 
-// 提交分析题给 AI 评阅
+// 提交填空题或分析题给 AI 评阅
 export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizReviewResult> {
   const response = await http.post('/ai/quiz/review', request, { timeout: 60000 })
   return response.data as QuizReviewResult
@@ -103,6 +103,7 @@ export interface ObjectiveQuestionResult {
   question_id: string
   user_answer: string
   is_correct: boolean
+  score?: number
   subject?: string
   question_type?: string
   content?: string
@@ -124,6 +125,59 @@ export interface ObjectiveSubmitResponse {
 export async function submitObjectiveResults(request: ObjectiveSubmitRequest): Promise<ObjectiveSubmitResponse> {
   const response = await http.post('/ai/quiz/submit', request)
   return response.data.data as ObjectiveSubmitResponse
+}
+
+// 答题历史条目
+export interface QuizAnswerHistoryItem {
+  question_id: string
+  subject: string | null
+  question_type: string | null
+  score: number | null
+  is_correct: boolean
+  attempts: number
+  last_answer: string | null
+  created_at: string
+}
+
+// 答题历史响应
+export interface QuizAnswerHistoryResponse {
+  items: QuizAnswerHistoryItem[]
+  total: number
+  page: number
+  page_size: number
+}
+
+// 答题历史分页查询参数
+export interface QuizHistoryParams {
+  subject?: string
+  is_correct?: boolean
+  page?: number
+  page_size?: number
+}
+
+// 获取用户答题历史（分页列表）
+export async function fetchQuizHistoryList(params?: QuizHistoryParams): Promise<QuizAnswerHistoryResponse> {
+  const response = await http.get('/ai/quiz/history', { params })
+  return response.data.data as QuizAnswerHistoryResponse
+}
+
+// 获取用户答题历史（所有做过的题，用于"做过"标记）
+export async function fetchQuizAnswerHistory(): Promise<Map<string, QuizAnswerHistoryItem>> {
+  const map = new Map<string, QuizAnswerHistoryItem>()
+  const pageSize = 100
+  let page = 1
+
+  while (true) {
+    const data = await fetchQuizHistoryList({ page, page_size: pageSize })
+    for (const item of data.items || []) {
+      map.set(item.question_id, item)
+    }
+
+    if (!data.items?.length || data.items.length < pageSize || map.size >= data.total) break
+    page += 1
+  }
+
+  return map
 }
 
 // 标准化题目数据字段

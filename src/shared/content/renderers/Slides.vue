@@ -1,132 +1,112 @@
 <template>
   <div class="ppt-resource" :class="{ compact }">
     <Frame :compact="compact" class="ppt-item">
-      <div class="header-actions" v-if="!compact">
-        <a v-if="downloadUrl" :href="downloadUrl" target="_blank" class="btn btn-primary btn-sm">
-          <Download class="w-4 h-4 inline-block align-middle mr-1" />
-          打开 HTML 课件
-        </a>
-        <button v-if="htmlUrl" class="btn btn-outline btn-sm" @click="toggleFullscreen">
-          <Expand class="w-4 h-4 inline-block align-middle mr-1" />
-          全屏预览
-        </button>
+      <div v-if="!compact" class="deck-toolbar">
+        <div class="deck-status">
+          <span class="deck-label">教学课件</span>
+          <span v-if="totalSlides" class="deck-page">{{ currentSlide }} / {{ totalSlides }}</span>
+        </div>
+        <div class="toolbar-actions">
+          <button class="nav-button" :disabled="currentSlide <= 1" @click="sendCommand('previous')">上一页</button>
+          <button class="nav-button nav-primary" :disabled="!totalSlides || currentSlide >= totalSlides" @click="sendCommand('next')">下一页</button>
+          <button v-if="htmlUrl" class="icon-button" aria-label="全屏预览" @click="toggleFullscreen">
+            <Expand class="w-5 h-5" />
+          </button>
+          <a v-if="htmlUrl" :href="htmlUrl" target="_blank" class="icon-button" aria-label="在新窗口打开">
+            <ArrowSquareOut class="w-5 h-5" />
+          </a>
+        </div>
       </div>
-      <div class="player-wrapper">
+      <div ref="playerRef" class="player-wrapper">
         <iframe
           v-if="htmlUrl"
+          ref="iframeRef"
           :src="htmlUrl"
           class="slides-iframe"
           frameborder="0"
           sandbox="allow-scripts allow-downloads"
           allowfullscreen
+          @load="requestDeckState"
         ></iframe>
-        <div v-else class="no-preview">
-          暂无幻灯片课件预览
-        </div>
+        <div v-else class="no-preview">暂无幻灯片课件预览</div>
       </div>
     </Frame>
   </div>
 </template>
 
 <script setup lang="ts">
-// 幻灯片渲染器：展示 HTML 课件（iframe），支持全屏和下载
-
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import Frame from '../Frame.vue'
-import { PhDownload as Download, PhArrowsOut as Expand } from '@phosphor-icons/vue'
+import { PhArrowsOut as Expand, PhArrowSquareOut as ArrowSquareOut } from '@phosphor-icons/vue'
 
-const props = defineProps<{
-  resource?: any
-  compact?: boolean
-}>()
+const props = defineProps<{ resource?: unknown; compact?: boolean }>()
 
-// 全屏切换（iframe 全屏 API）
-function toggleFullscreen() {
-  const iframe = document.querySelector('.slides-iframe') as HTMLIFrameElement | null
-  if (!iframe) return
+const iframeRef = ref<HTMLIFrameElement | null>(null)
+const playerRef = ref<HTMLElement | null>(null)
+const currentSlide = ref(1)
+const totalSlides = ref(0)
 
-  if (!document.fullscreenElement) {
-    iframe.requestFullscreen?.()
-  } else {
-    document.exitFullscreen?.()
+function parseObject(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === 'object') return value as Record<string, unknown>
+  if (typeof value !== 'string') return null
+  try {
+    const parsed = JSON.parse(value)
+    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null
+  } catch {
+    return null
   }
 }
 
-// 从 resource 的 metadata 或 content 中提取 html_url
 const htmlUrl = computed(() => {
-  const raw = props.resource
-  if (!raw) return ''
-
-  const meta = raw.metadata_json || raw.metadata
-  const metadata = typeof meta === 'string' ? JSON.parse(meta) : meta
-  const url = metadata?.html_url
-  if (typeof url === 'string' && url) return url
-
-  const content = raw.content
-  const contentObj = typeof content === 'string' ? JSON.parse(content) : content
-  const contentUrl = contentObj?.html_url
-  if (typeof contentUrl === 'string' && contentUrl) return contentUrl
-
-  return ''
+  const resource = parseObject(props.resource)
+  if (!resource) return ''
+  const metadata = parseObject(resource.metadata_json ?? resource.metadata)
+  const content = parseObject(resource.content)
+  const url = metadata?.html_url ?? content?.html_url
+  return typeof url === 'string' ? url : ''
 })
 
-const downloadUrl = computed(() => htmlUrl.value)
+function sendCommand(action: 'previous' | 'next' | 'state') {
+  iframeRef.value?.contentWindow?.postMessage({ source: 'mentorly-ppt', type: 'command', action }, '*')
+}
+
+function requestDeckState() {
+  sendCommand('state')
+}
+
+function handleMessage(event: MessageEvent) {
+  if (event.source !== iframeRef.value?.contentWindow) return
+  const data = event.data
+  if (!data || data.source !== 'mentorly-ppt' || !['ready', 'state'].includes(data.type)) return
+  if (typeof data.current === 'number') currentSlide.value = data.current
+  if (typeof data.total === 'number') totalSlides.value = data.total
+}
+
+function toggleFullscreen() {
+  const player = playerRef.value
+  if (!player) return
+  if (document.fullscreenElement) document.exitFullscreen?.()
+  else player.requestFullscreen?.()
+}
+
+onMounted(() => window.addEventListener('message', handleMessage))
+onBeforeUnmount(() => window.removeEventListener('message', handleMessage))
 </script>
 
 <style scoped>
-.ppt-resource {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.ppt-item {
-  padding: 0 !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.header-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-}
-
-.player-wrapper {
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  max-height: 75vh;
-  border-radius: var(--radius-md);
-  overflow: hidden;
-  border: 1px solid var(--color-border);
-  background: #ffffff;
-}
-
-.slides-iframe {
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: transparent;
-}
-
-.no-preview {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: var(--color-text-faint);
-  font-size: 16px;
-}
-
-.compact .player-wrapper {
-  aspect-ratio: 16 / 9;
-  height: auto;
-  max-height: 25vh;
-}
+.ppt-resource { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.ppt-item { padding: 0 !important; background: transparent !important; border: none !important; box-shadow: none !important; }
+.deck-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 14px; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface); }
+.deck-status, .toolbar-actions { display: flex; align-items: center; gap: 10px; }
+.deck-label { color: var(--color-text); font-weight: 700; }
+.deck-page { color: var(--color-text-faint); font-variant-numeric: tabular-nums; }
+.nav-button, .icon-button { display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); color: var(--color-text); font-size: 13px; cursor: pointer; text-decoration: none; }
+.icon-button { width: 36px; padding: 0; }
+.nav-primary { border-color: var(--color-primary); background: var(--color-primary); color: white; }
+.nav-button:disabled { cursor: not-allowed; opacity: .45; }
+.player-wrapper { width: 100%; aspect-ratio: 16 / 9; max-height: 75vh; overflow: hidden; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: #eef4fb; }
+.slides-iframe { width: 100%; height: 100%; border: none; background: transparent; }
+.no-preview { display: grid; height: 100%; place-items: center; color: var(--color-text-faint); font-size: 16px; }
+.compact .player-wrapper { max-height: 25vh; }
+@media (max-width: 640px) { .deck-toolbar { align-items: flex-start; flex-direction: column; } }
 </style>

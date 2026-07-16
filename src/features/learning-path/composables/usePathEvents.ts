@@ -1,5 +1,6 @@
 import { readonly, ref, shallowRef } from 'vue'
 import type { PathEvent, PathEventName } from '@/features/learning-path/model/pathEvent'
+import { getAuthToken } from '@/shared/auth/token'
 
 // 路径规划 SSE 连接状态：idle → connecting → (running | reconnecting) → completed | failed
 export type PathConnectionStatus =
@@ -76,7 +77,11 @@ export function usePathEvents() {
     pathId.value = nextPathId
     connectionStatus.value = 'connecting'
 
-    const url = `${API_BASE}/path-plan/${nextPathId}/runs/${nextRunId}/events`
+    const params = new URLSearchParams()
+    const token = getAuthToken()
+    if (token) params.set('token', token)
+    const query = params.toString()
+    const url = `${API_BASE}/path-plan/${nextPathId}/runs/${nextRunId}/events${query ? `?${query}` : ''}`
     const eventSource = new EventSource(url)
 
     // 监听自定义事件 'path.event'（非标准 MessageEvent，需用 addEventListener）

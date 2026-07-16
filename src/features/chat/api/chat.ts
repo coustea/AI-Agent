@@ -4,6 +4,7 @@ import type {
   ChatMessageItem,
   ChatSession,
   TeachingDiagramImage,
+  ChatVideoArtifact,
   UploadResult,
   StreamChatParams,
 } from '@/features/chat/types/chat' // 导入聊天 DTO 类型
@@ -97,5 +98,24 @@ export function createChatMessage(params: StreamChatParams) {
 export function retryDiagramImage(messageId: number) {
   return http.post<ApiResponse<{ diagram: TeachingDiagramImage }>>(
     `/ai/chat/messages/${messageId}/diagram-image/retry`,
+  )
+}
+
+export function createChatVideo(topic: string, sessionId?: string) {
+  const formData = new FormData()
+  formData.append('topic', topic)
+  if (sessionId) formData.append('session_id', sessionId)
+  return http.post<ApiResponse<{
+    user_message_id: number
+    session_id: string
+    video: ChatVideoArtifact
+  }>>('/ai/chat/videos', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+export function getChatVideo(sessionId: string, userMessageId: number) {
+  return http.get<ApiResponse<{ user_message_id: number, video: ChatVideoArtifact }>>(
+    `/ai/chat/sessions/${sessionId}/videos/${userMessageId}`,
   )
 }

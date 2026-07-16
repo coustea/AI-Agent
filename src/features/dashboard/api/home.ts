@@ -104,14 +104,44 @@ export function getRecentResources() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. Study Stats
+// 6. Profile Study Snapshot Compatibility
 // ---------------------------------------------------------------------------
 
 export interface StudyStatsData {
   weekly_days: number
 }
 
-// 获取学习统计数据（如周学习天数）
-export function getStudyStats() {
-  return http.get<ApiResponse<StudyStatsData>>('/ai/dashboard/study-stats')
+// 个人中心旧看板仍需要本周活跃天数。后端旧 study-stats 路由已移除，
+// 这里优先从 7 天学习评估事实快照中读取活跃天数，避免重新引入旧接口。
+export async function getStudyStats() {
+  const history = await http.get<ApiResponse<{
+    items: {
+      id: number
+      range_days: number
+      status: string
+    }[]
+  }>>(
+    '/ai/evaluation/reports',
+    { params: { page: 1, page_size: 50 } },
+  )
+  const weeklyReport = history.data.data.items.find(
+    item => item.status === 'ready' && item.range_days === 7,
+  )
+  const response = weeklyReport
+    ? await http.get<ApiResponse<{ facts_snapshot?: { activity?: { active_days?: number } } }>>(
+      `/ai/evaluation/reports/${weeklyReport.id}`,
+    )
+    : await http.get<ApiResponse<{ facts_snapshot?: { activity?: { active_days?: number } } } | null>>(
+      '/ai/evaluation/reports/latest',
+    )
+
+  return {
+    ...response,
+    data: {
+      ...response.data,
+      data: {
+        weekly_days: response.data.data?.facts_snapshot?.activity?.active_days ?? 0,
+      },
+    },
+  }
 }

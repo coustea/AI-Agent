@@ -48,6 +48,7 @@ if str(_SERVER_ROOT) not in sys.path:
 
 from app.config import (  # noqa: E402
     KB_DIR,
+    KB_EMBED_BASE_URL,
     KB_EMBED_MODEL,
     SERVER_DIR,
 )
@@ -62,6 +63,7 @@ from app.rag.splitter import (  # noqa: E402
     split_documents,
 )
 from app.rag.store import build_bm25, build_store, verify_store  # noqa: E402
+from app.rag.embeddings import probe_embedding_service  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -161,6 +163,8 @@ def _write_manifest(
     source_dir: Path,
     source_snapshot: dict[str, Any],
     batch_size: int,
+    embedding_dimension: int,
+    bm25_metadata: dict[str, Any] | None,
 ) -> None:
     """写入索引 manifest。
 
@@ -174,6 +178,8 @@ def _write_manifest(
         "schema_version": SCHEMA_VERSION,
         "collection": collection,
         "embedding_model": KB_EMBED_MODEL,
+        "embedding_base_url": KB_EMBED_BASE_URL.rstrip("/"),
+        "embedding_dimension": embedding_dimension,
         "distance_metric": "cosine",
         "document_count": doc_count,
         "chunk_count": chunk_count,
@@ -192,7 +198,8 @@ def _write_manifest(
         },
         "bm25": {
             "enabled": True,
-            "built": True,
+            "built": bm25_metadata is not None,
+            **(bm25_metadata or {}),
         },
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -215,6 +222,17 @@ def _read_manifest(output_dir: Path) -> dict[str, Any] | None:
     except Exception as exc:
         logger.warning("[check] manifest read failed: %s", exc)
         return None
+
+
+def _ensure_complete_index(index_dir: Path) -> None:
+    """Reject an index unless both retrieval channels validate from disk."""
+    from app.rag.retriever import check_index_health
+
+    health = check_index_health(index_dir)
+    if not health.ready:
+        raise RuntimeError(f"Vector index validation failed: {health.reason}")
+    if not health.bm25_ready:
+        raise RuntimeError(f"BM25 index validation failed: {health.bm25_reason}")
 
 
 # ============ 构建残留清理 ============
@@ -265,7 +283,7 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
     流程：
       1. 如果旧索引存在，先重命名为 backup
       2. 将 temp_dir 重命名为正式索引目录
-      3. 重新打开 ChromaDB 验证
+      3. 重新打开并验证向量与 BM25 工件
       4. 验证失败则删除新目录并回滚旧目录
       5. 成功后重置 BM25 懒加载单例
     """
@@ -282,20 +300,17 @@ def _swap_index(temp_dir: Path, final_dir: Path) -> None:
     temp_dir.rename(final_dir)
 
     try:
-        import chromadb
-
-        client = chromadb.PersistentClient(path=str(final_dir))
-        collection = client.get_collection(name=CHROMA_COLLECTION)
-        count = collection.count()
-
-        logger.info("[build] final index verified: %d chunks", count)
+        _ensure_complete_index(final_dir)
+        logger.info("[build] final index fully verified")
 
         # 如果构建和服务在同一进程内执行，确保 BM25 下次重新加载新索引。
         try:
             from app.rag.bm25 import reset_bm25_index
+            from app.rag.retriever import reset_health_cache
 
             reset_bm25_index()
-            logger.info("[build] bm25 cache reset")
+            reset_health_cache()
+            logger.info("[build] retrieval caches reset")
         except Exception as exc:
             logger.warning("[build] bm25 cache reset failed: %s", exc)
 
@@ -396,6 +411,11 @@ def build_index(
 
         reset_breaker()
 
+        # 使用与构建完全相同的 config.yaml 参数探测 embedding 服务，
+        # 在创建临时索引前尽早发现 endpoint/model/key 不可用的问题。
+        embedding_dimension = probe_embedding_service()
+        logger.info("[build] embedding service ready: dimension=%d", embedding_dimension)
+
         # 7. 准备临时索引目录
         stage = "prepare_temp_dir"
         _log_stage(7, "准备临时索引目录")
@@ -412,13 +432,16 @@ def build_index(
             output_dir=temp_dir,
             collection=col_name,
             batch_size=batch_size,
+            embedding_dimension=embedding_dimension,
         )
         logger.info("[build] vector index built: docs=%d chunks=%d", doc_count, chunk_count)
 
         # 9. 构建 BM25 关键词索引
         stage = "build_bm25"
         _log_stage(9, "构建 BM25 关键词索引")
-        build_bm25(chunks, temp_dir)
+        bm25_metadata = build_bm25(chunks, temp_dir)
+        if bm25_metadata is None:
+            raise RuntimeError("BM25 index build failed; refusing to publish a partial index")
         logger.info("[build] bm25 index built")
 
         # 10. 写 manifest 并校验临时索引
@@ -432,10 +455,13 @@ def build_index(
             source_dir=src_dir,
             source_snapshot=source_snapshot,
             batch_size=batch_size,
+            embedding_dimension=embedding_dimension,
+            bm25_metadata=bm25_metadata,
         )
         logger.info("[build] manifest written: %s", temp_dir / MANIFEST_FILENAME)
 
         verify_store(temp_dir, col_name, chunk_count)
+        _ensure_complete_index(temp_dir)
         logger.info("[build] temp index verified")
 
         # 11. 替换正式索引目录

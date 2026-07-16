@@ -11,8 +11,11 @@ knowledge.embed_base_url 和 knowledge.embed_api_key，下次启动时自动感�
 
 from __future__ import annotations
 
+import math
 import time
+from collections.abc import Sequence
 
+import httpx
 from langchain_openai import OpenAIEmbeddings
 
 from app.config import KB_EMBED_API_KEY, KB_EMBED_BASE_URL, KB_EMBED_MODEL
@@ -20,8 +23,18 @@ from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
+_PROBE_TEXT = "RAG embedding service health check."
+
 # 嵌入请求超时秒数（批量嵌入 32 条长文本时需较长等待）
 _REQUEST_TIMEOUT = 30
+
+# Windows 系统代理（如 Clash）会拦截 localhost 请求返回 502，
+# 显式创建不走代理的 httpx client 避免此问题。
+_no_proxy_transport = httpx.HTTPTransport(proxy=None)
+_no_proxy_http_client = httpx.Client(
+    transport=_no_proxy_transport,
+    timeout=_REQUEST_TIMEOUT,
+)
 
 # 熔断器：连续失败后暂时停止请求
 _BREAKER_COOLDOWN_SECONDS = 300.0
@@ -76,6 +89,7 @@ def _get_embeddings_client() -> OpenAIEmbeddings:
         base_url=KB_EMBED_BASE_URL,
         check_embedding_ctx_length=False,
         request_timeout=_REQUEST_TIMEOUT,
+        http_client=_no_proxy_http_client,
     )
 
 
@@ -123,3 +137,51 @@ def embed_documents(texts: list[str]) -> list[list[float]] | None:
         _record_failure(exc.__class__.__name__)
         logger.warning("[embeddings] embed_documents failed: %s", exc)
         return None
+
+
+def validate_embeddings(
+    vectors: Sequence[Sequence[float]],
+    *,
+    expected_count: int,
+    expected_dimension: int | None = None,
+) -> int:
+    """Validate an embedding response before it is persisted in Chroma.
+
+    OpenAI-compatible services differ in their error payloads.  Validating the
+    returned shape here keeps malformed responses from reaching the index and
+    gives every provider the same build contract.
+    """
+    if not vectors:
+        raise RuntimeError("embedding service returned empty vectors")
+    if len(vectors) != expected_count:
+        raise RuntimeError(
+            f"embedding count mismatch: expected {expected_count}, got {len(vectors)}"
+        )
+
+    dimension = expected_dimension
+    for index, vector in enumerate(vectors):
+        if not vector:
+            raise RuntimeError(f"embedding vector {index} is empty")
+        if dimension is None:
+            dimension = len(vector)
+        elif len(vector) != dimension:
+            raise RuntimeError(
+                f"embedding dimension mismatch: expected {dimension}, got {len(vector)}"
+            )
+        if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in vector):
+            raise RuntimeError(f"embedding vector {index} contains non-finite values")
+
+    return dimension
+
+
+def probe_embedding_service() -> int:
+    """Check the configured OpenAI-compatible embedding endpoint before build.
+
+    The endpoint configuration remains solely in ``config.yaml``.  This probe
+    only verifies that its model/base URL/key combination currently returns a
+    usable vector and never logs credentials.
+    """
+    vectors = embed_documents([_PROBE_TEXT])
+    if vectors is None:
+        raise RuntimeError("embedding service did not return vectors")
+    return validate_embeddings(vectors, expected_count=1)

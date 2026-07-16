@@ -40,6 +40,7 @@
 * 附件分析结果: `{attachment_analysis_context}`
 * 当前日期: `{current_date}`
 * 图解模式: `{diagram_mode}`
+* 智能辅导策略: `{guidance_strategy_context}`
 
   * `"开启"`：必须输出 `<diagram>`
   * `"关闭"`：只有学生当前消息显式要求图解时，才输出 `<diagram>`

@@ -195,9 +195,9 @@ const hasComplexity = computed(() => {
 }
 .code-card-content {
   display: flex; flex-direction: column; gap: 16px;
-  padding: 24px; background: var(--color-surface);
-  border: 1px solid var(--color-border); border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
+  padding: 0; background: transparent;
+  border: none; border-radius: 0;
+  box-shadow: none;
 }
 .markdown-shell { min-width: 0; line-height: 1.78; overflow-wrap: anywhere; font-size: 0.96rem; }
 .code-markdown-shell :deep(h1),
@@ -219,22 +219,22 @@ const hasComplexity = computed(() => {
 }
 .markdown-resource.is-code :deep(.code-block-wrapper) {
   margin: 1.2em 0; border: 1px solid var(--code-border); border-radius: var(--radius-md);
-  background: var(--code-bg); overflow: hidden; box-shadow: var(--shadow-sm);
+  background: var(--code-bg); overflow: hidden; box-shadow: none;
 }
 .markdown-resource.is-code :deep(pre code),
 .markdown-resource.is-code :deep(.code-block-wrapper code) {
   display: block; min-width: max-content; padding: 0; background: transparent !important;
-  color: var(--code-text) !important; font-family: var(--font-mono); font-size: 0.9rem; line-height: 1.76;
+  color: var(--code-text) !important; font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.85rem; line-height: 1.65;
 }
 .markdown-resource.is-code :deep(:not(pre) > code) {
-  padding: 0.16em 0.42em; border: 1px solid var(--color-border); border-radius: var(--radius-sm);
-  background: var(--color-bg) !important; color: var(--color-primary-text); font-family: var(--font-mono); font-size: 0.86em;
+  padding: 0.2em 0.4em; border: none; border-radius: var(--radius-sm);
+  background: var(--color-primary-soft) !important; color: var(--color-primary-text); font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.86em;
 }
 .code-header-meta { margin-bottom: 4px; }
 .code-summary-text { color: var(--color-text-secondary); font-size: 0.95rem; font-weight: 500; line-height: 1.6; }
 .code-footer-extras {
-  margin-top: 16px; padding: 18px; border: 1px solid var(--color-border);
-  border-radius: var(--radius-md); background: var(--color-surface); box-shadow: var(--shadow-sm);
+  margin-top: 16px; padding: 18px; border: none;
+  border-radius: var(--radius-md); background: var(--color-surface-hover, rgba(0,0,0,0.02)); box-shadow: none;
 }
 .footer-divider { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 .divider-label { font-size: 0.75rem; color: var(--color-primary-text); letter-spacing: 0.5px; font-weight: 700; }
@@ -248,8 +248,8 @@ const hasComplexity = computed(() => {
 .exercises-container { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
 .exercise-item {
   display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px;
-  border: 1px solid var(--color-border); border-radius: var(--radius-md); background: #fff;
-  color: var(--color-text-strong); font-size: 0.92rem; box-shadow: var(--shadow-sm);
+  border: none; border-radius: var(--radius-md); background: var(--color-surface);
+  color: var(--color-text-strong); font-size: 0.92rem; box-shadow: none;
 }
 .ex-num { flex-shrink: 0; padding: 2px 7px; border-radius: var(--radius-sm); background: var(--color-primary-soft); color: var(--color-primary-text); border: 1px solid var(--color-border); font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; }
 .compact .code-card-content { padding: 0; border: none; background: transparent; box-shadow: none; }

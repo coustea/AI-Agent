@@ -40,6 +40,8 @@
           <p>几步完成，开启你的个性化学习空间</p>
         </div>
 
+
+
         <form class="custom-form" @submit.prevent="handleRegister">
           <div class="form-group" :class="{ 'has-error': errors.username }">
             <label class="field-label" for="register-username">用户名</label>
@@ -68,7 +70,7 @@
                 class="input-control"
                 type="password"
                 autocomplete="new-password"
-                placeholder="至少 6 个字符"
+                placeholder="至少 5 个字符"
                 :disabled="isDeploying"
               />
             </div>
@@ -126,17 +128,6 @@
     </section>
   </main>
 
-  <!-- Status Dialog -->
-  <AuthStatusModal
-    :is-open="modalState.isOpen"
-    :type="modalState.type"
-    :title="modalState.title"
-    :message="modalState.message"
-    :countdown="modalState.countdown"
-    :primary-button-text="modalState.primaryButtonText"
-    @confirm="modalState.onConfirm"
-    @close="modalState.isOpen = false"
-  />
 </template>
 
 <script setup lang="ts">
@@ -146,23 +137,14 @@ import { PhUser as User, PhEnvelope as Message, PhLock as Lock, PhCheck as Check
 import { register } from '@/features/auth/api/auth'
 import { getErrorMessage } from '@/shared/api/http'
 import AppLogo from '@/shared/ui/AppLogo.vue'
-import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
+import { useToast } from 'primevue/usetoast'
 
 // Vue Router 实例，注册成功后跳转登录页
 const router = useRouter()
 // 注册请求进行中的加载状态
 const isDeploying = ref(false)
 
-// 状态弹窗的状态机（成功/错误/确认）
-const modalState = reactive({
-  isOpen: false,
-  type: 'success' as 'success' | 'error',
-  title: '',
-  message: '',
-  countdown: 0,
-  primaryButtonText: '确定',
-  onConfirm: () => {}
-})
+const toast = useToast()
 
 // 表单双向绑定数据
 const form = reactive({
@@ -205,7 +187,7 @@ const validateForm = () => {
     errors.password = '请输入密码'
     isValid = false
   } else if (form.password.length < 6 || form.password.length > 50) {
-    errors.password = '密码长度需为 6-50 个字符'
+    errors.password = '密码长度需为 5-50 个字符'
     isValid = false
   }
 
@@ -245,16 +227,8 @@ const handleRegister = async () => {
     } else if (field === 'password') {
       errors.password = msg
     } else {
-      // 通用错误：弹出错误提示框
-      modalState.type = 'error'
-      modalState.title = '注册失败'
-      modalState.message = msg
-      modalState.countdown = 0
-      modalState.primaryButtonText = '返回修改'
-      modalState.onConfirm = () => {
-        modalState.isOpen = false
-      }
-      modalState.isOpen = true
+      // 通用错误：气泡提示
+      toast.add({ severity: 'error', summary: '注册失败', detail: msg, life: 3000 })
     }
   } finally {
     isDeploying.value = false
@@ -565,4 +539,5 @@ const handleRegister = async () => {
     transform: none;
   }
 }
+
 </style>

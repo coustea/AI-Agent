@@ -1,316 +1,508 @@
-# -*- coding: utf-8 -*-
-"""Streaming ASR client for real-time speech recognition.
+"""Realtime speech-recognition client used by the digital-human bridge."""
 
-从 manager.py 抽取的 ASR WebSocket 逻辑，用于简化 bridge manager 的职责。
-
-StreamingASRSession: 单次 ASR 识别会话
-AdaptiveVADController: 自适应 VAD 参数控制器
-"""
+from __future__ import annotations
 
 import asyncio
 import base64
 import json
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 import websockets
 
+from app.avatar.services.endpoint_resolver import WebSocketTarget, endpoint_resolver
 from app.avatar.services.xfyun_auth import assemble_auth_url
-from app.config import ASR_API_KEY, ASR_API_SECRET, ASR_APP_ID, AVATAR_IAT_URL, ASR_VAD_EOS
+from app.config import (
+    ASR_API_KEY,
+    ASR_API_SECRET,
+    ASR_APP_ID,
+    ASR_VAD_EOS,
+    AVATAR_IAT_URL,
+)
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
 
+FIRST_AUDIO_TIMEOUT_SECONDS = 8.0
+AUDIO_INPUT_TIMEOUT_SECONDS = 3.0
+ASR_CLOSE_TIMEOUT_SECONDS = 0.25
+ASR_FINAL_TIMEOUT_SECONDS = 8.0
+ASR_EMPTY_FINAL_TIMEOUT_SECONDS = 2.5
+ASR_MAX_NODE_ATTEMPTS = 3
+ASR_REPLAY_FRAME_SECONDS = 0.02
 
-# 单次 ASR 流式识别会话：消费音频队列 → 连接讯飞 → 收发音频与结果
+
+class ASRResultAssembler:
+    """Apply Xfyun WPGS append/replace frames to one stable transcript."""
+
+    def __init__(self) -> None:
+        self._segments: dict[int, str] = {}
+        self.latest_text = ""
+        self.best_text = ""
+        self.published_text = ""
+
+    def consume(self, result: dict) -> str:
+        current_text = "".join(
+            candidates[0].get("w", "")
+            for item in result.get("ws", [])
+            if (candidates := item.get("cw", []))
+            and isinstance(candidates[0], dict)
+        )
+
+        segment_number = self._segment_number(result.get("sn"))
+        if result.get("pgs") == "rpl":
+            replace_range = result.get("rg")
+            try:
+                start, end = (int(value) for value in replace_range)
+            except (TypeError, ValueError):
+                start = end = None
+            if start is not None and end is not None:
+                for segment_id in range(start, end + 1):
+                    self._segments.pop(segment_id, None)
+                self.latest_text = self._joined_segments().strip()
+
+        if current_text:
+            if segment_number is None:
+                self.latest_text = current_text.strip()
+            else:
+                self._segments[segment_number] = current_text
+                self.latest_text = self._joined_segments().strip()
+        if self.latest_text:
+            self.best_text = self.latest_text
+        return self.latest_text
+
+    @property
+    def usable_text(self) -> str:
+        return self.latest_text or self.best_text
+
+    def should_publish(self, text: str) -> bool:
+        if not text or text == self.published_text:
+            return False
+        self.published_text = text
+        return True
+
+    def _joined_segments(self) -> str:
+        return "".join(self._segments[key] for key in sorted(self._segments))
+
+    @staticmethod
+    def _segment_number(value: object) -> int | None:
+        try:
+            return int(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None
+
+
+@dataclass(frozen=True)
+class ASRSendMetrics:
+    chunk_count: int
+    timeout_hit: bool
+
+
 class StreamingASRSession:
-    """Single ASR recognition session handler.
+    """Own one upstream ASR socket from readiness through final transcript."""
 
-    处理一次完整的 ASR 识别流程：
-    1. 从音频队列获取音频块
-    2. 连接讯飞 ASR WebSocket
-    3. 发送音频流
-    4. 接收识别结果
-    """
-
-    # 初始化会话：绑定音频队列、VAD 静默阈值，重置统计指标
     def __init__(
         self,
         audio_queue: asyncio.Queue,
         vad_eos: int = ASR_VAD_EOS,
-    ):
+        ready_event: asyncio.Event | None = None,
+        partial_callback: Callable[[str], Awaitable[None]] | None = None,
+    ) -> None:
         self.audio_queue = audio_queue
         self.vad_eos = vad_eos
+        self.ready_event = ready_event
+        self.partial_callback = partial_callback
         self.chunk_count = 0
         self.timeout_hit = False
+        self._results = ASRResultAssembler()
+        self._consumed_items: list[tuple[float, bytes] | None] = []
 
-    # 执行一轮 ASR 识别：等待首个音频块 → 建立连接 → 并发发送/接收 → 返回结果
+    def take_replay_items(self) -> list[tuple[float, bytes] | None]:
+        items = self._consumed_items
+        self._consumed_items = []
+        return items
+
     async def run(self) -> str | None:
-        """Execute one ASR recognition round. Returns recognized text or None.
+        auth_url = assemble_auth_url(
+            AVATAR_IAT_URL,
+            "GET",
+            ASR_API_KEY,
+            ASR_API_SECRET,
+        )
+        targets = await endpoint_resolver.resolve_candidates(AVATAR_IAT_URL)
+        try:
+            primary_target = targets[0]
+            logger.info(
+                "[ASR] live node=%s",
+                primary_target.host if primary_target is not None else "system-dns",
+            )
+            try:
+                result = await self._run_live_attempt(auth_url, primary_target)
+            except Exception as exc:
+                endpoint_resolver.report_failure(AVATAR_IAT_URL, primary_target)
+                logger.warning(
+                    "[ASR] live node failed node=%s error=%s",
+                    primary_target.host if primary_target is not None else "system-dns",
+                    type(exc).__name__,
+                )
+                if len(targets) <= 1:
+                    raise
+                result = None
+            if result and result.strip():
+                endpoint_resolver.report_success(AVATAR_IAT_URL, primary_target)
+                self._consumed_items.clear()
+                return result
+            endpoint_resolver.report_failure(AVATAR_IAT_URL, primary_target)
 
-        Returns:
-            str | None: 识别出的文本，如果无结果则返回 None
+            replay_chunks = [
+                item[1] for item in self._consumed_items if item is not None
+            ]
+            retry_targets = targets[1:ASR_MAX_NODE_ATTEMPTS]
+            if not replay_chunks or not retry_targets:
+                return result
 
-        Raises:
-            RuntimeError: ASR 连接或处理失败
+            result = await self._race_replay_targets(
+                auth_url,
+                retry_targets,
+                replay_chunks,
+            )
+            if result and result.strip():
+                self._consumed_items.clear()
+            return result
+        except Exception as exc:
+            error_name = type(exc).__name__
+            logger.error("[ASR] session failed: %s: %r", error_name, exc)
+            raise RuntimeError(
+                f"ASR session failed: {error_name}: {exc!r}"
+            ) from exc
+        finally:
+            logger.info(
+                "[ASR] session completed frames=%d timeout=%s result_len=%d",
+                self.chunk_count,
+                self.timeout_hit,
+                len(self._results.usable_text),
+            )
+
+    async def _run_live_attempt(
+        self,
+        auth_url: str,
+        target: WebSocketTarget | None,
+    ) -> str | None:
+        async with self._connect(auth_url, target) as websocket:
+            if self.ready_event is not None:
+                self.ready_event.set()
+
+            try:
+                first_item = await asyncio.wait_for(
+                    self.audio_queue.get(),
+                    timeout=FIRST_AUDIO_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                logger.debug("[ASR] no audio before idle connection timeout")
+                return None
+
+            if first_item is None:
+                return None
+
+            self._consumed_items.append(first_item)
+            _, first_chunk = first_item
+            return await self._stream(websocket, first_chunk)
+
+    async def _run_replay_attempt(
+        self,
+        auth_url: str,
+        target: WebSocketTarget | None,
+        chunks: list[bytes],
+    ) -> str | None:
+        async with self._connect(auth_url, target) as websocket:
+            receiver = asyncio.create_task(self._receive_result(websocket))
+            try:
+                await self._send_replay_audio(websocket, chunks)
+                return await self._await_final_result(receiver)
+            finally:
+                if not receiver.done():
+                    receiver.cancel()
+                await asyncio.gather(receiver, return_exceptions=True)
+
+    async def _race_replay_targets(
+        self,
+        auth_url: str,
+        targets: tuple[WebSocketTarget | None, ...],
+        chunks: list[bytes],
+    ) -> str | None:
+        """Replay one utterance on alternate nodes concurrently.
+
+        Empty provider responses are node-specific and used to make retries
+        take one full utterance plus timeout per node. Isolated sessions avoid
+        sharing WPGS assembly state while the first usable transcript wins.
         """
-        # 等待首个音频块（5 秒超时，超时即视为无人说话，返回 None）
+
+        async def replay(
+            attempt: int,
+            target: WebSocketTarget | None,
+        ) -> tuple[
+            WebSocketTarget | None,
+            str | None,
+            ASRResultAssembler,
+            Exception | None,
+        ]:
+            logger.warning(
+                "[ASR] empty response; racing %d frames on alternate node attempt=%d",
+                len(chunks),
+                attempt,
+            )
+            logger.info(
+                "[ASR] replay node=%s",
+                target.host if target is not None else "system-dns",
+            )
+            replay_session = StreamingASRSession(
+                asyncio.Queue(),
+                vad_eos=self.vad_eos,
+            )
+            try:
+                result = await replay_session._run_replay_attempt(
+                    auth_url,
+                    target,
+                    chunks,
+                )
+                return target, result, replay_session._results, None
+            except Exception as exc:
+                return target, None, replay_session._results, exc
+
+        tasks = {
+            asyncio.create_task(replay(attempt, target))
+            for attempt, target in enumerate(targets, start=2)
+        }
+        pending = set(tasks)
         try:
-            first_item = await asyncio.wait_for(self.audio_queue.get(), timeout=5.0)
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in done:
+                    target, result, assembler, error = task.result()
+                    if error is not None:
+                        endpoint_resolver.report_failure(AVATAR_IAT_URL, target)
+                        logger.warning(
+                            "[ASR] alternate node failed node=%s error=%s",
+                            target.host if target is not None else "system-dns",
+                            type(error).__name__,
+                        )
+                        continue
+                    if result and result.strip():
+                        endpoint_resolver.report_success(AVATAR_IAT_URL, target)
+                        self._results = assembler
+                        for pending_task in pending:
+                            pending_task.cancel()
+                        await asyncio.gather(*pending, return_exceptions=True)
+                        return result
+                    endpoint_resolver.report_failure(AVATAR_IAT_URL, target)
+            return None
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    @staticmethod
+    def _connect(auth_url: str, target: WebSocketTarget | None):
+        connect_kwargs = target.connect_kwargs() if target is not None else {}
+        return websockets.connect(
+            auth_url,
+            open_timeout=8,
+            close_timeout=ASR_CLOSE_TIMEOUT_SECONDS,
+            **connect_kwargs,
+        )
+
+    async def _stream(self, websocket, first_chunk: bytes) -> str | None:
+        await websocket.send(json.dumps(self._start_frame(first_chunk)))
+        receiver = asyncio.create_task(self._receive_result(websocket))
+        await asyncio.sleep(0)
+        sender = asyncio.create_task(self._send_audio(websocket))
+        try:
+            done, _ = await asyncio.wait(
+                (sender, receiver),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if receiver in done:
+                return receiver.result()
+
+            metrics = sender.result()
+            self.chunk_count = metrics.chunk_count
+            self.timeout_hit = metrics.timeout_hit
+            return await self._await_final_result(receiver)
+        finally:
+            for task in (sender, receiver):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(sender, receiver, return_exceptions=True)
+
+    async def _send_audio(self, websocket) -> ASRSendMetrics:
+        # Browser capture is the real-time clock. Sending the same PCM duration
+        # again here would add one full utterance of latency after audio_end.
+        chunk_count = 1
+        self.chunk_count = chunk_count
+        timeout_hit = False
+
+        while True:
+            try:
+                item = await asyncio.wait_for(
+                    self.audio_queue.get(),
+                    timeout=AUDIO_INPUT_TIMEOUT_SECONDS,
+                )
+            except asyncio.TimeoutError:
+                timeout_hit = True
+                self.timeout_hit = True
+                logger.debug("[ASR] audio input timed out; closing utterance")
+                break
+
+            if item is None:
+                self._consumed_items.append(None)
+                break
+
+            self._consumed_items.append(item)
+            _, chunk = item
+            await websocket.send(json.dumps(self._audio_frame(chunk)))
+            chunk_count += 1
+            self.chunk_count = chunk_count
+
+        await websocket.send(json.dumps(self._end_frame()))
+        return ASRSendMetrics(chunk_count=chunk_count, timeout_hit=timeout_hit)
+
+    async def _send_replay_audio(
+        self,
+        websocket,
+        chunks: list[bytes],
+    ) -> None:
+        if not chunks:
+            return
+        await websocket.send(json.dumps(self._start_frame(chunks[0])))
+        if len(chunks) > 1:
+            await asyncio.sleep(ASR_REPLAY_FRAME_SECONDS)
+        for index, chunk in enumerate(chunks[1:], start=1):
+            await websocket.send(json.dumps(self._audio_frame(chunk)))
+            if index < len(chunks) - 1:
+                await asyncio.sleep(ASR_REPLAY_FRAME_SECONDS)
+        await websocket.send(json.dumps(self._end_frame()))
+
+    async def _await_final_result(self, receiver: asyncio.Task) -> str | None:
+        timeout = (
+            ASR_FINAL_TIMEOUT_SECONDS
+            if self._results.usable_text
+            else ASR_EMPTY_FINAL_TIMEOUT_SECONDS
+        )
+        try:
+            return await asyncio.wait_for(asyncio.shield(receiver), timeout=timeout)
         except asyncio.TimeoutError:
-            logger.debug("[ASR] No audio chunk received within timeout")
-            return None
+            transcript = self._results.usable_text
+            logger.warning(
+                "[ASR] provider final timeout after %.1fs partial_len=%d",
+                timeout,
+                len(transcript),
+            )
+            return transcript or None
 
-        # 收到结束信号则直接返回
-        if first_item is None:
-            return None
-
-        # 解包时间戳与音频字节
-        _, first_chunk = first_item
-
-        # 构造带鉴权的讯飞 ASR WebSocket 地址
-        auth_url = assemble_auth_url(AVATAR_IAT_URL, 'GET', ASR_API_KEY, ASR_API_SECRET)
-
-        try:
-            # 建立识别会话 WebSocket
-            async with websockets.connect(auth_url) as ws:
-                # 并发：一个任务发送音频流，一个任务接收识别结果
-                send_task = asyncio.create_task(self._send_audio(ws, first_chunk))
-                recv_task = asyncio.create_task(self._receive_result(ws))
-
-                # 先等待识别结果
-                result = await recv_task
-
-                # 识别结束后取消仍在发送的任务并回收其统计指标
-                if not send_task.done():
-                    send_task.cancel()
-                send_result = await asyncio.gather(send_task, return_exceptions=True)
-
-                # 从发送任务结果中提取本轮回填的指标
-                if isinstance(send_result[0], dict):
-                    self.chunk_count = send_result[0].get("chunk_count", 0)
-                    self.timeout_hit = send_result[0].get("timeout_hit", False)
-
-                logger.info(
-                    "[ASR] Session completed chunks=%d timeout=%s result_len=%d",
-                    self.chunk_count,
-                    self.timeout_hit,
-                    len(result or ""),
+    async def _receive_result(self, websocket) -> str:
+        async for message in websocket:
+            data = json.loads(message)
+            code = data.get("code", -1)
+            if code != 0:
+                message_text = data.get("message", "Unknown error")
+                raise RuntimeError(
+                    f"ASR API error: code={code} message={message_text}"
                 )
 
-                # 返回本轮识别文本
-                return result
-        except Exception as e:
-            logger.error("[ASR] Session failed: %s", e)
-            raise RuntimeError(f"ASR session failed: {e}")
+            payload = data.get("data", {})
+            candidate = self._results.consume(payload.get("result", {}))
+            if (
+                self.partial_callback is not None
+                and self._results.should_publish(candidate)
+            ):
+                await self.partial_callback(candidate)
+            if payload.get("status") == 2:
+                return self._results.usable_text
 
-    # 向 ASR WebSocket 发送音频流：启动帧 → 中间帧 → 结束帧，返回发送指标
-    async def _send_audio(self, ws, first_chunk: bytes) -> dict:
-        """Send audio stream to ASR WebSocket.
+        return self._results.usable_text
 
-        Args:
-            ws: WebSocket connection
-            first_chunk: First audio chunk (already retrieved from queue)
-
-        Returns:
-            dict: Metrics about the sending process (chunk_count, timeout_hit)
-        """
-        # 将首个音频块编码为 base64，构造并发送启动帧
-        first_b64 = base64.b64encode(first_chunk).decode()
-        start_params = {
+    def _start_frame(self, chunk: bytes) -> dict:
+        return {
             "common": {"app_id": ASR_APP_ID},
             "business": {
                 "language": "zh_cn",
                 "domain": "iat",
                 "accent": "mandarin",
                 "vad_eos": self.vad_eos,
-                "ptt": 1,      # Enable punctuation
-                "pd": "0",     # Speaker separation mode
-                "nunum": 0,    # Convert numbers to Arabic
-                "dwa": "wpgs", # Enable dynamic correction
+                "ptt": 1,
+                "pd": "0",
+                "nunum": 1,
+                "dwa": "wpgs",
             },
             "data": {
-                "status": 0,  # 0 = first frame
+                "status": 0,
                 "format": "audio/L16;rate=16000",
                 "encoding": "raw",
-                "audio": first_b64,
+                "audio": base64.b64encode(chunk).decode(),
             },
         }
-        # 发送启动帧（status=0），携带首个音频块
-        await ws.send(json.dumps(start_params))
-        chunk_count = 1
-        timeout_hit = False
-        await asyncio.sleep(0.01)  # Minimal inter-frame delay for first frame
 
-        # 循环发送中间帧（status=1），直到队列超时或收到结束信号
-        while True:
-            try:
-                item = await asyncio.wait_for(self.audio_queue.get(), timeout=3.0)
-            except asyncio.TimeoutError:
-                # 队列 3 秒无数据，判定语音结束，准备发送结束帧
-                timeout_hit = True
-                logger.debug("[ASR] Audio queue timeout, sending end frame")
-                break
-
-            # 收到结束信号（None）则停止发送
-            if item is None:
-                break
-
-            _, chunk = item
-            audio_b64 = base64.b64encode(chunk).decode()
-            frame = {
-                "data": {
-                    "status": 1,  # 1 = middle frame
-                    "format": "audio/L16;rate=16000",
-                    "encoding": "raw",
-                    "audio": audio_b64,
-                }
-            }
-            await ws.send(json.dumps(frame))
-            chunk_count += 1
-            # 不添加帧间延时，尽快发送以降低延迟（队列本身随真实采集速率节流）
-
-        # 发送结束帧（status=2），标识音频流结束
-        end_frame = {
+    @staticmethod
+    def _audio_frame(chunk: bytes) -> dict:
+        return {
             "data": {
-                "status": 2,  # 2 = last frame
+                "status": 1,
+                "format": "audio/L16;rate=16000",
+                "encoding": "raw",
+                "audio": base64.b64encode(chunk).decode(),
+            }
+        }
+
+    @staticmethod
+    def _end_frame() -> dict:
+        return {
+            "data": {
+                "status": 2,
                 "format": "audio/L16;rate=16000",
                 "encoding": "raw",
                 "audio": "",
             }
         }
-        # 发送结束帧并结束发送任务
-        await ws.send(json.dumps(end_frame))
-
-        # 返回本轮回填的发送指标（块数、是否触发超时）
-        return {"chunk_count": chunk_count, "timeout_hit": timeout_hit}
-
-    # 从 ASR WebSocket 接收识别结果：累加词片直到 status=2
-    async def _receive_result(self, ws) -> str:
-        """Receive ASR result from WebSocket.
-
-        Args:
-            ws: WebSocket connection
-
-        Returns:
-            str: Recognized text (stripped)
-        """
-        result_text = ""
-        async for message in ws:
-            data = json.loads(message)
-            code = data.get('code', -1)
-
-            # 非零 code 表示讯飞接口错误，停止接收
-            if code != 0:
-                error_msg = data.get('message', 'Unknown error')
-                logger.error("[ASR] API error: code=%d message=%s", code, error_msg)
-                break
-
-            result = data.get('data', {}).get('result', {})
-            status = data.get('data', {}).get('status')
-
-            # 累加本轮词片文本
-            current_text = ""
-            for ws_item in result.get('ws', []):
-                for cw in ws_item.get('cw', []):
-                    current_text += cw.get('w', '')
-
-            # 讯飞 IAT 通常为整句快照而非增量，故用覆盖模式避免重复拼接
-            if current_text:
-                if status == 2:
-                    # 最终结果：仅当文本有效（长度>1）才更新
-                    if current_text.strip() and len(current_text.strip()) > 1:
-                        result_text = current_text
-                else:
-                    result_text = current_text
-
-            # status=2 表示最终结果，结束接收
-            if status == 2:
-                break
-
-        # 返回去除首尾空白的识别文本
-        return result_text.strip()
 
 
-# 自适应 VAD 控制器：根据历史识别表现动态调整静默结束阈值
 class AdaptiveVADController:
-    """Adaptive VAD timeout controller.
+    """Keep provider EOS conservative; browser VAD owns normal turn ending."""
 
-    根据历史 ASR 轮次的表现动态调整 VAD 结束静默时长：
-    - 空识别率高 → 增加 VAD timeout，避免过早结束
-    - 有效语音多且速度快 → 减少 VAD timeout，提高响应速度
-    """
-
-    # 初始化：基准 VAD 阈值、连续空识别计数、空识别率、历史指标
-    def __init__(self, base_vad_eos: int = ASR_VAD_EOS):
+    def __init__(self, base_vad_eos: int = ASR_VAD_EOS) -> None:
         self.base_vad_eos = base_vad_eos
         self.consecutive_empty = 0
         self.empty_rate = 0.0
         self.round_metrics: list[dict] = []
 
-    # 根据历史指标计算自适应 VAD 静默阈值（800~1800 毫秒）
     def compute_vad_eos(self) -> int:
-        """Compute adaptive VAD timeout based on metrics.
+        return max(1000, min(1800, self.base_vad_eos))
 
-        Returns:
-            int: Computed VAD EOS value in milliseconds (clamped to 800-1800)
-        """
-        # 以基准值为起点计算本次 VAD 静默阈值
-        vad = self.base_vad_eos
+    def record_round(
+        self,
+        chunk_count: int,
+        timeout_hit: bool,
+        has_result: bool,
+    ) -> None:
+        self.consecutive_empty = 0 if has_result else self.consecutive_empty + 1
+        self.round_metrics.append(
+            {
+                "chunk_count": chunk_count,
+                "timeout_hit": timeout_hit,
+                "has_result": has_result,
+            }
+        )
+        self.round_metrics = self.round_metrics[-20:]
+        if self.round_metrics:
+            empty_count = sum(
+                1 for metric in self.round_metrics if not metric["has_result"]
+            )
+            self.empty_rate = empty_count / len(self.round_metrics)
 
-        # 连续空识别较多时，加大超时避免过早截断用户说话
-        if self.consecutive_empty >= 3:
-            vad += 180
-        if self.empty_rate >= 0.6:
-            vad += 120
-
-        # 用户说话多且快时，降低超时以提升响应速度
-        if len(self.round_metrics) >= 3:
-            avg_chunks = sum(
-                m.get("chunk_count", 0) for m in self.round_metrics[-5:]
-            ) / min(5, len(self.round_metrics))
-
-            if avg_chunks >= 26 and self.empty_rate <= 0.35:
-                vad -= 120
-            elif avg_chunks >= 18 and self.empty_rate <= 0.45:
-                vad -= 60
-
-        # 阈值限制在 800~1800 毫秒之间
-        return max(800, min(1800, vad))
-
-    # 记录一轮 ASR 识别指标，更新空识别率和连续空识别计数
-    def record_round(self, chunk_count: int, timeout_hit: bool, has_result: bool):
-        """Record ASR round metrics for adaptive calculation.
-
-        Args:
-            chunk_count: Number of audio chunks sent this round
-            timeout_hit: Whether the audio queue timed out
-            has_result: Whether recognition produced non-empty text
-        """
-        # 更新连续空识别计数
-        if has_result:
-            self.consecutive_empty = 0
-        else:
-            self.consecutive_empty += 1
-
-        # 重算整体空识别率
-        total = len(self.round_metrics) + 1
-        empty_count = sum(1 for m in self.round_metrics if not m.get("has_result"))
-        if not has_result:
-            empty_count += 1
-        self.empty_rate = empty_count / total
-
-        # 记录本轮指标用于后续自适应计算
-        self.round_metrics.append({
-            "chunk_count": chunk_count,
-            "timeout_hit": timeout_hit,
-            "has_result": has_result,
-        })
-
-        # 仅保留最近 20 轮，避免指标无限增长
-        if len(self.round_metrics) > 20:
-            self.round_metrics = self.round_metrics[-20:]
-
-    # 重置所有统计指标到初始状态
-    def reset(self):
+    def reset(self) -> None:
         self.consecutive_empty = 0
         self.empty_rate = 0.0
         self.round_metrics = []

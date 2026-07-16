@@ -26,8 +26,8 @@ class UserRead(BaseModel):
     email: str | None = None
     # 头像 URL（可选）
     avatar: str | None = None
-    # 是否首次登录（False=未完成 onboarding，True=已完成）
-    is_first_login: bool = False
+    # onboarding 是否已完成（False=未完成需弹窗，True=已完成）
+    onboarding_completed: bool = False
 
     # ── 基础信息（原 profile base_info，onboarding 填写）──
     school: str | None = None

@@ -83,6 +83,12 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
     tool_calls = getattr(message, "tool_calls", None)
     tool_call_id = getattr(message, "tool_call_id", None)
 
+    # Explicit video requests are UI artifacts, not TutorAgent prompts. Keeping
+    # them out of history guarantees the model cannot infer an implicit trigger.
+    metadata = getattr(message, "usage_metadata", None)
+    if isinstance(metadata, dict) and isinstance(metadata.get("video"), dict):
+        return None
+
     # 用户消息：将结构化 content 转为 HumanMessage（文本/图片/文件）
     if role == "user":
         if isinstance(raw_content, list) and raw_content:

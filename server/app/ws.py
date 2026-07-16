@@ -49,13 +49,17 @@ async def avatar_websocket(websocket: WebSocket) -> None:
     # 接受 WebSocket 连接
     await websocket.accept()
     # 获取或创建当前用户的数字人桥接实例
-    bridge = await avatar_bridge_manager.get_or_create_bridge(user.id, username=user.username)
+    bridge, owner = await avatar_bridge_manager.attach_frontend(
+        user.id,
+        websocket,
+        username=user.username,
+    )
     try:
         # 进入消息循环，处理前端语音数据并转发到 TTS/ASR 服务
-        await bridge.handle_frontend(websocket)
+        await bridge.handle_frontend(websocket, owner)
     except WebSocketDisconnect:
         # 客户端正常断开连接，静默处理
         pass
     finally:
         # 清理桥接资源（音频流、连接池等）
-        await avatar_bridge_manager.cleanup(user.id)
+        await avatar_bridge_manager.cleanup(user.id, bridge, owner)

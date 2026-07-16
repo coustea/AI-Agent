@@ -1,44 +1,37 @@
-"""阅读智能体 — 基于教学蓝图生成拓展阅读材料（使用搜索获取真实 URL）。
-
-支持重试：首次生成资源不足时自动重试一次，合并两次结果。
-"""
+"""阅读智能体 — 检索真实网页资源后生成可验证的阅读推荐。"""
 
 from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import (
-    build_node_context,
-    build_resource_context,
-    build_path_context,
-)
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.common import build_path_context, build_resource_context
+from app.resource.research import research_web
+from app.resource.schemas import AgentResult, ResourceInput
 
 if TYPE_CHECKING:
     from app.path.schemas import PathResourceRequest
+    from app.shared.research.schemas import ResearchEvent, ResearchSourceItem
 
 logger = get_logger(__name__)
 
-# 重试配置
-MAX_RETRY_ATTEMPTS = 2  # 最多运行次数（首次 + 1 次重试）
-MIN_RESOURCES_THRESHOLD = 2  # 低于此数量触发重试
-
 
 class ReadingResource(BaseModel):
-    """单个阅读资源：书籍/论文/文章/文档/实践项目。"""
+    """一个经过搜索结果 URL 校验的阅读资源。"""
+
     id: str = Field(description="资源编号，如 R1")
     type: str = Field(description="资源类型，如 book/paper/article/documentation/practice_project")
     title: str = Field(description="资源标题")
     authors: list[str] = Field(default_factory=list)
-    url: str = Field(description="资源链接，必须是有效的 http/https URL")
+    url: str = Field(description="必须来自本次网页检索结果的 http/https URL")
     language: str = "中文"
     difficulty: str = "medium"
     suitable_for: str = ""
@@ -49,16 +42,24 @@ class ReadingResource(BaseModel):
     estimated_time: str = ""
     note: str = ""
 
+    @field_validator("url")
+    @classmethod
+    def validate_url(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized.startswith(("http://", "https://")):
+            raise ValueError("url must use the http or https scheme")
+        return normalized
 
-# LLM 输出包装类（ainvoke_json 要求 BaseModel 子类）
+
 class ReadingPayload(BaseModel):
-    """阅读资源列表 — LLM 结构化输出容器。"""
-    resources: list[ReadingResource] = Field(description="推荐的阅读资源列表")
+    """阅读 Agent 的结构化输出。"""
+
+    resources: list[ReadingResource] = Field(min_length=1)
 
 
 @register_agent
 class ReadingAgent(BaseResourceAgent):
-    """基于教学蓝图生成拓展阅读材料。"""
+    """唯一保留网页检索的 Worker：它需要真实 URL，而非知识补全。"""
 
     agent_id = "reading"
     agent_name = "拓展阅读"
@@ -68,28 +69,13 @@ class ReadingAgent(BaseResourceAgent):
         self.llm = get_llm()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        parts = build_resource_context(input_data)
-        input_text = "\n\n".join(parts)
         return await self._generate_reading(
-            input_text=input_text,
-            title_prefix=input_data.learning_need[:32],
+            input_text="\n\n".join(build_resource_context(input_data)),
+            title_prefix=input_data.learning_need[:80],
             config=input_data.agent_config,
         )
-
-    async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        parts = build_node_context(input_data)
-        input_text = "\n\n".join(parts)
-        result = await self._generate_reading(
-            input_text=input_text,
-            title_prefix=input_data.node_title,
-            config=input_data.agent_config,
-        )
-        result.metadata["path_id"] = input_data.path_id
-        result.metadata["node_id"] = input_data.node_id
-        return result
 
     async def generate_for_path(self, request: "PathResourceRequest") -> AgentResult:
-        """路径规划统一接口 — 接收 PathResourceRequest，返回 AgentResult。"""
         if request.tutorial is None:
             return AgentResult(
                 success=False,
@@ -97,10 +83,9 @@ class ReadingAgent(BaseResourceAgent):
                 file_type="json",
                 error="缺少教程内容",
             )
-        input_text = "\n\n".join(build_path_context(request))
         result = await self._generate_reading(
-            input_text=input_text,
-            title_prefix=request.node_title,
+            input_text="\n\n".join(build_path_context(request)),
+            title_prefix=request.node_title[:80],
             config={},
         )
         result.metadata["node_id"] = request.node_id
@@ -111,388 +96,177 @@ class ReadingAgent(BaseResourceAgent):
         *,
         input_text: str,
         title_prefix: str,
-        config: dict,
+        config: dict[str, Any],
     ) -> AgentResult:
-        """内部方法 — 使用搜索获取真实 URL，然后生成拓展阅读推荐。
-
-        流程：
-        1. 根据知识点构建搜索查询
-        2. 使用 Tavily/DuckDuckGo 搜索获取真实 URL
-        3. 基于搜索结果生成阅读推荐
-        4. 资源不足时自动重试一次，合并两次结果
-        """
-        coverage = config.get("coverage") or "extended"
-        max_items = config.get("max_items", 5)
-        # 至少生成 max_items 的一半，否则触发重试
-        min_items = max(2, max_items // 2)  # 至少生成 max_items 的一半
-        language_preference = config.get("language_preference") or "chinese"
-
-        logger.info("Agent[%s] 开始生成: learning_need=%s", self.agent_id, title_prefix)
+        """一次检索、一次生成；输出的每个 URL 必须可追溯到检索结果。"""
         started = time.perf_counter()
+        coverage = config.get("coverage") or "extended"
+        max_items = max(1, int(config.get("max_items", 5)))
+        language_preference = config.get("language_preference") or "chinese"
+        query = self._build_search_query(title_prefix, language_preference)
 
-        await self.emitter.send(self.agent_id, "running", "正在搜索相关阅读资源...", 25)
+        logger.info("Agent[%s] 开始检索: query=%s", self.agent_id, query)
+        await self.emitter.send(self.agent_id, "running", "正在检索真实阅读链接...", 25)
+        try:
+            report = await research_web(
+                query,
+                objective="为阅读推荐获取真实、可访问的权威学习资源 URL",
+                event_handler=self._handle_research_event,
+            )
+        except Exception as exc:
+            logger.warning("Agent[%s] 阅读链接检索失败: %s", self.agent_id, exc)
+            return self._search_failure(title_prefix, [exc])
+        sources = self._usable_sources(report.sources)
+        if not sources:
+            return self._search_failure(title_prefix, report.errors)
 
-        # 步骤 1: 构建搜索查询
-        search_queries = self._build_search_queries(input_text, title_prefix, language_preference)
-        logger.info(
-            "Agent[%s] 步骤: 构建搜索查询 queries=%d min_items=%d",
-            self.agent_id, len(search_queries), min_items,
+        await self.emitter.send(self.agent_id, "running", "正在基于真实链接编排阅读路径...", 60)
+        prompt = prompts.get("resource").get("reading")
+        full_prompt = f"{prompt}\n\n{self._build_generation_input(input_text, sources, max_items, coverage)}"
+        payload = await self.run_with_heartbeat(
+            self.llm.ainvoke_json(ReadingPayload, full_prompt),
+            messages=["正在筛选权威资料...", "正在补充阅读顺序与学习建议..."],
+            interval_seconds=12.0,
+            progress=70,
         )
-
-        # 步骤 2: 执行搜索获取真实 URL
-        search_results = await self._search_resources(search_queries, min_items)
-
-        # 步骤 3: 带重试的 LLM 生成阅读推荐
-        best_resources: list[ReadingResource] | None = None
-        # 带重试的生成循环：首次不足则重新搜索并合并
-        for attempt in range(1, MAX_RETRY_ATTEMPTS + 1):
-            is_retry = attempt > 1
-            if is_retry:
-                await self.emitter.send(
-                    self.agent_id, "running",
-                    f"首次生成资源不足，正在第 {attempt} 次重试...", 55,
-                )
-                # 重试时重新搜索以获取更多素材
-                retry_queries = self._build_retry_queries(input_text, title_prefix, language_preference)
-                extra_results = await self._search_resources(retry_queries, min_items)
-                # 合并搜索结果并去重
-                existing_urls = {r.get("url") for r in search_results}
-                for r in extra_results:
-                    if r.get("url") and r["url"] not in existing_urls:
-                        search_results.append(r)
-                        existing_urls.add(r["url"])
-                logger.info(
-                    "Agent[%s] 重试: 合并搜索结果 total=%d elapsed_ms=%d",
-                    self.agent_id, len(search_results),
-                    int((time.perf_counter() - started) * 1000),
-                )
-
-            # 搜索为空时：非末次重试，末次则失败返回
-            if not search_results:
-                if attempt < MAX_RETRY_ATTEMPTS:
-                    logger.warning("Agent[%s] 搜索结果为空，准备重试", self.agent_id)
-                    continue
-                return AgentResult(
-                    success=False,
-                    error=f"搜索结果为空，无法生成阅读资源（已重试 {attempt} 次）",
-                    title=f"{title_prefix} - 拓展阅读",
-                    summary="搜索资源失败",
-                    file_type="json",
-                    metadata={"agent_id": "reading", "error_type": "empty_search_results"},
-                )
-
-            prompt = prompts.get("resource").get("reading")
-            enhanced_input = self._build_enhanced_input(
-                search_results, input_text, config,
-                is_retry=is_retry,
-            )
-
-            logger.info(
-                "Agent[%s] LLM 调用: attempt=%d/%d search_results=%d input_len=%d",
-                self.agent_id, attempt, MAX_RETRY_ATTEMPTS, len(search_results),
-                len(f"{prompt}\n\n{enhanced_input}"),
-            )
-            await self.emitter.send(
-                self.agent_id, "running",
-                f"正在提炼拓展阅读推荐（第 {attempt} 次）...",
-                60 if not is_retry else 70,
-            )
-            llm_started = time.perf_counter()
-            result = await self.run_with_heartbeat(
-                self.llm.ainvoke_json(
-                    ReadingPayload,
-                    f"{prompt}\n\n{enhanced_input}",
-                ),
-                messages=[
-                    "正在提炼拓展阅读推荐...",
-                    "正在补充资源使用建议...",
-                ],
-                interval_seconds=12.0,
-                progress=70 if not is_retry else 80,
-            )
-            attempt_resources = result.resources
-            llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
-            logger.info(
-                "Agent[%s] LLM 完成: resources=%d elapsed_ms=%d",
-                self.agent_id, len(attempt_resources), llm_elapsed,
-            )
-
-            if best_resources is None:
-                best_resources = list(attempt_resources)
-            else:
-                # 合并两次结果：去重并追加新资源
-                best_resources = _merge_reading_resources(best_resources, list(attempt_resources))
-
-            merged_count = len(best_resources)
-            logger.info(
-                "Agent[%s] attempt=%d resources=%d merged_total=%d",
-                self.agent_id, attempt, len(attempt_resources), merged_count,
-            )
-
-            # 资源充足则提前结束重试
-            if merged_count >= min_items:
-                break
-
-        if best_resources is None:
+        resources = self._verify_resources(payload.resources, sources, max_items)
+        if not resources:
             return AgentResult(
                 success=False,
-                error="阅读资源生成失败：多次尝试均未产出结果",
+                error="阅读推荐未引用本次检索到的真实 URL",
                 title=f"{title_prefix} - 拓展阅读",
-                summary="生成失败",
+                summary="生成结果未通过真实链接校验",
                 file_type="json",
-                metadata={"agent_id": "reading", "error_type": "all_attempts_failed"},
+                metadata={"agent_id": self.agent_id, "error_type": "unverified_url"},
             )
 
-        # 最终校验：合并后仍不足则返回失败
-        if not best_resources:
-            return AgentResult(
-                success=False,
-                error="阅读资源生成失败：合并后仍无有效资源",
-                title=f"{title_prefix} - 拓展阅读",
-                summary="生成失败",
-                file_type="json",
-                metadata={"agent_id": "reading", "error_type": "no_resources_after_merge"},
-            )
-
-        # 序列化为 JSON
         content = json.dumps(
-            [r.model_dump(mode="json") for r in best_resources],
+            [resource.model_dump(mode="json") for resource in resources],
             ensure_ascii=False,
             indent=2,
         )
-        total_elapsed = int((time.perf_counter() - started) * 1000)
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         logger.info(
-            "Agent[%s] 生成完成: resources=%d coverage=%s elapsed_ms=%d → %s",
-            self.agent_id, len(best_resources), coverage, total_elapsed,
-            content[:200].replace("\n", " "),
+            "Agent[%s] 生成完成: resources=%d sources=%d elapsed_ms=%d",
+            self.agent_id,
+            len(resources),
+            len(sources),
+            elapsed_ms,
         )
-
         return AgentResult(
             success=True,
             content=content,
             file_type="json",
             title=f"{title_prefix} - 拓展阅读",
-            summary=f"生成 {len(best_resources)} 条拓展阅读材料",
+            summary=f"生成 {len(resources)} 条真实链接的拓展阅读材料",
             metrics={
-                "resource_count": len(best_resources),
-                "search_results_used": len(search_results),
+                "resource_count": len(resources),
+                "verified_source_count": len(sources),
                 "coverage": coverage,
                 "language_preference": language_preference,
             },
-            metadata={
-                "agent_id": "reading",
-                "coverage": coverage,
-                "min_items": min_items,
-                "max_items": max_items,
-                "language_preference": language_preference,
-                "search_queries": search_queries[:3],
+            metadata={"agent_id": self.agent_id, "coverage": coverage},
+        )
+
+    async def _handle_research_event(self, event: "ResearchEvent") -> None:
+        status = event.get("status", "running")
+        action = event.get("action", "检索网页资料")
+        tool_status = {"running": "running", "done": "completed", "failed": "failed"}.get(
+            status,
+            "running",
+        )
+        await self.emitter.send(
+            self.agent_id,
+            "running",
+            f"正在{action}..." if status == "running" else f"{action}{'已完成' if status == 'done' else '未完成'}",
+            data={
+                "phase": "reading_research",
+                "tool_name": event.get("tool_name"),
+                "tool_status": tool_status,
             },
         )
 
-    def _build_retry_queries(
-        self,
-        input_text: str,
-        title_prefix: str,
-        language_preference: str,
-    ) -> list[str]:
-        """构建重试时的差异化搜索查询，避免与首次查询重复。"""
-        queries = []
-        if language_preference == "chinese":
-            queries.append(f"{title_prefix} 入门指南 推荐")
-            queries.append(f"{title_prefix} 实战项目 案例")
-        else:
-            queries.append(f"{title_prefix} beginner guide recommended")
-            queries.append(f"{title_prefix} hands-on project tutorial")
-        queries.append(f"{title_prefix} 拓展阅读 书单")
-        return queries[:3]
+    @staticmethod
+    def _build_search_query(title_prefix: str, language_preference: str) -> str:
+        language_hint = {
+            "chinese": "中文",
+            "english": "English",
+            "both": "中文 English",
+        }.get(language_preference, "")
+        return f"{title_prefix} {language_hint} 官方文档 教程 学习资源".strip()
 
-    def _build_search_queries(
-        self,
-        input_text: str,
-        title_prefix: str,
-        language_preference: str
-    ) -> list[str]:
-        """构建搜索查询列表。"""
-        queries = []
-
-        # 从输入文本中提取关键知识点
-        # 使用标题作为主要查询
-        queries.append(f"{title_prefix} 教程")
-        queries.append(f"{title_prefix} 学习资源")
-
-        # 根据语言偏好调整查询
-        if language_preference == "chinese":
-            queries.append(f"{title_prefix} 中文教程")
-        else:
-            queries.append(f"{title_prefix} tutorial")
-
-        return queries[:5]  # 最多 5 个查询
-
-    async def _search_resources(
-        self,
-        queries: list[str],
-        min_items: int
-    ) -> list[dict]:
-        """执行搜索获取真实资源 URL。"""
-        results = []
-
-        for query in queries:
-            try:
-                # 使用基类内置的统一搜索工具调用
-                report = await self.search(query)
-
-                # 直接使用结构化搜索结果
-                for source in report.sources:
-                    results.append({
-                        "title": source.title,
-                        "url": source.url,
-                        "snippet": source.summary,
-                    })
-
-                logger.info(
-                    "Agent[%s] 搜索完成: query=%s results=%d",
-                    self.agent_id, query, len(report.sources),
-                )
-
-                # 如果已经获取足够的资源，停止搜索
-                if len(results) >= min_items * 2:
-                    break
-
-            except Exception as e:
-                logger.warning("Agent[%s] 搜索异常: query=%s error=%s", self.agent_id, query, e)
+    @staticmethod
+    def _usable_sources(sources: list["ResearchSourceItem"]) -> list["ResearchSourceItem"]:
+        unique: list[ResearchSourceItem] = []
+        seen_urls: set[str] = set()
+        for source in sources:
+            if not source.url or not source.url.startswith(("http://", "https://")):
                 continue
+            key = _normalized_url(source.url)
+            if key and key not in seen_urls:
+                seen_urls.add(key)
+                unique.append(source)
+        return unique[:12]
 
-        # 去重（按 URL）
-        unique_results = []
-        seen_urls = set()
-        for result in results:
-            url = result.get("url", "")
-            if url and url not in seen_urls:
-                unique_results.append(result)
-                seen_urls.add(url)
-
-        # 返回去重后的结果
-        return unique_results
-
-    def _build_enhanced_input(
-        self,
-        search_results: list[dict],
-        original_input: str,
-        config: dict,
-        is_retry: bool = False,
+    @staticmethod
+    def _build_generation_input(
+        input_text: str,
+        sources: list["ResearchSourceItem"],
+        max_items: int,
+        coverage: str,
     ) -> str:
-        """构建增强的输入，包含真实搜索结果。"""
-        parts = [original_input]
+        source_lines = []
+        for index, source in enumerate(sources, 1):
+            source_lines.extend([
+                f"{index}. 标题：{source.title or '未命名资源'}",
+                f"   URL：{source.url}",
+                f"   摘要：{source.summary[:300]}",
+            ])
+        return "\n".join([
+            input_text,
+            "## 本次检索到的真实资源（唯一允许使用的 URL）",
+            *source_lines,
+            "## 生成硬性约束",
+            f"- 最多输出 {max_items} 条资源，coverage={coverage}。",
+            "- 每条 url 必须逐字复制自上面的 URL；不得编造、改写或补全 URL。",
+            "- 只选择与学习目标相关、适合当前学习阶段的资源。",
+            "- 若可选资源不足，少推荐也可以；不要以假链接凑数。",
+        ])
 
-        # 添加搜索结果作为真实资源来源
-        parts.append("\n## 搜索获取的真实资源（必须使用这些 URL）")
-        if is_retry:
-            parts.append("这是重试生成，请务必产出更多高质量阅读资源，避免与已有资源重复。\n")
-        parts.append("以下是搜索到的真实学习资源，请基于这些资源生成阅读推荐：\n")
+    @staticmethod
+    def _verify_resources(
+        resources: list[ReadingResource],
+        sources: list["ResearchSourceItem"],
+        max_items: int,
+    ) -> list[ReadingResource]:
+        source_by_url = {_normalized_url(source.url): source for source in sources}
+        verified: list[ReadingResource] = []
+        seen_urls: set[str] = set()
+        for resource in resources:
+            key = _normalized_url(resource.url)
+            source = source_by_url.get(key)
+            if source is None or key in seen_urls:
+                continue
+            seen_urls.add(key)
+            verified.append(resource.model_copy(update={"url": source.url, "title": source.title or resource.title}))
+            if len(verified) >= max_items:
+                break
+        return verified
 
-        for i, result in enumerate(search_results[:10], 1):
-            title = result.get("title", "未知标题")
-            url = result.get("url", "")
-            snippet = result.get("snippet", "")
-
-            parts.append(f"{i}. **{title}**")
-            parts.append(f"   - URL: {url}")
-            if snippet:
-                parts.append(f"   - 摘要: {snippet[:200]}")
-            parts.append("")
-
-        # 添加明确要求
-        max_items = config.get("max_items", 5)
-        min_items = max(2, max_items // 2)
-        coverage = config.get("coverage", "extended")
-        parts.append("\n**重要要求**：")
-        parts.append(f"1. 必须生成至少 {min_items} 条阅读资源")
-        parts.append("2. 每条资源的 URL 必须来自上面的搜索结果（真实 URL）")
-        parts.append("3. 不要虚构或生成假的 URL")
-        parts.append("4. 资源类型要多样化：书籍、论文、文章、文档、实践项目等")
-        parts.append("5. 每条资源必须包含可点击跳转的完整 http/https URL")
-        parts.append(
-            f"6. 【严禁】resources 为空数组 []。"
-            f"你必须生成至少 {min_items} 条阅读资源，缺少任何一条都是错误。"
+    def _search_failure(self, title_prefix: str, errors: list[Any]) -> AgentResult:
+        logger.warning("Agent[%s] 未获取到真实阅读链接: errors=%d", self.agent_id, len(errors))
+        return AgentResult(
+            success=False,
+            error="未检索到可验证的阅读资源链接",
+            title=f"{title_prefix} - 拓展阅读",
+            summary="真实链接检索失败",
+            file_type="json",
+            metadata={"agent_id": self.agent_id, "error_type": "empty_search_results"},
         )
-        if coverage == "core":
-            parts.append("7. 推荐策略：精选最核心、最权威的 3-5 个资源，不追求数量")
-        elif coverage == "broad":
-            parts.append("7. 推荐策略：广泛覆盖从入门到前沿的全链路，涵盖不同难度和类型")
-        if is_retry:
-            parts.append(
-                "7. 【错误反馈】你上一次返回了 resources: []（空数组），这是严重错误。"
-                "resources 绝不能为空数组 []，必须包含至少一条阅读资源。"
-            )
-
-        return "\n".join(parts)
 
 
-def _merge_reading_resources(
-    primary: list[ReadingResource],
-    secondary: list[ReadingResource],
-) -> list[ReadingResource]:
-    """合并两次阅读生成结果，去重并保留完整资源。
-
-    Args:
-        primary: 首次生成结果（作为基础）
-        secondary: 重试生成结果（追加到 primary）
-
-    Returns:
-        合并后的资源列表
-    """
-    # 按 URL 和 title 去重
-    existing_urls = {r.url.strip().lower() for r in primary if r.url}
-    existing_titles = {r.title.strip().lower() for r in primary if r.title}
-
-    # 重新编号追加的资源
-    max_id_num = 0
-    for r in primary:
-        if r.id.startswith("R"):
-            try:
-                num = int(r.id[1:])
-                max_id_num = max(max_id_num, num)
-            except ValueError:
-                pass
-
-    merged = list(primary)
-    # 遍历重试结果，去重后追加
-    for r in secondary:
-        url_lower = r.url.strip().lower() if r.url else ""
-        title_lower = r.title.strip().lower() if r.title else ""
-
-        # 去重检查（URL 或标题重复则跳过）
-        if url_lower and url_lower in existing_urls:
-            continue
-        if title_lower and title_lower in existing_titles:
-            continue
-
-        # 重新编号
-        max_id_num += 1
-        new_id = f"R{max_id_num}"
-
-        # 创建新的资源对象（更新 id）
-        merged_resource = ReadingResource(
-            id=new_id,
-            type=r.type,
-            title=r.title,
-            authors=r.authors,
-            url=r.url,
-            language=r.language,
-            difficulty=r.difficulty,
-            suitable_for=r.suitable_for,
-            related_knowledge_points=r.related_knowledge_points,
-            description=r.description,
-            recommend_reason=r.recommend_reason,
-            how_to_use=r.how_to_use,
-            estimated_time=r.estimated_time,
-            note=r.note,
-        )
-        merged.append(merged_resource)
-
-        if url_lower:
-            existing_urls.add(url_lower)
-        if title_lower:
-            existing_titles.add(title_lower)
-
-    return merged
+def _normalized_url(url: str) -> str:
+    """比较 URL 时忽略末尾斜杠和 fragment，保留真实输出中的原 URL。"""
+    parsed = urlsplit(url.strip())
+    path = parsed.path.rstrip("/") or "/"
+    return urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, parsed.query, ""))

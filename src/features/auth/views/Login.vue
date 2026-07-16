@@ -32,6 +32,7 @@
           <p>继续今天的学习节奏</p>
         </div>
 
+
         <form class="custom-form" @submit.prevent="handleLogin">
           <div class="form-group" :class="{ 'has-error': errors.username }">
             <label class="field-label" for="login-username">用户名</label>
@@ -80,18 +81,6 @@
       </div>
     </section>
   </main>
-
-  <!-- Status Dialog -->
-  <AuthStatusModal
-    :is-open="modalState.isOpen"
-    :type="modalState.type"
-    :title="modalState.title"
-    :message="modalState.message"
-    :countdown="modalState.countdown"
-    :primary-button-text="modalState.primaryButtonText"
-    @confirm="modalState.onConfirm"
-    @close="modalState.isOpen = false"
-  />
 </template>
 
 <script setup lang="ts">
@@ -103,7 +92,7 @@ import { setCurrentUser } from '@/features/auth/model/currentUser'
 import { getErrorMessage } from '@/shared/api/http'
 import { setAuthToken } from '@/shared/auth/token'
 import AppLogo from '@/shared/ui/AppLogo.vue'
-import AuthStatusModal from '@/features/auth/components/AuthStatusModal.vue'
+import { useToast } from 'primevue/usetoast'
 
 // Vue Router 实例与当前路由信息
 const router = useRouter()
@@ -111,16 +100,7 @@ const route = useRoute()
 // 登录请求进行中的加载状态
 const isLoading = ref(false)
 
-// 状态弹窗的状态机（成功/错误/确认）
-const modalState = reactive({
-  isOpen: false,
-  type: 'success' as 'success' | 'error',
-  title: '',
-  message: '',
-  countdown: 0,
-  primaryButtonText: '确定',
-  onConfirm: () => {}
-})
+const toast = useToast()
 
 // 表单双向绑定数据
 const form = reactive({
@@ -134,7 +114,7 @@ const errors = reactive({
   password: ''
 })
 
-// 表单校验：校验用户名（3-50）与密码（6-50）长度
+// 表单校验：校验用户名（3-50）与密码（5-50）长度
 const validateForm = () => {
   let isValid = true
   errors.username = ''
@@ -152,7 +132,7 @@ const validateForm = () => {
     errors.password = '请输入密码'
     isValid = false
   } else if (form.password.length < 6 || form.password.length > 50) {
-    errors.password = '密码长度需为 6-50 个字符'
+    errors.password = '密码长度需为 5-50 个字符'
     isValid = false
   }
 
@@ -170,8 +150,11 @@ const handleLogin = async () => {
       // 保存 JWT Token 并更新全局用户状态
       setAuthToken(data.token)
       setCurrentUser(data.user ?? null)
-      // 首次登录跳转 onboarding 引导页，非首次直接进 dashboard
-      if (!data.user?.is_first_login) {
+
+      // onboarding_completed: false=未完成需弹窗, true=已完成
+      const needsOnboarding = data.user?.onboarding_completed === false
+
+      if (needsOnboarding) {
         router.push('/dashboard?onboarding=true&loginSuccess=true')
       } else {
         router.push('/dashboard?loginSuccess=true')
@@ -186,35 +169,19 @@ const handleLogin = async () => {
     } else if (field === 'password') {
       errors.password = msg
     } else {
-      // 通用错误：弹出错误提示框
-      modalState.type = 'error'
-      modalState.title = '登录失败'
-      modalState.message = msg
-      modalState.countdown = 0
-      modalState.primaryButtonText = '重新输入'
-      modalState.onConfirm = () => {
-        modalState.isOpen = false
-      }
-      modalState.isOpen = true
+      // 通用错误：气泡提示
+      toast.add({ severity: 'error', summary: '登录失败', detail: msg, life: 3000 })
     }
   } finally {
     isLoading.value = false
   }
 }
 
-// 注册成功后由 /login 的 query 触发“注册成功”弹窗
+// 注册成功后由 /login 的 query 触发“注册成功”气泡通知
 onMounted(() => {
   if (route.query.registerSuccess === 'true') {
-    modalState.type = 'success'
-    modalState.title = '注册成功'
-    modalState.message = '您的学习账户已创建成功！请在下方输入凭据登录。'
-    modalState.countdown = 0
-    modalState.primaryButtonText = '立即登录'
-    modalState.onConfirm = () => {
-      modalState.isOpen = false
-      router.replace({ path: route.path, query: { ...route.query, registerSuccess: undefined } })
-    }
-    modalState.isOpen = true
+    toast.add({ severity: 'success', summary: '注册成功', detail: '您的学习账户已创建成功！请在下方输入凭据登录。', life: 3000 })
+    router.replace({ path: route.path, query: { ...route.query, registerSuccess: undefined } })
   }
 })
 </script>

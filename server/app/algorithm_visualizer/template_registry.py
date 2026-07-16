@@ -1,738 +1,267 @@
-"""算法模板注册表。管理算法元信息和模板代码。
- * service.py 调用 get_all_algorithms / get_algorithm_info / get_template_code / LANGUAGES。"""
+"""The trusted, Python-only algorithm template catalogue."""
 
 from __future__ import annotations
 
-import os
-from typing import Any, Dict, List
+import hashlib
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal
 
-# 模板根目录
-_TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "templates")
+from pydantic import JsonValue
 
-# 支持的语言列表
-LANGUAGES: List[Dict[str, str]] = [
-    {"key": "python", "label": "Python", "extension": "py"},
-    {"key": "javascript", "label": "JavaScript", "extension": "js"},
-    {"key": "cpp", "label": "C++", "extension": "cpp"},
-    {"key": "java", "label": "Java", "extension": "java"},
-    {"key": "c", "label": "C", "extension": "c"},
-]
-
-# 语言 key → 干净模板文件名
-_LANGUAGE_FILE_MAP: Dict[str, str] = {
-    "python": "python.py",
-    "javascript": "js.js",
-    "cpp": "cpp.cpp",
-    "java": "java.java",
-    "c": "c.c",
-}
-
-# 语言 key → 预插装模板文件名（仅 Python 支持）
-_INSTRUMENTED_FILE_MAP: Dict[str, str] = {
-    "python": "python_instrumented.py",
-}
-
-# 算法元信息注册表
-ALGORITHMS: Dict[str, Dict[str, Any]] = {
-    # 1. 基础数据结构 (base_data_structure)
-    "array_base": {
-        "domain": "base_data_structure",
-        "name": "数组基础操作",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "assign", "finish"]
-    },
-    "linked_list_base": {
-        "domain": "base_data_structure",
-        "name": "链表基础操作",
-        "visualizer_type": "linked-list",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_list", "move_pointer", "add_node", "remove_node", "finish"]
-    },
-    "stack_base": {
-        "domain": "base_data_structure",
-        "name": "栈基础操作",
-        "visualizer_type": "stack-queue",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_stack", "push", "pop", "finish"]
-    },
-    "queue_base": {
-        "domain": "base_data_structure",
-        "name": "队列基础操作",
-        "visualizer_type": "stack-queue",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_queue", "enqueue", "dequeue", "finish"]
-    },
-    "hash_table_base": {
-        "domain": "base_data_structure",
-        "name": "哈希表基础操作",
-        "visualizer_type": "dp-table",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-    "heap_base": {
-        "domain": "base_data_structure",
-        "name": "堆基础操作",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-
-    # 2. 排序算法 (sorting)
-    "bubble_sort": {
-        "domain": "sorting",
-        "name": "冒泡排序",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
-        "required_events": ["init_array", "compare", "swap", "mark_sorted", "finish"]
-    },
-    "selection_sort": {
-        "domain": "sorting",
-        "name": "选择排序",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
-        "required_events": ["init_array", "compare", "swap", "mark_sorted", "finish"]
-    },
-    "insertion_sort": {
-        "domain": "sorting",
-        "name": "插入排序",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
-        "required_events": ["init_array", "compare", "assign", "mark_sorted", "finish"]
-    },
-    "shell_sort": {
-        "domain": "sorting",
-        "name": "希尔排序",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "assign", "finish"]
-    },
-    "quick_sort": {
-        "domain": "sorting",
-        "name": "快速排序",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python", "javascript", "cpp"],
-        "required_events": ["init_array", "compare", "swap", "assign", "mark_sorted", "finish"]
-    },
-    "merge_sort": {
-        "domain": "sorting",
-        "name": "归并排序",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "assign", "finish"]
-    },
-    "heap_sort": {
-        "domain": "sorting",
-        "name": "堆排序",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "swap", "finish"]
-    },
-    "counting_sort": {
-        "domain": "sorting",
-        "name": "计数排序",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "bucket_sort": {
-        "domain": "sorting",
-        "name": "桶排序",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "radix_sort": {
-        "domain": "sorting",
-        "name": "基数排序",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-
-    # 3. 查找算法 (searching)
-    "sequential_search": {
-        "domain": "searching",
-        "name": "顺序查找",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "binary_search": {
-        "domain": "searching",
-        "name": "二分查找",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python", "javascript", "cpp", "c", "java"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "interpolation_search": {
-        "domain": "searching",
-        "name": "插值查找",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "fibonacci_search": {
-        "domain": "searching",
-        "name": "斐波那契查找",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "hash_search": {
-        "domain": "searching",
-        "name": "哈希查找",
-        "visualizer_type": "dp-table",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "highlight", "clear_highlights", "finish"]
-    },
-
-    # 4. 线性结构算法 (linear_structure)
-    "double_pointers": {
-        "domain": "linear_structure",
-        "name": "双指针 (反转数组)",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "swap", "move_pointer", "finish"]
-    },
-    "sliding_window": {
-        "domain": "linear_structure",
-        "name": "滑动窗口 (最大连续子数组和)",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "move_pointer", "finish"]
-    },
-    "monotonic_stack": {
-        "domain": "linear_structure",
-        "name": "单调栈 (下一个更大元素)",
-        "visualizer_type": "stack-queue",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_stack", "push", "pop", "finish"]
-    },
-    "monotonic_queue": {
-        "domain": "linear_structure",
-        "name": "单调队列 (滑动窗口最大值)",
-        "visualizer_type": "stack-queue",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_queue", "enqueue", "dequeue", "finish"]
-    },
-    "prefix_sum": {
-        "domain": "linear_structure",
-        "name": "前缀和 (区域和检索)",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "difference_array": {
-        "domain": "linear_structure",
-        "name": "差分数组 (区间加法)",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-
-    # 5. 树结构算法 (tree_structure)
-    "binary_tree_traverse": {
-        "domain": "tree_structure",
-        "name": "二叉树前序遍历",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python", "javascript"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "binary_tree_recursion": {
-        "domain": "tree_structure",
-        "name": "二叉树递归 (求最大深度)",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "bst": {
-        "domain": "tree_structure",
-        "name": "二叉搜索树 (插入与查找)",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "heap_tree": {
-        "domain": "tree_structure",
-        "name": "最大堆调整过程",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "trie_tree": {
-        "domain": "tree_structure",
-        "name": "前缀树 (Trie)",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "segment_tree": {
-        "domain": "tree_structure",
-        "name": "线段树 (构建与区间查询)",
-        "visualizer_type": "tree",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "fenwick_tree": {
-        "domain": "tree_structure",
-        "name": "树状数组 (单点更新与前缀和)",
-        "visualizer_type": "tree",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-
-    # 6. 图结构算法 (graph_structure)
-    "graph_representation": {
-        "domain": "graph_structure",
-        "name": "图的表示 (邻接表/邻接矩阵)",
-        "visualizer_type": "graph",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_graph", "visit_node", "finish"]
-    },
-    "graph_bfs": {
-        "domain": "graph_structure",
-        "name": "图的广度优先搜索 (BFS)",
-        "visualizer_type": "graph",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_graph", "visit_node", "finish"]
-    },
-    "graph_dfs": {
-        "domain": "graph_structure",
-        "name": "图的深度优先搜索 (DFS)",
-        "visualizer_type": "graph",
-        "difficulty": "medium",
-        "supported_languages": ["python", "javascript", "cpp"],
-        "required_events": ["init_graph", "visit_node", "finish"]
-    },
-    "shortest_path": {
-        "domain": "graph_structure",
-        "name": "最短路径 (Dijkstra)",
-        "visualizer_type": "graph",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_graph", "visit_node", "finish"]
-    },
-    "topological_sort": {
-        "domain": "graph_structure",
-        "name": "拓扑排序 (Kahn算法)",
-        "visualizer_type": "graph",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_graph", "visit_node", "finish"]
-    },
-    "mst_kruskal": {
-        "domain": "graph_structure",
-        "name": "最小生成树 (Kruskal)",
-        "visualizer_type": "graph",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_graph", "visit_node", "finish"]
-    },
-    "dsu_union": {
-        "domain": "graph_structure",
-        "name": "并查集 (合并与路径压缩)",
-        "visualizer_type": "graph",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_graph", "visit_node", "finish"]
-    },
-
-    # 7. 字符串算法 (string_structure)
-    "string_match_naive": {
-        "domain": "string_structure",
-        "name": "暴力字符串匹配",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "kmp_match": {
-        "domain": "string_structure",
-        "name": "KMP 字符串匹配",
-        "visualizer_type": "array",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "rabin_karp": {
-        "domain": "string_structure",
-        "name": "Rabin-Karp 算法",
-        "visualizer_type": "array",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "trie_string_search": {
-        "domain": "string_structure",
-        "name": "Trie 单词检索",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "palindrome_check": {
-        "domain": "string_structure",
-        "name": "回文串检测 (双指针)",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-
-    # 8. 递归与回溯 (recursion_backtrack)
-    "recursion_fib": {
-        "domain": "recursion_backtrack",
-        "name": "递归斐波那契",
-        "visualizer_type": "tree",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "permutations": {
-        "domain": "recursion_backtrack",
-        "name": "全排列问题",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "subsets": {
-        "domain": "recursion_backtrack",
-        "name": "子集生成",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "combinations": {
-        "domain": "recursion_backtrack",
-        "name": "组合总和",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "n_queens": {
-        "domain": "recursion_backtrack",
-        "name": "N 皇后问题",
-        "visualizer_type": "dp-table",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-    "maze_search": {
-        "domain": "recursion_backtrack",
-        "name": "迷宫寻路 (回溯法)",
-        "visualizer_type": "dp-table",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-
-    # 9. 动态规划 (dynamic_programming)
-    "dp_fibonacci": {
-        "domain": "dynamic_programming",
-        "name": "斐波那契数 DP 填表",
-        "visualizer_type": "dp-table",
-        "difficulty": "easy",
-        "supported_languages": ["python", "javascript"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"],
-    },
-    "one_d_dp": {
-        "domain": "dynamic_programming",
-        "name": "一维 DP (爬楼梯)",
-        "visualizer_type": "dp-table",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-    "two_d_dp": {
-        "domain": "dynamic_programming",
-        "name": "二维 DP (最小路径和)",
-        "visualizer_type": "dp-table",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-    "knapsack_dp": {
-        "domain": "dynamic_programming",
-        "name": "0-1 背包问题",
-        "visualizer_type": "dp-table",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-    "interval_dp": {
-        "domain": "dynamic_programming",
-        "name": "区间 DP (最长回文子序列)",
-        "visualizer_type": "dp-table",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-    "tree_dp": {
-        "domain": "dynamic_programming",
-        "name": "树形 DP (打家劫舍 III)",
-        "visualizer_type": "tree",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "state_compress_dp": {
-        "domain": "dynamic_programming",
-        "name": "状态压缩 DP (旅行商 TSP 问题)",
-        "visualizer_type": "dp-table",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-
-    # 10. 贪心算法 (greedy)
-    "interval_greedy": {
-        "domain": "greedy",
-        "name": "无重叠区间 (区间调度)",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "finish"]
-    },
-    "stock_problem": {
-        "domain": "greedy",
-        "name": "买卖股票的最佳时机",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "jump_game": {
-        "domain": "greedy",
-        "name": "跳跃游戏",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "huffman_coding": {
-        "domain": "greedy",
-        "name": "哈夫曼树构建",
-        "visualizer_type": "tree",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-    "covering_problem": {
-        "domain": "greedy",
-        "name": "集合覆盖问题",
-        "visualizer_type": "array",
-        "difficulty": "hard",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "finish"]
-    },
-
-    # 11. 分治算法 (divide_conquer)
-    "binary_divide": {
-        "domain": "divide_conquer",
-        "name": "二分思想分治",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "move_pointer", "finish"]
-    },
-    "merge_divide": {
-        "domain": "divide_conquer",
-        "name": "归并排序分区",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "assign", "finish"]
-    },
-    "quick_partition": {
-        "domain": "divide_conquer",
-        "name": "快速选择 (第K大元素)",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "swap", "finish"]
-    },
-    "recursive_divide": {
-        "domain": "divide_conquer",
-        "name": "汉诺塔递归分解",
-        "visualizer_type": "tree",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_tree", "visit_node", "finish"]
-    },
-
-    # 12. 位运算 (bit_manipulation)
-    "basic_bit": {
-        "domain": "bit_manipulation",
-        "name": "二进制位提取/设置",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "xor_trick": {
-        "domain": "bit_manipulation",
-        "name": "只出现一次的数字 (异或)",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "compare", "finish"]
-    },
-    "bit_mask": {
-        "domain": "bit_manipulation",
-        "name": "位掩码状态转换",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "subset_enum": {
-        "domain": "bit_manipulation",
-        "name": "利用位运算枚举子集",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-
-    # 13. 数学算法 (math)
-    "gcd_euclidean": {
-        "domain": "math",
-        "name": "最大公约数 (欧几里得)",
-        "visualizer_type": "array",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "quick_power": {
-        "domain": "math",
-        "name": "数值快速幂",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "prime_sieve": {
-        "domain": "math",
-        "name": "埃拉托斯特尼筛法 (质数筛)",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    },
-    "combination_num": {
-        "domain": "math",
-        "name": "组合数计算 (杨辉三角)",
-        "visualizer_type": "dp-table",
-        "difficulty": "easy",
-        "supported_languages": ["python"],
-        "required_events": ["init_table", "set_value", "highlight", "clear_highlights", "finish"]
-    },
-    "mod_arithmetic": {
-        "domain": "math",
-        "name": "同余幂运算",
-        "visualizer_type": "array",
-        "difficulty": "medium",
-        "supported_languages": ["python"],
-        "required_events": ["init_array", "assign", "finish"]
-    }
-}
+from app.algorithm_visualizer.schemas import OfficialVisualizerType
+from app.algorithm_visualizer.template_inputs import (
+    BinarySearchInput,
+    BinaryTreeInput,
+    BracketMatchInput,
+    GraphTraversalInput,
+    IntegerArrayInput,
+    KnapsackInput,
+    LinkedListInput,
+    StrictTemplateInput,
+    WeightedGraphInput,
+)
 
 
-# 按 domain 过滤并返回所有算法信息列表
-def get_all_algorithms(domain: str = "all") -> List[Dict[str, Any]]:
-    """获取指定 domain 下的所有算法信息列表。支持 domain="all"。"""
-    result = []
-    for key, info in ALGORITHMS.items():
-        if domain == "all" or info["domain"] == domain:
-            result.append({"key": key, **info})
-    return result
+__all__ = (
+    "TemplateNotFoundError",
+    "TemplateSpec",
+    "get_all_template_specs",
+    "get_template_spec",
+)
 
 
-# 根据算法 key 获取单个算法的元信息
-def get_algorithm_info(algorithm_key: str) -> Dict[str, Any]:
-    """获取单个算法的元信息，不存在则抛出 ValueError。"""
-    info = ALGORITHMS.get(algorithm_key)
-    if not info:
-        raise ValueError(f"不支持的算法: {algorithm_key}")
-    return {"key": algorithm_key, **info}
+_TEMPLATES_DIR = Path(__file__).with_name("templates")
 
 
-# 读取干净模板代码（不含 tracer 调用）
-def get_template_code(algorithm_key: str, language: str) -> str:
-    """读取并返回指定算法+语言的干净模板代码（无 tracer 调用）。"""
-    info = get_algorithm_info(algorithm_key)
-    if language not in info["supported_languages"]:
-        raise ValueError(f"算法 {algorithm_key} 不支持语言 {language}")
+class TemplateNotFoundError(KeyError):
+    """Raised when a key is not present in the official catalogue."""
 
-    filename = _LANGUAGE_FILE_MAP.get(language)
-    if not filename:
-        raise ValueError(f"不支持的语言: {language}")
-
-    filepath = os.path.join(_TEMPLATES_DIR, info["domain"], algorithm_key, filename)
-    if not os.path.isfile(filepath):
-        raise ValueError(f"模板文件不存在: {algorithm_key}/{language}")
-
-    with open(filepath, "r", encoding="utf-8") as f:
-        return f.read()
+    def __init__(self, template_key: str) -> None:
+        self.template_key = template_key
+        super().__init__(f"未找到算法模板: {template_key}")
 
 
-# 读取预插装模板代码（含 tracer 调用），不存在则返回 None
-def get_instrumented_template_code(algorithm_key: str, language: str) -> str | None:
-    """读取预插装模板代码（含 tracer 调用）。
+@dataclass(frozen=True, slots=True)
+class TemplateSpec:
+    key: str
+    domain: str
+    name: str
+    visualizer_type: OfficialVisualizerType
+    difficulty: Literal["easy", "medium", "hard"]
+    entry_point: str
+    input_model: type[StrictTemplateInput]
+    default_input: dict[str, JsonValue]
+    adapter_key: str
+    max_events: int = 600
 
-    如果预插装文件不存在，返回 None（调用方应回退到 LLM 插装）。
-    """
-    info = get_algorithm_info(algorithm_key)
-    if language not in info["supported_languages"]:
-        return None
+    @property
+    def input_schema(self) -> dict[str, JsonValue]:
+        return self.input_model.model_json_schema()
 
-    filename = _INSTRUMENTED_FILE_MAP.get(language)
-    if not filename:
-        return None
+    @property
+    def source_path(self) -> Path:
+        return _TEMPLATES_DIR / self.domain / self.key / "python.py"
 
-    filepath = os.path.join(_TEMPLATES_DIR, info["domain"], algorithm_key, filename)
-    if not os.path.isfile(filepath):
-        return None
+    @property
+    def source_code(self) -> str:
+        return self.source_path.read_text(encoding="utf-8")
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        return f.read()
+    @property
+    def version(self) -> str:
+        normalized = self.source_code.replace("\r\n", "\n").rstrip() + "\n"
+        return f"sha256:{hashlib.sha256(normalized.encode()).hexdigest()}"
+
+
+def _template(
+    *,
+    key: str,
+    domain: str,
+    name: str,
+    visualizer_type: OfficialVisualizerType,
+    difficulty: Literal["easy", "medium", "hard"],
+    entry_point: str,
+    input_model: type[StrictTemplateInput],
+    default_input: dict[str, JsonValue],
+) -> TemplateSpec:
+    validated_default = input_model.model_validate(default_input).model_dump(mode="json")
+    return TemplateSpec(
+        key=key,
+        domain=domain,
+        name=name,
+        visualizer_type=visualizer_type,
+        difficulty=difficulty,
+        entry_point=entry_point,
+        input_model=input_model,
+        default_input=validated_default,
+        adapter_key=key,
+    )
+
+
+_SPECS: tuple[TemplateSpec, ...] = (
+    _template(
+        key="bubble_sort",
+        domain="sorting",
+        name="冒泡排序",
+        visualizer_type="array",
+        difficulty="easy",
+        entry_point="bubble_sort_with_bounds",
+        input_model=IntegerArrayInput,
+        default_input={"arr": [6, 1, 8, 3, 9, 2]},
+    ),
+    _template(
+        key="selection_sort",
+        domain="sorting",
+        name="选择排序",
+        visualizer_type="array",
+        difficulty="easy",
+        entry_point="selection_sort",
+        input_model=IntegerArrayInput,
+        default_input={"arr": [6, 1, 8, 3, 9, 2]},
+    ),
+    _template(
+        key="insertion_sort",
+        domain="sorting",
+        name="插入排序",
+        visualizer_type="array",
+        difficulty="easy",
+        entry_point="insertion_sort",
+        input_model=IntegerArrayInput,
+        default_input={"arr": [6, 1, 8, 3, 9, 2]},
+    ),
+    _template(
+        key="quick_sort",
+        domain="sorting",
+        name="快速排序",
+        visualizer_type="array",
+        difficulty="medium",
+        entry_point="quick_sort",
+        input_model=IntegerArrayInput,
+        default_input={"arr": [6, 1, 8, 3, 9, 2]},
+    ),
+    _template(
+        key="merge_sort",
+        domain="sorting",
+        name="归并排序",
+        visualizer_type="array",
+        difficulty="medium",
+        entry_point="merge_sort_wrapper",
+        input_model=IntegerArrayInput,
+        default_input={"arr": [6, 1, 8, 3, 9, 2]},
+    ),
+    _template(
+        key="binary_search",
+        domain="searching",
+        name="二分查找",
+        visualizer_type="array",
+        difficulty="easy",
+        entry_point="binary_search",
+        input_model=BinarySearchInput,
+        default_input={"arr": [1, 2, 3, 5, 8], "target": 5},
+    ),
+    _template(
+        key="linked_list_reverse",
+        domain="base_data_structure",
+        name="链表反转",
+        visualizer_type="linked-list",
+        difficulty="medium",
+        entry_point="reverse_list",
+        input_model=LinkedListInput,
+        default_input={"arr": [1, 2, 3, 4, 5]},
+    ),
+    _template(
+        key="bracket_match",
+        domain="base_data_structure",
+        name="括号匹配",
+        visualizer_type="stack-queue",
+        difficulty="easy",
+        entry_point="is_valid_brackets",
+        input_model=BracketMatchInput,
+        default_input={"s": "{[()]}"},
+    ),
+    _template(
+        key="binary_tree_traverse",
+        domain="tree_structure",
+        name="二叉树前序遍历",
+        visualizer_type="tree",
+        difficulty="easy",
+        entry_point="preorder_traversal",
+        input_model=BinaryTreeInput,
+        default_input={"arr": [1, 2, 3, 4, 5, 6, 7]},
+    ),
+    _template(
+        key="graph_bfs",
+        domain="graph_structure",
+        name="广度优先搜索",
+        visualizer_type="graph",
+        difficulty="easy",
+        entry_point="bfs_all_components",
+        input_model=GraphTraversalInput,
+        default_input={
+            "num_nodes": 6,
+            "edges": [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5]],
+            "start": 0,
+        },
+    ),
+    _template(
+        key="graph_dfs",
+        domain="graph_structure",
+        name="深度优先搜索",
+        visualizer_type="graph",
+        difficulty="easy",
+        entry_point="dfs_graph",
+        input_model=GraphTraversalInput,
+        default_input={
+            "num_nodes": 6,
+            "edges": [[0, 1], [0, 2], [1, 3], [1, 4], [2, 5]],
+            "start": 0,
+        },
+    ),
+    _template(
+        key="shortest_path",
+        domain="graph_structure",
+        name="Dijkstra 最短路径",
+        visualizer_type="graph",
+        difficulty="medium",
+        entry_point="dijkstra",
+        input_model=WeightedGraphInput,
+        default_input={
+            "num_nodes": 6,
+            "edges": [
+                [0, 1, 5],
+                [0, 2, 1],
+                [1, 2, 2],
+                [1, 3, 3],
+                [1, 4, 20],
+                [2, 4, 12],
+                [3, 4, 2],
+                [3, 5, 6],
+                [4, 5, 1],
+            ],
+            "start": 0,
+        },
+    ),
+    _template(
+        key="knapsack_dp",
+        domain="dynamic_programming",
+        name="0/1 背包",
+        visualizer_type="dp-table",
+        difficulty="medium",
+        entry_point="knapsack",
+        input_model=KnapsackInput,
+        default_input={"weights": [2, 3, 4, 5], "values": [3, 4, 5, 6], "capacity": 5},
+    ),
+)
+
+_SPECS_BY_KEY = {spec.key: spec for spec in _SPECS}
+
+
+def get_all_template_specs() -> list[TemplateSpec]:
+    return list(_SPECS)
+
+
+def get_template_spec(template_key: str) -> TemplateSpec:
+    try:
+        return _SPECS_BY_KEY[template_key]
+    except KeyError as exc:
+        raise TemplateNotFoundError(template_key) from exc

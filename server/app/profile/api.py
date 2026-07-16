@@ -39,9 +39,6 @@ from app.profile import (
 from app.profile.service import (
     get_profile_service,
     _user_base_info_dict,
-    _utc_week_range,
-    weighted_new_event_points,
-    PROFILE_REFRESH_EVENT_THRESHOLD,
 )
 from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
 from sqlmodel import col, select
@@ -51,55 +48,18 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
-# ── 共享懒加载刷新触发 ───────────────────────────────────────────────
-
-
-# 条件满足时后台触发画像刷新（周兜底 OR 加权新事件达阈值）
-async def maybe_trigger_profile_refresh(
-    background_tasks: BackgroundTasks,
-    session: AsyncSession,
-    user_id: int,
-    profile: UserProfile,
-) -> None:
-    """当条件满足时后台触发画像刷新（周兜底 OR 加权新事件达阈值）。"""
-    week_start, _ = _utc_week_range()
-    # 本周已超一周未刷新则触发
-    need_refresh = profile.updated_at < week_start
-    if not need_refresh:
-        # 否则按加权新事件点数判断是否达到阈值
-        points = await weighted_new_event_points(session, user_id, profile.updated_at)
-        need_refresh = points >= PROFILE_REFRESH_EVENT_THRESHOLD
-    # 满足任一条件则后台启动文字画像刷新
-    if need_refresh:
-        background_tasks.add_task(
-            get_profile_service().infer_profile_from_digest, user_id=user_id
-        )
-        logger.info(
-            "[ProfileAPI] 触发周概要画像刷新: user_id=%s updated_at=%s",
-            user_id, profile.updated_at,
-        )
-
-
-# 获取完整用户画像（懒加载触发后台刷新）
+# 获取完整用户画像
 @router.get("/profile")
 async def get_profile(
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """获取完整用户画像 — 聚合 User.base_info、UserProfileDimension 和 UserProfile.score。
-    
-    懒加载触发：当本周加权新事件 ≥ 阈值或 profile.updated_at 早于本周周一时，
-    后台启动 infer_profile_from_digest 刷新文字画像 + 分数；接口立即返回当前数据，
-    下次访问可见新结果。
-    """
+    """获取完整用户画像 — 聚合 User.base_info、UserProfileDimension 和 UserProfile.score。"""
     logger.info("GET /profile — user=%d", current_user.id)
     svc = get_profile_service()
     profile = await svc.get_profile(user_id=current_user.id, db=session)
     dimensions = await svc.get_dimensions(user_id=current_user.id, db=session)
     base_info = _user_base_info_dict(current_user)
-
-    await maybe_trigger_profile_refresh(background_tasks, session, current_user.id, profile)
 
     # 组装各维度得分映射
     dimension_scores = {
@@ -322,14 +282,12 @@ def _weak_topics_from_events(events: list[LearningEvent]) -> list[str]:
 # 获取首页推荐内容（根据用户状态返回个性化下一步建议）
 @router.get("/dashboard/recommendation")
 async def get_recommendation(
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取首页推荐内容 — 根据用户状态返回个性化学习建议。"""
     logger.info("GET /dashboard/recommendation — user=%d", current_user.id)
     profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
-    await maybe_trigger_profile_refresh(background_tasks, session, current_user.id, profile)
     goal = _text(current_user.global_learning_goal)
     courses = current_user.courses or []
     primary_course = courses[0] if courses else ""
@@ -448,14 +406,12 @@ async def get_recommendation(
 # 获取用户画像雷达图数据（各维度得分与薄弱区域）
 @router.get("/dashboard/profile-radar")
 async def get_profile_radar(
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取用户画像雷达图数据 — 各维度得分。"""
     logger.info("GET /dashboard/profile-radar — user=%d", current_user.id)
     profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
-    await maybe_trigger_profile_refresh(background_tasks, session, current_user.id, profile)
     score_dict = await _get_profile_score_json(session, current_user.id)
 
     scores = score_dict.get("dimension_scores") or {}
@@ -486,14 +442,12 @@ async def get_profile_radar(
 # 获取快捷操作和今日建议（按权重排序）
 @router.get("/dashboard/quick-actions")
 async def get_quick_actions(
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取快捷操作和今日建议。"""
     logger.info("GET /dashboard/quick-actions — user=%d", current_user.id)
     profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
-    await maybe_trigger_profile_refresh(background_tasks, session, current_user.id, profile)
     recent_events = await _get_recent_events(session, current_user.id, limit=30)
 
     chat_session_count = (await session.exec(
@@ -517,6 +471,15 @@ async def get_quick_actions(
     active_path = active_paths[0] if active_paths else None
 
     weak_topics = _weak_topics_from_events(recent_events)
+
+    # Check if user has a ready assessment report
+    from app.infra.models import LearningAssessmentReport
+    report_count = (await session.exec(
+        select(func.count())
+        .select_from(LearningAssessmentReport)
+        .where(LearningAssessmentReport.user_id == current_user.id, LearningAssessmentReport.status == 'ready')
+    )).one()
+    has_ready_report = report_count > 0
 
     action_defs = [
         {
@@ -554,6 +517,15 @@ async def get_quick_actions(
             "score": 25 + sum(1 for event in recent_events if event.event_type == "quiz_submitted") * 4 + len(weak_topics),
             "description": f"用练习验证 {weak_topics[0]}" if weak_topics else "用题目把最近学习收口成反馈",
             "tag": f"{sum(1 for event in recent_events if event.event_type == 'quiz_submitted')} 次测验",
+        },
+        {
+            "key": "assessment",
+            "label": "学习评估",
+            "path": "/assessment",
+            "icon": "assessment",
+            "score": 40 + (10 if has_ready_report else 0),
+            "description": "查看学习效果评估报告与辅导策略" if has_ready_report else "生成学习效果评估，获取个性化辅导建议",
+            "tag": "已有报告" if has_ready_report else "待生成",
         },
     ]
     # 按 score 降序排序并剔除 score 字段，生成最终快捷操作列表

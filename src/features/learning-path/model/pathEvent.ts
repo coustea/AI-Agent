@@ -8,6 +8,10 @@ export type PathEventName =
   | 'node.ready'
   | 'planning.completed'
   | 'planning.failed'
+  | 'resource.started'
+  | 'resource.running'
+  | 'resource.completed'
+  | 'resource.failed'
 
 // SSE 推送的路径规划事件载荷
 export interface PathEvent {

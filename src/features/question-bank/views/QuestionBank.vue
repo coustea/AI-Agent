@@ -5,7 +5,9 @@
         <!-- 左侧题单侧栏 -->
         <aside class="bank-left-rail">
           <div class="rail-brand">
-            <div class="rail-brand-icon"></div>
+            <div class="rail-brand-icon" aria-hidden="true">
+              <PhBooks :size="22" weight="fill" />
+            </div>
             <div>
               <strong>题库</strong>
               <span>Question Bank</span>
@@ -20,8 +22,14 @@
                 :class="['rail-menu-item', { active: activeModule === item.key }]"
                 @click="switchModule(item.key)"
             >
-              <span class="rail-menu-mark">{{ item.mark }}</span>
-              <span>
+              <span class="rail-menu-icon" aria-hidden="true">
+                <component
+                  :is="item.icon"
+                  :size="20"
+                  :weight="activeModule === item.key ? 'fill' : 'regular'"
+                />
+              </span>
+              <span class="rail-menu-copy">
                 <strong>{{ item.label }}</strong>
                 <small>{{ item.desc }}</small>
               </span>
@@ -83,6 +91,7 @@
                     <span class="tag subject-tag">{{ portalQuestion.subject }}</span>
                     <span class="tag type-tag">{{ portalQuestion.type }}</span>
                     <span class="tag difficulty-tag">{{ portalQuestion.difficulty || '中等' }}</span>
+                    <span v-if="isQuestionDone(portalQuestion.id)" class="tag done-tag">做过</span>
                   </div>
 
                   <div class="recommend-question-content" v-html="renderInline(portalQuestion.content)"></div>
@@ -136,7 +145,7 @@
                         :disabled="portalSubmitted[portalQuestion.id] || !hasAnswerData(portalAnswers[portalQuestion.id])"
                         @click="submitPortalAnswer(portalQuestion)"
                       >
-                        {{ portalReviewing[portalQuestion.id] ? '评阅中...' : '提交答案' }}
+                        {{ portalReviewing[portalQuestion.id] ? `${pendingAnswerLabel(portalQuestion.type)}...` : '提交答案' }}
                       </button>
                       <button type="button" class="soft-action inline" @click="pickPortalQuestion">换一题</button>
                       <button type="button" class="soft-action inline" @click="switchModule('search')">全部题库</button>
@@ -157,11 +166,18 @@
                   </div>
                 </template>
 
+                <template v-else-if="recommendationLoading">
+                  <div class="empty-state">
+                    <strong>正在加载推荐题目</strong>
+                    <p>正在同步题库数据，请稍候。</p>
+                  </div>
+                </template>
+
                 <template v-else>
                   <div class="empty-state">
                     <strong>暂无可推荐题目</strong>
                     <p>题库接口返回为空时会显示此状态，请先导入题库数据或调整课程筛选。</p>
-                    <button type="button" class="primary-action" @click="loadQuestionBank">重新加载题库</button>
+                    <button type="button" class="primary-action" @click="reloadQuestionBank">重新加载题库</button>
                   </div>
                 </template>
               </section>
@@ -231,6 +247,7 @@
                     :openedAnalysis="openedDailyAnalysis"
                     :submittedCount="dailySubmittedCount"
                     :correctCount="dailyCorrectCount"
+                    :answerHistoryMap="answerHistoryMap"
                     @refresh-daily="refreshDailyQuestions"
                     @select-daily-option="selectDailyOption"
                     @submit-daily="submitDailyAnswer"
@@ -256,6 +273,7 @@
                     :openedAnalysis="openedAnalysis"
                     :highlightQuestionId="highlightQuestionId"
                     :highlightVersion="highlightVersion"
+                    :answerHistoryMap="answerHistoryMap"
                     @search="searchBank"
                     @page-change="handleBankPageChange"
                     @select-option="selectBankOption"
@@ -327,6 +345,11 @@
                     @toggle-wrong-analysis="toggleWrongAnalysis"
                     @archive-wrong="archiveWrong"
                     @remove-wrong="removeWrong"
+                />
+
+                <HistoryTab
+                    v-else-if="activeModule === 'history'"
+                    @open-question="openHistoryQuestion"
                 />
               </section>
             </div>
@@ -461,8 +484,17 @@
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { toast } from 'vue-sonner'
+import {
+  PhBookmarkSimple,
+  PhBooks,
+  PhCalendarCheck,
+  PhClockCounterClockwise,
+  PhExam,
+  PhGauge,
+  PhListMagnifyingGlass,
+} from '@phosphor-icons/vue'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
-import { fetchQuizBankQuestions, fetchQuizReview, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult } from '@/features/question-bank/api/quizBank'
+import { fetchQuizBankQuestions, fetchQuizReview, fetchQuizAnswerHistory, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult, type QuizAnswerHistoryItem } from '@/features/question-bank/api/quizBank'
 import {
   archiveWrongQuestion,
   fetchRandomWrongQuestion,
@@ -475,10 +507,12 @@ import SearchTab from '@/features/question-bank/components/SearchTab.vue'
 import ExamTab from '@/features/question-bank/components/ExamTab.vue'
 import AnalysisReviewPage from '@/features/question-bank/components/AnalysisReviewPage.vue'
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
+import HistoryTab from '@/features/question-bank/components/HistoryTab.vue'
 import { getErrorMessage } from '@/shared/api/http'
+import { pendingAnswerLabel, requiresAiReview } from '@/features/question-bank/model/grading'
 
 type ViewMode = 'workspace' | 'exam' | 'analysis-review'
-type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong'
+type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong' | 'history'
 type AnswerValue = string | string[] | undefined
 
 interface Question {
@@ -545,6 +579,7 @@ const allQuestionPool = shallowRef<Question[]>([])
 const portalQuestion = ref<Question | null>(null)
 const dailyQuestions = shallowRef<Question[]>([])
 const dailyChallengeQuestion = ref<Question | null>(null)
+const recommendationLoading = ref(true)
 
 // 题库搜索状态
 const questions = shallowRef<Question[]>([])
@@ -561,6 +596,9 @@ const wrongLoading = ref(false)
 const wrongPage = ref(1)
 const wrongPageSize = ref(8)
 const wrongFilters = reactive({ query: '', subject: '', type: '' })
+
+// 答题历史（做过的题）— key: question_id, value: 最新作答记录
+const answerHistoryMap = ref<Map<string, QuizAnswerHistoryItem>>(new Map())
 
 // 题库答题状态
 const bankAnswers = ref<Record<string, AnswerValue>>({})
@@ -704,6 +742,7 @@ const moduleTitles: Record<ModuleKey, string> = {
   search: '全部题目',
   paper: '模拟组卷',
   wrong: '错题本',
+  history: '答题记录',
 }
 
 const moduleDescriptions: Record<ModuleKey, string> = {
@@ -712,14 +751,16 @@ const moduleDescriptions: Record<ModuleKey, string> = {
   search: '按学科、难度和题型检索题库并直接作答。',
   paper: '配置你的模拟试卷，并在预览后进入考试模式。',
   wrong: '集中复习错题、管理薄弱点并进行再练。',
+  history: '查看所有做过的题目，按科目和对错筛选。',
 }
 
-const moduleNavItems: Array<{ key: ModuleKey; label: string; desc: string; mark: string }> = [
-  { key: 'portal', label: '控制台', desc: '刷题总览', mark: '01' },
-  { key: 'daily', label: '每日练习', desc: '每日 10 题', mark: '02' },
-  { key: 'search', label: '全部题目', desc: '筛选检索', mark: '03' },
-  { key: 'paper', label: '模拟组卷', desc: '考试模式', mark: '04' },
-  { key: 'wrong', label: '错题本', desc: '薄弱复习', mark: '05' },
+const moduleNavItems = [
+  { key: 'portal' as ModuleKey, label: '控制台', desc: '刷题总览', icon: PhGauge },
+  { key: 'daily' as ModuleKey, label: '每日练习', desc: '每日 10 题', icon: PhCalendarCheck },
+  { key: 'search' as ModuleKey, label: '全部题目', desc: '筛选检索', icon: PhListMagnifyingGlass },
+  { key: 'paper' as ModuleKey, label: '模拟组卷', desc: '考试模式', icon: PhExam },
+  { key: 'wrong' as ModuleKey, label: '错题本', desc: '薄弱复习', icon: PhBookmarkSimple },
+  { key: 'history' as ModuleKey, label: '答题记录', desc: '做过汇总', icon: PhClockCounterClockwise },
 ]
 
 // 首页功能卡片配置（动态显示每日/错题/模考状态）
@@ -932,10 +973,26 @@ async function bootstrap() {
   }
 
   syncBankSubmissionStateForToday()
-  await loadPracticePool()
-  await loadQuestionBank()
-  await loadWrongBook()
+  recommendationLoading.value = true
+  const practicePoolPromise = loadPracticePool()
+  await Promise.all([
+    practicePoolPromise,
+    loadQuestionBank(),
+    loadWrongBook(),
+    loadAnswerHistory(),
+  ])
   refreshDailySelections()
+  recommendationLoading.value = false
+}
+
+async function reloadQuestionBank() {
+  recommendationLoading.value = true
+  await Promise.all([
+    loadPracticePool(),
+    loadQuestionBank(),
+  ])
+  refreshDailySelections()
+  recommendationLoading.value = false
 }
 
 // 切换左侧导航模块
@@ -1012,6 +1069,20 @@ async function loadPracticePool() {
     practicePool.value = []
     toast.error(getErrorMessage(error, '加载练习池失败'))
   }
+}
+
+// 加载答题历史（做过的题）
+async function loadAnswerHistory() {
+  try {
+    answerHistoryMap.value = await fetchQuizAnswerHistory()
+  } catch {
+    answerHistoryMap.value = new Map()
+  }
+}
+
+// 检查题目是否做过
+function isQuestionDone(questionId: string): boolean {
+  return answerHistoryMap.value.has(questionId)
 }
 
 // 根据筛选条件加载题库分页
@@ -1277,9 +1348,33 @@ async function submitPortalAnswer(question: Question) {
   openedPortalAnalysis.value = new Set(openedPortalAnalysis.value).add(question.id)
   saveAttempt(1, result.correct ? 1 : 0)
 
-  if (!result.correct) await saveWrongQuestion(question, portalAnswers.value[question.id])
+  await submitQuestionAttempt(question, portalAnswers.value[question.id], result.correct, result.review?.score)
 
   portalReviewing.value[question.id] = false
+}
+
+// 从答题记录定位到题库原题，并自动展开作答面板。
+async function openHistoryQuestion(questionId: string) {
+  const source = allQuestionPool.value.length
+    ? allQuestionPool.value
+    : practicePool.value.length
+      ? practicePool.value
+      : questions.value
+  const sourceIndex = source.findIndex((item) => item.id === questionId)
+
+  activeModule.value = 'search'
+  resetQuestionBankFilters()
+  bankPage.value = sourceIndex >= 0 ? Math.floor(sourceIndex / bankPageSize.value) + 1 : 1
+  highlightQuestionId.value = questionId
+  highlightVersion.value += 1
+  openedAnalysis.value = new Set()
+
+  await loadQuestionBank()
+
+  if (!questions.value.some((item) => item.id === questionId)) {
+    highlightQuestionId.value = null
+    toast.warning('未能在题库中定位到这道题目')
+  }
 }
 
 // 提交题库搜索中的题目答案
@@ -1295,7 +1390,7 @@ async function submitBankAnswer(question: Question) {
   markBankQuestionSubmittedToday(question.id, result.correct)
   saveAttempt(1, result.correct ? 1 : 0)
 
-  if (!result.correct) await saveWrongQuestion(question, bankAnswers.value[question.id])
+  await submitQuestionAttempt(question, bankAnswers.value[question.id], result.correct, result.review?.score)
 
   bankReviewing.value[question.id] = false
 }
@@ -1318,7 +1413,7 @@ async function submitDailyAnswer(question: Question) {
   openedDailyAnalysis.value = new Set(openedDailyAnalysis.value).add(question.id)
   saveAttempt(1, result.correct ? 1 : 0)
 
-  if (!result.correct) await saveWrongQuestion(question, dailyAnswers.value[question.id])
+  await submitQuestionAttempt(question, dailyAnswers.value[question.id], result.correct, result.review?.score)
 
   dailyReviewing.value[question.id] = false
 
@@ -1351,6 +1446,7 @@ async function submitWrongAnswer(question: Question) {
   wrongReview.value[question.id] = result.review
   openedWrongAnalysis.value = new Set(openedWrongAnalysis.value).add(question.id)
   saveAttempt(1, result.correct ? 1 : 0)
+  await submitQuestionAttempt(question, wrongAnswers.value[question.id], result.correct, result.review?.score)
   wrongReviewing.value[question.id] = false
 }
 
@@ -1364,6 +1460,7 @@ async function submitWrongDrill() {
   wrongDrillCorrect.value = result.correct
   wrongDrillReview.value = result.review
   saveAttempt(1, result.correct ? 1 : 0)
+  await submitQuestionAttempt(wrongDrillQuestion.value, wrongDrillAnswer.value, result.correct, result.review?.score)
   wrongDrillReviewing.value = false
 }
 
@@ -1579,7 +1676,7 @@ async function submitExam() {
     const batchResults: Array<Record<string, unknown>> = []
 
     examPaper.value.forEach((q) => {
-      if (isObjectiveQuestion(q)) {
+      if (!requiresAiReview(q.type)) {
         const isCorrect = evaluateAnswer(q, examAnswers.value[q.id])
         if (isCorrect) correctCount += 1
 
@@ -1587,6 +1684,7 @@ async function submitExam() {
           question_id: q.id,
           user_answer: formatUserAnswer(examAnswers.value[q.id]),
           is_correct: isCorrect,
+          score: isCorrect ? 100 : 0,
           subject: q.subject,
           question_type: q.type,
           content: q.content,
@@ -1598,7 +1696,7 @@ async function submitExam() {
     })
 
     const subjectiveTasks = examPaper.value
-      .filter((q) => !isObjectiveQuestion(q))
+      .filter((q) => requiresAiReview(q.type))
       .map(async (q) => {
         const result = await gradeQuestion(q, examAnswers.value[q.id])
         examReview.value[q.id] = result.review
@@ -1609,6 +1707,7 @@ async function submitExam() {
           question_id: q.id,
           user_answer: formatUserAnswer(examAnswers.value[q.id]),
           is_correct: correct,
+          score: result.review?.score,
           subject: q.subject,
           question_type: q.type,
           content: q.content,
@@ -1622,6 +1721,7 @@ async function submitExam() {
 
     if (batchResults.length > 0) {
       await submitObjectiveResults({ results: batchResults as any[] })
+      await Promise.all([loadAnswerHistory(), loadWrongBook()])
     }
 
     examCorrectCount.value = correctCount
@@ -1728,9 +1828,9 @@ function updateExamAnswer(id: string, value: string) {
   examAnswers.value[id] = value
 }
 
-// 评阅单道题目（客观题自动判，主观题调 AI）
+// 仅填空题和分析题调用 AI，其余题型在前端精确判定。
 async function gradeQuestion(question: Question, answer: AnswerValue) {
-  if (isObjectiveQuestion(question)) return { correct: evaluateAnswer(question, answer), review: null }
+  if (!requiresAiReview(question.type)) return { correct: evaluateAnswer(question, answer), review: null }
 
   try {
     const review = await fetchQuizReview({
@@ -1757,15 +1857,16 @@ async function gradeQuestion(question: Question, answer: AnswerValue) {
   }
 }
 
-// 提交错题记录到服务器
-async function saveWrongQuestion(question: Question, answer: AnswerValue) {
+// 提交单题作答；后端统一保存历史，并仅在答错时维护错题本。
+async function submitQuestionAttempt(question: Question, answer: AnswerValue, isCorrect: boolean, score?: number) {
   try {
-    await submitObjectiveResults({
+    const response = await submitObjectiveResults({
       results: [
         {
           question_id: question.id,
           user_answer: formatUserAnswer(answer),
-          is_correct: false,
+          is_correct: isCorrect,
+          score,
           subject: question.subject,
           question_type: question.type,
           content: question.content,
@@ -1776,9 +1877,12 @@ async function saveWrongQuestion(question: Question, answer: AnswerValue) {
       ],
     })
 
-    wrongTotal.value += 1
-  } catch {
-    // 忽略重复错题
+    await loadAnswerHistory()
+    if (!isCorrect && response.wrong_saved_count > 0) await loadWrongBook()
+    return true
+  } catch (error) {
+    toast.error(getErrorMessage(error, '答题结果未同步，请稍后重试'))
+    return false
   }
 }
 
@@ -1831,10 +1935,6 @@ function evaluateAnswer(question: Question, answer: AnswerValue) {
   }
 
   return userText.includes(stdText) || stdText.includes(userText)
-}
-
-function isObjectiveQuestion(q: Question) {
-  return ['选择题', '单选题', '判断题', '填空题'].includes(q.type)
 }
 
 function isOptionQuestion(q: Question) {
@@ -2045,7 +2145,7 @@ function scrollQuestionBankViewportToTop() {
 <style scoped>
 .question-bank-layout {
   min-height: calc(100vh - var(--navbar-height, 64px));
-  padding: 28px 28px 36px;
+  padding: 0;
   box-sizing: border-box;
   color: #172033;
   background:
@@ -2063,34 +2163,39 @@ function scrollQuestionBankViewportToTop() {
       sans-serif;
 }
 
-.question-bank-workspace,
+.question-bank-workspace {
+  width: 100%;
+  margin: 0;
+}
+
 .exam-workspace {
-  width: min(1480px, 100%);
-  margin: 0 auto;
+  width: min(1480px, calc(100% - 56px));
+  margin: 28px auto 36px;
 }
 
 .bank-shell {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr) 300px;
-  gap: 22px;
-  min-height: calc(100vh - var(--navbar-height, 64px) - 64px);
-  border: 1px solid rgba(226, 232, 240, 0.84);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.72);
+  gap: 0;
+  min-height: calc(100vh - var(--navbar-height, 64px));
+  border: none;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
-  backdrop-filter: blur(18px);
+  backdrop-filter: none;
   overflow: visible;
 }
 
 .bank-left-rail {
   position: sticky;
-  top: 16px;
+  top: 0;
   align-self: start;
-  max-height: calc(100vh - var(--navbar-height, 64px) - 32px);
+  min-height: calc(100vh - var(--navbar-height, 64px));
+  max-height: calc(100vh - var(--navbar-height, 64px));
   overflow-y: auto;
-  padding: 22px 14px;
-  border-right: 1px solid rgba(226, 232, 240, 0.8);
-  background: rgba(255, 255, 255, 0.54);
+  padding: 24px 12px 28px 20px;
+  border-right: 1px solid rgba(226, 232, 240, 0.82);
+  background: rgba(255, 255, 255, 0.7);
   scrollbar-width: thin;
 }
 
@@ -2098,17 +2203,23 @@ function scrollQuestionBankViewportToTop() {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 26px;
+  margin-bottom: 24px;
+  padding: 0 4px;
 }
 
 .rail-brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 34px;
   height: 34px;
   border-radius: 9px;
   background:
       linear-gradient(135deg, #67e8f9, #8bdbb6),
       #8bdbb6;
+  color: #075f57;
   box-shadow: none;
+  flex-shrink: 0;
 }
 
 .rail-brand strong {
@@ -2122,28 +2233,30 @@ function scrollQuestionBankViewportToTop() {
 .rail-brand span {
   display: block;
   margin-top: 2px;
-  color: #8a94a7;
-  font-size: 11px;
-  font-weight: 700;
+  color: #a5adbb;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .rail-menu {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .rail-menu-item {
+  position: relative;
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 10px;
   width: 100%;
-  min-height: 50px;
-  padding: 10px 8px;
+  min-height: 58px;
+  padding: 8px 10px 8px 4px;
   border: 1px solid transparent;
   border-radius: 10px;
   background: transparent;
-  color: #5f6b7c;
+  color: #516071;
   text-align: left;
   cursor: pointer;
   transition:
@@ -2154,33 +2267,48 @@ function scrollQuestionBankViewportToTop() {
 }
 
 .rail-menu-item:hover {
-  background: rgba(248, 250, 252, 0.86);
+  background: rgba(235, 242, 244, 0.72);
   transform: none;
 }
 
 .rail-menu-item.active {
-  border-color: rgba(82, 211, 173, 0.34);
-  background: rgba(209, 250, 229, 0.48);
-  color: #136f60;
+  border-color: transparent;
+  background: rgba(209, 250, 229, 0.42);
+  color: #0f6b55;
 }
 
-.rail-menu-mark {
+.rail-menu-item.active::before {
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 0;
+  width: 3px;
+  border-radius: 3px;
+  background: #2fc68f;
+  content: '';
+}
+
+.rail-menu-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: 8px;
-  background: rgba(241, 245, 249, 0.8);
-  color: #8a94a7;
-  font-size: 11px;
-  font-weight: 900;
+  background: transparent;
+  color: #6f7d90;
   flex-shrink: 0;
 }
 
-.rail-menu-item.active .rail-menu-mark {
-  background: #42c99a;
-  color: #fff;
+.rail-menu-item.active .rail-menu-icon {
+  background: rgba(47, 198, 143, 0.14);
+  color: #168165;
+}
+
+.rail-menu-copy {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
 }
 
 .rail-menu-item strong,
@@ -2189,15 +2317,20 @@ function scrollQuestionBankViewportToTop() {
 }
 
 .rail-menu-item strong {
-  font-size: 13px;
+  color: #334155;
+  font-size: 14px;
   font-weight: 800;
+}
+
+.rail-menu-item.active strong {
+  color: #0f6b55;
 }
 
 .rail-menu-item small {
   margin-top: 2px;
   font-size: 11px;
   font-weight: 600;
-  color: #9aa4b5;
+  color: #94a0b2;
 }
 
 .rail-menu-item.active small {
@@ -2213,7 +2346,7 @@ function scrollQuestionBankViewportToTop() {
 
 .bank-main {
   min-width: 0;
-  padding: 24px 0 28px;
+  padding: 28px 32px 36px;
 }
 
 .portal-board,
@@ -2641,6 +2774,11 @@ function scrollQuestionBankViewportToTop() {
 .difficulty-tag {
   background: #dff2ff;
   color: #3487c7;
+}
+
+.done-tag {
+  background: #e8f5e9;
+  color: #2e7d32;
 }
 
 .recommend-question-content {
@@ -3414,6 +3552,7 @@ function scrollQuestionBankViewportToTop() {
     position: static;
     top: auto;
     align-self: stretch;
+    min-height: 0;
     max-height: none;
     overflow: visible;
     border-right: none;

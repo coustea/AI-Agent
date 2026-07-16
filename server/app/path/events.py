@@ -1,7 +1,7 @@
 """路径模块学习事件埋点。
 
 提供路径节点启动、完成和测验答题三个事件埋点函数，记录到 ``learning_events`` 表，
-供画像评分按时间窗口聚合统计。
+供学习评估按时间窗口聚合统计。
 
 依赖关系：本文件仅被 ``service.py`` 和 ``workflows.py`` 调用，
 不依赖 ``path/event.py``（SSE 事件流）。
@@ -157,6 +157,8 @@ async def record_path_quiz_answered_event(
         event_metadata={
             "path_node_id": path_node_id,
             "node_id": node_id,
+            "is_correct": score >= 60,
+            "attempt_index": 1,
             "weak_knowledge_points": weak_knowledge_points or [],
             "outcome": outcome,
         },

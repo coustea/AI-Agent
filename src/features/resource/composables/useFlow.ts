@@ -45,8 +45,14 @@ export function useFlow(nodes: ComputedRef<DagNodeState[]>) {
 
   // 注册或移除某个节点卡片的 DOM 引用，随后触发重新测量
   function setCardRef(id: string, element: unknown) {
+    const previous = cardRefs.get(id)
+    if (previous && previous !== element) {
+      resizeObserver?.unobserve(previous)
+    }
+
     if (element instanceof HTMLElement) {
       cardRefs.set(id, element)
+      resizeObserver?.observe(element)
     } else {
       cardRefs.delete(id)
     }
@@ -129,6 +135,7 @@ export function useFlow(nodes: ComputedRef<DagNodeState[]>) {
     if (typeof ResizeObserver !== 'undefined' && canvasRef.value) {
       resizeObserver = new ResizeObserver(scheduleMeasure)
       resizeObserver.observe(canvasRef.value)
+      cardRefs.forEach(card => resizeObserver?.observe(card))
     }
   })
 
@@ -143,7 +150,7 @@ export function useFlow(nodes: ComputedRef<DagNodeState[]>) {
 
   // 监听节点的 id、状态和进度变化，DOM 更新后重新测量连线几何
   watch(
-    () => nodes.value.map(node => `${node.id}:${node.status}:${node.progress}`).join('|'),
+    () => nodes.value.map(node => `${node.id}:${node.status}:${node.progress}:${node.currentMessage}`).join('|'),
     async () => {
       await nextTick()
       scheduleMeasure()

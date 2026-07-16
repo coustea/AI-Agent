@@ -147,6 +147,7 @@ export function stopTracking() {
     duration_seconds: durationSeconds,
     course: context.course,
     topic: context.topic,
+    client_session_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'sess-' + Math.random().toString(36).slice(2, 11) + '-' + Date.now(),
     event_metadata: {
       resource_id: context.resourceId,
       path_id: context.pathId,

@@ -32,10 +32,19 @@ PathEventName = Literal[
     "node.ready",          # 节点就绪
     "planning.completed",  # 路径规划完成
     "planning.failed",     # 路径规划失败
+    "resource.started",     # 资源生成开始
+    "resource.running",     # 资源生成中
+    "resource.completed",   # 资源生成完成
+    "resource.failed",      # 资源生成失败
 ]
 
 # 终止事件集合 — 触发后频道进入倒计时清理
-PATH_TERMINAL_EVENTS: set[PathEventName] = {"planning.completed", "planning.failed"}
+PATH_TERMINAL_EVENTS: set[PathEventName] = {
+    "planning.completed",
+    "planning.failed",
+    "resource.completed",
+    "resource.failed",
+}
 
 
 # 路径事件数据模型 — SSE 推送的单个事件
@@ -138,6 +147,14 @@ class _PathChannel:
             )
         return path_event
 
+    @property
+    def is_terminal(self) -> bool:
+        return self._is_terminal
+
+    @property
+    def last_sequence(self) -> int:
+        return self._sequence
+
     # 订阅频道事件，支持断线重放历史事件
     async def subscribe(
         self, after_sequence: int
@@ -150,6 +167,8 @@ class _PathChannel:
     # 取消订阅，从订阅者列表移除
     async def unsubscribe(self, queue: asyncio.Queue[PathEvent]) -> None:
         self._subscribers = [q for q in self._subscribers if q is not queue]
+        if self._is_terminal and not self._subscribers:
+            await self._cleanup()
 
     # 清理无订阅者的终止频道，从全局注册表中移除
     async def _cleanup(self) -> None:
@@ -255,7 +274,11 @@ class PathEvents:
 
     @property
     def is_terminal(self) -> bool:
-        return self._channel is not None and self._channel._is_terminal
+        return self._channel is not None and self._channel.is_terminal
+
+    @property
+    def last_sequence(self) -> int:
+        return self._channel.last_sequence if self._channel is not None else 0
 
 
 # SSE 编码 — 将 PathEvent 转换为 text/event-stream 格式

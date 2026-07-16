@@ -9,7 +9,7 @@ ChatAgent 不感知 Chroma、embedding、distance 等细节。
   3. 扩大召回后融合截断
   4. BM25 结果不再用 source 冒充正文
 
-Called by: app/rag/tools.py (retrieve), app/rag/indexing/build.py (check_index_health),
+Called by: app/rag/tools.py (retrieve), app/rag/build.py (check_index_health),
            app/main.py lifespan (check_index_health).
 Per user: "retrieve() 里 embedding 失败就直接返回 unavailable，没有使用 BM25 兜底"
 """
@@ -17,6 +17,7 @@ Per user: "retrieve() 里 embedding 失败就直接返回 unavailable，没有�
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -28,15 +29,28 @@ from pydantic import BaseModel
 from app.config import (
     KB_DIR,
     KB_ENABLED,
+    KB_EMBED_BASE_URL,
     KB_EMBED_MODEL,
     KB_TOP_K,
 )
 from app.infra.logging import get_logger
 from app.rag.bm25 import get_bm25_index
 from app.rag.embeddings import embed_query
-from app.rag.models import CHROMA_COLLECTION, MANIFEST_FILENAME, RetrievedChunk, RetrievalResult
+from app.rag.models import (
+    CHROMA_COLLECTION,
+    MANIFEST_FILENAME,
+    RetrievedChunk,
+    RetrievalResult,
+    ChannelStatus,
+    CourseFilterMode,
+)
 
 logger = get_logger(__name__)
+
+
+def _normalize_base_url(value: str) -> str:
+    """Normalize only trailing slashes; callers must provide the API root."""
+    return value.strip().rstrip("/")
 
 # 并发检索限制
 _semaphore = asyncio.Semaphore(4)
@@ -48,6 +62,13 @@ _RRF_CANDIDATE_K = 20      # RRF 融合后保留候选
 _RRF_K = 60                # RRF 平滑常数
 _FINAL_TOP_K_LIMIT = 8     # 对外最多返回 8 条
 
+# 证据门控阈值
+_MAX_DENSE_DISTANCE = 1.0  # 向量距离上限，超过此值视为无证据
+
+# 健康检查 TTL 缓存
+_HEALTH_TTL_SECONDS = 30.0
+_health_cache: tuple[float, Path, IndexHealth] | None = None
+
 
 # 索引健康状态模型
 class IndexHealth(BaseModel):
@@ -57,6 +78,36 @@ class IndexHealth(BaseModel):
     reason: str
     document_count: int = 0
     chunk_count: int = 0
+    # BM25 状态
+    bm25_ready: bool = False
+    bm25_reason: str = ""
+
+
+# ============ 健康缓存 ============
+
+
+# 重置健康缓存（索引构建后调用）
+def reset_health_cache() -> None:
+    """重置健康检查缓存，下次访问时重新检查。"""
+    global _health_cache
+    _health_cache = None
+
+
+# 获取带缓存的索引健康状态
+async def _get_cached_health(kb_dir: Path | None = None) -> IndexHealth:
+    """获取带 TTL 缓存的索引健康状态。"""
+    global _health_cache
+    now = time.monotonic()
+    target_dir = Path(kb_dir or KB_DIR).expanduser().resolve()
+    if (
+        _health_cache
+        and _health_cache[1] == target_dir
+        and now - _health_cache[0] < _HEALTH_TTL_SECONDS
+    ):
+        return _health_cache[2]
+    health = await asyncio.to_thread(check_index_health, target_dir)
+    _health_cache = (now, target_dir, health)
+    return health
 
 
 # ============ 辅助函数 ============
@@ -136,13 +187,20 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
     if collection_name != CHROMA_COLLECTION:
         return IndexHealth(ready=False, reason=f"collection_mismatch:{collection_name}")
 
+    chunk_count = int(manifest.get("chunk_count", 0))
+    if chunk_count <= 0:
+        return IndexHealth(ready=False, reason="chunk_count_zero")
+
     embed_model = str(manifest.get("embedding_model", ""))
     if embed_model and embed_model != KB_EMBED_MODEL:
         return IndexHealth(ready=False, reason=f"embedding_model_mismatch:{embed_model}")
 
-    chunk_count = int(manifest.get("chunk_count", 0))
-    if chunk_count <= 0:
-        return IndexHealth(ready=False, reason="chunk_count_zero")
+    manifest_base_url = str(manifest.get("embedding_base_url", "")).strip()
+    if manifest_base_url and _normalize_base_url(manifest_base_url) != _normalize_base_url(KB_EMBED_BASE_URL):
+        return IndexHealth(
+            ready=False,
+            reason=f"embedding_base_url_mismatch:{manifest_base_url}",
+        )
 
     # 校验 Chroma 实际数量
     try:
@@ -157,7 +215,47 @@ def _validate_manifest(manifest: dict[str, Any] | None, kb_dir: Path) -> IndexHe
     except Exception as exc:
         return IndexHealth(ready=False, reason=f"chroma_error:{exc}")
 
-    return IndexHealth(ready=True, reason="ok", document_count=0, chunk_count=chunk_count)
+    # 校验 BM25 状态
+    bm25_ready = False
+    bm25_reason = ""
+    bm25_manifest = manifest.get("bm25", {})
+    if bm25_manifest:
+        bm25_built = bool(bm25_manifest.get("built", False))
+        bm25_schema = str(bm25_manifest.get("schema_version", ""))
+        bm25_chunk_count = int(bm25_manifest.get("chunk_count", 0))
+        bm25_filename = str(bm25_manifest.get("filename", "bm25_index.pkl"))
+        bm25_checksum = str(bm25_manifest.get("sha256", ""))
+        bm25_path = kb_dir / bm25_filename
+
+        if not bm25_built:
+            bm25_reason = "not_built"
+        elif bm25_schema != "1":
+            bm25_reason = f"schema_version_mismatch:{bm25_schema}"
+        elif bm25_chunk_count <= 0:
+            bm25_reason = "chunk_count_zero"
+        elif not bm25_path.exists():
+            bm25_reason = "file_missing"
+        elif bm25_chunk_count != chunk_count:
+            bm25_reason = f"count_mismatch:manifest={bm25_chunk_count},chroma={chunk_count}"
+        elif not bm25_checksum:
+            bm25_reason = "checksum_missing"
+        elif hashlib.sha256(bm25_path.read_bytes()).hexdigest() != bm25_checksum:
+            bm25_reason = "checksum_mismatch"
+        else:
+            bm25_ready = True
+            bm25_reason = "ok"
+    else:
+        # 旧 manifest 无 BM25 信息，视为 BM25 未就绪但不影响向量健康
+        bm25_reason = "not_in_manifest"
+
+    return IndexHealth(
+        ready=True,
+        reason="ok",
+        document_count=0,
+        chunk_count=chunk_count,
+        bm25_ready=bm25_ready,
+        bm25_reason=bm25_reason,
+    )
 
 
 # 非阻塞检查索引健康状态（不请求嵌入服务）
@@ -264,6 +362,7 @@ def _parse_chroma_results(results: dict[str, Any]) -> list[RetrievedChunk]:
                 section=str(meta.get("section", "")),
                 course=str(meta.get("course", "")),
                 distance=distance,
+                dense_distance=distance,  # 保留向量距离
                 score=_distance_to_score(distance),
                 retrieval_type="vector",
                 parent_id=str(meta.get("parent_id", "")),
@@ -282,16 +381,21 @@ async def _vector_search_soft_course(
     course_name: str | None,
     fetch_k: int,
     min_results: int,
-) -> list[RetrievedChunk]:
+) -> tuple[list[RetrievedChunk], CourseFilterMode]:
     """向量检索：优先课程过滤，不足时自动放宽。
 
     避免 course metadata 推断不准导致直接查空。
+
+    Returns:
+        (chunks, filter_mode): 检索结果列表和课程过滤模式
     """
     where_filter: dict[str, Any] | None = None
-    if course_name and course_name.strip():
-        where_filter = {"course": {"$eq": course_name.strip()}}
+    canonical_course = (course_name or "").strip()
+    if canonical_course:
+        where_filter = {"course": {"$eq": canonical_course}}
 
     chunks: list[RetrievedChunk] = []
+    course_filtered_chunks: list[RetrievedChunk] = []
 
     # 先尝试课程过滤检索
     if where_filter:
@@ -302,13 +406,15 @@ async def _vector_search_soft_course(
                 fetch_k,
                 where_filter,
             )
-            chunks.extend(_parse_chroma_results(filtered_results))
+            course_filtered_chunks = _parse_chroma_results(filtered_results)
+            # 标记这些为课程过滤结果
+            chunks.extend(course_filtered_chunks)
         except Exception as exc:
             logger.warning("[retriever] chroma filtered query failed: %s", exc)
 
         # 课程过滤结果已足够则直接返回
         if len(chunks) >= min_results:
-            return _dedupe_chunks(chunks)
+            return _dedupe_chunks(chunks), "filtered"
 
     # 课程过滤不足或失败，放宽到全库检索
     try:
@@ -318,25 +424,71 @@ async def _vector_search_soft_course(
             fetch_k,
             None,
         )
-        chunks.extend(_parse_chroma_results(broad_results))
+        broad_chunks = _parse_chroma_results(broad_results)
+        # 标记全局补充的为回退结果
+        for chunk in broad_chunks:
+            if canonical_course and chunk.course != canonical_course:
+                chunk.course_fallback = True
+            chunks.append(chunk)
     except Exception as exc:
         logger.warning("[retriever] chroma broad query failed: %s", exc)
+        # A broad query is the required final dense path.  Do not silently
+        # convert this runtime outage into a genuine no-match result.
+        raise RuntimeError("chroma broad query failed") from exc
 
-    return _dedupe_chunks(chunks)
+    # 确定过滤模式
+    filter_mode: CourseFilterMode = "filtered" if where_filter and course_filtered_chunks else "none"
+    if not course_filtered_chunks and canonical_course:
+        filter_mode = "fallback"
+
+    return _dedupe_chunks(chunks), filter_mode
 
 
 # ============ BM25 检索 ============
 
 
 # BM25 关键词检索（内存操作，无 IO 阻塞）
-def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
-    """BM25 关键词检索（内存操作，无 IO 阻塞）。"""
+def _bm25_query(
+    query: str, top_k: int, course: str | None = None
+) -> tuple[list[RetrievedChunk], CourseFilterMode]:
+    """BM25 关键词检索（内存操作，无 IO 阻塞）。
+
+    Returns:
+        (chunks, filter_mode): 检索结果列表和课程过滤模式
+    """
     kb_dir = Path(KB_DIR)
     index = get_bm25_index(kb_dir)
     if not index.is_ready:
-        return []
+        return [], "none"
 
+    # 先尝试课程过滤；不足的部分再由全库补充并显式标记。
+    if course:
+        filtered_chunks = _parse_bm25_results(
+            index.search(query, top_k=top_k, course=course)
+        )
+        if len(filtered_chunks) >= top_k:
+            return filtered_chunks, "filtered"
+
+        # 课程结果不足时，才用全库结果补齐；不能把全库结果伪装成已过滤。
+        global_chunks = _parse_bm25_results(index.search(query, top_k=top_k))
+        filtered_ids = {chunk.chunk_id for chunk in filtered_chunks}
+        for chunk in global_chunks:
+            if chunk.chunk_id not in filtered_ids and chunk.course != course:
+                chunk.course_fallback = True
+        merged = _dedupe_chunks([*filtered_chunks, *global_chunks])
+        if merged:
+            return merged, "fallback" if len(filtered_chunks) < top_k else "filtered"
+        return [], "filtered"
+
+    # 没有课程提示时使用全局检索。
     results = index.search(query, top_k=top_k)
+    chunks = _parse_bm25_results(results)
+    return chunks, "none"
+
+
+# 解析 BM25 原始结果为 RetrievedChunk 列表
+def _parse_bm25_results(results: list[dict[str, Any]]) -> list[RetrievedChunk]:
+    """解析 BM25 检索结果为 RetrievedChunk 列表。"""
     chunks: list[RetrievedChunk] = []
     seen: set[str] = set()
 
@@ -352,7 +504,8 @@ def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
             # 旧索引可能缺正文，跳过避免把 source 当正文返回
             continue
 
-        score = r.get("score", r.get("bm25_score"))
+        bm25_score = r.get("bm25_score")
+        score = r.get("score", bm25_score)
 
         chunks.append(
             RetrievedChunk(
@@ -362,7 +515,7 @@ def _bm25_query(query: str, top_k: int) -> list[RetrievedChunk]:
                 title=str(r.get("title", "")),
                 section=str(r.get("section", "")),
                 course=str(r.get("course", "")),
-                distance=None,
+                bm25_score=float(bm25_score) if bm25_score is not None else None,
                 score=float(score) if score is not None else None,
                 retrieval_type="bm25",
                 parent_id=str(r.get("parent_id", "")),
@@ -385,7 +538,11 @@ def _rrf_fusion(
     top_k: int,
     k: int = 60,
 ) -> list[RetrievedChunk]:
-    """Reciprocal Rank Fusion: score(d) = Σ 1/(k + rank_i)。"""
+    """Reciprocal Rank Fusion: score(d) = Σ 1/(k + rank_i)。
+
+    保留每个 chunk 的通道特定分数（dense_distance, bm25_score），
+    fusion_score 写入单独字段，不覆盖原有分数。
+    """
     doc_scores: dict[str, float] = {}
     doc_objects: dict[str, RetrievedChunk] = {}
     doc_sources: dict[str, set[str]] = {}
@@ -410,6 +567,9 @@ def _rrf_fusion(
     fused: list[RetrievedChunk] = []
     for key in sorted_keys[:top_k]:
         chunk = doc_objects[key]
+        # fusion_score 写入单独字段
+        chunk.fusion_score = doc_scores[key]
+        # 向后兼容：score 作为 fusion_score 的别名
         chunk.score = doc_scores[key]
 
         # 根据命中来源标注检索类型
@@ -426,10 +586,38 @@ def _rrf_fusion(
     return fused
 
 
+# ============ 证据门控 ============
+
+
+def _has_evidence(chunk: RetrievedChunk) -> bool:
+    """检查 chunk 是否有正向证据。
+
+    有证据的条件：
+    - BM25 分数 > 0（词汇匹配）
+    - 或向量距离 <= _MAX_DENSE_DISTANCE（语义相似）
+
+    Returns:
+        是否有证据支持
+    """
+    if chunk.bm25_score is not None and chunk.bm25_score > 0:
+        return True
+    if chunk.dense_distance is not None and chunk.dense_distance <= _MAX_DENSE_DISTANCE:
+        return True
+    return False
+
+
+def _apply_evidence_gate(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+    """应用证据门控，过滤无证据的结果。
+
+    保留有正向证据的候选，避免返回完全不相关的结果。
+    """
+    return [chunk for chunk in chunks if _has_evidence(chunk)]
+
+
 # ============ 公共接口 ============
 
 
-# 混合检索公共接口：BM25 兜底 + 向量检索 + RRF 融合
+# 混合检索公共接口：非阻塞通道执行 + 能力感知状态
 async def retrieve(
     query: str,
     *,
@@ -442,6 +630,7 @@ async def retrieve(
     1. BM25 先执行，embedding 不可用时可兜底。
     2. course_name 使用软过滤，避免 metadata 不准导致查空。
     3. 扩大召回，再融合截断。
+    4. 非阻塞通道执行，能力感知状态。
     """
     # 空查询直接返回 empty
     normalized_query = (query or "").strip()
@@ -454,6 +643,8 @@ async def retrieve(
             status="unavailable",
             query=normalized_query,
             message="KB disabled",
+            dense_status="disabled",
+            bm25_status="disabled",
         )
 
     # 计算最终返回条数并构造查询文本
@@ -461,55 +652,109 @@ async def retrieve(
     query_text = _build_query_text(normalized_query, course_name)
     start = time.monotonic()
 
-    async with _semaphore:
-        health = check_index_health()
+    # 获取健康状态（带缓存）
+    health = await _get_cached_health()
 
-        # 先做 BM25：即使向量服务失败也能兜底
-        bm25_chunks = _bm25_query(query_text, _BM25_FETCH_K)
+    # 初始化通道状态
+    dense_status: ChannelStatus = "not_ready"
+    bm25_status: ChannelStatus = "not_ready"
+    course_filter_mode: CourseFilterMode = "none"
 
-        # 索引未就绪时尝试用 BM25 兜底
-        if not health.ready:
-            if bm25_chunks:
-                return RetrievalResult(
-                    status="ok",
-                    query=normalized_query,
-                    chunks=bm25_chunks[:effective_k],
-                    elapsed_ms=_elapsed_ms(start),
-                    message=f"vector index not ready, bm25 fallback: {health.reason}",
-                )
+    # 并发执行 BM25 和 embedding（在线程池中）
+    bm25_task = asyncio.to_thread(
+        _bm25_query, query_text, _BM25_FETCH_K, course_name
+    )
+    embedding_task = asyncio.to_thread(embed_query, query_text)
 
+    bm25_result, embedding = await asyncio.gather(
+        bm25_task, embedding_task, return_exceptions=True
+    )
+
+    # 处理 BM25 结果
+    if isinstance(bm25_result, Exception):
+        logger.warning("[retriever] BM25 query failed: %s", bm25_result)
+        bm25_chunks = []
+        bm25_status = "unavailable"
+    elif isinstance(bm25_result, tuple):
+        bm25_chunks, course_filter_mode = bm25_result
+        bm25_status = "ok" if bm25_chunks else "not_ready"
+    else:
+        bm25_chunks = []
+        bm25_status = "unavailable"
+
+    # 索引未就绪时尝试用 BM25 兜底
+    if not health.ready:
+        if bm25_chunks:
             return RetrievalResult(
-                status="unavailable",
+                status="ok",
                 query=normalized_query,
+                chunks=bm25_chunks[:effective_k],
                 elapsed_ms=_elapsed_ms(start),
-                message=f"index not ready: {health.reason}",
+                message=f"vector index not ready, bm25 fallback: {health.reason}",
+                dense_status="not_ready",
+                bm25_status=bm25_status,
+                course_filter_mode=course_filter_mode,
             )
 
-        # 向量检索需嵌入查询；嵌入失败则用 BM25 兜底
-        embedding = embed_query(query_text)
-        if embedding is None:
-            if bm25_chunks:
-                return RetrievalResult(
-                    status="ok",
-                    query=normalized_query,
-                    chunks=bm25_chunks[:effective_k],
-                    elapsed_ms=_elapsed_ms(start),
-                    message="embedding unavailable, bm25 fallback",
-                )
+        return RetrievalResult(
+            status="unavailable",
+            query=normalized_query,
+            elapsed_ms=_elapsed_ms(start),
+            message=f"index not ready: {health.reason}",
+            dense_status="not_ready",
+            bm25_status=bm25_status,
+        )
 
+    # 处理 embedding 结果
+    if isinstance(embedding, Exception):
+        logger.warning("[retriever] embedding failed: %s", embedding)
+        embedding = None
+        dense_status = "unavailable"
+    elif embedding is None:
+        dense_status = "unavailable"
+    else:
+        dense_status = "ok"
+
+    # embedding 失败则用 BM25 兜底
+    if embedding is None:
+        if bm25_chunks:
             return RetrievalResult(
-                status="unavailable",
+                status="partial",
                 query=normalized_query,
+                chunks=bm25_chunks[:effective_k],
                 elapsed_ms=_elapsed_ms(start),
-                message="embedding unavailable",
+                message="embedding unavailable, bm25 fallback",
+                dense_status=dense_status,
+                bm25_status=bm25_status,
+                course_filter_mode=course_filter_mode,
             )
 
-        vector_chunks = await _vector_search_soft_course(
+        return RetrievalResult(
+            status="unavailable",
+            query=normalized_query,
+            elapsed_ms=_elapsed_ms(start),
+            message="embedding unavailable",
+            dense_status=dense_status,
+            bm25_status=bm25_status,
+        )
+
+    # 向量检索
+    try:
+        vector_result = await _vector_search_soft_course(
             embedding=embedding,
             course_name=course_name,
             fetch_k=_VECTOR_FETCH_K,
             min_results=effective_k,
         )
+        vector_chunks, vector_filter_mode = vector_result
+        dense_status = "ok"
+        # 使用向量检索的课程过滤模式（优先级更高）
+        if vector_filter_mode != "none":
+            course_filter_mode = vector_filter_mode
+    except Exception as exc:
+        logger.warning("[retriever] vector search failed: %s", exc)
+        vector_chunks = []
+        dense_status = "unavailable"
 
     # 双路均有结果则做 RRF 融合，否则取单边
     if vector_chunks and bm25_chunks:
@@ -524,21 +769,45 @@ async def retrieve(
     else:
         chunks = bm25_chunks
 
+    # 应用证据门控
+    chunks = _apply_evidence_gate(chunks)
+
     # 去重并按最终条数截断
     chunks = _dedupe_chunks(chunks)[:effective_k]
 
-    # 无任何结果返回 empty
+    # 无任何结果时，必须把运行时故障与真实无命中分开。
     if not chunks:
+        if dense_status == "unavailable":
+            return RetrievalResult(
+                status="unavailable",
+                query=normalized_query,
+                elapsed_ms=_elapsed_ms(start),
+                message="vector retrieval unavailable and no BM25 fallback result",
+                dense_status=dense_status,
+                bm25_status=bm25_status,
+                course_filter_mode=course_filter_mode,
+            )
         return RetrievalResult(
             status="empty",
             query=normalized_query,
             elapsed_ms=_elapsed_ms(start),
+            dense_status=dense_status,
+            bm25_status=bm25_status,
+            course_filter_mode=course_filter_mode,
         )
+
+    # 确定最终状态
+    # Dense retrieval alone is a complete usable service.  Only use `partial`
+    # when the dense channel failed and lexical retrieval supplied the result.
+    final_status = "partial" if dense_status != "ok" else "ok"
 
     # 返回检索成功结果
     return RetrievalResult(
-        status="ok",
+        status=final_status,
         query=normalized_query,
         chunks=chunks,
         elapsed_ms=_elapsed_ms(start),
+        dense_status=dense_status,
+        bm25_status=bm25_status,
+        course_filter_mode=course_filter_mode,
     )

@@ -1,7 +1,7 @@
 """LangGraph 图状态定义 — 统一 Agent 架构。
 
 状态字段分为三类：
-1. 请求输入：user_id, session_id, question, attachments, enable_web_search, need_teaching_diagram
+1. 请求输入：user_id, session_id, question, attachments, enable_web_search, diagram_mode
 2. 上下文：history_messages, session_summary, attachment_context
 3. Agent 循环：messages（LangGraph 标准 reducer）
 4. 运行时：event_queue, stream_events, tool_invocations, sources, errors
@@ -33,7 +33,8 @@ class TutorAgentState(TypedDict, total=False):
     question: str
     attachments: list[str]
     enable_web_search: bool
-    need_teaching_diagram: bool
+    diagram_mode: str
+    voice_mode: bool
 
     # ── 上下文（无 reducer）──
     history_messages: list[AnyMessage]

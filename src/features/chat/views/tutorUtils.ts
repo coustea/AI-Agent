@@ -1,4 +1,4 @@
-import type { StructuredTeachingDiagram, TeachingDiagram } from '@/features/chat/types/chat'
+import type { ChatVideoArtifact, StructuredTeachingDiagram, TeachingDiagram } from '@/features/chat/types/chat'
 
 export interface PendingFile {
   file?: File
@@ -61,6 +61,7 @@ export interface ChatMsg {
   attachments?: Attachment[] | null
   teachingDiagram?: TeachingDiagram | null
   teachingDiagramGenerating?: boolean
+  video?: ChatVideoArtifact | null
   agentActivities?: AgentActivity[]
   sources?: KnowledgeSource[]  // 知识库来源
 }
@@ -84,26 +85,6 @@ export const finalizeRunningAgentActivities = (
   ))
 )
 
-export interface AutoRestartVadDecision {
-  isVoiceChatting: boolean
-  chatMode: string
-  isAvatarConnected: boolean
-  continuousVoiceConversation?: boolean
-}
-
-// 判断数字人回复完成后是否应自动重启 VAD（语音通话模式）
-export const shouldAutoRestartVadAfterAssistantComplete = ({
-  isVoiceChatting,
-  chatMode,
-  isAvatarConnected,
-  continuousVoiceConversation = true,
-}: AutoRestartVadDecision): boolean => (
-  continuousVoiceConversation
-  && isVoiceChatting
-  && chatMode === 'digital_human'
-  && isAvatarConnected
-)
-
 const SUPPORTED_DIAGRAM_TYPES = new Set([
   'comparison',
   'flowchart',
@@ -117,7 +98,6 @@ const SUPPORTED_DIAGRAM_TYPES = new Set([
   'timeline',
 ])
 
-// 校验教学图解结构完整性和类型支持
 const isStructuredTeachingDiagram = (diagram: unknown): diagram is StructuredTeachingDiagram => {
   if (!diagram || typeof diagram !== 'object') return false
   const candidate = diagram as Partial<StructuredTeachingDiagram>
@@ -150,6 +130,24 @@ export const normalizeTeachingDiagram = (diagram: unknown): TeachingDiagram | nu
 }
 
 // 根据文件名获取文档类型分类
+export interface InputToolState {
+  uploadingFile: boolean
+  enableWebSearch: boolean
+  needTeachingDiagram: boolean
+}
+
+export const getInputToolStateKey = ({
+  uploadingFile,
+  enableWebSearch,
+  needTeachingDiagram,
+}: InputToolState): string => (
+  [
+    uploadingFile ? 'uploading' : 'idle',
+    enableWebSearch ? 'web-on' : 'web-off',
+    needTeachingDiagram ? 'diagram-on' : 'diagram-off',
+  ].join(':')
+)
+
 export const getDocumentType = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase() || ''
   if (['doc', 'docx'].includes(ext)) return 'word'

@@ -46,10 +46,8 @@
           :dagSelectedAgentIds="dagSelectedAgentIds"
           :generationError="generationError"
           :planReady="planReady"
-          :latestArtifactAgentId="latestArtifactAgentId"
           :visibleWorkflowNodes="visibleWorkflowNodes"
           @selectNode="selectDagNode"
-          @openResource="openResourceByType"
         />
 
         <div v-else key="result" class="redirecting-shell">
@@ -58,11 +56,12 @@
         </div>
       </transition>
     </div>
+
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
+import { watch, onMounted, onActivated, onDeactivated, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { PhClockAfternoon as HistoryIcon } from '@phosphor-icons/vue'
 
@@ -71,7 +70,6 @@ import ResourceSetting from './ResourceSetting.vue'
 import ResourceRunning from './ResourceRunning.vue'
 
 import { useGeneration } from '../composables/useGeneration'
-import { getResourceBundle } from '../api/resource'
 
 const route = useRoute()
 const router = useRouter()
@@ -80,7 +78,7 @@ const router = useRouter()
 const {
   currentPhase, naturalInput, learningScenario, enabledAgentIds, agentConfigs,
   dagNodeStates, selectedDagNodeId, overallProgress, latestWorkflowMessage,
-  generatedResources, generationError, planReady, latestArtifactAgentId,
+  generatedResources, generationError, planReady,
   activeResourceId, visibleWorkflowNodes, dagSelectedAgentIds,
   submitInput, start, restore, pause, resume, dispose, selectDagNode,
 } = useGeneration()
@@ -91,35 +89,6 @@ watch(currentPhase, (phase) => {
     router.push({ name: 'ResourceResult', params: { id: activeResourceId.value } })
   }
 })
-
-// 生成中预览进行中资源（沿用原 ResourceGenerator 逻辑）
-const activePreviewAgent = ref<string | null>(null)
-const previewData = ref<any>(null)
-const previewResource = ref<any>(null)
-
-// 按资源类型打开预览：若 content 为空则尝试从资源包拉取完整数据
-async function openResourceByType(type: string) {
-  let resource = generatedResources.value.find((item: any) => item.type === type)
-  if (resource && !resource.content && activeResourceId.value) {
-    try {
-      const bundle = (await getResourceBundle(activeResourceId.value)).data?.data
-      const full = bundle?.resources?.find((item: any) => item.type === type)
-      if (full) {
-        const updated = [...generatedResources.value]
-        updated[updated.findIndex((item: any) => item.type === type)] = full
-        generatedResources.value = updated
-        resource = full
-      }
-    } catch (err) {
-      console.error('Failed to fetch resource content for preview:', err)
-    }
-  }
-  if (resource?.content) {
-    activePreviewAgent.value = resource.type || resource.agent_type
-    previewData.value = resource.content
-    previewResource.value = resource
-  }
-}
 
 // 组件挂载：从 URL query 恢复 prompt 或 resourceId 并恢复生成状态
 onMounted(() => {

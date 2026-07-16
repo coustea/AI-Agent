@@ -8,12 +8,9 @@ import time
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import (
-    build_node_context,
-    build_resource_context,
-)
+from app.resource.agents.common import build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+from app.resource.schemas import AgentResult, ResourceInput
 from app.resource.schemas.quiz import (
     QuizBlueprintSlot,
     QuizPayload,
@@ -44,18 +41,6 @@ class QuizAgent(BaseResourceAgent):
             config=input_data.agent_config,
         )
 
-    async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        parts = build_node_context(input_data)
-        input_text = "\n\n".join(parts)
-        result = await self._generate_quiz(
-            input_text=input_text,
-            title_prefix=input_data.node_title,
-            config=input_data.agent_config,
-        )
-        result.metadata["path_id"] = input_data.path_id
-        result.metadata["node_id"] = input_data.node_id
-        return result
-
     async def _generate_quiz(
         self,
         *,
@@ -65,7 +50,7 @@ class QuizAgent(BaseResourceAgent):
     ) -> AgentResult:
         """内部方法 — 调用 LLM 生成结构化习题集。
 
-        agent_config 已由 build_resource_context / build_node_context 统一注入，
+        agent_config 已由 build_resource_context 统一注入，
         此处仅提取运行时需要的参数（如 question_count 用于空数组重试）。
 
         题型和难度先由后端形成确定性蓝图，再由模型填充题目内容。
@@ -87,19 +72,6 @@ class QuizAgent(BaseResourceAgent):
         )
 
         prompt = prompts.get("resource").get("quiz")
-        # 执行搜索以获取相关的习题出题参考信息
-        await self.emitter.send(self.agent_id, "running", "正在搜索相关习题参考素材...", 30)
-        search_query = f"{title_prefix} 习题 题型"
-        search_report = await self.search(search_query)
-        search_text = self.format_search_result(search_report)
-        search_elapsed = int((time.perf_counter() - started) * 1000)
-        logger.info(
-            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
-            self.agent_id, search_query, len(search_report.sources), search_elapsed,
-        )
-        # 将搜索参考前置拼入提示词
-        if search_text:
-            input_text = f"## 搜索到的出题参考背景\n{search_text}\n\n" + input_text
 
         full_prompt = (
             f"{prompt}\n\n{input_text}\n\n"
@@ -167,39 +139,18 @@ class QuizAgent(BaseResourceAgent):
         prompt: str,
         blueprint: list[QuizBlueprintSlot],
     ) -> QuizPayload:
-        """使用结构化输出生成题库；语义不匹配时仅做一次定向纠正。"""
-        try:
-            # 首次尝试：结构化输出并校验
-            payload = await self.llm.ainvoke_json(
-                QuizPayload,
-                prompt,
-            )
-            payload = QuizPayload.model_validate(payload)
+        """生成题库并在统一 JSON 边界校验确定性题目蓝图。
+
+        ``ainvoke_json`` 保存首次原始输出；当蓝图校验失败时，会把那份原文
+        与错误一起交回模型修复一次。因此这里不能再发起脱离原文的第二次生成。
+        """
+        def validate_blueprint(candidate: object) -> None:
+            payload = QuizPayload.model_validate(candidate)
             validate_quiz_payload(payload, blueprint)
-            return payload
-        except Exception as first_error:
-            # 首次失败：将校验错误回灌模型做定向纠正
-            logger.warning(
-                "Agent[quiz] 首次结构化输出不符合题库契约，正在定向纠正: %s",
-                first_error,
-            )
-            await self.emitter.send(
-                self.agent_id,
-                "running",
-                "正在按题目蓝图纠正输出结构...",
-                75,
-            )
-            correction_prompt = (
-                f"{prompt}\n\n"
-                "## 上一次输出的校验错误\n"
-                f"{str(first_error)[:1600]}\n\n"
-                "重新生成完整 QuizPayload。只纠正上述结构或蓝图偏差，"
-                "仍须保持题目准确、选项有区分度、解析能够说明正确与错误原因。"
-            )
-            payload = await self.llm.ainvoke_json(
-                QuizPayload,
-                correction_prompt,
-            )
-            payload = QuizPayload.model_validate(payload)
-            validate_quiz_payload(payload, blueprint)
-            return payload
+
+        payload = await self.llm.ainvoke_json(
+            QuizPayload,
+            prompt,
+            validator=validate_blueprint,
+        )
+        return QuizPayload.model_validate(payload)

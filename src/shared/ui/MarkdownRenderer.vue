@@ -3,9 +3,11 @@
 
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
-import { escapeHtml } from '@/shared/markdown/escapeHtml'
-import type { MarkdownTheme } from '@/shared/markdown/types'
-import { renderMarkdown } from '@/shared/markdown/workerClient'
+import {
+  escapeHtml,
+  renderMarkdown,
+  type MarkdownTheme,
+} from '@/shared/markdown/markdown'
 
 const props = withDefaults(defineProps<{
   content?: string
@@ -95,19 +97,30 @@ function restoreCopyLabel(button: HTMLButtonElement, label: string): void {
   copyTimers.set(button, timer)
 }
 
-// 点击事件代理：处理代码块复制按钮
+// 点击事件代理：处理代码块复制与自动换行。
 async function handleClick(event: MouseEvent): Promise<void> {
   const target = event.target
   if (!(target instanceof Element)) {
     return
   }
 
-  const button = target.closest<HTMLButtonElement>('.code-block-copy')
+  const button = target.closest<HTMLButtonElement>('[data-code-action]')
   if (!button) {
     return
   }
 
   const wrapper = button.closest('.code-block-wrapper')
+  if (button.dataset.codeAction === 'wrap') {
+    const wrapped = wrapper?.classList.toggle('is-wrapped') ?? false
+    button.textContent = wrapped ? '取消换行' : '自动换行'
+    button.setAttribute('aria-pressed', String(wrapped))
+    return
+  }
+
+  if (button.dataset.codeAction !== 'copy') {
+    return
+  }
+
   const code = wrapper?.querySelector('pre code')
   if (!code) {
     return

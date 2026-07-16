@@ -15,8 +15,8 @@ class UserRegister(BaseModel):
     """用户注册请求体。"""
     # 用户名：2-50 个字符
     username: str = Field(min_length=2, max_length=50)
-    # 密码：6-100 个字符
-    password: str = Field(min_length=6, max_length=100)
+    # 密码：5-100 个字符
+    password: str = Field(min_length=5, max_length=100)
     # 邮箱：可选
     email: str | None = None
 
@@ -42,8 +42,8 @@ class UserUpdate(BaseModel):
     email: str | None = None
     # 头像 URL（可选）
     avatar: str | None = None
-    # 是否首次登录标记（可选，用于控制 onboarding 弹窗）
-    is_first_login: bool | None = None
+    # onboarding 是否已完成（可选，用于标记 onboarding 完成状态）
+    onboarding_completed: bool | None = None
 
     # ── 基础信息（原 profile base_info，onboarding 填写）──
     school: str | None = None

@@ -11,5 +11,5 @@
 主要业务流程：
 1. 路径规划：POST /path-plan → PathPlannerAgent → LearningPlan → 持久化
 2. 节点学习：节点工作区 → 教程生成 → 测验评分 → 进度推进
-3. 资源生成：节点资源请求 → NodeInput → resource 模块 agent → PathNodeResource
+3. 资源生成：节点资源请求 → PathResourceRequest → Agent.generate_for_path → PathNodeResource
 """

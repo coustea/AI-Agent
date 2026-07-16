@@ -24,7 +24,7 @@
         </div>
 
         <div class="standard-sidebar-nav">
-          <div :class="['nav-item', 'new-chat-btn', { active: !currentSessionId }]" @click="newSession" title="新建对话">
+          <div :class="['nav-item', 'new-chat-btn', { active: !activeSessionId }]" @click="newSession" title="新建对话">
             <EditPen class="nav-icon" /> <span class="nav-text">新建对话</span>
           </div>
 
@@ -56,7 +56,7 @@
                     <div
                         v-for="s in filteredSessions"
                         :key="s.id"
-                        :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
+                        :class="['nav-item', 'session-item', { active: s.id === activeSessionId }]"
                         @click="switchSession(s.id); searchPopoverVisible = false"
                     >
                       <ChatLineSquare class="session-icon" />
@@ -75,8 +75,13 @@
             </PopoverPortal>
           </PopoverRoot>
 
-          <PopoverRoot>
-            <PopoverTrigger v-if="sessionSidebarCollapsed" class="nav-item history-collapsed-btn" title="历史记录" style="background: none; border: none; text-align: left; padding: 0; outline: none; width: 100%;">
+          <PopoverRoot v-model:open="historyPopoverVisible">
+            <PopoverTrigger
+              v-if="sessionSidebarCollapsed"
+              class="nav-item history-collapsed-btn"
+              title="历史记录"
+              aria-label="历史记录"
+            >
               <Timer class="nav-icon" />
             </PopoverTrigger>
 
@@ -87,20 +92,38 @@
                 align="start"
                 :side-offset="8"
               >
+                <div class="history-popover-header">
+                  <div class="history-popover-heading">
+                    <Timer class="history-popover-icon" aria-hidden="true" />
+                    <div>
+                      <div class="popover-title">历史记录</div>
+                      <div class="history-popover-count">{{ sessions.length }} 个对话</div>
+                    </div>
+                  </div>
+                </div>
                 <div class="popover-session-scroll">
-                  <div class="popover-title">历史记录</div>
                   <div
                       v-for="s in visibleSessions"
                       :key="s.id"
-                      :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
-                      @click="switchSession(s.id)"
+                      :class="['nav-item', 'session-item', { active: s.id === activeSessionId }]"
+                      :title="s.title || '新建对话'"
+                      :aria-current="s.id === activeSessionId ? 'true' : undefined"
+                      @click="switchSession(s.id); historyPopoverVisible = false"
                   >
                     <ChatLineSquare class="session-icon" />
                     <div class="session-info nav-text">
-                      <span class="session-title">{{ s.title || '新建对话' }}</span>
+                      <span class="session-title-line">
+                        <span class="session-title">{{ s.title || '新建对话' }}</span>
+                        <span v-if="s.id === activeSessionId" class="current-session-indicator">当前</span>
+                      </span>
                       <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
                     </div>
-                    <button class="btn-link del-btn nav-text" @click.stop="archiveSession(s.id)" title="删除对话">
+                    <button
+                      class="btn-link del-btn nav-text"
+                      aria-label="删除对话"
+                      title="删除对话"
+                      @click.stop="historyPopoverVisible = false; archiveSession(s.id)"
+                    >
                       <Delete class="del-icon" />
                     </button>
                   </div>
@@ -125,7 +148,7 @@
           <div
               v-for="s in visibleSessions"
               :key="s.id"
-              :class="['nav-item', 'session-item', { active: s.id === currentSessionId }]"
+              :class="['nav-item', 'session-item', { active: s.id === activeSessionId }]"
               @click="switchSession(s.id)"
               :title="s.title || '新建对话'"
           >
@@ -219,6 +242,7 @@
                   || msg.agentActivities?.length
                   || msg.teachingDiagramGenerating
                   || msg.teachingDiagram
+                  || msg.video
                 "
                 :class="['message-row', msg.role]"
               >
@@ -335,8 +359,8 @@
                   <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
                     <TeachingDiagramImage
                       v-if="msg.teachingDiagram.kind === 'image'"
-                      :title="msg.teachingDiagram.title"
-                      :image-url="msg.teachingDiagram.image_url"
+                      :diagram="msg.teachingDiagram"
+                      compact
                       @expand="previewTeachingDiagram(msg.teachingDiagram)"
                     />
                     <TeachingDiagramCard
@@ -348,6 +372,8 @@
                       @retry="retryTeachingDiagramImage(msg)"
                     />
                   </div>
+
+                  <ChatVideoArtifact v-if="msg.video" :video="msg.video" />
                 </div>
               </div>
             </template>
@@ -416,7 +442,7 @@
               ></textarea>
 
               <div class="minimal-action-bar">
-                <div class="action-left">
+                <div class="action-left" :key="inputToolStateKey">
                   <button
                     type="button"
                     class="input-tool-btn"
@@ -454,6 +480,21 @@
                   >
                     <DataLine class="btn-icon" aria-hidden="true" />
                     <span>图解</span>
+                  </button>
+
+                  <button
+                    v-if="chatMode === 'standard'"
+                    type="button"
+                    class="input-tool-btn"
+                    :disabled="!canGenerateVideo"
+                    :title="canGenerateVideo ? '根据当前输入生成动画讲解视频' : '请输入视频主题，视频不支持附件'"
+                    @click="startVideoGeneration"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
+                      <rect x="3" y="6" width="12" height="12" rx="2"></rect>
+                      <path d="m15 10 5-3v10l-5-3z"></path>
+                    </svg>
+                    <span>视频</span>
                   </button>
                 </div>
 
@@ -493,8 +534,8 @@
                     class="minimal-icon-btn voice"
                     :class="{ 'is-recording': isRecording }"
                     @click="handleVoiceToggle"
-                    :aria-label="isRecording ? '结束录音' : '语音提问'"
-                    :title="isRecording ? '结束录音' : '语音提问'"
+                    :aria-label="isRecording ? '结束连续语音' : '开启连续语音'"
+                    :title="isRecording ? '结束连续语音' : '开启连续语音'"
                   >
                     <Microphone class="btn-icon" aria-hidden="true" />
                   </button>
@@ -617,21 +658,10 @@
               <div class="preview-content">
                 <TeachingDiagramImage
                   v-if="teachingDiagramPreviewData.kind === 'image'"
-                  :title="teachingDiagramPreviewData.title"
-                  :image-url="teachingDiagramPreviewData.image_url"
+                  :diagram="teachingDiagramPreviewData"
+                  show-download
                 />
                 <TeachingDiagramCard v-else :diagram="teachingDiagramPreviewData" />
-              </div>
-              <div class="preview-footer">
-                <span>图解可保存为高清图片，便于复习。</span>
-                <div class="footer-actions">
-                  <button class="btn btn-outline" :disabled="isCapturing" @click="handleDownloadDiagram">
-                    <span v-if="isCapturing" class="spinner mr-2"></span>
-                    <Download class="btn-icon-left" />
-                    <span>保存图片</span>
-                  </button>
-                  <button class="btn btn-primary" @click="teachingDiagramPreviewVisible = false">完成</button>
-                </div>
               </div>
             </div>
           </div>
@@ -679,7 +709,6 @@ import {
   PhClock as Timer,
   PhGraph as DataLine,
   PhCheckCircle as CircleCheckFilled,
-  PhDownload as Download,
   PhSpinner as Loading
 } from '@phosphor-icons/vue'
 import { toast } from 'vue-sonner'
@@ -689,12 +718,11 @@ import TutorMessageContent from '@/features/chat/components/TutorMessageContent.
 import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
 import TeachingDiagramImage from '@/features/chat/components/TeachingDiagramImage.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
-
-
-import { useDiagramCapture } from '@/features/chat/composables/useDiagramCapture'
+import ChatVideoArtifact from '@/features/chat/components/ChatVideoArtifact.vue'
 
 import { triggerGlobalProfileRefresh } from '@/features/profile/model/useGlobalProfile'
 import { useChatStreamManager } from '@/features/chat/composables/useChatStreamManager'
+import { useChatVideoTasks } from '@/features/chat/composables/useChatVideoTasks'
 import {
   uploadFile,
   getSessions,
@@ -703,9 +731,11 @@ import {
   updateSessionTitle,
   getChatHistory,
   retryDiagramImage,
+  createChatVideo,
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
+  ChatVideoArtifact as ChatVideoArtifactData,
   TeachingDiagram,
 } from '@/features/chat/types/chat'
 import type { ChatEvent } from '@/features/chat/types/chatEvent'
@@ -723,7 +753,7 @@ import {
   formatFileSize,
   formatRelativeTime,
   finalizeRunningAgentActivities,
-  shouldAutoRestartVadAfterAssistantComplete,
+  getInputToolStateKey,
   isInsideOpenFence,
   takeNextStreamUnit,
 } from './tutorUtils'
@@ -741,6 +771,7 @@ const userInput = ref('')
 // AI 是否正在思考/生成中
 const isAIThinking = ref(false)
 const digitalHumanBackendStatus = ref('')
+const asrRecoveryStatus = ref('')
 const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const messageFormRef = ref<HTMLFormElement | null>(null)
@@ -771,7 +802,32 @@ const isVoiceChatting = ref(false)
 const lastAsrText = ref('')
 const hasSpeechDetected = ref(false)
 const lastAsrCommittedText = ref('')
+const asrPreviewMessageId = ref<number | null>(null)
 let lastAsrCommitAt = 0
+
+const clearAsrPreview = () => {
+  if (asrPreviewMessageId.value === null) return
+  const index = messages.value.findIndex(message => message.id === asrPreviewMessageId.value)
+  if (index >= 0) messages.value.splice(index, 1)
+  asrPreviewMessageId.value = null
+}
+
+const updateAsrPreview = (text: string) => {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (!normalized) return
+  lastAsrText.value = normalized
+  const existing = asrPreviewMessageId.value === null
+    ? null
+    : messages.value.find(message => message.id === asrPreviewMessageId.value && message.role === 'user')
+  if (existing) {
+    existing.content = normalized
+  } else {
+    const messageId = Date.now()
+    messages.value.push({ id: messageId, role: 'user', content: normalized, time: now() })
+    asrPreviewMessageId.value = messageId
+  }
+  scrollToBottom()
+}
 
 
 const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
@@ -792,11 +848,56 @@ const {
   setNeedDiagram: setAvatarNeedDiagram,
   startVad,
   stopVad,
+  setContinuousVoice,
+  switchSession: switchAvatarSession,
   enableAudio: enableAvatarAudio,
   setPlayerContainer,
 } = useDigitalHuman({
+  onConnectionChange: (connected) => {
+    if (connected) return
+
+    // An unexpected WebSocket close must release every voice/turn lock. If an
+    // empty assistant placeholder survives, the composer stays disabled as
+    // "AI 正在回答" and the next microphone session can never start cleanly.
+    isVoiceChatting.value = false
+    isRecording.value = false
+    hasSpeechDetected.value = false
+    digitalHumanBackendStatus.value = ''
+    asrRecoveryStatus.value = ''
+    clearAsrProcessing()
+    clearAsrPreview()
+    clearAvatarThinkingTimeout()
+    stopTeachingDiagramGeneratingForCurrentAi()
+    isAIThinking.value = false
+
+    if (streamingMsgId.value !== null) {
+      flushPendingStreamText(true)
+      commitStreamTextToMessage(streamingMsgId.value)
+      const index = messages.value.findIndex(message => message.id === streamingMsgId.value)
+      const pendingMessage = index >= 0 ? messages.value[index] : null
+      if (
+        pendingMessage
+        && !pendingMessage.content.trim()
+        && !pendingMessage.teachingDiagram
+        && !pendingMessage.video
+      ) {
+        messages.value.splice(index, 1)
+      }
+    }
+    streamingMsgId.value = null
+    streamingMsgRef.value = null
+  },
   onStatus: (status: any) => {
-    digitalHumanBackendStatus.value = status.message || ''
+    if (status.stage === 'asr_empty') {
+      digitalHumanBackendStatus.value = ''
+      asrRecoveryStatus.value = status.message || '未识别到有效语音，正在重新倾听'
+      clearAsrPreview()
+      clearAsrProcessing()
+      clearAvatarThinkingTimeout()
+      isAIThinking.value = false
+    } else {
+      digitalHumanBackendStatus.value = status.message || ''
+    }
     // 数字人模式下不显示 agent activity 卡片
     // 数字人有语音播报，用户通过听就能知道进度，不需要文本模式的复杂步骤卡片
     // 这些卡片反而会和语音播报不同步，造成视觉干扰
@@ -804,6 +905,7 @@ const {
   onThinkingStart: () => {
     // 数字人模式下简化思考动画：只显示状态覆盖层，不创建 AI 消息占位
     // AI 消息占位在 onAssistantChunk 首次到达时创建
+    asrRecoveryStatus.value = ''
     isAIThinking.value = true
     startAvatarThinkingTimeout()
   },
@@ -815,6 +917,7 @@ const {
   },
   onAssistantChunk: (chunk) => {
     digitalHumanBackendStatus.value = ''
+    asrRecoveryStatus.value = ''
     clearAsrProcessing()
     startAvatarThinkingTimeout()
     if (isVoiceChatting.value && isVadListening.value) {
@@ -823,7 +926,13 @@ const {
     }
     if (streamingMsgId.value === null) {
       const aiMsgId = Date.now() + 1
-      messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
+      messages.value.push({
+        id: aiMsgId,
+        role: 'ai',
+        content: '',
+        time: now(),
+        teachingDiagramGenerating: needTeachingDiagram.value,
+      })
       streamingMsgId.value = aiMsgId
       streamingMsgRef.value = messages.value[messages.value.length - 1] || null
       // 数字人模式下不设置 isAIThinking
@@ -836,14 +945,31 @@ const {
   },
   onDiagram: (diagram) => {
     if (!diagram) return
-    const aiMsg = (
-      (streamingMsgId.value !== null
-        ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
-        : null)
-      || [...messages.value].reverse().find(m => m.role === 'ai')
-    )
-    if (!aiMsg) return
-    aiMsg.teachingDiagram = normalizeTeachingDiagram(diagram as TeachingDiagram)
+    const normalizedDiagram = normalizeTeachingDiagram(diagram as TeachingDiagram)
+    if (!normalizedDiagram) return
+
+    let aiMsg = streamingMsgId.value !== null
+      ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
+      : undefined
+
+    // A diagram can arrive before the complete assistant sentence is revealed.
+    // It still belongs to the current turn, so create that turn's AI row now.
+    // Never fall back to the previous AI row: doing so places the new diagram
+    // above the user question that requested it.
+    if (!aiMsg) {
+      const aiMsgId = Date.now() + 1
+      aiMsg = {
+        id: aiMsgId,
+        role: 'ai',
+        content: '',
+        time: now(),
+      }
+      messages.value.push(aiMsg)
+      streamingMsgId.value = aiMsgId
+      streamingMsgRef.value = aiMsg
+    }
+
+    aiMsg.teachingDiagram = normalizedDiagram
     aiMsg.teachingDiagramGenerating = false
     scrollToBottom()
   },
@@ -866,7 +992,11 @@ const {
     triggerGlobalProfileRefresh()
     // 不再在 assistant_complete 时重启 VAD
     // 因为此时数字人可能还在说话（TTS 播报中），麦克风会拾取到回声
-    // VAD 重启逻辑已移至 onAvatarStopped 回调中
+    // 连续语音的 VAD 重启由 useDigitalHuman 在 avatar_stopped 后统一调度。
+  },
+  onAsrPartial: (text) => {
+    asrRecoveryStatus.value = ''
+    updateAsrPreview(text)
   },
   onAsrResult: (text) => {
     if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
@@ -874,41 +1004,52 @@ const {
     }
     const normalized = text.replace(/\s+/g, ' ').trim()
     lastAsrText.value = normalized
+    asrRecoveryStatus.value = ''
+    // Final ASR text is no longer "processing". Commit the user bubble now;
+    // turn_start will switch the overlay to thinking after the backend's short
+    // transcript render handoff window.
+    clearAsrProcessing()
+    if (!normalized) {
+      clearAsrPreview()
+      return
+    }
     if (normalized) {
-      startAsrProcessing(6000)
       const nowTs = Date.now()
       const isDup = normalized === lastAsrCommittedText.value
       const isNearDup = normalized.includes(lastAsrCommittedText.value) || lastAsrCommittedText.value.includes(normalized)
       const committedRecently = nowTs - lastAsrCommitAt < 1400
-      if (isDup || (isNearDup && committedRecently)) return
+      if (isDup || (isNearDup && committedRecently)) {
+        clearAsrPreview()
+        return
+      }
       lastAsrCommittedText.value = normalized
       lastAsrCommitAt = nowTs
-      messages.value.push({
-        id: Date.now(),
-        role: 'user',
-        content: normalized,
-        time: now(),
-      })
-      if (streamingMsgId.value === null) {
-        const aiMsgId = Date.now() + 1
-        messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
-        streamingMsgId.value = aiMsgId
-        streamingMsgRef.value = messages.value[messages.value.length - 1] || null
+      const preview = asrPreviewMessageId.value === null
+        ? null
+        : messages.value.find(message => message.id === asrPreviewMessageId.value && message.role === 'user')
+      if (preview) {
+        preview.content = normalized
+        asrPreviewMessageId.value = null
+      } else {
+        messages.value.push({
+          id: Date.now(),
+          role: 'user',
+          content: normalized,
+          time: now(),
+        })
       }
-      if (needTeachingDiagram.value) {
-        const aiMsg = streamingMsgId.value !== null
-          ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
-          : null
-        if (aiMsg) aiMsg.teachingDiagramGenerating = true
-      }
-      // 数字人模式下不设置 isAIThinking
-      // 思考状态由后端 digital_human_state 事件驱动，不在此处设置
+      // Do not create an empty AI row here. It can pull the viewport below the
+      // freshly recognized user text and make that transcript appear missing.
+      // The AI row is created by onAssistantChunk when the complete reply is
+      // actually ready; turn_start exclusively controls the thinking state.
       scrollToBottom()
     }
   },
   onVadStateChange: (listening) => {
     isRecording.value = listening
-    if (!listening) {
+    if (listening) {
+      asrRecoveryStatus.value = ''
+    } else {
       hasSpeechDetected.value = false
       if (chatMode.value === 'digital_human' && isVoiceChatting.value) {
         startAsrProcessing(8000)
@@ -920,9 +1061,18 @@ const {
   },
   onSpeechDetectedChange: (detected) => {
     hasSpeechDetected.value = detected
+    if (detected) asrRecoveryStatus.value = ''
   },
-  onError: (msg) => {
+  onError: (msg, context) => {
+    if (context?.source === 'player') {
+      // Player readiness belongs to the video transport, not the active LLM
+      // turn. Keep the current thinking/message state until the turn itself
+      // completes or fails.
+      toast.error({ message: msg, plain: true })
+      return
+    }
     digitalHumanBackendStatus.value = ''
+    asrRecoveryStatus.value = ''
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
     stopTeachingDiagramGeneratingForCurrentAi()
@@ -945,23 +1095,6 @@ const {
       }
     })
   },
-  onAvatarStopped: () => {
-    // 数字人播报结束后，如果处于语音通话模式，自动重启 VAD
-    // 之前在 assistant_complete 时重启，但那时 TTS 可能还在播放，
-    // 导致麦克风拾取到 TTS 回声产生错误识别
-    if (shouldAutoRestartVadAfterAssistantComplete({
-      isVoiceChatting: isVoiceChatting.value,
-      chatMode: chatMode.value,
-      isAvatarConnected: isAvatarConnected.value,
-    })) {
-      window.setTimeout(async () => {
-        if (!isVoiceChatting.value || chatMode.value !== 'digital_human' || !isAvatarConnected.value) return
-        if (isAvatarSpeaking.value) return // 安全检查：确保确实已停止说话
-        await startVad(needTeachingDiagram.value, getAvatarCapabilities())
-        isRecording.value = isVadListening.value
-      }, 600) // 600ms 延迟确保 TTS 音频完全停止
-    }
-  },
 })
 
 // 兜底：当 canvasRef 变为可用时自动设置 player container
@@ -978,6 +1111,11 @@ watch(canvasRef, (newInstance) => {
 const uploadingFile = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
+const inputToolStateKey = computed(() => getInputToolStateKey({
+  uploadingFile: uploadingFile.value,
+  enableWebSearch: enableWebSearch.value,
+  needTeachingDiagram: needTeachingDiagram.value,
+}))
 
 
 // 会话列表
@@ -985,8 +1123,14 @@ const sessions = ref<ChatSession[]>([])
 // 当前活跃会话 ID
 const currentSessionId = ref<string | undefined>(undefined)
 const digitalHumanSessionId = ref<string | undefined>(undefined)
+const activeSessionId = computed(() => (
+  chatMode.value === 'digital_human'
+    ? digitalHumanSessionId.value
+    : currentSessionId.value
+))
 const sessionSidebarCollapsed = ref(false)
 const searchPopoverVisible = ref(false)
+const historyPopoverVisible = ref(false)
 const searchKeyword = ref('')
 const historyExpanded = ref(false)
 const HISTORY_COLLAPSED_COUNT = 5
@@ -1013,10 +1157,21 @@ const canSendMessage = computed(() => (
   && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
 ))
 
+// Video creation is a separate, user-triggered workflow and must not inherit
+// the text-agent's long-running "responding" lock.
+const canGenerateVideo = computed(() => (
+  chatMode.value === 'standard'
+  && !uploadingFile.value
+  && pendingFiles.value.length === 0
+  && Boolean(userInput.value.trim())
+))
+
 // 流式消息管理器（全局单例）
 const streamManager = useChatStreamManager()
+const videoTasks = useChatVideoTasks()
 // 数字人思考超时定时器
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
+const isAvatarThinkingSlow = ref(false)
 const isAsrProcessing = ref(false)
 let asrProcessingTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -1187,6 +1342,7 @@ const clearAvatarThinkingTimeout = () => {
     clearTimeout(avatarThinkingTimeout)
     avatarThinkingTimeout = null
   }
+  isAvatarThinkingSlow.value = false
 }
 
 const detachCurrentStreamCallbacks = () => {
@@ -1240,10 +1396,11 @@ const startAvatarThinkingTimeout = () => {
   avatarThinkingTimeout = setTimeout(() => {
     if (chatMode.value !== 'digital_human') return
     if (!isAIThinking.value) return
-    isAIThinking.value = false
-    stopTeachingDiagramGeneratingForCurrentAi()
-    streamingMsgId.value = null
-    toast.warning({ message: '数字人响应超时，请重试或重新连接', plain: true })
+    // Long tool/RAG turns can legitimately exceed 30 seconds. This watchdog
+    // must never end the turn or expose the microphone preparation state while
+    // the backend is still producing the current answer.
+    isAvatarThinkingSlow.value = true
+    avatarThinkingTimeout = null
   }, 30000)
 }
 
@@ -1349,19 +1506,21 @@ const voiceAsrStage = computed<VoiceAsrStage>(() => {
 })
 
 const digitalHumanStatusText = computed(() => {
+  if (!isAvatarConnected.value) return '数字人未连接'
   if (isAvatarSpeaking.value) return '正在播报中...'
+  if (isAIThinking.value && isAvatarThinkingSlow.value) return '正在深入思考，请稍候...'
   if (isAIThinking.value) return '正在思考中...'
-  if (voiceAsrStage.value === 'no_voice') return '未识别到声音'
-  if (voiceAsrStage.value === 'heard_voice') return '已识别到声音'
-  if (voiceAsrStage.value === 'transcribing') return '正在转文字'
-  return '倾听就绪'
+  if (asrRecoveryStatus.value) return asrRecoveryStatus.value
+  if (voiceAsrStage.value === 'no_voice') return '倾听就绪'
+  if (voiceAsrStage.value === 'heard_voice') return '已检测到语音'
+  if (voiceAsrStage.value === 'transcribing') return '正在转文字...'
+  if (isVoiceChatting.value) return '正在准备语音识别...'
+  return '数字人已就绪'
 })
 
 const teachingDiagramPreviewVisible = ref(false)
 const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
 const retryingDiagramMessageIds = ref(new Set<number>())
-
-const { isCapturing, captureToDataUrl, downloadImage } = useDiagramCapture()
 
 // 打开教学图解预览弹窗
 const previewTeachingDiagram = (diagram: TeachingDiagram) => {
@@ -1387,24 +1546,6 @@ const retryTeachingDiagramImage = async (message: ChatMsg) => {
     const pending = new Set(retryingDiagramMessageIds.value)
     pending.delete(message.id)
     retryingDiagramMessageIds.value = pending
-  }
-}
-
-const handleDownloadDiagram = async () => {
-  if (!teachingDiagramPreviewData.value) return
-  
-  const dataUrl = await captureToDataUrl('capture-target', {
-    pixelRatio: 2,
-    backgroundColor: '#ffffff',
-    style: {
-      padding: '24px',
-      borderRadius: '16px'
-    }
-  })
-  
-  if (dataUrl) {
-    downloadImage(dataUrl, `${teachingDiagramTitle(teachingDiagramPreviewData.value)}_高清截图`)
-    toast.success('图解说明已保存至本地')
   }
 }
 
@@ -1634,13 +1775,12 @@ const enqueueStreamChunk = (messageId: number, chunk: string) => {
   if (streamingMsgRef.value?.id !== messageId) return
   lastChunkArrivedAt = Date.now()
 
-  // 数字人模式下：useDigitalHuman 的 reveal 系统已经按 TTS 语速节流了
-  // 这里直接渲染，不再做二次节流，避免字幕延迟
+  // 数字人字幕只由 useDigitalHuman 的 TTS 时钟驱动。这里作为纯渲染
+  // 终点直接写入消息，不能再进入文本聊天的第二套流式缓冲。
   if (isDigitalHumanPacedStream()) {
     const aiMsg = streamingMsgRef.value
     if (aiMsg) {
-      streamRenderedChunks.push(chunk)
-      streamDisplayText.value += chunk
+      aiMsg.content += chunk
       scrollToBottomThrottled(true)
     }
     return
@@ -1912,7 +2052,13 @@ const newSession = () => {
   streamingMsgRef.value = null
   isAIThinking.value = false
 
-  currentSessionId.value = undefined
+  if (chatMode.value === 'digital_human') {
+    digitalHumanSessionId.value = undefined
+    switchAvatarSession()
+    if (isVoiceChatting.value) configureContinuousVoice(true)
+  } else {
+    currentSessionId.value = undefined
+  }
   messages.value = []
   clearPendingFiles()
 }
@@ -1960,6 +2106,10 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         msg.diagram as TeachingDiagram | null | undefined
           ?? msg.usage_metadata?.diagram as TeachingDiagram | null | undefined,
       )
+      const rawVideo = msg.video ?? msg.usage_metadata?.video
+      const video = rawVideo && typeof rawVideo === 'object'
+        ? rawVideo as ChatVideoArtifactData
+        : null
 
       return {
         id: msg.id || Date.now() + i,
@@ -1970,12 +2120,24 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         attachments,
         agentActivities: (msg.activities || []) as AgentActivity[],
         teachingDiagram: diagram,
+        video,
       }
     })
+    // Abandoned/failed streams can leave an assistant row containing only
+    // progress activities. Those activities are no longer live after history
+    // reload, so rendering them would leave a permanent "processing" card.
+    const renderableHistory = mapped.filter(item => (
+      item.role === 'user'
+      || Boolean(item.content.trim())
+      || Boolean(item.attachments?.length)
+      || Boolean(item.teachingDiagram)
+      || Boolean(item.video)
+    ))
+
     // 防止刷新后历史中相邻重复消息导致双排显示
-    messages.value = mapped.filter((item, idx) => {
+    messages.value = renderableHistory.filter((item, idx) => {
       if (idx === 0) return true
-      const prev = mapped[idx - 1]
+      const prev = renderableHistory[idx - 1]
       const currentAttachmentKey = (item.attachments || []).map(att => `${att.type}:${att.url}:${att.name}`).join('|')
       const previousAttachmentKey = (prev?.attachments || []).map(att => `${att.type}:${att.url}:${att.name}`).join('|')
       return !(
@@ -1985,6 +2147,11 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         && previousAttachmentKey === currentAttachmentKey
       )
     })
+    for (const message of messages.value) {
+      if (message.video?.status === 'queued' || message.video?.status === 'running') {
+        watchChatVideo(sessionId, message.id)
+      }
+    }
   } catch (err) {
     toast.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
   }
@@ -1992,7 +2159,13 @@ const loadHistoryFromAPI = async (sessionId: string) => {
 
 // 切换会话：加载历史 → 恢复流状态 → 绑定回调
 const switchSession = async (sessionId: string) => {
+  videoTasks.dispose()
   currentSessionId.value = sessionId
+  if (chatMode.value === 'digital_human') {
+    digitalHumanSessionId.value = sessionId
+    switchAvatarSession(sessionId)
+    if (isVoiceChatting.value) configureContinuousVoice(true)
+  }
   messages.value = []
 
   // Check global manager for stream state on this session
@@ -2126,8 +2299,13 @@ const confirmArchiveSession = async () => {
     await deleteSession(sessionId)
     sessions.value = sessions.value.filter(session => session.id !== sessionId)
 
-    if (currentSessionId.value === sessionId) {
+    if (activeSessionId.value === sessionId) {
       currentSessionId.value = undefined
+      if (chatMode.value === 'digital_human') {
+        digitalHumanSessionId.value = undefined
+        switchAvatarSession()
+        if (isVoiceChatting.value) configureContinuousVoice(true)
+      }
       messages.value = []
 
       if (sessions.value.length > 0) {
@@ -2196,6 +2374,10 @@ const getAvatarCapabilities = () => ({
   enable_search: enableWebSearch.value,
 })
 
+const configureContinuousVoice = (enabled: boolean) => {
+  setContinuousVoice(enabled, needTeachingDiagram.value, getAvatarCapabilities())
+}
+
 const handleTeachingDiagramToggle = () => {
   needTeachingDiagram.value = !needTeachingDiagram.value
 }
@@ -2219,7 +2401,9 @@ const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standa
 const handleVoiceChatToggle = async () => {
   if (!isVoiceChatting.value) {
     if (!await ensureCurrentSession('digital_human')) return
+    asrRecoveryStatus.value = ''
     isVoiceChatting.value = true
+    configureContinuousVoice(true)
     chatMode.value = 'digital_human'
     await connectAvatar()
     nextTick(() => {
@@ -2232,23 +2416,31 @@ const handleVoiceChatToggle = async () => {
     isRecording.value = isVadListening.value
     toast.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
   } else {
+    configureContinuousVoice(false)
     stopVad()
     isRecording.value = false
     isVoiceChatting.value = false
+    asrRecoveryStatus.value = ''
+    clearAsrProcessing()
     toast.info({ message: '已关闭语音通话模式', plain: true })
   }
 }
 
 const handleVoiceToggle = async () => {
   if (isVadListening.value) {
+    configureContinuousVoice(false)
     stopVad()
     isRecording.value = false
+    isVoiceChatting.value = false
     hasSpeechDetected.value = true
     startAsrProcessing(8000)
     return
   }
 
   if (!await ensureCurrentSession('digital_human')) return
+  asrRecoveryStatus.value = ''
+  isVoiceChatting.value = true
+  configureContinuousVoice(true)
   await startVad(needTeachingDiagram.value, getAvatarCapabilities())
   isRecording.value = isVadListening.value
   clearAsrProcessing()
@@ -2256,6 +2448,7 @@ const handleVoiceToggle = async () => {
 
 // 重新连接数字人（断开后重建 WebSocket）
 const handleAvatarReconnect = async () => {
+  const shouldResumeVoice = isVoiceChatting.value
   disconnectAvatar()
   await connectAvatar()
   setAvatarSpeechRate(avatarSpeechRate.value)
@@ -2265,10 +2458,68 @@ const handleAvatarReconnect = async () => {
       setPlayerContainer(container)
     }
   })
+  if (shouldResumeVoice) {
+    configureContinuousVoice(true)
+    await startVad(needTeachingDiagram.value, getAvatarCapabilities())
+    isRecording.value = isVadListening.value
+  }
 }
 
 const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
+}
+
+const watchChatVideo = (sessionId: string, userMessageId: number) => {
+  videoTasks.watch(sessionId, userMessageId, (video) => {
+    const message = messages.value.find(item => item.id === userMessageId)
+    if (message) message.video = video
+    if (video.status === 'completed') scrollToBottom()
+  })
+}
+
+const startVideoGeneration = async () => {
+  const topic = userInput.value.trim()
+  if (!canGenerateVideo.value || !topic) return
+  if (!await ensureCurrentSession('standard')) return
+  const sessionId = currentSessionId.value
+  if (!sessionId) return
+
+  const localMessageId = Date.now()
+  const localVideo: ChatVideoArtifactData = {
+    task_id: `pending-${localMessageId}`,
+    status: 'queued',
+    topic,
+  }
+  messages.value.push({
+    id: localMessageId,
+    role: 'user',
+    content: topic,
+    time: now(),
+    video: localVideo,
+  })
+  userInput.value = ''
+  isExpandedInput.value = false
+  if (textareaRef.value) textareaRef.value.style.height = '24px'
+  scrollToBottom()
+
+  try {
+    const response = await createChatVideo(topic, sessionId)
+    const task = response.data.data
+    const message = messages.value.find(item => item.id === localMessageId)
+    if (!message) return
+    message.id = task.user_message_id
+    message.video = task.video
+    watchChatVideo(task.session_id, task.user_message_id)
+  } catch (error) {
+    const message = messages.value.find(item => item.id === localMessageId)
+    if (message?.video) {
+      message.video = {
+        ...message.video,
+        status: 'failed',
+        error: getErrorMessage(error, '视频任务创建失败，请重新发起请求。'),
+      }
+    }
+  }
 }
 
 // 发送消息：上传附件 → 创建 AI 消息 → 启动 SSE 流 / 数字人消息
@@ -2487,7 +2738,7 @@ watch(chatMode, async (newMode) => {
     digitalHumanSessionId.value = undefined
     messages.value = []
     clearPendingFiles()
-    if (!await ensureCurrentSession('digital_human')) return
+    switchAvatarSession()
     await connectAvatar()
     setAvatarNeedDiagram(needTeachingDiagram.value)
     nextTick(() => {
@@ -2498,6 +2749,8 @@ watch(chatMode, async (newMode) => {
     })
   } else if (newMode === 'standard') {
     sessionSidebarCollapsed.value = false
+    isVoiceChatting.value = false
+    configureContinuousVoice(false)
     disconnectAvatar()
     clearPendingFiles()
     if (currentSessionId.value) {
@@ -2512,6 +2765,11 @@ watch(needTeachingDiagram, (enabled) => {
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     setAvatarNeedDiagram(enabled)
   }
+  if (isVoiceChatting.value) configureContinuousVoice(true)
+})
+
+watch(enableWebSearch, () => {
+  if (isVoiceChatting.value) configureContinuousVoice(true)
 })
 
 // 组件挂载：加载用户信息、会话列表、恢复上次会话
@@ -2575,6 +2833,7 @@ onBeforeUnmount(() => {
   }
   isStreamDone = false
   streamingMsgRef.value = null
+  videoTasks.dispose()
   clearPendingFiles()
   if (dimTimer) clearTimeout(dimTimer)
   document.removeEventListener('mousedown', handleGlobalClick)
@@ -2714,10 +2973,20 @@ onBeforeUnmount(() => {
 
 .nav-item.history-collapsed-btn {
   color: var(--color-text-secondary);
+  width: 100%;
+  padding: 0;
+  border: 1px solid transparent;
+  outline: none;
+  text-align: left;
 }
 .nav-item.history-collapsed-btn:hover {
   background: var(--color-border);
   color: var(--color-text);
+}
+.nav-item.history-collapsed-btn[data-state='open'] {
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  color: var(--color-primary);
 }
 
 .history-section-header {
@@ -2743,6 +3012,162 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+:global(.history-popover-content) {
+  width: min(320px, calc(100vw - 88px));
+  max-height: min(520px, calc(100vh - 32px));
+  padding: 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background-color: var(--color-surface, #fff);
+  color: var(--color-text);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
+  box-shadow: 0 18px 42px rgba(17, 46, 52, 0.18), 0 4px 12px rgba(17, 46, 52, 0.08);
+  outline: none;
+  z-index: 1200;
+}
+
+:global([data-radix-popper-content-wrapper]:has(.history-popover-content)) {
+  z-index: 1200 !important;
+}
+
+.history-popover-header {
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+  padding: 2px 4px 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.history-popover-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.history-popover-icon {
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  color: var(--color-primary);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+:global(.history-popover-content .popover-title) {
+  padding: 0;
+  margin: 0;
+  border: 0;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: var(--weight-bold);
+}
+
+.history-popover-count {
+  margin-top: 2px;
+  color: var(--color-text-faint);
+  font-size: 0.72rem;
+}
+
+:global(.history-popover-content .popover-session-scroll) {
+  max-height: min(400px, calc(100vh - 150px));
+  padding-right: 2px;
+  gap: 4px;
+}
+
+:global(.history-popover-content .session-item) {
+  width: 100%;
+  min-height: 58px;
+  margin: 0;
+  padding: 9px 10px;
+  box-sizing: border-box;
+  gap: 10px;
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+:global(.history-popover-content .session-item:hover) {
+  background: var(--color-bg);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+:global(.history-popover-content .session-item.active) {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+  border-color: var(--color-border-hover);
+  box-shadow: inset 3px 0 0 var(--color-primary);
+}
+
+:global(.history-popover-content .session-icon) {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.session-title-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.session-title-line .session-title {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  font-size: 0.88rem;
+  font-weight: var(--weight-semibold);
+}
+
+.current-session-indicator {
+  flex-shrink: 0;
+  color: var(--color-primary);
+  font-size: 0.68rem;
+  font-weight: var(--weight-semibold);
+}
+
+:global(.history-popover-content .session-time) {
+  margin-top: 3px;
+  font-size: 0.72rem;
+}
+
+:global(.history-popover-content .del-btn) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  opacity: 0.35;
+}
+
+:global(.history-popover-content .session-item:hover .del-btn),
+:global(.history-popover-content .del-btn:focus-visible) {
+  opacity: 1;
+  background: var(--color-danger-soft, #fff1f1);
+}
+
+:global(.history-popover-content .session-empty) {
+  margin: 24px 0;
+  color: var(--color-text-faint);
+}
+
+:global(.history-popover-content .session-expand-btn) {
+  margin-top: 6px;
+  padding: 10px 0 2px;
+  border-top: 1px solid var(--color-border);
 }
 
 .search-results-scroll {
@@ -3431,10 +3856,15 @@ onBeforeUnmount(() => {
 .user-plain-text {
   margin: 0;
   padding: 0;
+  color: #1e293b;
+  font-size: 16px;
+  font-weight: 400;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
   overflow-wrap: anywhere;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* markdown 渲染排版及对齐优化 */
@@ -3447,6 +3877,14 @@ onBeforeUnmount(() => {
   text-align: left; /* 确保严格左对齐 */
   word-break: normal;
   line-height: 1.65;
+}
+
+/* 文本 AI 正文使用中性深色与整数像素字号，避免 Windows 字体抗锯齿出现青色笔画。 */
+.mode-standard .message-row.ai :deep(.tutor-markdown-block) {
+  color: #1e293b !important;
+  font-size: 16px !important;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 :deep(.markdown-body > :first-child) {
@@ -4443,7 +4881,7 @@ onBeforeUnmount(() => {
 }
 
 .user-plain-text {
-  font-size: 0.94rem;
+  font-size: 16px;
   line-height: 1.65;
 }
 
@@ -5094,6 +5532,53 @@ onBeforeUnmount(() => {
   gap: 16px;
   min-height: 62px;
   padding: 11px 16px;
+}
+
+.diagram-image-dialog {
+  position: relative;
+  width: 100vw;
+  max-width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.diagram-image-dialog .diagram-preview-body {
+  height: 100vh;
+  max-height: 100vh;
+  padding: 0;
+  overflow: auto;
+  background: transparent;
+}
+
+.diagram-image-dialog .preview-content {
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.diagram-image-close {
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 3;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  color: #1f2937;
+  background: rgba(255, 255, 255, .92);
+  border: 1px solid rgba(148, 163, 184, .42);
+  border-radius: 999px;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, .18);
+  backdrop-filter: blur(10px);
+}
+
+.diagram-image-close:hover {
+  color: #0f172a;
+  background: #fff;
 }
 
 .diagram-dialog-header > div {

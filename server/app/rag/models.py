@@ -7,8 +7,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-RetrievalStatus = Literal["ok", "empty", "unavailable"]
+RetrievalStatus = Literal["ok", "partial", "empty", "unavailable"]
 RetrievalType = Literal["vector", "bm25", "hybrid", ""]
+
+ChannelStatus = Literal["ok", "unavailable", "disabled", "not_ready"]
+
+CourseFilterMode = Literal["none", "filtered", "fallback"]
 
 # ChromaDB collection 名（build 与 retriever 共享的索引契约，属实现细节，不暴露为运行时配置）
 CHROMA_COLLECTION = "langchain"
@@ -37,6 +41,14 @@ class RetrievedChunk(BaseModel):
     # 统一相关性分数：BM25 / RRF / rerank 都可以写这里
     score: float | None = None
 
+    # 通道特定的分数字段（用于 provenance）
+    dense_distance: float | None = None  # 向量距离
+    bm25_score: float | None = None  # BM25 原始分数
+    fusion_score: float | None = None  # RRF 融合分数
+
+    # 课程过滤标记
+    course_fallback: bool = False  # 是否从全局结果补充
+
     # 结果来源：vector / bm25 / hybrid
     retrieval_type: RetrievalType = ""
 
@@ -55,8 +67,9 @@ class RetrievalResult(BaseModel):
 
     status 语义：
       ok          — 索引正常，至少返回一条 chunk
+      partial     — 部分检索通道不可用，但仍有可用结果
       empty       — 索引正常，但没有匹配结果
-      unavailable — 索引不存在 / 损坏 / 嵌入服务不可用
+      unavailable — 所有检索通道不可用
     """
 
     status: RetrievalStatus
@@ -64,3 +77,10 @@ class RetrievalResult(BaseModel):
     chunks: list[RetrievedChunk] = Field(default_factory=list)
     elapsed_ms: int = 0
     message: str = ""
+
+    # 通道状态（用于 provenance 和降级提示）
+    dense_status: ChannelStatus = "not_ready"
+    bm25_status: ChannelStatus = "not_ready"
+
+    # 课程过滤模式
+    course_filter_mode: CourseFilterMode = "none"

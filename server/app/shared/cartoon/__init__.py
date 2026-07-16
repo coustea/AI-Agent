@@ -1,17 +1,19 @@
-"""Deterministic computer-theory animation video generation."""
+"""Stateful educational cartoon generation."""
 
-from app.shared.cartoon.agent import (
+from app.shared.cartoon.models import (
+    CartoonArtifact,
+    CartoonBrief,
+    CartoonGenerationConfig,
     CartoonGenerationError,
-    CartoonGenerationResult,
-    CartoonVideoAgent,
+    CartoonResourceMetadata,
 )
-from app.shared.cartoon.service import (
-    CartoonService,
-)
+from app.shared.cartoon.pipeline import CartoonPipeline
 
 __all__ = [
+    "CartoonArtifact",
+    "CartoonBrief",
+    "CartoonGenerationConfig",
     "CartoonGenerationError",
-    "CartoonGenerationResult",
-    "CartoonVideoAgent",
-    "CartoonService",
+    "CartoonResourceMetadata",
+    "CartoonPipeline",
 ]

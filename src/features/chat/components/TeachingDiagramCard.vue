@@ -1,7 +1,7 @@
 <template>
   <article
     class="diagram-card"
-    :class="{ compact: props.compact, 'is-interactive': props.compact }"
+    :class="{ compact: props.compact, 'visual-only': props.visualOnly, 'is-interactive': props.compact }"
     :role="props.compact ? 'button' : undefined"
     :tabindex="props.compact ? 0 : undefined"
     @click="handleExpand"
@@ -17,7 +17,7 @@
         @click.stop="emit('retry')"
       >{{ retrying ? '正在重新生成图片…' : '重新生成图片' }}</button>
     </div>
-    <header class="diagram-header">
+    <header v-if="!props.visualOnly" class="diagram-header">
       <div class="diagram-heading-mark" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none">
           <rect x="3" y="4" width="7" height="6" rx="1.5" />
@@ -72,7 +72,7 @@
         </div>
       </section>
 
-      <aside v-if="!props.compact" class="teaching-panel">
+      <aside v-if="!props.compact && !props.visualOnly" class="teaching-panel">
         <section v-if="displayDiagram.teaching_goal" class="teaching-block teaching-goal">
           <span class="section-index">01</span>
           <div>
@@ -112,7 +112,7 @@
       </aside>
     </div>
 
-    <footer v-if="!props.compact && displayDiagram.teaching_content.summary" class="diagram-summary">
+    <footer v-if="!props.compact && !props.visualOnly && displayDiagram.teaching_content.summary" class="diagram-summary">
       <span>一句话带走</span>
       <p>{{ displayDiagram.teaching_content.summary }}</p>
     </footer>
@@ -183,6 +183,7 @@ const props = defineProps<{
   diagram: TeachingDiagram
   compact?: boolean
   retrying?: boolean
+  visualOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -247,6 +248,15 @@ const handleExpand = () => {
   overflow: hidden;
   border-radius: 10px;
   box-shadow: 0 7px 24px rgba(15, 23, 42, 0.07);
+}
+
+.diagram-card.visual-only {
+  gap: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .diagram-card.is-interactive {
@@ -368,6 +378,11 @@ const handleExpand = () => {
   display: block;
 }
 
+.visual-only .diagram-layout {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+}
+
 .visual-panel {
   position: relative;
   min-width: 0;
@@ -384,6 +399,10 @@ const handleExpand = () => {
 .compact .visual-panel {
   border: 0;
   border-radius: 0;
+}
+
+.visual-only .visual-panel {
+  border-radius: 10px;
 }
 
 .visual-toolbar {
@@ -414,6 +433,11 @@ const handleExpand = () => {
   max-height: 290px;
   padding: 12px;
   overflow: hidden;
+}
+
+.visual-only .visual-viewport {
+  min-height: min(72vh, 720px);
+  padding: 24px;
 }
 
 .visual-wrapper {

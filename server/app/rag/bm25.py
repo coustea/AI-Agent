@@ -10,6 +10,7 @@ Per user: "BM25Index.build() 只保存 metadata，没有保存 chunk正文" — 
 
 from __future__ import annotations
 
+import hashlib
 import pickle
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,9 @@ from rank_bm25 import BM25Okapi
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+
+# BM25 Schema 版本
+BM25_SCHEMA_VERSION = "1"
 
 # 中文停用词：助词 / 连词 / 疑问词 / 人称 / 语气词 / 动词修饰
 # 按教育场景精简，覆盖高频虚词
@@ -74,12 +78,11 @@ class BM25Index:
             logger.warning("[bm25] empty texts, skip build")
             return
 
-        # 文本与元数据数量不一致时告警
+        # 文本与元数据必须一一对应，否则 BM25 排名会指向错误 chunk。
         if len(texts) != len(metadatas):
-            logger.warning(
-                "[bm25] texts/metadatas length mismatch: texts=%d, metadatas=%d",
-                len(texts),
-                len(metadatas),
+            raise ValueError(
+                "BM25 texts/metadatas length mismatch: "
+                f"texts={len(texts)}, metadatas={len(metadatas)}"
             )
 
         # 对所有文本执行分词
@@ -94,7 +97,7 @@ class BM25Index:
 
         # 关键修复：保存 chunk 正文，避免检索结果只有 source 路径
         self._docs = []
-        for idx, (text, meta) in enumerate(zip(texts, metadatas, strict=False)):
+        for idx, (text, meta) in enumerate(zip(texts, metadatas, strict=True)):
             item = dict(meta)
             item["text"] = text
             item["bm25_doc_index"] = idx
@@ -104,8 +107,15 @@ class BM25Index:
         logger.info("[bm25] index built: %d docs, avg tokens=%.1f", len(self._docs), avg_tokens)
 
     # 执行 BM25 检索并按最大分数归一化相关性
-    def search(self, query: str, top_k: int = 10) -> list[dict[str, Any]]:
+    def search(
+        self, query: str, top_k: int = 10, course: str | None = None
+    ) -> list[dict[str, Any]]:
         """BM25 检索。
+
+        Args:
+            query: 查询文本
+            top_k: 返回结果数量
+            course: 课程过滤（可选）
 
         Returns:
             列表，每项包含 chunk_id, text, bm25_score, score, metadata。
@@ -122,7 +132,34 @@ class BM25Index:
         if len(scores) == 0:
             return []
 
-        # 取分数最高的 top_k 文档下标
+        # 如果指定了课程过滤，先过滤文档
+        if course:
+            filtered_docs_with_scores = [
+                (idx, scores[idx], self._docs[idx])
+                for idx in range(len(self._docs))
+                if self._docs[idx].get("course") == course and scores[idx] > 0
+            ]
+
+            # 如果过滤后有结果，使用过滤后的结果
+            if filtered_docs_with_scores:
+                # 按分数排序取 top_k
+                filtered_docs_with_scores.sort(
+                    key=lambda x: x[1], reverse=True
+                )
+                filtered_docs_with_scores = filtered_docs_with_scores[:top_k]
+
+                max_score = max(s for _, s, _ in filtered_docs_with_scores)
+
+                results: list[dict[str, Any]] = []
+                for idx, score, doc in filtered_docs_with_scores:
+                    meta = dict(doc)
+                    meta["bm25_score"] = score
+                    meta["score"] = score / max_score if max_score > 0 else 0
+                    results.append(meta)
+
+                return results
+
+        # 无课程过滤或过滤后无结果，使用全部文档
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[
             : max(1, top_k)
         ]
@@ -132,7 +169,7 @@ class BM25Index:
         if max_score <= 0:
             return []
 
-        results: list[dict[str, Any]] = []
+        results = []
         for idx in top_indices:
             score = float(scores[idx])
             if score <= 0:
@@ -146,17 +183,35 @@ class BM25Index:
         return results
 
     # 将 BM25 模型与文档 pickle 持久化到磁盘
-    def save(self, kb_dir: Path) -> None:
-        """持久化 BM25 索引到磁盘。"""
+    def save(self, kb_dir: Path) -> dict[str, Any]:
+        """持久化 BM25 索引到磁盘。
+
+        Returns:
+            元数据字典，包含 schema_version, chunk_count, sha256 等。
+        """
         if self._bm25 is None:
-            return
+            return {}
+
         path = kb_dir / _BM25_INDEX_FILENAME
-        data = {
+        payload = {
+            "schema_version": BM25_SCHEMA_VERSION,
             "bm25": self._bm25,
             "docs": self._docs,
         }
-        path.write_bytes(pickle.dumps(data, protocol=pickle.HIGHEST_PROTOCOL))
+        path.write_bytes(pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL))
+
+        # 计算校验和
+        sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+
+        metadata = {
+            "filename": _BM25_INDEX_FILENAME,
+            "schema_version": BM25_SCHEMA_VERSION,
+            "chunk_count": len(self._docs),
+            "sha256": sha256,
+        }
+
         logger.info("[bm25] index saved: %s (%d docs)", path, len(self._docs))
+        return metadata
 
     # 从磁盘加载已持久化的 BM25 索引
     @classmethod
@@ -169,17 +224,30 @@ class BM25Index:
 
         # 反序列化索引文件
         try:
-            data = pickle.loads(path.read_bytes())
+            raw_bytes = path.read_bytes()
+            data = pickle.loads(raw_bytes)
+
+            # 验证 schema 版本
+            schema_version = data.get("schema_version", "0")
+            if schema_version != BM25_SCHEMA_VERSION:
+                logger.warning(
+                    "[bm25] schema version mismatch: expected=%s, got=%s",
+                    BM25_SCHEMA_VERSION,
+                    schema_version,
+                )
+                return cls()
+
             idx = cls()
-            idx._bm25 = data["bm25"]
-            idx._docs = data["docs"]
+            idx._bm25 = data.get("bm25")
+            idx._docs = data.get("docs", [])
+
             logger.info("[bm25] index loaded: %d docs", len(idx._docs))
             return idx
+
         # 加载失败则降级返回空索引
         except Exception as exc:
             logger.warning("[bm25] load failed: %s", exc)
             return cls()
-
 
 # 模块级懒加载单例
 _bm25_index: BM25Index | None = None

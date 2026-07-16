@@ -18,35 +18,21 @@ jwt:
   expire_days: 7
 
 # ============ 模型配置 ============
-# 切换本地/云端只需修改 base_url、api_key、model_name
 models:
-#  # --- 云端：讯飞 Maas ---
-#  base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-#  api_key: "0b8dc23dda12b1e2e5cd69746c7916dc:OTk3OTE5ODFjODRmMDA1NzY4NmVjODMw"
-#  model_name: "astron-code-latest"
+  # 主模型：系统默认调用
+  main:
+    base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
+    api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
+    model_name: "astron-code-latest"
+    max_tokens: 8192
+    timeout: 300
+    max_retries: 2
+    temperature:
+      default: 0.7
+      json: 0.1
+      stream: 1.0
 
-  base_url: "https://api.deepseek.com"
-  api_key: "sk-dd48ba6031634138a4fc7b3644faa299"
-  model_name: "deepseek-v4-flash"
-
-
-  # 推理参数
-  max_tokens: 8192
-  # 结构化输出策略：function_calling_first / json_mode_first / prompt_first
-  structured_output_strategy: "function_calling_first"
-  # 网络与重试参数
-  timeout: 300          # 单次请求超时（秒）
-  max_retries: 2        # 失败重试次数
-
-  # 温度参数（控制输出随机性，0=确定性，1=高随机性）
-  # json_temp: JSON 结构化输出，低温度确保格式稳定
-  # stream_temp: 流式对话输出，高温度增加创意性和自然感
-  # default_temp: 普通文本生成，中等温度平衡确定性和多样性
-  json_temp: 0.1
-  stream_temp: 1.0
-  default_temp: 0.7
-
-  # 图片理解模型（独立配置）
+  # 视觉模型：图片理解
   vision:
     base_url: "https://open.bigmodel.cn/api/paas/v4/"
     api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
@@ -70,8 +56,8 @@ avatar:
   anchor_id: "111204004"
   vcn: "x5_lingxiaoyue_flow"
   iat_url: "wss://iat-api.xfyun.cn/v2/iat"
-  background_source: "image"
-  background_image: "../public/static/avatar-background-bookshelf.jpg"
+  background_source: "res_key"
+  background_image: "22SLM2teIw+aqR6Xsm2JbH6Ng310kDam2NiCY/RQ9n6s3nYJXloZWW1l64/g32vrn7d2lJQR7m9xD5EHYkVs1zuP4AyAYT6ujNjsPymLI/WxeAzv8DjuimJOQlzH+66+Pc7W/Dug9AuYPnJkluZEQyoPrYAzp5Au+YU4hioS6cTosd4rev2C8fcKvtuWjZXJEFhyZMD8c+ssuXeQE1StdaR11kxFrbyVEVCzQmhikzYwMT7cljAvIlsK/ptuXqi4qHI8xSQ+tfk5s6SQoqA/2PfPxTvC/ZQGruKSUb6y8q7OmlkFRb0dpkvT5TAcRlkkV2oaULluWs4NuYqVuuR2s5k6pPWJlfl2JcuLrqHSbiI="
   background_encoding: "jpg"
 
 # 搜索服务
@@ -88,7 +74,7 @@ paths:
 knowledge:
   enabled: true
   embed_model: "bge-m3:latest"
-  embed_base_url: "http://127.0.0.1:11434/v1"
+  embed_base_url: "http://127.0.0.1:10000/v1"
   embed_api_key: "sk-placeholder"
   top_k: 4
   max_context_chars: 6000
@@ -136,5 +122,7 @@ paths_config:
 
 # ASR 语音识别配置
 asr:
+  # 当前网络使用 fake-IP DNS；域名鉴权和 TLS SNI 仍保持不变。
+  direct_ip: "124.172.152.234"
   # VAD 结束静默时长（毫秒）— 越小响应越快，但可能截断短停顿
-  vad_eos: 700
+  vad_eos: 1200

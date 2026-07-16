@@ -130,6 +130,7 @@ class ChatMessageItem:
         attachment_analyses: list[dict[str, Any]] | None = None,
         activities: list[dict[str, Any]] | None = None,
         usage_metadata: dict[str, Any] | None = None,
+        video: dict[str, Any] | None = None,
         diagram: dict[str, Any] | None = None,
         created_at: Any = None,
     ) -> None:
@@ -142,6 +143,7 @@ class ChatMessageItem:
         self.attachment_analyses = attachment_analyses or []
         self.activities = activities or []
         self.usage_metadata = usage_metadata
+        self.video = video
         self.diagram = diagram
         self.created_at = created_at
 
@@ -163,6 +165,8 @@ class ChatMessageItem:
             data["tool_call_id"] = self.tool_call_id
         if self.usage_metadata:
             data["usage_metadata"] = self.usage_metadata
+        if self.video:
+            data["video"] = self.video
         if self.diagram:
             data["diagram"] = self.diagram
         return data

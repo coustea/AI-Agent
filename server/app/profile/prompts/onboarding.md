@@ -44,40 +44,58 @@ onboarding 表单信息有限，不求覆盖所有 7 个维度，只求输出的
 | global_learning_goal | 全局学习目标 | 期末复习 / 考研学习 / 进阶学习 / 补基础 / 项目实战 |
 | programming_languages | 已掌握编程语言列表 | ["Python","Java","C++","JavaScript","Go","Rust"] 子集或自定义 |
 | courses | 计划学习的课程列表 | ["数据结构","操作系统","计算机网络","数据库系统","编译原理","机器学习"] 子集或自定义 |
+| foundational_level | 基础水平（自评） | beginner / entry / proficient / master（初学 / 入门 / 熟练 / 精通） |
+| learning_style | 学习风格偏好 | theory_first / practice_first / case_driven（理论优先 / 实践优先 / 案例驱动） |
+| content_depth | 内容深度偏好 | quick_overview / systematic_deep（快速了解 / 系统深入） |
+| weak_points | 薄弱知识点列表 | ["数组","链表","树","图","排序算法"] 等用户自选的薄弱知识点 |
 
 处理规则：
 - 空字符串 / 空列表 / null 一律视为"无该信息"，不得据此推断
 - school_level 由后端从 school 名反查院校库得出，可作为辅助证据；若为空则忽略
+- foundational_level / learning_style / content_depth 为用户自评偏好，可直接映射到相应维度
+- weak_points 为用户自选薄弱知识点，可直接用于 weak_knowledge_points 维度
 
 # REASONING STRATEGY（推理策略）
 
 ## 维度提取优先级
 
-onboarding 表单信息有限，按以下优先级挑选 1-2 个证据最强的维度输出：
+onboarding 表单信息丰富，按以下优先级挑选 1-2 个证据最强的维度输出：
 
 **优先级 1（首选）— knowledge_level（知识基础）**
-- 证据源最丰富：major + grade + programming_languages + courses + school_level
+- 证据源最丰富：major + grade + programming_languages + courses + school_level + foundational_level
 - 几乎总能从专业、年级、语言栈、课程组合出具体描述
-- 推断要点：专业方向 + 年级对应的知识深度 + 已掌握语言栈 + 正在学习的课程范围
-- 触发条件：major 或 grade 至少一个非空
+- 推断要点：专业方向 + 年级对应的知识深度 + 已掌握语言栈 + 正在学习的课程范围 + 自评基础水平
+- 触发条件：major 或 grade 或 foundational_level 至少一个非空
 
-**优先级 2 — learning_goal_type（学习目标导向）**
+**优先级 2 — weak_knowledge_points（易错点偏好）**
+- 证据源：weak_points（用户直接填写）
+- 仅当 weak_points 非空时输出
+- 可直接引用用户自选的薄弱知识点
+
+**优先级 3 — learning_goal_type（学习目标导向）**
 - 证据源：global_learning_goal（直接对应）+ grade + daily_study_time（辅）
 - 仅当 global_learning_goal 非空时输出
 - 目标映射：期末复习→应试导向；考研学习→考研导向；进阶学习→能力进阶/兴趣导向；补基础→补漏导向；项目实战→职业/工程导向
 
+**优先级 4 — cognitive_style（认知风格）**
+- 证据源：learning_style + content_depth
+- 仅当 learning_style 或 content_depth 非空时输出
+- 可直接映射用户的学习偏好
+
 **其余维度（一般不输出，仅在证据非常具体时才考虑）**
 - difficulty_tolerance：需 daily_study_time + global_learning_goal 共同支撑，能给出具体耐受带宽描述
 - knowledge_gap_pattern：需 grade + courses 共同支撑，能区分"系统性建立中" vs "局部补漏"
-- weak_knowledge_points / cognitive_style / self_correction_ability：onboarding 阶段无具体证据，**不输出**
+- self_correction_ability：onboarding 阶段无具体证据，**不输出**
 
 ## 提取决策
 
-1. 先尝试输出优先级 1（knowledge_level）——若 major 或 grade 至少一个非空，通常可输出
-2. 再看优先级 2（learning_goal_type）——若 global_learning_goal 非空，可追加为第 2 个维度
-3. 若两者都无证据，退而考虑 difficulty_tolerance 或 knowledge_gap_pattern（需证据具体）
-4. 全部无证据时输出空 dimensions_patch（{}），但这种情况极少见
-5. **总计输出不超过 2 个维度**
+1. 先尝试输出优先级 1（knowledge_level）——若 major 或 grade 或 foundational_level 至少一个非空，通常可输出
+2. 再看优先级 2（weak_knowledge_points）——若 weak_points 非空，可追加为第 2 个维度
+3. 再看优先级 3（learning_goal_type）——若 global_learning_goal 非空，可考虑输出
+4. 再看优先级 4（cognitive_style）——若 learning_style 或 content_depth 非空，可考虑输出
+5. 若以上都无证据，退而考虑 difficulty_tolerance 或 knowledge_gap_pattern（需证据具体）
+6. 全部无证据时输出空 dimensions_patch（{}），但这种情况极少见
+7. **总计输出不超过 2 个维度**
 
 # OUTPUT FORMAT（输出格式）
 
@@ -108,7 +126,9 @@ knowledge_level、cognitive_style、weak_knowledge_points、knowledge_gap_patter
 - 仅输出单个合法 JSON 对象，禁止用 ```json``` 代码块包裹
 - dimensions_patch 最多包含 2 个维度；证据不足的维度必须整体省略
 - 每个 value 不超过 80 字；每个 evidence 项格式统一为 "字段名：字段值"
-- weak_knowledge_points、cognitive_style、self_correction_ability 在 onboarding 阶段不输出
+- weak_knowledge_points 仅可引用 weak_points 字段内容，不得编造
+- cognitive_style 可根据 learning_style / content_depth 输出
+- self_correction_ability 在 onboarding 阶段无证据，不输出
 
 # CONSTRAINTS（约束）
 
@@ -121,8 +141,8 @@ knowledge_level、cognitive_style、weak_knowledge_points、knowledge_gap_patter
 - 维度名必须使用 7 个白名单之一
 - 禁止用 ```json``` 代码块包裹输出
 - dimensions_patch 最多 2 个维度
-- weak_knowledge_points 不得编造具体易错知识点
-- cognitive_style 不得贴视觉型/听觉型等无依据标签
+- weak_knowledge_points 不得编造具体易错知识点（但可直接引用 weak_points 字段）
+- cognitive_style 可根据 learning_style / content_depth 输出，不再禁止
 
 ## Soft Constraints
 
@@ -142,9 +162,10 @@ knowledge_level、cognitive_style、weak_knowledge_points、knowledge_gap_patter
 - 是否仅输出了纯 JSON，无代码块标记？
 - dimensions_patch 是否最多 2 个维度？
 - 每个维度的 evidence 是否都能在表单字段中找到来源？
-- 是否避免了输出 weak_knowledge_points / cognitive_style / self_correction_ability？
 - 维度名是否在 7 个白名单内？
 - 是否有课程层面内容混入？（课程层面信息不属于全局画像 7 维度）
+- weak_knowledge_points 是否仅引用了 weak_points 字段内容？
+- self_correction_ability 是否被排除？
 
 # FEEDBACK LOOP（反馈机制）
 
@@ -157,61 +178,61 @@ knowledge_level、cognitive_style、weak_knowledge_points、knowledge_gap_patter
 ## 示例 1：信息丰富（典型考研用户）→ 输出 2 个维度
 
 【输入】
-{"school": "北京邮电大学", "school_level": "211", "major": "软件工程", "grade": "大三", "daily_study_time": "2-3h", "global_learning_goal": "考研学习", "programming_languages": ["Python", "Java"], "courses": ["数据结构", "操作系统", "计算机网络"]}
+{"school": "北京邮电大学", "school_level": "211", "major": "软件工程", "grade": "大三", "daily_study_time": "2-3h", "global_learning_goal": "考研学习", "programming_languages": ["Python", "Java"], "courses": ["数据结构", "操作系统", "计算机网络"], "foundational_level": "proficient", "learning_style": "practice_first", "content_depth": "systematic_deep", "weak_points": ["图", "动态规划"]}
 
 【输出】
 {
   "dimensions_patch": {
     "knowledge_level": {
-      "value": "软件工程专业大三，掌握 Python/Java，正在学习数据结构、操作系统、计算机网络等 CS 核心课，专业基础中等以上",
-      "evidence": ["major：软件工程", "grade：大三", "programming_languages：Python, Java", "courses：数据结构, 操作系统, 计算机网络"]
+      "value": "软件工程专业大三，自评熟练水平，掌握 Python/Java，正在学习数据结构、操作系统、计算机网络，偏好实践优先和系统深入",
+      "evidence": ["major：软件工程", "grade：大三", "foundational_level：proficient", "programming_languages：Python, Java", "courses：数据结构, 操作系统, 计算机网络", "learning_style：practice_first", "content_depth：systematic_deep"]
     },
-    "learning_goal_type": {
-      "value": "明确的考研导向，追求系统性与深度理解，目标为初试核心课复习",
-      "evidence": ["global_learning_goal：考研学习"]
+    "weak_knowledge_points": {
+      "value": "自选薄弱知识点为图和动态规划，需针对性强化",
+      "evidence": ["weak_points：图, 动态规划"]
     }
   }
 }
 
-【分析】knowledge_level 证据最丰富（4 字段组合）→ 优先输出；learning_goal_type 由 global_learning_goal 直接对应 → 作为第 2 维。difficulty_tolerance 等虽有间接证据但为控制数量不再输出。
+【分析】knowledge_level 证据最丰富（含 foundational_level、learning_style、content_depth）→ 优先输出；weak_knowledge_points 由 weak_points 直接对应 → 作为第 2 维。
 
 ## 示例 2：补基础的大一新生 → 输出 2 个维度
 
 【输入】
-{"school": "普通本科院校", "school_level": "普通本科", "major": "计算机科学与技术", "grade": "大一", "daily_study_time": "30-60min", "global_learning_goal": "补基础", "programming_languages": [], "courses": ["数据结构"]}
+{"school": "普通本科院校", "school_level": "普通本科", "major": "计算机科学与技术", "grade": "大一", "daily_study_time": "30-60min", "global_learning_goal": "补基础", "programming_languages": [], "courses": ["数据结构"], "foundational_level": "beginner", "learning_style": "theory_first", "content_depth": "systematic_deep", "weak_points": ["数组", "链表"]}
 
 【输出】
 {
   "dimensions_patch": {
     "knowledge_level": {
-      "value": "计算机科学与技术专业大一新生，刚接触数据结构，编程语言栈尚未建立，基础处于起步阶段",
-      "evidence": ["major：计算机科学与技术", "grade：大一", "programming_languages：[]", "courses：数据结构"]
+      "value": "计算机科学与技术专业大一新生，自评初学水平，刚接触数据结构，偏好理论优先和系统深入学习",
+      "evidence": ["major：计算机科学与技术", "grade：大一", "foundational_level：beginner", "courses：数据结构", "learning_style：theory_first", "content_depth：systematic_deep"]
     },
-    "learning_goal_type": {
-      "value": "补基础导向，重点在夯实底层而非应试或进阶，需循序渐进",
-      "evidence": ["global_learning_goal：补基础"]
+    "weak_knowledge_points": {
+      "value": "自选薄弱知识点为数组和链表，需从基础概念强化",
+      "evidence": ["weak_points：数组, 链表"]
     }
   }
 }
 
-【分析】cognitive_style 因 programming_languages 为空 → 不输出；weak_knowledge_points 不编造具体易错点 → 不输出。共 2 个维度。
+【分析】knowledge_level 证据丰富（含 foundational_level）→ 优先输出；weak_knowledge_points 由 weak_points 直接对应 → 作为第 2 维。
 
 ## 示例 3：信息极少 → 仅输出 1 个维度
 
 【输入】
-{"school": "", "school_level": "", "major": "计算机科学与技术", "grade": "大一", "daily_study_time": "", "global_learning_goal": "", "programming_languages": [], "courses": []}
+{"school": "", "school_level": "", "major": "计算机科学与技术", "grade": "大一", "daily_study_time": "", "global_learning_goal": "", "programming_languages": [], "courses": [], "foundational_level": "", "learning_style": "", "content_depth": "", "weak_points": []}
 
 【输出】
 {
   "dimensions_patch": {
     "knowledge_level": {
-      "value": "初步推测为计算机科学与技术专业大一新生，知识基础尚在建立中，无语言栈与课程信息",
+      "value": "初步推测为计算机科学与技术专业大一新生，知识基础尚在建立中",
       "evidence": ["major：计算机科学与技术", "grade：大一"]
     }
   }
 }
 
-【分析】global_learning_goal 为空 → learning_goal_type 无法输出；其余字段均空 → 仅输出 knowledge_level 1 个维度。
+【分析】global_learning_goal 为空 → learning_goal_type 无法输出；weak_points 为空 → weak_knowledge_points 无法输出；仅输出 knowledge_level 1 个维度。
 
 # TOOLS（可选）
 

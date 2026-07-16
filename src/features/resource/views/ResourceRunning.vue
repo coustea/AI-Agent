@@ -1,132 +1,250 @@
 <template>
-  <!-- 生成进度主视图：顶部摘要 + 智能体流程画布 + 浮层详情 + 产物区 + 日志抽屉 -->
-  <div class="phase-view generating-view workflow-stage-page workflow-stage-page-v4">
-    <!-- 顶部进度摘要栏：展示整体进度、运行中智能体数量、已交付产物数与路由步骤 -->
-    <!-- 内联 Summary：工作流顶部状态栏 -->
-    <header class="stage-topbar stage-topbar-v4">
-      <div class="stage-title-area">
-        <!-- 工作流标题与当前提示文案 -->
-        <div class="stage-title-copy">
+  <div class="phase-view generating-view workflow-page">
+    <!-- 顶部状态摘要 -->
+    <header class="workflow-summary">
+      <div class="summary-main">
+        <div class="summary-title">
+          <span class="summary-eyebrow">MULTI-AGENT WORKFLOW</span>
           <h2>资源生成工作流</h2>
           <p>{{ dagHeroMessage }}</p>
         </div>
-        <!-- 生成阶段步骤条：遍历步骤并渲染连接线 -->
-        <div class="stage-route-progress" aria-label="生成阶段">
+
+        <div class="route-progress" aria-label="资源生成阶段">
           <template v-for="(step, index) in routeSteps" :key="step.key">
-            <span class="route-step" :class="step.state">{{ step.label }}</span>
-            <span
-              v-if="index < routeSteps.length - 1"
-              class="route-line"
-              :class="step.lineState"
-            ></span>
+            <div class="route-step" :class="step.state">
+              <span>{{ index + 1 }}</span>
+              <strong>{{ step.label }}</strong>
+            </div>
+
+            <i
+                v-if="index < routeSteps.length - 1"
+                class="route-connector"
+                :class="step.lineState"
+            ></i>
           </template>
         </div>
       </div>
 
-      <!-- 右侧统计区：进度、活跃数、已交付数与日志入口 -->
-      <div class="stage-stat-group stage-stat-group-v4">
-        <div class="stage-stat-card progress-stat-card">
-          <span>生成进度</span>
+      <div class="summary-metrics">
+        <div class="summary-progress">
+          <span>总体进度</span>
           <strong>{{ overallProgress }}%</strong>
-          <div class="mini-progress-track"><i :style="{ width: `${overallProgress}%` }"></i></div>
+
+          <div class="summary-progress-track">
+            <i :style="{ transform: `scaleX(${overallProgress / 100})` }"></i>
+          </div>
         </div>
-        <div class="stage-stat-card">
-          <span>活跃 Agent</span>
-          <strong>{{ runningAgentCount }}<small>/{{ dagSelectedAgentIds.length }}</small></strong>
+
+        <div class="summary-metric">
+          <span>活跃智能体</span>
+          <strong>
+            {{ runningAgentCount }}
+            <small>/{{ workflowAgentTotal }}</small>
+          </strong>
         </div>
-        <div class="stage-stat-card wide">
+
+        <div class="summary-metric">
           <span>已交付资源</span>
-          <strong>{{ generatedResources.length }}<small> 项</small></strong>
+          <strong>
+            {{ generatedResources.length }}
+            <small>项</small>
+          </strong>
         </div>
-        <!-- 点击打开运行日志抽屉 -->
-        <button class="btn btn-outline rounded-full stage-log-btn" type="button" @click="workflowLogDrawerVisible = true">
-          运行日志
+
+        <button
+            class="summary-log-button"
+            type="button"
+            @click="workflowLogDrawerVisible = true"
+        >
+          查看日志
           <ArrowRight class="h-4 w-4" />
         </button>
       </div>
     </header>
-    <!-- 主体区域：包含调度工作台面板与详情浮层 -->
-    <main class="agent-stage-shell-v4">
-      <!-- 调度工作台面板：标题/状态/控制按钮 + 智能体流程画布 -->
-      <section class="dispatch-workbench-panel dispatch-workbench-panel-v4">
-        <!-- 面板头部：执行流程标题、错误状态入口与日志按钮 -->
-        <div class="workbench-header workbench-header-v4">
+
+    <main class="workflow-main">
+      <section class="workflow-workbench">
+        <header class="workbench-header">
           <div>
-            <span class="panel-eyebrow">执行流程</span>
-            <h3>资源生成进度</h3>
-            <p>教学计划完成后生成基础资源，再生成教学课件，最后完成资源整合。</p>
+            <span class="panel-eyebrow">实时协同视图</span>
+            <h3>多智能体调用链</h3>
+            <p>展示任务拆分、并行执行、结果回传、上下文交接与多模态资源生成过程。</p>
           </div>
-          <div class="workbench-actions">
-            <!-- 生成出错时展示中断状态按钮，点击打开日志抽屉 -->
+
+          <div class="workbench-controls">
             <button
-              v-if="generationError"
-              class="workflow-error-status"
-              type="button"
-              :title="generationError"
-              @click="workflowLogDrawerVisible = true"
+                v-if="generationError"
+                class="workflow-error-status"
+                type="button"
+                :title="generationError"
+                @click="workflowLogDrawerVisible = true"
             >
               <span></span>
               <strong>生成中断</strong>
               <em>查看详情</em>
-              <ArrowRight class='w-4 h-4 inline-block align-middle' />
+              <ArrowRight class="h-4 w-4" />
             </button>
-            <!-- 正常状态下展示 SSE 实时流追踪标签 -->
-            <span v-else class="control-pill active"><span class="live-dot"></span> SSE 实时流追踪</span>
-            <!-- 教学计划生成状态标签 -->
-            <span class="control-pill muted">计划 {{ planReady ? '已生成' : '生成中' }}</span>
-            <button class="btn btn-outline btn-sm rounded-full" @click="workflowLogDrawerVisible = true">查看日志</button>
+
+            <span v-else class="live-control">
+              <i></i>
+              SSE 实时追踪
+            </span>
+
+            <span class="plan-control">
+              计划 {{ planReady ? '已就绪' : '生成中' }}
+            </span>
           </div>
-        </div>
+        </header>
 
-        <!-- 智能体流程画布：包含计划核心、连接线 SVG、基础资源工位行、聚合工位行、整合卡片 -->
-        <div ref="flowCanvasRef" class="agent-flow-canvas agent-flow-canvas-v4">
-          <!-- 装饰性背景：网格与三条轨道光晕 -->
-          <div class="flow-grid-bg"></div>
-          <div class="flow-orbit orbit-one"></div>
-          <div class="flow-orbit orbit-two"></div>
-          <div class="flow-orbit orbit-three"></div>
+        <div
+            ref="flowCanvasRef"
+            class="workflow-canvas"
+            :class="{
+            'has-measured-links': agentLinkPaths.length > 0,
+            'is-running': runningAgentCount > 0,
+          }"
+        >
+          <div class="canvas-grid"></div>
+          <div class="canvas-glow canvas-glow-one"></div>
+          <div class="canvas-glow canvas-glow-two"></div>
 
-          <!-- 核心区：教学计划智能体卡片 -->
-          <div class="flow-core-stack flow-core-stack-v4">
-            <!-- Planning Agent 卡片，点击打开详情浮层 -->
+          <!-- 第一阶段：规划调度 -->
+          <section class="workflow-stage planning-stage">
+            <div class="stage-heading stage-heading-centered">
+              <span class="stage-index">01</span>
+
+              <div>
+                <strong>任务规划与调度</strong>
+                <p>解析学习需求，制定教学计划，并拆分多个资源生成任务。</p>
+              </div>
+
+              <em :class="`status-${planningNode.status}`">
+                {{ getNodeStatusLabel(planningNode) }}
+              </em>
+            </div>
+
             <article
-              ref="planningNodeRef"
-              class="agent-station-card agent-station-card-v4 planning-core"
-              :class="['status-' + getStageNode('planning').status, { 'is-selected': selectedDagNodeId === 'planning' }]"
-              @click="handleAgentClick('planning')"
+                ref="planningNodeRef"
+                class="planning-agent-card"
+                :class="[
+                `status-${planningNode.status}`,
+                {
+                  'is-selected': selectedDagNodeId === planningNode.id,
+                },
+              ]"
+                @click="handleAgentClick(planningNode.id)"
             >
-              <div class="station-header">
-                <div class="station-icon">
-                  <component :is="getWorkflowIcon('planning')"  class='w-4 h-4' />
-                </div>
-                <div>
-                  <strong>教学计划</strong>
-                  <span>Planning Agent</span>
-                </div>
-                <em>{{ getNodeStatusLabel(getStageNode('planning')) }}</em>
-              </div>
-              <!-- 静态当前消息：planning 节点 -->
-              <div class="station-live-log" :class="[`is-${getStageNode('planning').status}`]">
-                <div class="live-message-row">
-                  <span class="station-live-dot" :class="getStageNode('planning').status"></span>
-                  <p class="live-message-only">{{ getNodeMessage(getStageNode('planning')) }}</p>
-                </div>
-              </div>
-              <div class="station-footer">
-                <span>{{ getNodeStageLabel(getStageNode('planning')) }}</span>
-              </div>
-            </article>
-          </div>
+              <div class="planning-pulse-ring ring-one"></div>
+              <div class="planning-pulse-ring ring-two"></div>
 
-          <!-- SVG 连接线层：根据各工位卡片实测坐标绘制贝塞尔连线与端点圆 -->
-          <svg class="agent-link-svg" :viewBox="'0 0 ' + linkCanvasSize.width + ' ' + linkCanvasSize.height" preserveAspectRatio="none" aria-hidden="true">
+              <div class="planning-card-header">
+                <div class="planning-icon">
+                  <component
+                      :is="getWorkflowIcon(planningNode.id)"
+                      class="h-5 w-5"
+                  />
+                </div>
+
+                <div class="planning-identity">
+                  <span>ORCHESTRATOR</span>
+                  <strong>教学计划智能体</strong>
+                  <p>Planning Agent</p>
+                </div>
+
+                <span
+                    class="node-status-badge"
+                    :class="`status-${planningNode.status}`"
+                >
+                  <i></i>
+                  {{ getNodeStatusLabel(planningNode) }}
+                </span>
+              </div>
+
+              <div class="planning-message">
+                <span>当前任务</span>
+                <strong>{{ getNodeMessage(planningNode) }}</strong>
+              </div>
+
+              <div class="planning-dispatch-grid">
+                <div>
+                  <span>基础任务</span>
+                  <strong>{{ parallelPoolNodes.length }} 个并行任务</strong>
+                </div>
+
+                <div>
+                  <span>多模态任务</span>
+                  <strong>{{ aggregationNodes.length }} 个合成任务</strong>
+                </div>
+
+                <div>
+                  <span>运行事件</span>
+                  <strong>{{ getNodeEventCount(planningNode) }} 条</strong>
+                </div>
+              </div>
+
+              <footer class="planning-footer">
+                <span>{{ getNodeStageLabel(planningNode) }}</span>
+
+                <div class="node-progress-track">
+                  <i
+                      :style="{
+                      transform: `scaleX(${getNodeProgress(planningNode) / 100})`,
+                    }"
+                  ></i>
+                </div>
+
+                <b>{{ getNodeProgress(planningNode) }}%</b>
+              </footer>
+            </article>
+
+            <div class="dispatch-bus" aria-hidden="true">
+              <div class="dispatch-command">
+                <span></span>
+                <strong>任务分发</strong>
+                <em>{{ parallelDispatchLabel }}</em>
+              </div>
+            </div>
+          </section>
+
+          <!-- Planning Agent 到基础资源 Agent 的动态连接线 -->
+          <svg
+              class="agent-link-svg"
+              :viewBox="`0 0 ${linkCanvasSize.width} ${linkCanvasSize.height}`"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+          >
             <defs>
-              <linearGradient id="agentLinkGradient" x1="0" x2="1" y1="0" y2="1">
-                <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.22" />
-                <stop offset="52%" stop-color="#2563EB" stop-opacity="0.8" />
-                <stop offset="100%" stop-color="#1D4ED8" stop-opacity="0.28" />
+              <linearGradient
+                  id="agentLinkGradient"
+                  x1="0"
+                  x2="1"
+                  y1="0"
+                  y2="1"
+              >
+                <stop
+                    offset="0%"
+                    stop-color="#5b7cfa"
+                    stop-opacity="0.2"
+                />
+                <stop
+                    offset="48%"
+                    stop-color="#4f73e8"
+                    stop-opacity="0.92"
+                />
+                <stop
+                    offset="100%"
+                    stop-color="#33b7a4"
+                    stop-opacity="0.32"
+                />
               </linearGradient>
-              <filter id="agentLinkGlow" x="-20%" y="-20%" width="140%" height="140%">
+
+              <filter
+                  id="agentPacketGlow"
+                  x="-100%"
+                  y="-100%"
+                  width="300%"
+                  height="300%"
+              >
                 <feGaussianBlur stdDeviation="3" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
@@ -134,195 +252,688 @@
                 </feMerge>
               </filter>
             </defs>
+
             <path
-              v-for="link in agentLinkPaths"
-              :key="link.id"
-              class="agent-link-path"
-              :class="`status-${link.status}`"
-              :d="link.d"
+                v-for="link in agentLinkPaths"
+                :key="link.id"
+                class="agent-link-path"
+                :class="`status-${link.status}`"
+                :d="link.d"
             />
+
+            <g
+                v-for="link in runningAgentLinkPaths"
+                :key="`${link.id}-packets`"
+                class="agent-packet-group"
+            >
+              <circle class="agent-data-packet" r="4">
+                <animateMotion
+                    :path="link.d"
+                    dur="1.7s"
+                    repeatCount="indefinite"
+                />
+              </circle>
+
+              <circle
+                  class="agent-data-packet packet-secondary"
+                  r="3"
+              >
+                <animateMotion
+                    :path="link.d"
+                    dur="1.7s"
+                    begin="0.65s"
+                    repeatCount="indefinite"
+                />
+              </circle>
+            </g>
+
             <circle
-              v-for="link in agentLinkPaths"
-              :key="`${link.id}-dot`"
-              class="agent-link-dot"
-              :class="`status-${link.status}`"
-              :cx="link.x"
-              :cy="link.y"
-              r="4"
+                v-for="link in agentLinkPaths"
+                :key="`${link.id}-terminal`"
+                class="agent-link-terminal"
+                :class="`status-${link.status}`"
+                :cx="link.x"
+                :cy="link.y"
+                r="4"
             />
           </svg>
 
-          <!-- 基础资源并行工位行：渲染各 Worker 智能体卡片 -->
-          <transition-group name="agent-station" tag="div" class="agent-station-row agent-station-row-v4 base-agent-row">
-            <article
-              v-for="node in parallelPoolNodes"
-              :key="node.id"
-              class="agent-station-card agent-station-card-v4"
-              :ref="el => setStationCardRef(node.id, el)"
-              :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id, 'has-artifact': hasGeneratedResource(node.id) }]"
-              @click="handleAgentClick(node.id)"
-            >
-              <div class="station-header">
-                <div class="station-icon">
-                  <component :is="getWorkflowIcon(node.id)"  class='w-4 h-4' />
-                </div>
-                <div>
-                  <strong>{{ getWorkflowTitle(node.id) }}</strong>
-                  <span>基础资源</span>
-                </div>
-                <em>{{ getNodeStatusLabel(node) }}</em>
-              </div>
-              <!-- 静态当前消息：并行工位节点 -->
-              <div class="station-live-log" :class="[`is-${node.status}`]">
-                <div class="live-message-row">
-                  <span class="station-live-dot" :class="node.status"></span>
-                  <p class="live-message-only">{{ getNodeMessage(node) }}</p>
-                </div>
-              </div>
-              <div class="station-footer">
-                <span>{{ getNodeStageLabel(node) }}</span>
-              </div>
-            </article>
-          </transition-group>
+          <!-- 第二阶段：基础资源并行执行 -->
+          <section class="workflow-stage parallel-stage">
+            <div class="stage-heading">
+              <span class="stage-index">02</span>
 
-          <!-- 聚合阶段连接器装饰（仅在存在 PPT/视频/动画 智能体时显示） -->
-          <div v-if="showAggregationStage" class="dual-flow-connector" aria-hidden="true">
-            <span></span><i></i><i></i>
-          </div>
-
-          <!-- 聚合工位行：渲染 PPT / 视频 / 动画 智能体卡片 -->
-          <div v-if="showAggregationStage" class="agent-station-row agent-station-row-v4 aggregation-agent-row">
-            <article
-              v-for="node in aggregationNodes"
-              :key="node.id"
-              class="agent-station-card agent-station-card-v4"
-              :class="['status-' + node.status, { 'is-selected': selectedDagNodeId === node.id, 'has-artifact': hasGeneratedResource(node.id) }]"
-              @click="handleAgentClick(node.id)"
-            >
-              <div class="station-header">
-                <div class="station-icon">
-                  <component :is="getWorkflowIcon(node.id)" class='w-4 h-4' />
-                </div>
-                <div>
-                  <strong>{{ getWorkflowTitle(node.id) }}</strong>
-                  <span>{{ node.id === CARTOON_AGENT_ID ? 'Cartoon Agent' : node.id === VIDEO_AGENT_ID ? 'Video Agent' : 'PPT Agent' }}</span>
-                </div>
-                <em>{{ getNodeStatusLabel(node) }}</em>
-              </div>
-              <!-- 静态当前消息：聚合工位节点 -->
-              <div class="station-live-log" :class="[`is-${node.status}`]">
-                <div class="live-message-row">
-                  <span class="station-live-dot" :class="node.status"></span>
-                  <p class="live-message-only">{{ getNodeMessage(node) }}</p>
-                </div>
-              </div>
-              <div class="station-footer">
-                <span>{{ getNodeStageLabel(node) }}</span>
-              </div>
-            </article>
-
-          </div>
-
-          <!-- 合并连接器：将聚合结果汇入资源整合卡片 -->
-          <div v-if="showAggregationStage" class="dual-flow-connector is-merge" aria-hidden="true">
-            <span></span><i></i><i></i>
-          </div>
-
-          <!-- 资源整合（Bundle Agent）卡片：最终产物打包交付节点 -->
-          <div class="bundle-stage-shell">
-            <article
-              class="review-station-card review-station-card-v4 bundle-stage-card"
-              :class="['status-' + bundleNode.status, { 'is-selected': selectedDagNodeId === bundleNode.id }]"
-              @click="handleAgentClick(bundleNode.id)"
-            >
-              <div class="review-icon">
-                <component :is="getWorkflowIcon(bundleNode.id)"  class='w-4 h-4' />
-              </div>
               <div>
-                <strong>资源整合</strong>
-                <span>{{ getNodeStageLabel(bundleNode) }}</span>
+                <strong>基础资源并行执行层</strong>
+                <p>多个专业智能体并发生成讲解、导图、题目、代码和阅读资源。</p>
               </div>
-              <em>{{ getNodeStatusLabel(bundleNode) }}</em>
-            </article>
+
+              <div class="stage-live-summary">
+                <span>
+                  <i class="running-dot"></i>
+                  {{ activeBaseCount }} 执行中
+                </span>
+
+                <span>
+                  {{ completedBaseCount }}/{{ parallelPoolNodes.length }} 已返回
+                </span>
+              </div>
+            </div>
+
+            <transition-group
+                name="agent-station"
+                tag="div"
+                class="parallel-agent-grid"
+            >
+              <article
+                  v-for="node in parallelPoolNodes"
+                  :key="node.id"
+                  :ref="el => setStationCardRef(node.id, el)"
+                  class="agent-card"
+                  :class="[
+                  getAgentToneClass(node.id),
+                  `status-${node.status}`,
+                  {
+                    'is-selected': selectedDagNodeId === node.id,
+                    'has-artifact': hasGeneratedResource(node.id),
+                  },
+                ]"
+                  @click="handleAgentClick(node.id)"
+              >
+                <div class="agent-card-running-line"></div>
+
+                <header class="agent-card-header">
+                  <div class="agent-icon">
+                    <component
+                        :is="getWorkflowIcon(node.id)"
+                        class="h-4 w-4"
+                    />
+                  </div>
+
+                  <div class="agent-identity">
+                    <strong>{{ getWorkflowTitle(node.id) }}</strong>
+                    <span>{{ getAgentRoleName(node.id) }}</span>
+                  </div>
+
+                  <span
+                      class="node-status-badge compact"
+                      :class="`status-${node.status}`"
+                  >
+                    <i></i>
+                    {{ getNodeStatusLabel(node) }}
+                  </span>
+                </header>
+
+                <div class="agent-current-task">
+                  <span>{{ getNodePhaseLabel(node) }}</span>
+                  <p>{{ getNodeMessage(node) }}</p>
+                </div>
+
+                <div
+                    class="agent-execution-chain"
+                    aria-label="智能体执行步骤"
+                >
+                  <template
+                      v-for="(step, index) in getAgentExecutionSteps(node)"
+                      :key="step.label"
+                  >
+                    <div
+                        class="execution-step"
+                        :class="step.state"
+                    >
+                      <i></i>
+                      <span>{{ step.label }}</span>
+                    </div>
+
+                    <b
+                        v-if="index < getAgentExecutionSteps(node).length - 1"
+                    ></b>
+                  </template>
+                </div>
+
+                <div class="agent-event-preview">
+                  <span>最新事件</span>
+                  <p>{{ getLatestNodeEvent(node) }}</p>
+                  <em>{{ getNodeEventCount(node) }} 条事件</em>
+                </div>
+
+                <footer class="agent-card-footer">
+                  <span>{{ getNodeStageLabel(node) }}</span>
+
+                  <div class="node-progress-track">
+                    <i
+                        :style="{
+                        transform: `scaleX(${getNodeProgress(node) / 100})`,
+                      }"
+                    ></i>
+                  </div>
+
+                  <b>{{ getNodeProgress(node) }}%</b>
+                </footer>
+              </article>
+            </transition-group>
+          </section>
+
+          <!-- 并行资源回传 -->
+          <div class="handoff-rail handoff-return-rail">
+            <div class="handoff-packet packet-one">
+              <i></i>
+              <span>资源结果</span>
+            </div>
+
+            <div class="handoff-packet packet-two">
+              <i></i>
+              <span>运行快照</span>
+            </div>
+
+            <div class="handoff-packet packet-three">
+              <i></i>
+              <span>质量指标</span>
+            </div>
+
+            <strong>并行结果回传</strong>
           </div>
+
+          <!-- 第三阶段：轻量协同交接，不再展示 Coordinator Agent 卡片 -->
+          <section class="workflow-stage coordination-stage">
+            <div class="stage-heading stage-heading-centered">
+              <span class="stage-index">03</span>
+
+              <div>
+                <strong>协同汇总与上下文交接</strong>
+                <p>系统自动收集执行结果，完成结构检查，并组装下游生成上下文。</p>
+              </div>
+
+              <em :class="`status-${coordinatorNode.status}`">
+                {{ getNodeStatusLabel(coordinatorNode) }}
+              </em>
+            </div>
+
+            <div
+                class="coordination-flow-strip"
+                :class="`status-${coordinatorNode.status}`"
+            >
+              <div class="coordination-flow-header">
+                <div>
+                  <span>COORDINATION PIPELINE</span>
+                  <strong>{{ getNodeMessage(coordinatorNode) }}</strong>
+                </div>
+
+                <div class="coordination-progress-copy">
+                  <span>{{ getNodeStageLabel(coordinatorNode) }}</span>
+                  <b>{{ getNodeProgress(coordinatorNode) }}%</b>
+                </div>
+              </div>
+
+              <div class="coordination-steps">
+                <template
+                    v-for="(step, index) in coordinationSteps"
+                    :key="step.label"
+                >
+                  <div
+                      class="coordination-step"
+                      :class="step.state"
+                  >
+                    <span>{{ index + 1 }}</span>
+
+                    <div>
+                      <strong>{{ step.label }}</strong>
+                      <p>{{ step.description }}</p>
+                    </div>
+
+                    <em>{{ getStepStateLabel(step.state) }}</em>
+                  </div>
+
+                  <i
+                      v-if="index < coordinationSteps.length - 1"
+                      class="coordination-step-line"
+                      :class="step.state"
+                  ></i>
+                </template>
+              </div>
+
+              <div class="coordination-progress-track">
+                <i
+                    :style="{
+                    transform: `scaleX(${getNodeProgress(coordinatorNode) / 100})`,
+                  }"
+                ></i>
+              </div>
+            </div>
+          </section>
+
+          <!-- 上下文传递 -->
+          <div
+              v-if="showAggregationStage"
+              class="context-handoff-line"
+          >
+            <span></span>
+
+            <div>
+              <i></i>
+
+              <p>
+                <strong>上下文 Handoff</strong>
+                <em>教学计划 · 基础资源 · 用户画像 · 生成参数</em>
+              </p>
+            </div>
+          </div>
+
+          <!-- 第四阶段：多模态资源合成 -->
+          <section
+              v-if="showAggregationStage"
+              class="workflow-stage aggregation-stage"
+          >
+            <div class="stage-heading">
+              <span class="stage-index">04</span>
+
+              <div>
+                <strong>多模态资源合成层</strong>
+                <p>基于基础资源结果生成教学课件与动画讲解。</p>
+              </div>
+
+              <div class="stage-live-summary">
+                <span>
+                  <i class="running-dot"></i>
+                  {{ activeAggregationCount }} 执行中
+                </span>
+
+                <span>
+                  {{ completedAggregationCount }}/{{ aggregationNodes.length }} 已完成
+                </span>
+              </div>
+            </div>
+
+            <div class="aggregation-agent-grid">
+              <article
+                  v-for="node in aggregationNodes"
+                  :key="node.id"
+                  class="agent-card aggregation-agent-card"
+                  :class="[
+                  getAgentToneClass(node.id),
+                  `status-${node.status}`,
+                  {
+                    'is-selected': selectedDagNodeId === node.id,
+                    'has-artifact': hasGeneratedResource(node.id),
+                  },
+                ]"
+                  @click="handleAgentClick(node.id)"
+              >
+                <div class="agent-card-running-line"></div>
+
+                <header class="agent-card-header">
+                  <div class="agent-icon">
+                    <component
+                        :is="getWorkflowIcon(node.id)"
+                        class="h-4 w-4"
+                    />
+                  </div>
+
+                  <div class="agent-identity">
+                    <strong>{{ getWorkflowTitle(node.id) }}</strong>
+                    <span>{{ getAgentRoleName(node.id) }}</span>
+                  </div>
+
+                  <span
+                      class="node-status-badge compact"
+                      :class="`status-${node.status}`"
+                  >
+                    <i></i>
+                    {{ getNodeStatusLabel(node) }}
+                  </span>
+                </header>
+
+                <div class="aggregation-inputs">
+                  <span>接收上游上下文</span>
+
+                  <div>
+                    <em>教学计划</em>
+                    <em>基础资源</em>
+                    <em>个性化参数</em>
+                  </div>
+                </div>
+
+                <div class="agent-current-task">
+                  <span>{{ getNodePhaseLabel(node) }}</span>
+                  <p>{{ getNodeMessage(node) }}</p>
+                </div>
+
+                <div class="agent-execution-chain">
+                  <template
+                      v-for="(step, index) in getAgentExecutionSteps(node)"
+                      :key="step.label"
+                  >
+                    <div
+                        class="execution-step"
+                        :class="step.state"
+                    >
+                      <i></i>
+                      <span>{{ step.label }}</span>
+                    </div>
+
+                    <b
+                        v-if="index < getAgentExecutionSteps(node).length - 1"
+                    ></b>
+                  </template>
+                </div>
+
+                <div class="agent-event-preview">
+                  <span>最新事件</span>
+                  <p>{{ getLatestNodeEvent(node) }}</p>
+                  <em>{{ getNodeEventCount(node) }} 条事件</em>
+                </div>
+
+                <footer class="agent-card-footer">
+                  <span>{{ getNodeStageLabel(node) }}</span>
+
+                  <div class="node-progress-track">
+                    <i
+                        :style="{
+                        transform: `scaleX(${getNodeProgress(node) / 100})`,
+                      }"
+                    ></i>
+                  </div>
+
+                  <b>{{ getNodeProgress(node) }}%</b>
+                </footer>
+              </article>
+            </div>
+          </section>
+
+          <!-- 产物进入最终交付 -->
+          <div class="delivery-merge-line" aria-hidden="true">
+            <span></span>
+
+            <div>
+              <i></i>
+
+              <p>
+                <strong>产物合并</strong>
+                <em>统一保存资源索引与生成结果</em>
+              </p>
+            </div>
+          </div>
+
+          <!-- 最终资源交付摘要，不再作为 Agent 卡片 -->
+          <section class="workflow-stage delivery-stage">
+            <div class="stage-heading stage-heading-centered">
+              <span class="stage-index">
+                {{ showAggregationStage ? '05' : '04' }}
+              </span>
+
+              <div>
+                <strong>资源整合与交付</strong>
+                <p>汇总生成结果、保存资源索引并构建最终学习资源包。</p>
+              </div>
+
+              <em :class="`status-${bundleNode.status}`">
+                {{ getNodeStatusLabel(bundleNode) }}
+              </em>
+            </div>
+
+            <div
+                class="delivery-summary"
+                :class="`status-${bundleNode.status}`"
+            >
+              <div class="delivery-icon">
+                <component
+                    :is="getWorkflowIcon(bundleNode.id)"
+                    class="h-5 w-5"
+                />
+              </div>
+
+              <div class="delivery-copy">
+                <span>FINAL DELIVERY</span>
+                <strong>个性化学习资源包</strong>
+                <p>{{ getNodeMessage(bundleNode) }}</p>
+              </div>
+
+              <div class="delivery-count">
+                <span>已接收产物</span>
+                <strong>{{ generatedResources.length }}</strong>
+              </div>
+
+              <div class="delivery-progress">
+                <div class="node-progress-track">
+                  <i
+                      :style="{
+                      transform: `scaleX(${getNodeProgress(bundleNode) / 100})`,
+                    }"
+                  ></i>
+                </div>
+
+                <span>{{ getNodeStageLabel(bundleNode) }}</span>
+                <b>{{ getNodeProgress(bundleNode) }}%</b>
+              </div>
+
+              <span
+                  class="node-status-badge"
+                  :class="`status-${bundleNode.status}`"
+              >
+                <i></i>
+                {{ getNodeStatusLabel(bundleNode) }}
+              </span>
+            </div>
+          </section>
         </div>
       </section>
 
-      <!-- 详情浮层：传送至 body，点击工位卡片时展示选中智能体的运行详情 -->
+      <!-- Agent 完整执行流程弹窗 -->
       <Teleport to="body">
         <transition name="detail-fade">
-          <!-- 遮罩层，点击关闭详情 -->
           <div
-            v-if="detailPanelVisible && selectedDagNode"
-            class="detail-overlay"
-            @click="closeAgentDetail"
+              v-if="detailPanelVisible && selectedDagNode"
+              class="detail-overlay"
+              @click="closeAgentDetail"
           >
-            <!-- 详情面板容器，按智能体类型应用主题色 -->
             <aside
-              class="agent-detail-floating-panel"
-              :class="[getResourceToneClass(selectedDagNode.id)]"
-              role="dialog"
-              aria-label="Agent 运行详情"
-              @click.stop
+                class="agent-detail-panel"
+                :class="getAgentToneClass(selectedDagNode.id)"
+                role="dialog"
+                aria-modal="true"
+                aria-label="智能体完整执行流程"
+                @click.stop
             >
-              <!-- 详情面板头部：图标、标题、状态点、关闭按钮 -->
-              <div class="detail-panel-title">
-                <div class="focus-agent-icon">
-                  <component :is="getWorkflowIcon(selectedDagNode.id)" class='w-4 h-4' />
+              <header class="detail-header">
+                <div class="detail-agent-icon">
+                  <component
+                      :is="getWorkflowIcon(selectedDagNode.id)"
+                      class="h-5 w-5"
+                  />
                 </div>
-                <div class="detail-title-copy">
-                  <span>运行详情</span>
+
+                <div class="detail-agent-title">
+                  <span>AGENT EXECUTION WORKFLOW</span>
                   <h3>{{ getWorkflowTitle(selectedDagNode.id) }}</h3>
-                  <p>{{ getNodeStageLabel(selectedDagNode) }}</p>
-                </div>
-                <span class="detail-status-dot" :class="`status-${selectedDagNode.status}`"></span>
-                <button class="detail-close-btn" type="button" aria-label="关闭 Agent 详情" @click="closeAgentDetail">×</button>
-              </div>
-
-              <!-- 详情主体卡片：当前任务、指标网格、输入输出、指标标签 -->
-              <div class="selected-agent-detail-card">
-                <!-- 当前任务区：任务描述 -->
-                <div class="detail-current-task">
-                  <span>当前任务</span>
-                  <strong>{{ getNodeDisplayMessage(selectedDagNode) }}</strong>
+                  <p>{{ getAgentRoleName(selectedDagNode.id) }}</p>
                 </div>
 
-                <!-- 关键指标网格：阶段、耗时、更新时间、成果状态 -->
-                <dl class="focus-metrics detail-metrics-v3">
-                  <div>
-                    <dt>当前阶段</dt>
-                    <dd>{{ getNodePhaseLabel(selectedDagNode) }}</dd>
-                  </div>
-                  <div>
-                    <dt>运行耗时</dt>
-                    <dd>{{ formatElapsed(selectedDagNode.elapsedMs) }}</dd>
-                  </div>
-                  <div>
-                    <dt>最近更新</dt>
-                    <dd>{{ getNodeTimeLabel(selectedDagNode) }}</dd>
-                  </div>
-                  <div>
-                    <dt>成果状态</dt>
-                    <dd>{{ getNodeArtifactStatus(selectedDagNode) }}</dd>
-                  </div>
-                </dl>
+                <span
+                    class="detail-status"
+                    :class="`status-${selectedDagNode.status}`"
+                >
+                  <i></i>
+                  {{ getNodeStatusLabel(selectedDagNode) }}
+                </span>
 
-                <!-- 输入输出摘要网格 -->
-                <div class="detail-io-grid">
-                  <div>
-                    <span>输入</span>
-                    <p>{{ getNodeInputSummary(selectedDagNode) }}</p>
-                  </div>
-                  <div>
-                    <span>输出</span>
-                    <p>{{ getNodeOutputSummary(selectedDagNode) }}</p>
-                  </div>
+                <button
+                    type="button"
+                    aria-label="关闭详情"
+                    @click="closeAgentDetail"
+                >
+                  ×
+                </button>
+              </header>
+
+              <div class="detail-body">
+                <!-- 左侧：Agent 执行概览 -->
+                <div class="detail-overview">
+                  <section class="detail-current-task">
+                    <div class="detail-section-heading">
+                      <div>
+                        <span>当前运行任务</span>
+                        <strong>{{ getNodePhaseLabel(selectedDagNode) }}</strong>
+                      </div>
+
+                      <b>{{ getNodeProgress(selectedDagNode) }}%</b>
+                    </div>
+
+                    <p>{{ getNodeDisplayMessage(selectedDagNode) }}</p>
+
+                    <div class="detail-progress-row">
+                      <div class="node-progress-track">
+                        <i
+                            :style="{
+                            transform: `scaleX(${getNodeProgress(selectedDagNode) / 100})`,
+                          }"
+                        ></i>
+                      </div>
+                    </div>
+                  </section>
+
+                  <dl class="detail-metrics">
+                    <div>
+                      <dt>当前阶段</dt>
+                      <dd>{{ getNodePhaseLabel(selectedDagNode) }}</dd>
+                    </div>
+
+                    <div>
+                      <dt>运行耗时</dt>
+                      <dd>{{ getNodeElapsedLabel(selectedDagNode) }}</dd>
+                    </div>
+
+                    <div>
+                      <dt>最近更新</dt>
+                      <dd>{{ getNodeTimeLabel(selectedDagNode) }}</dd>
+                    </div>
+
+                    <div>
+                      <dt>成果状态</dt>
+                      <dd>{{ getNodeArtifactStatus(selectedDagNode) }}</dd>
+                    </div>
+                  </dl>
+
+                  <section class="detail-full-process">
+                    <header class="detail-section-title">
+                      <div>
+                        <span>完整执行流程</span>
+                        <p>展示该智能体从接收任务到成果交付的全部阶段。</p>
+                      </div>
+
+                      <em>
+                        {{ completedExecutionStepCount(selectedDagNode) }}
+                        /
+                        {{ getAgentExecutionSteps(selectedDagNode).length }}
+                      </em>
+                    </header>
+
+                    <div class="detail-process-list">
+                      <article
+                          v-for="(step, index) in getAgentExecutionSteps(selectedDagNode)"
+                          :key="step.label"
+                          class="detail-process-step"
+                          :class="step.state"
+                      >
+                        <div class="detail-process-index">
+                          <span>{{ index + 1 }}</span>
+                          <i></i>
+                        </div>
+
+                        <div class="detail-process-copy">
+                          <div>
+                            <strong>{{ step.label }}</strong>
+                            <em>{{ getStepStateLabel(step.state) }}</em>
+                          </div>
+
+                          <p>
+                            {{ getExecutionStepDescription(selectedDagNode, index) }}
+                          </p>
+                        </div>
+                      </article>
+                    </div>
+                  </section>
+
+                  <section class="detail-io-grid">
+                    <article>
+                      <span>输入上下文</span>
+                      <p>
+                        {{ getNodeExecutionInputSummary(selectedDagNode) }}
+                      </p>
+                    </article>
+
+                    <article>
+                      <span>输出结果</span>
+                      <p>
+                        {{ getNodeOutputSummary(selectedDagNode) }}
+                      </p>
+                    </article>
+                  </section>
+
+                  <section
+                      v-if="getMetricChips(selectedDagNode).length"
+                      class="detail-metric-section"
+                  >
+                    <span>运行指标</span>
+
+                    <div class="detail-metric-chips">
+                      <em
+                          v-for="chip in getMetricChips(selectedDagNode)"
+                          :key="chip"
+                      >
+                        {{ chip }}
+                      </em>
+                    </div>
+                  </section>
                 </div>
 
-                <!-- 指标标签条：展示 metrics 中的前四项键值 -->
-                <div class="focus-metric-chips" v-if="getMetricChips(selectedDagNode).length">
-                  <span v-for="chip in getMetricChips(selectedDagNode)" :key="chip">{{ chip }}</span>
-                </div>
+                <!-- 右侧：完整事件时间线 -->
+                <section class="detail-history">
+                  <header class="detail-history-header">
+                    <div>
+                      <span>完整事件流</span>
+                      <h4>Agent 运行记录</h4>
+                      <p>按执行顺序展示该智能体收到的状态、阶段和结果事件。</p>
+                    </div>
+
+                    <em>{{ selectedNodeTimeline.length }} 条记录</em>
+                  </header>
+
+                  <div
+                      v-if="selectedNodeTimeline.length"
+                      class="timeline-stream"
+                  >
+                    <article
+                        v-for="(item, index) in selectedNodeTimeline"
+                        :key="item.id"
+                        class="timeline-item"
+                        :class="`is-${item.status}`"
+                    >
+                      <div class="timeline-axis">
+                        <span>{{ index + 1 }}</span>
+                        <i></i>
+                      </div>
+
+                      <div class="timeline-card">
+                        <header>
+                          <div>
+                            <strong>{{ item.phaseLabel }}</strong>
+                            <span>{{ getLogStatusLabel(item.status) }}</span>
+                          </div>
+
+                          <em>{{ formatEventTime(item.timestamp) }}</em>
+                        </header>
+
+                        <p>{{ item.message }}</p>
+                      </div>
+                    </article>
+                  </div>
+
+                  <div v-else class="timeline-empty">
+                    <span></span>
+                    <strong>等待运行事件</strong>
+                    <p>该智能体尚未上报详细执行记录。</p>
+                  </div>
+                </section>
               </div>
             </aside>
           </div>
@@ -330,133 +941,125 @@
       </Teleport>
     </main>
 
-    <!-- 内联 Outputs：已交付资源停靠区 -->
-    <section class="output-dock-section output-dock-section-v4">
-      <div class="output-dock-heading">
-        <div>
-          <span>READY RESOURCES</span>
-          <strong>已交付资源</strong>
-        </div>
-        <p>这里仅展示已经完成并可预览的资源，不改变主流水线的阅读顺序。</p>
-      </div>
-      <div class="output-dock-list">
-        <button
-          v-for="agentId in visibleOutputAgentIds"
-          :key="agentId"
-          type="button"
-          class="output-dock-item"
-          :class="[
-            isOutputReady(agentId) ? 'ready' : isOutputRunning(agentId) ? 'running' : 'waiting',
-            { 'just-arrived': latestArtifactAgentId === agentId }
-          ]"
-          :disabled="!isOutputReady(agentId)"
-          @click="isOutputReady(agentId) && openResourcePreview(agentId)"
-        >
-          <span class="output-icon"><component :is="getOutputIcon(agentId)" class="h-4 w-4" /></span>
-          <span class="output-copy">
-            <strong>{{ getArtifactLabel(agentId) }}</strong>
-            <small>{{ getAgentOutputFormat(agentId) }}</small>
-          </span>
-          <em class="output-status">
-            <template v-if="isOutputReady(agentId)">刚刚完成 ▶</template>
-            <template v-else-if="isOutputRunning(agentId)">执行中<span class="loading-dots">...</span></template>
-            <template v-else>就绪待命</template>
-          </em>
-        </button>
-      </div>
-    </section>
-
-    <!-- 内联 Logs：工作流日志抽屉 -->
+    <!-- 日志抽屉 -->
     <Teleport to="body">
       <transition name="slide-over">
-        <div v-if="workflowLogDrawerVisible" class="custom-modal-overlay" @click="workflowLogDrawerVisible = false">
-          <aside class="log-drawer" aria-label="实时调度日志" @click.stop>
+        <div
+            v-if="workflowLogDrawerVisible"
+            class="drawer-overlay"
+            @click="workflowLogDrawerVisible = false"
+        >
+          <aside
+              class="log-drawer"
+              aria-label="实时调度日志"
+              @click.stop
+          >
             <header>
-              <h3>实时调度日志</h3>
-              <button type="button" aria-label="关闭日志" @click="workflowLogDrawerVisible = false">×</button>
+              <div>
+                <span>WORKFLOW LOGS</span>
+                <h3>实时调度日志</h3>
+              </div>
+
+              <button
+                  type="button"
+                  aria-label="关闭日志"
+                  @click="workflowLogDrawerVisible = false"
+              >
+                ×
+              </button>
             </header>
+
             <div class="drawer-log-list">
-              <div
-                v-for="item in workflowLogItems"
-                :key="item.id"
-                class="drawer-log-item"
-                :class="`is-${item.status}`"
+              <article
+                  v-for="item in workflowLogItems"
+                  :key="item.id"
+                  class="drawer-log-item"
+                  :class="`is-${item.status}`"
               >
                 <span class="drawer-log-dot"></span>
+
                 <div>
                   <strong>{{ item.title }}</strong>
                   <p>{{ item.message }}</p>
                 </div>
-              </div>
-              <p v-if="!workflowLogItems.length" class="empty-log">等待智能体上报运行日志</p>
+              </article>
+
+              <p
+                  v-if="!workflowLogItems.length"
+                  class="empty-log"
+              >
+                等待智能体上报运行日志
+              </p>
             </div>
           </aside>
         </div>
       </transition>
     </Teleport>
-
-    <!-- 资源预览弹窗：点击产物时打开 -->
-    <PreviewDialog
-      v-model:activeAgent="activePreviewAgent"
-      :data="previewData"
-      :resource="previewResource"
-    />
   </div>
 </template>
 
 <script setup lang="ts">
-// 引入 Vue 响应式原语、计算属性、生命周期钩子与组件类型
-import { ref, computed, type Component } from 'vue'
-// 引入 Phosphor 图标集，为各智能体匹配视觉图标
+import {
+  computed,
+  ref,
+  type Component,
+} from 'vue'
+
 import {
   PhTarget as Aim,
   PhArrowRight as ArrowRight,
   PhArchive as Box,
-  PhCompass as Connection,
   PhCpu as Cpu,
   PhChartBar as DataBoard,
   PhFileText as Document,
   PhNotePencil as EditPen,
   PhBookOpen as Reading,
   PhShareNetwork as Share,
-  // 内联 Outputs 所需图标
-  PhChartBar as SlidesIcon,
-  PhCpu as CodeIcon,
-  PhFileText as ArticleIcon,
   PhFilmStrip as VideoIcon,
-  PhNotePencil as QuizIcon,
-  PhBookOpen as ReadingIcon,
-  PhShareNetwork as MindMapIcon,
 } from '@phosphor-icons/vue'
-// 资源智能体 ID 联合类型
-import type { ResourceAgentId } from '@/features/resource/model/resource'
-// 预览弹窗
-import PreviewDialog from '@/shared/content/PreviewDialog.vue'
-// 共享的内容类型标签工具（内联 Outputs 所需）
-import { getArtifactLabel } from '@/shared/content/kind'
-// 智能体工位连线坐标计算组合式函数
-import { useFlow } from '../composables/useFlow'
-// 引入智能体常量、显示信息与 DAG 节点状态类型
+
+import type {
+  ResourceAgentId,
+} from '@/features/resource/model/resource'
+
+import {
+  useFlow,
+} from '../composables/useFlow'
+
 import {
   COORDINATOR_AGENT_ID,
   CARTOON_AGENT_ID,
   PPT_AGENT_ID,
-  VIDEO_AGENT_ID,
   BUNDLE_AGENT_ID,
   SYSTEM_AGENT_IDS,
   AGENT_DISPLAY,
-  getAgentOutputFormat,
-  getResourceToneClass,
   type DagNodeState,
 } from '../model/catalog'
 
-// 已生成资源条目类型（含可选生成时间与排序字段）
 type GeneratedResourceItem = Record<string, any> & {
   generatedAt?: string
   displayOrder?: number
 }
 
-// 组件 props：由父组件 ResourceGenerator 传入的 DAG 状态与生成数据
+type ExecutionStepState = 'waiting' | 'running' | 'success' | 'failed'
+
+type ExecutionStep = {
+  label: string
+  state: ExecutionStepState
+}
+
+type CoordinationStep = ExecutionStep & {
+  description: string
+}
+
+type DetailTimelineItem = {
+  id: string
+  phaseLabel: string
+  message: string
+  status: DagNodeState['status']
+  timestamp?: number
+}
+
 const props = defineProps<{
   naturalInput: string
   dagNodeStates: Record<string, DagNodeState>
@@ -467,48 +1070,19 @@ const props = defineProps<{
   dagSelectedAgentIds: ResourceAgentId[]
   generationError: string | null
   planReady: boolean
-  latestArtifactAgentId: string | null
   visibleWorkflowNodes: DagNodeState[]
 }>()
 
-// 事件输出：选中节点与打开资源预览
 const emit = defineEmits<{
   selectNode: [id: string]
-  openResource: [type: string]
 }>()
 
-// 日志抽屉显隐状态
 const workflowLogDrawerVisible = ref(false)
-// 详情浮层显隐状态
 const detailPanelVisible = ref(false)
 
-// 预览弹窗状态（点击产物区资源时打开预览）
-const activePreviewAgent = ref<string | null>(null)
-const previewData        = ref<any>(null)
-const previewResource    = ref<any>(null)
-
-// 点击产物时打开预览：数据已加载则直接展示，否则委托父组件从 API 获取
-function openResourcePreview(type: string) {
-  const resource = props.generatedResources.find((r: any) => r.type === type)
-  if (!resource) {
-    // 数据尚未加载，委托父组件从 API 获取后打开预览
-    emit('openResource', type)
-    return
-  }
-  if (resource.content) {
-    activePreviewAgent.value = resource.type || resource.agent_type
-    previewData.value        = resource.content
-    previewResource.value    = resource
-  } else {
-    // 资源内容尚未加载，委托父组件从后端获取后打开预览
-    emit('openResource', type)
-  }
-}
-
-// 智能体 ID 到 Phosphor 图标组件的映射表
 const workflowIconMap: Record<string, Component> = {
   planning: Aim,
-  coordinator: Connection,
+  coordinator: Share,
   content: Document,
   mindmap: Share,
   quiz: EditPen,
@@ -519,10 +1093,9 @@ const workflowIconMap: Record<string, Component> = {
   bundle: Box,
 }
 
-// 智能体 ID 到中文显示标题的映射表
 const workflowTitleMap: Record<string, string> = {
   planning: '教学计划',
-  coordinator: '结果汇总',
+  coordinator: '协同汇总',
   content: '课程讲解',
   mindmap: '思维导图',
   quiz: '练习题',
@@ -533,38 +1106,72 @@ const workflowTitleMap: Record<string, string> = {
   bundle: '资源包交付',
 }
 
-// 根据智能体 ID 获取对应图标，缺省返回文档图标
+const agentRoleMap: Record<string, string> = {
+  planning: 'Planning Agent',
+  coordinator: 'Coordination Pipeline',
+  content: 'Content Agent',
+  mindmap: 'Mindmap Agent',
+  quiz: 'Quiz Agent',
+  code: 'Code Agent',
+  reading: 'Reading Agent',
+  ppt: 'PPT Agent',
+  cartoon: 'Cartoon Agent',
+  bundle: 'Delivery Pipeline',
+}
+
+const agentToneMap: Record<string, string> = {
+  planning: 'tone-indigo',
+  coordinator: 'tone-cyan',
+  content: 'tone-blue',
+  mindmap: 'tone-violet',
+  quiz: 'tone-rose',
+  code: 'tone-amber',
+  reading: 'tone-emerald',
+  ppt: 'tone-indigo',
+  cartoon: 'tone-pink',
+  bundle: 'tone-cyan',
+}
+
 function getWorkflowIcon(id: string) {
   return workflowIconMap[id] || Document
 }
 
-// 根据智能体 ID 获取中文标题，缺省返回 AGENT_DISPLAY 标签或原始 ID
 function getWorkflowTitle(id: string) {
   return workflowTitleMap[id] || AGENT_DISPLAY[id]?.label || id
 }
 
-// 点击工位卡片：打开详情浮层并通知父组件选中节点
+function getAgentRoleName(id: string) {
+  return agentRoleMap[id] || `${id} Agent`
+}
+
+function getAgentToneClass(id: string) {
+  return agentToneMap[id] || 'tone-blue'
+}
+
 function handleAgentClick(id: string) {
   detailPanelVisible.value = true
   emit('selectNode', id)
 }
 
-// 关闭详情浮层
 function closeAgentDetail() {
   detailPanelVisible.value = false
 }
 
-// 基础资源智能体 ID 列表（排除 PPT / 动画 / 视频等聚合阶段智能体）
 const baseGenerationAgentIds = computed(() => {
-  return props.dagSelectedAgentIds.filter(id => ![PPT_AGENT_ID, CARTOON_AGENT_ID, VIDEO_AGENT_ID].includes(id))
+  return props.dagSelectedAgentIds.filter(
+      id => ![
+        PPT_AGENT_ID,
+        CARTOON_AGENT_ID,
+      ].includes(id),
+  )
 })
 
-// 基础资源并行工位的 DAG 节点状态数组
 const parallelPoolNodes = computed(() => {
-  return baseGenerationAgentIds.value.map(agentId => getStageNode(agentId))
+  return baseGenerationAgentIds.value.map(agentId => {
+    return getStageNode(agentId)
+  })
 })
 
-// 连线组合式函数：基于工位卡片 DOM 实测坐标计算 SVG 连线路径
 const {
   canvasRef: flowCanvasRef,
   sourceRef: planningNodeRef,
@@ -572,101 +1179,326 @@ const {
   links: agentLinkPaths,
   setCardRef: setStationCardRef,
 } = useFlow(parallelPoolNodes)
-// flowCanvasRef / planningNodeRef 由模板 ref 绑定使用，vue-tsc 无法识别模板引用
-void flowCanvasRef; void planningNodeRef
 
+void flowCanvasRef
+void planningNodeRef
 
-
-// 聚合阶段节点：根据用户选中的智能体 ID 直接判断，确保进入页面即展示
 const aggregationNodes = computed(() => {
   const nodes: DagNodeState[] = []
-  // 直接使用 dagSelectedAgentIds 判断，不再依赖 DAG 节点是否已进入工作流
-  if (props.dagSelectedAgentIds.includes(PPT_AGENT_ID as ResourceAgentId)) {
+
+  if (
+      props.dagSelectedAgentIds.includes(
+          PPT_AGENT_ID as ResourceAgentId,
+      )
+  ) {
     nodes.push(getStageNode(PPT_AGENT_ID))
   }
-  if (props.dagSelectedAgentIds.includes(VIDEO_AGENT_ID as ResourceAgentId)) {
-    nodes.push(getStageNode(VIDEO_AGENT_ID))
-  }
-  if (props.dagSelectedAgentIds.includes(CARTOON_AGENT_ID as ResourceAgentId)) {
+
+  if (
+      props.dagSelectedAgentIds.includes(
+          CARTOON_AGENT_ID as ResourceAgentId,
+      )
+  ) {
     nodes.push(getStageNode(CARTOON_AGENT_ID))
   }
+
   return nodes
 })
 
-// 是否展示聚合阶段：只要用户选择了 PPT/动画/视频 中任意一个即为 true
-const showAggregationStage = computed(() => aggregationNodes.value.length > 0)
+const showAggregationStage = computed(() => {
+  return aggregationNodes.value.length > 0
+})
 
-// 资源整合节点状态
-const bundleNode = computed(() => getStageNode(BUNDLE_AGENT_ID))
+const planningNode = computed(() => {
+  return getStageNode('planning')
+})
 
-// 当前选中的 DAG 节点（用于详情浮层展示）
+const coordinatorNode = computed(() => {
+  return getStageNode(COORDINATOR_AGENT_ID)
+})
+
+const bundleNode = computed(() => {
+  return getStageNode(BUNDLE_AGENT_ID)
+})
+
 const selectedDagNode = computed(() => {
-  if (!props.selectedDagNodeId) return null
-  if (props.selectedDagNodeId === COORDINATOR_AGENT_ID) return getStageNode(COORDINATOR_AGENT_ID)
-  return props.dagNodeStates[props.selectedDagNodeId] || getStageNode(props.selectedDagNodeId)
+  if (!props.selectedDagNodeId) {
+    return null
+  }
+
+  return (
+      props.dagNodeStates[props.selectedDagNodeId]
+      || getStageNode(props.selectedDagNodeId)
+  )
 })
 
-// 当前运行中的智能体数量（排除协调器）
+const selectedNodeTimeline = computed<DetailTimelineItem[]>(() => {
+  if (!selectedDagNode.value) {
+    return []
+  }
+
+  return getNodeFullTimeline(selectedDagNode.value)
+})
+
 const runningAgentCount = computed(() => {
-  return props.visibleWorkflowNodes.filter(node => node.id !== COORDINATOR_AGENT_ID && node.status === 'running').length
+  return props.visibleWorkflowNodes.filter(node => {
+    return (
+        node.id !== COORDINATOR_AGENT_ID
+        && node.id !== BUNDLE_AGENT_ID
+        && node.status === 'running'
+    )
+  }).length
 })
 
-// 顶部摘要文案：优先展示运行中消息，其次全局完成/最新工作流消息
-const dagHeroMessage = computed(() => {
-  const running = Object.values(props.dagNodeStates).find(n => n.id !== COORDINATOR_AGENT_ID && n.status === 'running')
-  if (running) return running.currentMessage || `${running.label}处理中...`
-  if (getStageNode(COORDINATOR_AGENT_ID).status === 'running') return '正在准备教学课件...'
-  const allDone = Object.values(props.dagNodeStates).every(n => n.status === 'success')
-  if (allDone) return '所有资源生成完成'
-  return props.latestWorkflowMessage || '多智能体协同生成中'
+const workflowAgentTotal = computed(() => {
+  return props.dagSelectedAgentIds.length + 1
 })
 
-// 路由步骤数组：教学计划 → 基础资源 → 教学课件 → 资源整合四阶段进度状态
-const routeSteps = computed(() => {
-  const planning = getStageNode('planning')
-  const coordinator = getStageNode(COORDINATOR_AGENT_ID)
-  const baseDone = parallelPoolNodes.value.length > 0 && parallelPoolNodes.value.every(node => ['success', 'failed', 'skipped'].includes(node.status))
-  const baseRunning = parallelPoolNodes.value.some(node => node.status === 'running')
-  const aggregationRunning = aggregationNodes.value.some(node => node.status === 'running')
-  const aggregationDone = aggregationNodes.value.length === 0 || aggregationNodes.value.every(node => ['success', 'failed', 'skipped'].includes(node.status))
-  const bundle = bundleNode.value
+const activeBaseCount = computed(() => {
+  return parallelPoolNodes.value.filter(node => {
+    return node.status === 'running'
+  }).length
+})
 
-  return [
+const completedBaseCount = computed(() => {
+  return parallelPoolNodes.value.filter(node => {
+    return ['success', 'skipped'].includes(node.status)
+  }).length
+})
+
+const activeAggregationCount = computed(() => {
+  return aggregationNodes.value.filter(node => {
+    return node.status === 'running'
+  }).length
+})
+
+const completedAggregationCount = computed(() => {
+  return aggregationNodes.value.filter(node => {
+    return ['success', 'skipped'].includes(node.status)
+  }).length
+})
+
+const runningAgentLinkPaths = computed(() => {
+  return agentLinkPaths.value.filter(link => {
+    return link.status === 'running'
+  })
+})
+
+const parallelDispatchLabel = computed(() => {
+  if (planningNode.value.status === 'running') {
+    return '正在拆分任务'
+  }
+
+  if (planningNode.value.status === 'success') {
+    if (activeBaseCount.value > 0) {
+      return `${activeBaseCount.value} 个 Agent 已启动`
+    }
+
+    if (
+        parallelPoolNodes.value.length > 0
+        && completedBaseCount.value === parallelPoolNodes.value.length
+    ) {
+      return '基础任务已全部返回'
+    }
+
+    return '任务已分发'
+  }
+
+  if (planningNode.value.status === 'failed') {
+    return '任务分发中断'
+  }
+
+  return '等待教学计划'
+})
+
+const coordinationSteps = computed<CoordinationStep[]>(() => {
+  const node = coordinatorNode.value
+  const progress = getNodeProgress(node)
+
+  const labels = [
     {
-      key: 'plan',
-      label: '教学计划',
-      state: planning.status === 'success' ? 'done' : 'active',
-      lineState: planning.status === 'success' ? 'done' : 'active',
+      label: '收集执行结果',
+      description: `${completedBaseCount.value}/${parallelPoolNodes.value.length} 个基础资源已返回`,
     },
     {
-      key: 'base',
-      label: '基础资源',
-      state: baseDone ? 'done' : baseRunning ? 'active' : '',
-      lineState: coordinator.status === 'success' ? 'done' : baseDone || coordinator.status === 'running' ? 'active' : '',
+      label: '检查资源结构',
+      description: '检查资源完整性、格式和下游依赖',
     },
     {
-      key: 'aggregation',
-      label: '教学课件',
-      state: aggregationDone && aggregationNodes.value.length ? 'done' : aggregationRunning || coordinator.status === 'running' ? 'active' : '',
-      lineState: aggregationDone || bundle.status === 'running' || bundle.status === 'success' ? 'done' : aggregationRunning ? 'active' : '',
-    },
-    {
-      key: 'bundle',
-      label: '资源整合',
-      state: bundle.status === 'success' ? 'done' : bundle.status === 'running' ? 'active' : '',
-      lineState: '',
+      label: '组装生成上下文',
+      description: '构建课件与动画智能体所需输入',
     },
   ]
+
+  return labels.map((item, index) => {
+    let state: ExecutionStepState = 'waiting'
+
+    if (node.status === 'success') {
+      state = 'success'
+    } else if (node.status === 'failed') {
+      const currentIndex = Math.min(
+          labels.length - 1,
+          Math.floor(progress / (100 / labels.length)),
+      )
+
+      if (index < currentIndex) {
+        state = 'success'
+      } else if (index === currentIndex) {
+        state = 'failed'
+      }
+    } else if (node.status === 'running') {
+      const currentIndex = Math.min(
+          labels.length - 1,
+          Math.floor(progress / (100 / labels.length)),
+      )
+
+      if (index < currentIndex) {
+        state = 'success'
+      } else if (index === currentIndex) {
+        state = 'running'
+      }
+    }
+
+    return {
+      ...item,
+      state,
+    }
+  })
 })
 
-// 产物输出区需要展示的智能体 ID 列表
-const visibleOutputAgentIds = computed(() => {
-  return props.dagSelectedAgentIds
+const dagHeroMessage = computed(() => {
+  const runningNode = Object.values(props.dagNodeStates).find(node => {
+    return (
+        node.id !== COORDINATOR_AGENT_ID
+        && node.id !== BUNDLE_AGENT_ID
+        && node.status === 'running'
+    )
+  })
+
+  if (runningNode) {
+    return (
+        runningNode.currentMessage
+        || `${getWorkflowTitle(runningNode.id)}正在执行`
+    )
+  }
+
+  if (coordinatorNode.value.status === 'running') {
+    return '正在汇总基础资源并构建下游智能体上下文'
+  }
+
+  if (bundleNode.value.status === 'running') {
+    return '正在整合并打包个性化学习资源'
+  }
+
+  const allCompleted = props.visibleWorkflowNodes.length > 0
+      && props.visibleWorkflowNodes.every(node => {
+        return ['success', 'skipped'].includes(node.status)
+      })
+
+  if (allCompleted) {
+    return '所有智能体任务已完成，资源包已准备就绪'
+  }
+
+  return (
+      props.latestWorkflowMessage
+      || '多智能体正在协同生成个性化学习资源'
+  )
 })
 
-// 工作流日志条目汇总：全局错误 + 各节点最近事件/步骤历史
+const routeSteps = computed(() => {
+  const planning = planningNode.value
+  const coordinator = coordinatorNode.value
+  const bundle = bundleNode.value
+
+  const baseRunning = parallelPoolNodes.value.some(node => {
+    return node.status === 'running'
+  })
+
+  const baseDone = parallelPoolNodes.value.length > 0
+      && parallelPoolNodes.value.every(node => {
+        return ['success', 'failed', 'skipped'].includes(node.status)
+      })
+
+  const aggregationRunning = aggregationNodes.value.some(node => {
+    return node.status === 'running'
+  })
+
+  const aggregationDone = aggregationNodes.value.length === 0
+      || aggregationNodes.value.every(node => {
+        return ['success', 'failed', 'skipped'].includes(node.status)
+      })
+
+  const steps = [
+    {
+      key: 'planning',
+      label: '任务规划',
+      state: getRouteNodeState(planning),
+      lineState: planning.status === 'success'
+          ? 'done'
+          : planning.status === 'running'
+              ? 'active'
+              : '',
+    },
+    {
+      key: 'parallel',
+      label: '并行生成',
+      state: baseDone
+          ? 'done'
+          : baseRunning
+              ? 'active'
+              : '',
+      lineState: baseDone || coordinator.status === 'running'
+          ? 'done'
+          : baseRunning
+              ? 'active'
+              : '',
+    },
+    {
+      key: 'coordination',
+      label: '协同交接',
+      state: getRouteNodeState(coordinator),
+      lineState: coordinator.status === 'success'
+          ? 'done'
+          : coordinator.status === 'running'
+              ? 'active'
+              : '',
+    },
+  ]
+
+  if (showAggregationStage.value) {
+    steps.push({
+      key: 'aggregation',
+      label: '多模态合成',
+      state: aggregationDone
+          ? 'done'
+          : aggregationRunning
+              ? 'active'
+              : '',
+      lineState: aggregationDone || bundle.status === 'running'
+          ? 'done'
+          : aggregationRunning
+              ? 'active'
+              : '',
+    })
+  }
+
+  steps.push({
+    key: 'bundle',
+    label: '资源交付',
+    state: getRouteNodeState(bundle),
+    lineState: '',
+  })
+
+  return steps
+})
+
 const workflowLogItems = computed(() => {
-  const items: Array<{ id: string; title: string; message: string; status: DagNodeState['status'] }> = []
+  const items: Array<{
+    id: string
+    title: string
+    message: string
+    status: DagNodeState['status']
+  }> = []
 
   if (props.generationError) {
     items.push({
@@ -677,58 +1509,53 @@ const workflowLogItems = computed(() => {
     })
   }
 
-  props.visibleWorkflowNodes.forEach((node) => {
-    if (node.id === COORDINATOR_AGENT_ID) return
-    const richLogs = node.eventLogs || []
+  props.visibleWorkflowNodes.forEach(node => {
+    const eventLogs = node.eventLogs || []
 
-    // 优先展示最近 4 条结构化事件日志
-    if (richLogs.length) {
-      richLogs.slice(-4).forEach((log) => {
+    if (eventLogs.length) {
+      eventLogs.slice(-5).forEach(log => {
         items.push({
           id: log.id,
-          title: `${node.label} · ${getLogPhaseLabel(log.phase)}`,
+          title: `${getWorkflowTitle(node.id)} · ${getLogPhaseLabel(log.phase)}`,
           message: log.message,
           status: log.status || node.status,
         })
       })
+
       return
     }
 
-    // 无结构化日志时回退到步骤历史，取最近 3 条
     if (node.stepHistory?.length) {
       node.stepHistory.slice(-3).forEach((step, index) => {
         items.push({
           id: `${node.id}-${index}-${step}`,
-          title: node.label,
+          title: getWorkflowTitle(node.id),
           message: step,
           status: node.status,
         })
       })
     }
   })
+
   return items
 })
 
-// 将事件阶段英文名翻译为简短中文标签
-function getLogPhaseLabel(phase?: string) {
-  const phaseMap: Record<string, string> = {
-    planning_blueprint: '规划',
-    llm_generating: '生成',
-    validating: '校验',
-    ppt_generating: 'PPT',
-    ppt_waiting_sources: '等待',
-    artifact_saved: '保存',
-    research: '资料研究',
-    research_delegate: '研究委托',
-    bundling: '打包',
-    finished: '完成',
-    failed: '失败',
+function getRouteNodeState(node: DagNodeState) {
+  if (node.status === 'success') {
+    return 'done'
   }
 
-  return phase ? phaseMap[phase] || phase : '状态'
+  if (node.status === 'running') {
+    return 'active'
+  }
+
+  if (node.status === 'failed') {
+    return 'failed'
+  }
+
+  return ''
 }
 
-// 安全获取 DAG 节点状态：不存在时返回带默认值的占位节点
 function getStageNode(id: string): DagNodeState {
   return props.dagNodeStates[id] || {
     id,
@@ -743,3361 +1570,3294 @@ function getStageNode(id: string): DagNodeState {
   }
 }
 
-// 判断某智能体是否已生成资源（资源列表或节点成功状态）
 function hasGeneratedResource(type: string) {
-  const isReadyInResources = props.generatedResources.some(resource => resource.type === type)
-  const isReadyInDag = props.dagNodeStates[type]?.status === 'success'
-  return isReadyInResources || isReadyInDag
+  const resourceReady = props.generatedResources.some(resource => {
+    return resource.type === type
+  })
+
+  const nodeReady = props.dagNodeStates[type]?.status === 'success'
+
+  return resourceReady || nodeReady
 }
 
-// 节点状态标签（受阻/跳过/就绪/执行中/就绪待命）
 function getNodeStatusLabel(node: DagNodeState) {
-  if (node.status === 'failed') return '受阻'
-  if (node.status === 'skipped') return '已跳过'
-  if (node.status === 'success') return '就绪'
-  if (node.status === 'running') return '执行中'
-  return '就绪待命'
+  if (node.status === 'failed') {
+    return '执行失败'
+  }
+
+  if (node.status === 'skipped') {
+    return '已跳过'
+  }
+
+  if (node.status === 'success') {
+    return '已完成'
+  }
+
+  if (node.status === 'running') {
+    return '执行中'
+  }
+
+  return '等待调度'
 }
 
-// 卡片正文静态消息：只展示当前进度文案，不轮播、不显示冗长的完成文案
-// 过滤掉后端发送的 "X completed" / "X finished" 类冗余消息，只保留有意义的运行时消息
-function getNodeMessage(node: DagNodeState): string {
-  if (node.status === 'success') return '已完成'
-  if (node.status === 'failed') return node.currentMessage?.trim() || '执行失败'
-  if (node.status === 'skipped') return '已跳过'
-  if (node.status === 'running') {
-    const msg = node.currentMessage?.trim()
-    // 过滤掉 "planning completed" / "content finished" 等冗余完成消息
-    if (msg && /^(planning|content|mindmap|quiz|code|reading|ppt|cartoon|bundle)\s+(completed|finished|done)/i.test(msg)) {
-      return '运行中'
-    }
-    return msg || '运行中'
+function getNodeProgress(node: DagNodeState) {
+  if (node.status === 'success') {
+    return 100
   }
+
+  if (
+      node.status === 'waiting'
+      || node.status === 'skipped'
+  ) {
+    return 0
+  }
+
+  return Math.max(
+      0,
+      Math.min(
+          100,
+          Math.round(node.progress || 0),
+      ),
+  )
+}
+
+function getNodeMessage(node: DagNodeState) {
+  if (node.status === 'success') {
+    return getNodeSuccessMessage(node)
+  }
+
+  if (node.status === 'failed') {
+    return node.currentMessage?.trim() || '智能体执行失败'
+  }
+
+  if (node.status === 'skipped') {
+    return '该智能体已跳过'
+  }
+
+  if (node.status === 'running') {
+    const message = node.currentMessage?.trim()
+
+    if (
+        message
+        && /^(planning|content|mindmap|quiz|code|reading|ppt|cartoon|bundle|coordinator)\s+(completed|finished|done)/i.test(message)
+    ) {
+      return getNodeRunningFallback(node)
+    }
+
+    return message || getNodeRunningFallback(node)
+  }
+
+  return getNodeWaitingMessage(node)
+}
+
+function getNodeSuccessMessage(node: DagNodeState) {
+  if (node.id === 'planning') {
+    return '教学计划已完成，任务已分发'
+  }
+
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return '资源检查完成，下游上下文已准备'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return '个性化学习资源包已生成'
+  }
+
+  if (node.id === PPT_AGENT_ID) {
+    return '教学课件已生成'
+  }
+
+  if (node.id === CARTOON_AGENT_ID) {
+    return '动画讲解已生成'
+  }
+
+  return '资源已生成并返回'
+}
+
+function getNodeRunningFallback(node: DagNodeState) {
+  if (node.id === 'planning') {
+    return '正在分析需求并拆分资源任务'
+  }
+
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return '正在检查资源并组装下游上下文'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return '正在汇总并打包学习资源'
+  }
+
+  if (node.id === PPT_AGENT_ID) {
+    return '正在生成教学课件'
+  }
+
+  if (node.id === CARTOON_AGENT_ID) {
+    return '正在生成动画讲解'
+  }
+
+  return '正在生成个性化学习资源'
+}
+
+function getNodeWaitingMessage(node: DagNodeState) {
+  if (node.id === 'planning') {
+    return '等待启动任务规划'
+  }
+
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return '等待基础资源返回'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return '等待上游资源全部就绪'
+  }
+
+  if (
+      node.id === PPT_AGENT_ID
+      || node.id === CARTOON_AGENT_ID
+  ) {
+    return '等待基础资源与教学计划'
+  }
+
+  return '等待 Planning Agent 分发任务'
+}
+
+function getNodeStageLabel(node: DagNodeState) {
+  if (node.status === 'success') {
+    if (node.id === BUNDLE_AGENT_ID) {
+      return '资源交付完成'
+    }
+
+    return '任务已完成'
+  }
+
+  if (node.status === 'failed') {
+    return '协同执行中断'
+  }
+
+  if (node.status === 'skipped') {
+    return '该任务已跳过'
+  }
+
+  if (node.status === 'running') {
+    if (node.id === 'planning') {
+      return '正在规划与分发'
+    }
+
+    if (node.id === COORDINATOR_AGENT_ID) {
+      return '正在汇总与交接'
+    }
+
+    if (node.id === BUNDLE_AGENT_ID) {
+      return '正在整合资源'
+    }
+
+    if (
+        node.id === PPT_AGENT_ID
+        || node.id === CARTOON_AGENT_ID
+    ) {
+      return '正在合成多模态资源'
+    }
+
+    return '正在执行资源任务'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return '等待所有产物'
+  }
+
+  if (
+      node.id === PPT_AGENT_ID
+      || node.id === CARTOON_AGENT_ID
+  ) {
+    return '等待上游上下文'
+  }
+
+  return '等待任务调度'
+}
+
+function getNodePhaseLabel(node: DagNodeState): string {
+  const phaseMap: Record<string, string> = {
+    queued: '等待调度',
+    planning: '任务规划',
+    planning_research: '规划资料核验',
+    plan_ready: '计划就绪',
+    generation_started: '任务已启动',
+    working: '内容生成',
+    heartbeat: '持续生成',
+    reading_research: '资料检索',
+    validation: '结构校验',
+    persistence: '成果保存',
+    artifact_saved: '成果已交付',
+    coordination: '结果汇总',
+    aggregation_ready: '聚合准备',
+    aggregation: '资源聚合',
+    generation: '任务完成',
+    timeout: '执行超时',
+    failed: '执行失败',
+  }
+
+  if (node.phase && node.phase in phaseMap) {
+    return phaseMap[node.phase]!
+  }
+
+  if (node.status === 'waiting') {
+    return '等待上游'
+  }
+
+  if (node.status === 'success') {
+    return '执行完成'
+  }
+
+  if (node.status === 'failed') {
+    return '执行异常'
+  }
+
+  if (node.id === 'planning') {
+    return '计划编排'
+  }
+
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return '协同汇总'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return '资源打包'
+  }
+
+  return '资源生成'
+}
+
+function getNodeDisplayMessage(node: DagNodeState) {
+  return node.currentMessage?.trim() || getNodeMessage(node)
+}
+
+function getNodeArtifactStatus(node: DagNodeState) {
+  if (node.status === 'failed') {
+    return '未交付成果'
+  }
+
+  if (node.status === 'skipped') {
+    return '已跳过'
+  }
+
+  if (node.id === 'planning') {
+    return node.status === 'success'
+        ? '教学计划已生成'
+        : '计划生成中'
+  }
+
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return node.status === 'success'
+        ? '上下文交接已完成'
+        : '等待结果汇总'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return node.status === 'success'
+        ? '最终资源包已交付'
+        : '资源包尚未完成'
+  }
+
+  if (hasGeneratedResource(node.id)) {
+    return '资源已交付'
+  }
+
+  if (node.status === 'running') {
+    return '成果生成中'
+  }
+
+  return '等待生成'
+}
+
+function getNodeExecutionInputSummary(node: DagNodeState) {
+  if (node.id === 'planning') {
+    return '学习需求、用户画像、课程范围、资源偏好与已选智能体'
+  }
+
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return '教学计划、基础资源执行结果、Agent 状态和质量指标'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return '基础资源、多模态资源、持久化结果和资源元数据'
+  }
+
+  if (node.id === PPT_AGENT_ID) {
+    return '教学计划、课程讲解、思维导图、练习题与个性化参数'
+  }
+
+  if (node.id === CARTOON_AGENT_ID) {
+    return '教学计划、基础资源、动画参数、讲解风格与用户画像'
+  }
+
+  return '学习需求、用户画像、教学计划与知识库检索上下文'
+}
+
+function getNodeOutputSummary(node: DagNodeState) {
+  if (node.id === 'planning') {
+    return '教学大纲、任务拆分结果、Agent 分工与依赖关系'
+  }
+
+  if (node.id === COORDINATOR_AGENT_ID) {
+    return '基础资源摘要、质量检查结果和下游生成上下文'
+  }
+
+  if (node.id === BUNDLE_AGENT_ID) {
+    return node.status === 'success'
+        ? '最终资源包、资源索引和可预览结果'
+        : '等待上游资源后构建最终资源包'
+  }
+
+  if (node.id === PPT_AGENT_ID) {
+    return hasGeneratedResource(node.id)
+        ? '教学课件已生成'
+        : '教学课件生成中'
+  }
+
+  if (node.id === CARTOON_AGENT_ID) {
+    return hasGeneratedResource(node.id)
+        ? '动画视频已生成'
+        : '动画讲解生成中'
+  }
+
+  return hasGeneratedResource(node.id)
+      ? '基础资源已生成并保存'
+      : '基础资源生成中'
+}
+
+function formatElapsed(ms?: number | null) {
+  if (ms == null || ms < 0) {
+    return '未开始'
+  }
+
+  const seconds = Math.floor(ms / 1000)
+
+  if (seconds < 60) {
+    return `${seconds}s`
+  }
+
+  const minutes = Math.floor(seconds / 60)
+  const restSeconds = seconds % 60
+
+  return `${minutes}m ${restSeconds}s`
+}
+
+function getNodeElapsedLabel(node: DagNodeState) {
+  if (node.elapsedMs != null) {
+    return formatElapsed(node.elapsedMs)
+  }
+
+  if (node.status === 'running') {
+    return '进行中'
+  }
+
+  return '未开始'
+}
+
+function getNodeTimeLabel(node: DagNodeState) {
+  if (node.status === 'waiting') {
+    return '等待上游'
+  }
+
+  if (!node.lastUpdatedAt) {
+    return node.status === 'running'
+        ? '刚刚更新'
+        : formatElapsed(node.elapsedMs)
+  }
+
+  const seconds = Math.max(
+      0,
+      Math.floor(
+          (Date.now() - node.lastUpdatedAt) / 1000,
+      ),
+  )
+
+  if (seconds < 3) {
+    return '刚刚更新'
+  }
+
+  if (seconds < 60) {
+    return `${seconds}s 前`
+  }
+
+  return `${Math.floor(seconds / 60)}m 前`
+}
+
+function getMetricChips(node: DagNodeState) {
+  const metrics = node.metrics || {}
+
+  return Object.entries(metrics)
+      .filter(([, value]) => {
+        return (
+            value !== null
+            && value !== undefined
+            && value !== ''
+        )
+      })
+      .slice(0, 8)
+      .map(([key, value]) => {
+        return `${key}: ${String(value)}`
+      })
+}
+
+function getNodeEventCount(node: DagNodeState) {
+  if (node.eventLogs?.length) {
+    return node.eventLogs.length
+  }
+
+  return node.stepHistory?.length || 0
+}
+
+function getLatestNodeEvent(node: DagNodeState) {
+  const eventLogs = node.eventLogs || []
+
+  if (eventLogs.length) {
+    const latestEvent = eventLogs[eventLogs.length - 1]
+    return latestEvent?.message || getNodeMessage(node)
+  }
+
+  const stepHistory = node.stepHistory || []
+
+  if (stepHistory.length) {
+    return stepHistory[stepHistory.length - 1]
+  }
+
+  return getNodeMessage(node)
+}
+
+function getLogPhaseLabel(phase?: string): string {
+  const phaseMap: Record<string, string> = {
+    queued: '等待调度',
+    planning: '任务规划',
+    planning_research: '资料核验',
+    plan_ready: '计划就绪',
+    generation_started: '启动任务',
+    working: '资源生成',
+    heartbeat: '生成心跳',
+    reading_research: '资料检索',
+    validation: '结构校验',
+    persistence: '成果保存',
+    artifact_saved: '成果交付',
+    coordination: '结果汇总',
+    aggregation_ready: '聚合就绪',
+    aggregation: '资源聚合',
+    generation: '任务完成',
+    timeout: '执行超时',
+    failed: '执行失败',
+  }
+
+  return phase
+      ? phaseMap[phase] || phase
+      : '运行状态'
+}
+
+function getLogStatusLabel(
+    status?: DagNodeState['status'],
+) {
+  if (status === 'success') {
+    return '已完成'
+  }
+
+  if (status === 'failed') {
+    return '执行失败'
+  }
+
+  if (status === 'skipped') {
+    return '已跳过'
+  }
+
+  if (status === 'running') {
+    return '进行中'
+  }
+
   return '等待中'
 }
 
-// 节点阶段标签：根据节点类型与运行阶段给出中文进度描述
-function getNodeStageLabel(node: DagNodeState) {
-  if (node.status === 'success') return node.id === BUNDLE_AGENT_ID ? '整合完成' : '已完成'
-  if (node.status === 'failed') return '协作中断'
-  if (node.status === 'skipped') return '已跳过'
-  if (node.status === 'running') {
-    if (node.id === 'planning') return '计划生成中'
-    if (node.id === COORDINATOR_AGENT_ID) return '结果汇总中'
-    if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '生成中'
-    if (node.phase === 'llm_generating') return '核心推演中'
-    if (node.phase === 'research' || node.phase === 'research_delegate') return '资料研究中'
-    if (node.phase === 'validating') return '一致性校验中'
-    if (node.phase === 'artifact_saved') return '资源已保存'
-    if (node.phase === 'bundling') return '资源整合中'
-    return '工位执行中'
+function formatEventTime(timestamp?: number) {
+  if (!timestamp) {
+    return '阶段记录'
   }
-  if (node.id === BUNDLE_AGENT_ID) return '等待基础资源与课件'
-  if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id)) return '等待基础资源'
-  return '等待上游协同'
-}
 
-// 节点阶段名称（详情面板用）：阶段英文 key 映射为中文短标签
-function getNodePhaseLabel(node: DagNodeState) {
-  const phaseMap: Record<string, string> = {
-    planning_blueprint: '蓝图构建',
-    coverage_gap_warning: '覆盖校验',
-    llm_generating: '深度推演',
-    validating: '一致性校验',
-    ppt_generating: 'PPT 聚合',
-    ppt_waiting_sources: '等待讲义要义',
-    cartoon_planning: '动画分镜',
-    artifact_saved: '成果移交',
-    research: '资料研究',
-    research_delegate: '研究委托',
-    aggregation_done: '聚合完成',
-    bundling: '资源打包',
-    finished: '已完成',
-    failed: '受阻',
+  const date = new Date(timestamp)
+
+  if (Number.isNaN(date.getTime())) {
+    return '阶段记录'
   }
-  if (node.phase && phaseMap[node.phase]) return phaseMap[node.phase]
-  if (node.id === 'planning' && node.status === 'running') return '计划生成'
-  if (node.id === COORDINATOR_AGENT_ID && node.status === 'running') return '任务调度'
-  if ([PPT_AGENT_ID, VIDEO_AGENT_ID, CARTOON_AGENT_ID].includes(node.id) && node.status === 'running') return '聚合生成'
-  if (node.id === BUNDLE_AGENT_ID && node.status === 'running') return '打包交付'
-  if (node.status === 'waiting') return '等待上游'
-  if (node.status === 'success') return '已完成'
-  if (node.status === 'failed') return '受阻'
-  return '工位状态'
+
+  return date.toLocaleTimeString('zh-CN', {
+    hour12: false,
+  })
 }
 
-// 节点展示消息：只展示后端发送的消息，无消息时返回空
-function getNodeDisplayMessage(node: DagNodeState) {
-  if (node.status === 'failed') return node.currentMessage || '执行失败'
-  if (node.currentMessage) return node.currentMessage
-  return ''
+function getAgentExecutionSteps(
+    node: DagNodeState,
+): ExecutionStep[] {
+  const labels = getExecutionStepLabels(node)
+
+  return labels.map((label, index) => {
+    return {
+      label,
+      state: getExecutionStepState(
+          node,
+          index,
+          labels.length,
+      ),
+    }
+  })
 }
 
-// 节点成果状态描述：按智能体类型返回产物就绪/生成中/等待状态文案
-function getNodeArtifactStatus(node: DagNodeState) {
+function getExecutionStepLabels(node: DagNodeState) {
   if (node.id === 'planning') {
-    return node.status === 'success' ? '教学计划已生成' : '正在生成教学计划'
+    return [
+      '理解学习需求',
+      '构建教学计划',
+      '拆分资源任务',
+      '分发智能体任务',
+    ]
   }
+
   if (node.id === COORDINATOR_AGENT_ID) {
-    return node.status === 'success' ? '调度与汇总已完成' : '正在分发并汇总执行状态'
+    return [
+      '收集执行结果',
+      '检查资源结构',
+      '组装生成上下文',
+      '完成上下文交接',
+    ]
   }
+
   if (node.id === BUNDLE_AGENT_ID) {
-    if (node.status === 'success') return '资源包已交付'
-    if (node.status === 'running') return '正在汇总并打包资源'
-    return '等待上游资源就绪'
+    return [
+      '收集生成产物',
+      '建立资源索引',
+      '统一打包资源',
+      '完成资源交付',
+    ]
   }
+
   if (node.id === PPT_AGENT_ID) {
-    return hasGeneratedResource(node.id) ? '聚合资源已交付' : '等待基础资源后生成'
+    return [
+      '接收上游上下文',
+      '设计课件大纲',
+      '生成课件页面',
+      '渲染教学课件',
+    ]
   }
-  if (node.id === VIDEO_AGENT_ID) {
-    return hasGeneratedResource(node.id) ? '讲解视频已交付' : '等待基础资源后生成'
-  }
+
   if (node.id === CARTOON_AGENT_ID) {
-    return hasGeneratedResource(node.id) ? '动画视频已交付' : '等待基础资源后生成'
+    return [
+      '接收上游上下文',
+      '设计动画分镜',
+      '生成动画内容',
+      '渲染教学视频',
+    ]
   }
-  return hasGeneratedResource(node.id) ? '基础资源已交付' : '工位响应中'
+
+  return [
+    '接收生成任务',
+    '生成资源内容',
+    '校验资源结果',
+    '保存并回传成果',
+  ]
 }
 
-// 节点输入摘要：按智能体类型描述上游输入要素
-function getNodeInputSummary(node: DagNodeState) {
-  if (node.id === 'planning') return '学习需求 / 学习场景 / 用户画像 / 已选 Agent'
-  if (node.id === COORDINATOR_AGENT_ID) return '教学计划 / 基础资源执行结果 / 当前执行快照'
-  if (node.id === BUNDLE_AGENT_ID) return '基础资源结果 / 聚合资源结果 / 已持久化产物'
-  if (node.id === PPT_AGENT_ID) return '教学计划 / 基础资源 handoff / 上游已完成内容'
-  if (node.id === VIDEO_AGENT_ID) return '学习需求 / 基础资源 handoff / 视频个性化参数'
-  if (node.id === CARTOON_AGENT_ID) return '学习需求 / 基础资源 handoff / 动画个性化参数'
-  return '学习需求 / 用户画像 / 教学计划'
+function getExecutionStepState(
+    node: DagNodeState,
+    index: number,
+    total: number,
+): ExecutionStepState {
+  if (node.status === 'success') {
+    return 'success'
+  }
+
+  if (node.status === 'failed') {
+    const failedIndex = Math.min(
+        total - 1,
+        Math.floor(
+            getNodeProgress(node) / (100 / total),
+        ),
+    )
+
+    if (index < failedIndex) {
+      return 'success'
+    }
+
+    if (index === failedIndex) {
+      return 'failed'
+    }
+
+    return 'waiting'
+  }
+
+  if (
+      node.status === 'waiting'
+      || node.status === 'skipped'
+  ) {
+    return 'waiting'
+  }
+
+  const progress = getNodeProgress(node)
+  const stepSize = 100 / total
+  const currentIndex = Math.min(
+      total - 1,
+      Math.floor(progress / stepSize),
+  )
+
+  if (index < currentIndex) {
+    return 'success'
+  }
+
+  if (index === currentIndex) {
+    return 'running'
+  }
+
+  return 'waiting'
 }
 
-// 节点输出摘要：按智能体类型描述产物格式与生成状态
-function getNodeOutputSummary(node: DagNodeState) {
-  if (node.id === 'planning') return '教学计划 / 大纲 / Agent 分工'
-  if (node.id === COORDINATOR_AGENT_ID) return '成功失败统计 / 覆盖情况 / 基础资源 handoff'
-  if (node.id === BUNDLE_AGENT_ID) return node.status === 'success' ? '最终资源包 / 可预览结果' : '等待汇总后生成资源包'
-  if (hasGeneratedResource(node.id)) return getAgentOutputFormat(node.id)
-  if (node.id === PPT_AGENT_ID) return '聚合资源生成中 / 等待中'
-  if (node.id === VIDEO_AGENT_ID) return 'MP4 讲解视频生成中 / 等待中'
-  if (node.id === CARTOON_AGENT_ID) return 'MP4 动画视频生成中 / 等待中'
-  return '基础资源生成中 / 等待中'
+function completedExecutionStepCount(node: DagNodeState) {
+  return getAgentExecutionSteps(node).filter(step => {
+    return step.state === 'success'
+  }).length
 }
 
-// 将毫秒耗时格式化为人类可读的 "Xs" / "Xm Ys" 文本
-function formatElapsed(ms?: number | null) {
-  if (!ms || ms < 0) return '未开始'
-  const seconds = Math.floor(ms / 1000)
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  const rest = seconds % 60
-  return `${minutes}m ${rest}s`
+function getStepStateLabel(state: ExecutionStepState) {
+  if (state === 'success') {
+    return '已完成'
+  }
+
+  if (state === 'running') {
+    return '执行中'
+  }
+
+  if (state === 'failed') {
+    return '失败'
+  }
+
+  return '等待中'
 }
 
-// 节点更新时间标签：刚刚/X秒前/X分钟前
-function getNodeTimeLabel(node: DagNodeState) {
-  if (node.status === 'waiting') return '等待上游'
-  if (!node.lastUpdatedAt) return formatElapsed(node.elapsedMs)
-  const seconds = Math.max(0, Math.floor((Date.now() - node.lastUpdatedAt) / 1000))
-  if (seconds < 3) return '刚刚更新'
-  if (seconds < 60) return `${seconds}s 前更新`
-  return `${Math.floor(seconds / 60)}m 前更新`
+function getExecutionStepDescription(
+    node: DagNodeState,
+    index: number,
+) {
+  if (node.id === 'planning') {
+    return [
+      '解析学习目标、课程主题、用户画像和资源偏好。',
+      '规划知识结构、教学顺序和资源覆盖范围。',
+      '将教学计划拆分为多个可以并行执行的资源任务。',
+      '向已启用的资源智能体发送任务和执行上下文。',
+    ][index] || ''
+  }
+
+  if (node.id === PPT_AGENT_ID) {
+    return [
+      '读取教学计划、基础资源和个性化学习参数。',
+      '设计章节结构、页面顺序和每页教学重点。',
+      '生成标题、正文、图示和教学内容布局。',
+      '完成课件文件渲染、保存和资源回传。',
+    ][index] || ''
+  }
+
+  if (node.id === CARTOON_AGENT_ID) {
+    return [
+      '读取教学目标、基础内容和动画生成配置。',
+      '规划场景顺序、动画过程、旁白和重点展示。',
+      '生成动画页面、时间线和动态教学内容。',
+      '完成视频渲染、文件保存和资源回传。',
+    ][index] || ''
+  }
+
+  return [
+    '接收 Planning Agent 分发的任务和教学上下文。',
+    '根据资源类型生成符合用户画像的学习内容。',
+    '检查资源结构、内容完整性和格式正确性。',
+    '保存最终成果，并向工作流返回资源信息。',
+  ][index] || ''
 }
 
-// 提取节点 metrics 中的前四项指标，格式化为 "key: value" 标签数组
-function getMetricChips(node: DagNodeState) {
-  const metrics = node.metrics || {}
-  return Object.entries(metrics)
-    .filter(([, value]) => value !== null && value !== undefined && value !== '')
-    .slice(0, 4)
-    .map(([key, value]) => `${key}: ${String(value)}`)
-}
+function getNodeFullTimeline(
+    node: DagNodeState,
+): DetailTimelineItem[] {
+  const eventLogs = node.eventLogs || []
 
-// ==================== 内联 Outputs 逻辑 ====================
-// 智能体 id 到图标组件的映射表（Outputs 用）
-const outputIcons: Record<string, Component> = {
-  content: ArticleIcon,
-  mindmap: MindMapIcon,
-  quiz: QuizIcon,
-  code: CodeIcon,
-  reading: ReadingIcon,
-  ppt: SlidesIcon,
-  cartoon: VideoIcon,
-}
+  if (eventLogs.length) {
+    return eventLogs.map((log, index) => ({
+      id: log.id || `${node.id}-event-${index}`,
+      phaseLabel: getLogPhaseLabel(log.phase),
+      message: log.message,
+      status: log.status || node.status,
+      timestamp: log.timestamp,
+    }))
+  }
 
-// 根据智能体 id 返回对应图标，缺省回退到文章图标
-function getOutputIcon(id: string) {
-  return outputIcons[id] || ArticleIcon
-}
+  const stepHistory = node.stepHistory || []
 
-// 判断某智能体产出是否已就绪：已生成或节点状态为成功
-function isOutputReady(id: string) {
-  return props.generatedResources.some((r: any) => r.type === id) || props.dagNodeStates[id]?.status === 'success'
-}
+  if (stepHistory.length) {
+    return stepHistory.map((step, index) => ({
+      id: `${node.id}-history-${index}`,
+      phaseLabel: `执行阶段 ${index + 1}`,
+      message: step,
+      status: index === stepHistory.length - 1
+          ? node.status
+          : 'success',
+    }))
+  }
 
-// 判断某智能体是否正在执行中
-function isOutputRunning(id: string) {
-  return props.dagNodeStates[id]?.status === 'running'
+  return [
+    {
+      id: `${node.id}-current`,
+      phaseLabel: getNodePhaseLabel(node),
+      message: getNodeMessage(node),
+      status: node.status,
+      timestamp: node.lastUpdatedAt,
+    },
+  ]
 }
-
 </script>
 
 <style scoped>
-.generating-view {
-  background: transparent;
-  overflow-y: auto;
+.workflow-page,
+.workflow-page * {
+  box-sizing: border-box;
 }
 
-.workflow-stage-page {
-  background: transparent;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 12px 18px 16px;
-  gap: 12px;
-}
+.workflow-page {
+  --workflow-text: #142033;
+  --workflow-text-secondary: #475569;
+  --workflow-muted: #718096;
+  --workflow-faint: #94a3b8;
+  --workflow-border: #dfe6ef;
+  --workflow-border-strong: #cbd6e4;
+  --workflow-surface: #ffffff;
+  --workflow-surface-soft: #f7f9fc;
 
-.workflow-stage-page-v4 {
-  --font-sans: var(--font-ui);
-  --agent-body-font: var(--font-body);
-
-  min-height: auto;
-  padding: clamp(24px, 3vw, 36px) var(--resource-page-inset) 80px;
-  background: transparent; /* allow parent background glow to show */
-  font-family: var(--font-sans);
-}
-
-.stage-topbar {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  justify-content: space-between;
-  gap: 18px;
-  align-items: center;
-  background: var(--generator-card-bg);
-  backdrop-filter: var(--generator-card-blur);
-  -webkit-backdrop-filter: var(--generator-card-blur);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-outer);
-  padding: 14px 18px;
-  box-shadow: var(--generator-card-shadow);
-}
-
-.stage-topbar-v4 {
-  margin-bottom: 14px;
-}
-
-.stage-title-area {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
+  padding: 18px 22px 60px;
+  overflow-x: hidden;
+  color: var(--workflow-text);
+  background: transparent;
 }
 
-.stage-title-area h2 {
-  margin: 0;
-  font-size: var(--text-xl);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text);
+.workflow-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: center;
+  padding: 5px 0 16px;
+  border-bottom: 1px solid var(--workflow-border);
 }
 
-.stage-title-area p {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-family: var(--agent-body-font);
-}
-
-.stage-route-progress {
+.summary-main {
   display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 34px;
+}
+
+.summary-title {
+  min-width: 260px;
+}
+
+.summary-eyebrow,
+.panel-eyebrow {
+  display: block;
+  color: #718096;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.summary-title h2 {
+  margin: 5px 0 0;
+  color: var(--workflow-text);
+  font-size: 21px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.summary-title p {
+  max-width: 430px;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: var(--workflow-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-progress {
+  display: flex;
+  min-width: 0;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
 }
 
 .route-step {
   display: inline-flex;
+  height: 31px;
   align-items: center;
-  height: 24px;
-  padding: 0 var(--space-2);
-  border-radius: 999px;
-  background: var(--color-surface-hover);
-  color: var(--color-text-faint);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  color: #7e8a9b;
+  background: #f8fafc;
+  white-space: nowrap;
+  transition:
+      border-color 180ms ease,
+      color 180ms ease,
+      background-color 180ms ease;
 }
 
-.route-step.done {
-  background: var(--color-success-soft);
-  color: var(--color-success);
+.route-step > span {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  color: #7f8b9d;
+  background: #e7ecf2;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.route-step strong {
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .route-step.active {
-  background: var(--cat-resource-soft);
-  color: var(--cat-resource);
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.16);
+  border-color: #b9cdfc;
+  color: #3158aa;
+  background: #f4f7ff;
 }
 
-.route-step:not(.done):not(.active) {
-  background: rgba(241, 245, 249, 0.92);
+.route-step.active > span {
+  color: #ffffff;
+  background: #4f73e8;
+  box-shadow: 0 0 0 4px rgba(79, 115, 232, 0.11);
 }
 
-.route-line {
-  width: 28px;
+.route-step.done {
+  border-color: #b8dfd1;
+  color: #16745c;
+  background: #f2fbf7;
+}
+
+.route-step.done > span {
+  color: #ffffff;
+  background: #22a47c;
+}
+
+.route-step.failed {
+  border-color: #f0bebe;
+  color: #af4040;
+  background: #fff5f5;
+}
+
+.route-step.failed > span {
+  color: #ffffff;
+  background: #d65353;
+}
+
+.route-connector {
+  width: clamp(14px, 1.8vw, 32px);
   height: 2px;
   border-radius: 99px;
-  background: var(--color-border-hover);
+  background: #dce3eb;
 }
 
-.route-line.done {
-  background: var(--color-primary);
+.route-connector.active {
+  background: linear-gradient(
+      90deg,
+      #4f73e8,
+      #90a9ec
+  );
 }
 
-.route-line.active {
-  background: linear-gradient(90deg, var(--color-primary), var(--cat-resource));
+.route-connector.done {
+  background: #48b38d;
 }
 
-.stage-stat-group {
+.summary-metrics {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-shrink: 0;
-}
-
-.stage-stat-group-v4 .progress-stat-card {
-  min-width: 148px;
-}
-
-.stage-stat-card {
-  min-width: 92px;
-  padding: 10px 14px;
-  border-radius: var(--radius-inner);
-  background: rgba(255, 255, 255, 0.52);
-  border: var(--generator-card-border);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.stage-stat-card.wide {
-  min-width: 110px;
-}
-
-.stage-stat-card span {
-  color: var(--color-text-muted);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-}
-
-.stage-stat-card strong {
-  color: var(--color-text);
-  font-size: var(--text-xl);
-  line-height: 1;
-  font-weight: var(--weight-extrabold);
-}
-
-.stage-stat-card small {
-  color: var(--color-text-faint);
-  font-size: var(--text-xs);
-  margin-left: 2px;
-}
-
-.stage-log-btn {
-  height: 42px;
-  border-color: rgba(16,185,129,0.3) !important;
-  color: var(--color-info, #2563eb) !important;
-  font-weight: 800;
-  background: var(--color-surface, #fff) !important;
-}
-
-.mini-progress-track {
-  width: 100%;
-  height: 5px;
-  background: rgba(148, 163, 184, 0.2);
-  border-radius: 999px;
-  overflow: hidden;
-  margin-top: 6px;
-}
-
-.mini-progress-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #22C55E, #06B6D4, #3B82F6);
-  box-shadow: 0 0 18px rgba(59, 130, 246, 0.42);
-  transition: width 0.35s ease;
-}
-
-.agent-stage-shell-v4 {
-  position: relative;
-  z-index: 1;
-  width: 100%;
-  min-height: auto;
-  display: block;
-}
-
-.dispatch-workbench-panel,
-.agent-detail-floating-panel,
-.output-dock-section-v4 {
-  position: relative;
-  border-radius: 28px;
-  background: rgba(255, 255, 255, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.86);
-  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.07);
-  backdrop-filter: blur(22px);
-  overflow: hidden;
-}
-
-.dispatch-workbench-panel-v4 {
-  width: 100%;
-  padding: clamp(16px, 1.4vw, 24px);
   min-width: 0;
-}
-
-.panel-eyebrow {
-  display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  color: var(--cat-resource);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
 }
 
-.control-pill {
+.summary-progress,
+.summary-metric {
+  display: grid;
+  grid-template-columns: auto auto;
+  align-items: baseline;
+  gap: 3px 9px;
+  min-width: 112px;
+  padding: 4px 16px;
+  border-left: 1px solid var(--workflow-border);
+}
+
+.summary-progress {
+  min-width: 154px;
+}
+
+.summary-progress > span,
+.summary-metric > span {
+  color: var(--workflow-muted);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.summary-progress > strong,
+.summary-metric > strong {
+  color: var(--workflow-text);
+  font-size: 17px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-metric small {
+  margin-left: 2px;
+  color: var(--workflow-faint);
+  font-size: 11px;
+}
+
+.summary-progress-track {
+  grid-column: 1 / -1;
+  height: 4px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e8edf3;
+}
+
+.summary-progress-track i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  border-radius: inherit;
+  background: linear-gradient(
+      90deg,
+      #4f73e8,
+      #32b4a2
+  );
+  transition: transform 320ms ease;
+}
+
+.summary-log-button {
   display: inline-flex;
+  height: 36px;
   align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 900;
-  background: rgba(241, 245, 249, 0.78);
-  color: #64748B;
-  border: 1px solid rgba(226, 232, 240, 0.86);
+  gap: 7px;
+  margin-left: 11px;
+  padding: 0 14px;
+  border: 1px solid #cbd6e4;
+  border-radius: 8px;
+  color: #40536e;
+  background: #ffffff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  cursor: pointer;
+  transition:
+      border-color 180ms ease,
+      color 180ms ease,
+      background-color 180ms ease;
 }
 
-.control-pill.active {
-  background: rgba(224, 231, 255, 0.84);
-  color: #4338ca;
-  border-color: rgba(165, 180, 252, 0.78);
+.summary-log-button:hover {
+  border-color: #9fb2ca;
+  color: #244e8f;
+  background: #f8fbff;
 }
 
-.control-pill.muted {
-  background: rgba(248, 250, 252, 0.9);
-  color: #64748B;
+.workflow-main {
+  width: 100%;
+  min-width: 0;
+  margin-top: 14px;
 }
 
-.live-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #6366F1;
-  box-shadow: 0 0 0 5px rgba(99, 102, 241, 0.14);
+.workflow-workbench {
+  width: 100%;
+  min-width: 0;
+  padding: 20px;
+  border: 1px solid var(--workflow-border);
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 9px 30px rgba(22, 35, 57, 0.055);
 }
 
 .workbench-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
+  gap: 22px;
+  margin-bottom: 17px;
 }
 
 .workbench-header h3 {
-  margin: 6px 0 0;
-  color: var(--color-text);
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
+  margin: 5px 0 0;
+  color: var(--workflow-text);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
 
 .workbench-header p {
   margin: 6px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-  font-family: var(--agent-body-font);
+  color: var(--workflow-muted);
+  font-size: 13px;
+  line-height: 1.55;
 }
 
-.workbench-actions {
+.workbench-controls {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.live-control,
+.plan-control {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid #dce3ec;
+  border-radius: 7px;
+  color: #667489;
+  background: #f8fafc;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.live-control {
+  border-color: #bfd2ff;
+  color: #355ba9;
+  background: #f5f8ff;
+}
+
+.live-control i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4f73e8;
+  box-shadow: 0 0 0 4px rgba(79, 115, 232, 0.12);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.workflow-error-status {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 1px solid #f0b9b9;
+  border-radius: 7px;
+  color: #a43a3a;
+  background: #fff6f6;
+  font: inherit;
+  cursor: pointer;
+}
+
+.workflow-error-status > span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc5050;
+}
+
+.workflow-error-status strong {
+  font-size: 11px;
+}
+
+.workflow-error-status em {
+  color: #bb6969;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.workflow-canvas {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  flex-direction: column;
+  overflow: hidden;
+  isolation: isolate;
+  padding: clamp(26px, 2.8vw, 46px);
+  border: 1px solid #d8e5f4;
+  border-radius: 17px;
+  background:
+      radial-gradient(
+          circle at 50% 1%,
+          rgba(79, 115, 232, 0.105),
+          transparent 28%
+      ),
+      radial-gradient(
+          circle at 8% 48%,
+          rgba(44, 180, 161, 0.065),
+          transparent 25%
+      ),
+      linear-gradient(
+          180deg,
+          #fcfdff 0%,
+          #f7faff 100%
+      );
+}
+
+.canvas-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -3;
+  opacity: 0.42;
+  background-image:
+      linear-gradient(
+          rgba(135, 151, 174, 0.085) 1px,
+          transparent 1px
+      ),
+      linear-gradient(
+          90deg,
+          rgba(135, 151, 174, 0.085) 1px,
+          transparent 1px
+      );
+  background-size: 30px 30px;
+  mask-image: radial-gradient(
+      ellipse at center,
+      #000 20%,
+      transparent 82%
+  );
+}
+
+.canvas-glow {
+  position: absolute;
+  z-index: -2;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(10px);
+}
+
+.canvas-glow-one {
+  top: 90px;
+  left: 43%;
+  width: 220px;
+  height: 220px;
+  background: rgba(79, 115, 232, 0.065);
+}
+
+.canvas-glow-two {
+  right: 5%;
+  bottom: 10%;
+  width: 280px;
+  height: 280px;
+  background: rgba(45, 181, 163, 0.055);
+}
+
+.workflow-stage {
+  position: relative;
+  z-index: 4;
+}
+
+.stage-heading {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 13px;
+  width: 100%;
+  align-items: center;
+  margin-bottom: 17px;
+}
+
+.stage-heading-centered {
+  width: min(760px, 100%);
+  margin-right: auto;
+  margin-bottom: 16px;
+  margin-left: auto;
+}
+
+.stage-index {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 1px solid #cad6e5;
+  border-radius: 9px;
+  color: #51657f;
+  background: rgba(255, 255, 255, 0.94);
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.stage-heading strong {
+  display: block;
+  color: #1f2b3e;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.stage-heading p {
+  margin: 4px 0 0;
+  color: #748196;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.stage-heading > em {
+  padding: 5px 9px;
+  border: 1px solid #d8e0ea;
+  border-radius: 6px;
+  color: #7d8999;
+  background: #ffffff;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.stage-heading > em.status-running {
+  border-color: #bfd1ff;
+  color: #355cac;
+  background: #f4f7ff;
+}
+
+.stage-heading > em.status-success {
+  border-color: #bce2d4;
+  color: #157258;
+  background: #f2fbf7;
+}
+
+.stage-heading > em.status-failed {
+  border-color: #f0bebe;
+  color: #ae4141;
+  background: #fff5f5;
+}
+
+.stage-live-summary {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
-.agent-flow-canvas {
-  position: relative;
-  border-radius: 28px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 20%, rgba(59, 130, 246, 0.12), transparent 34%),
-    radial-gradient(circle at 48% 74%, rgba(45, 212, 191, 0.12), transparent 38%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(248, 250, 252, 0.68));
-  border: 1px solid rgba(226, 232, 240, 0.78);
+.stage-live-summary span {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #dce4ee;
+  border-radius: 6px;
+  color: #657388;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
 }
 
-.agent-flow-canvas-v4 {
-  min-height: clamp(660px, 70vh, 840px);
-  padding: clamp(20px, 2.2vw, 32px) clamp(18px, 2.4vw, 34px) clamp(24px, 2.4vw, 34px);
+.running-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4f73e8;
+  animation: live-pulse 1.6s ease-in-out infinite;
 }
 
-.agent-flow-canvas-v4::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 96px;
-  width: 1px;
-  height: 240px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, rgba(59,130,246,0), rgba(59,130,246,0.28), rgba(45,212,191,0.18), rgba(59,130,246,0));
-  pointer-events: none;
-}
-.flow-grid-bg {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: radial-gradient(circle at 50% 48%, #000, transparent 74%);
-  pointer-events: none;
-}
-
-.flow-orbit {
-  position: absolute;
-  left: 6%;
-  right: 6%;
-  border-radius: 999px;
-  pointer-events: none;
-  border: 1px dashed rgba(59, 130, 246, 0.18);
-  filter: drop-shadow(0 0 18px rgba(59, 130, 246, 0.18));
-}
-
-.orbit-one {
-  top: 112px;
-  height: 220px;
-  transform: rotate(-4deg);
-}
-
-.orbit-two {
-  top: 176px;
-  height: 250px;
-  transform: rotate(5deg);
-  border-color: rgba(45, 212, 191, 0.2);
-}
-
-.orbit-three {
-  top: 236px;
-  height: 220px;
-  transform: rotate(-2deg);
-  border-color: rgba(139, 92, 246, 0.16);
-}
-
-.flow-core-stack {
-  position: relative;
-  z-index: 4;
+.planning-stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
-  margin-top: 80px;
 }
 
-.flow-core-stack-v4 {
-  margin-top: 44px;
+.planning-agent-card {
+  position: relative;
+  width: min(440px, 100%);
+  min-height: 222px;
+  padding: 19px;
+  overflow: visible;
+  border: 1px solid #bdcff5;
+  border-radius: 17px;
+  background:
+      linear-gradient(
+          145deg,
+          rgba(255, 255, 255, 0.98),
+          rgba(245, 248, 255, 0.96)
+      );
+  box-shadow:
+      0 18px 44px rgba(59, 91, 170, 0.13),
+      0 0 0 5px rgba(79, 115, 232, 0.045);
+  cursor: pointer;
+  transition:
+      transform 200ms ease,
+      border-color 200ms ease,
+      box-shadow 200ms ease;
 }
 
-.core-agent-node {
-  width: min(300px, 44vw);
-  min-height: 78px;
+.planning-agent-card:hover,
+.planning-agent-card.is-selected {
+  transform: translateY(-3px);
+  border-color: #7596e8;
+  box-shadow:
+      0 22px 52px rgba(59, 91, 170, 0.18),
+      0 0 0 5px rgba(79, 115, 232, 0.08);
+}
+
+.planning-agent-card.status-running {
+  animation: planning-running 2.4s ease-in-out infinite;
+}
+
+.planning-pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: -1;
+  border: 1px solid rgba(79, 115, 232, 0.18);
+  border-radius: 24px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.planning-agent-card.status-running .planning-pulse-ring {
+  animation: planning-ring 2.5s ease-out infinite;
+}
+
+.planning-agent-card.status-running .ring-one {
+  inset: -12px;
+  transform: none;
+}
+
+.planning-agent-card.status-running .ring-two {
+  inset: -24px;
+  animation-delay: 0.8s;
+  transform: none;
+}
+
+.planning-card-header {
   display: grid;
   grid-template-columns: 46px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
-  padding: 14px 16px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(191, 219, 254, 0.82);
-  box-shadow: 0 18px 48px rgba(37, 99, 235, 0.12);
-  cursor: pointer;
-  transition: all 0.24s ease;
 }
 
-.planning-core {
-  width: min(280px, 90vw) !important;
-  min-height: 132px !important;
+.planning-icon,
+.delivery-icon,
+.detail-agent-icon {
+  display: grid;
+  place-items: center;
+  color: #3d61b3;
+  background: #edf3ff;
+  border: 1px solid #cbdafa;
 }
 
-.core-agent-node:hover,
-.core-agent-node.is-selected {
-  transform: translateY(-2px);
-  border-color: rgba(37, 99, 235, 0.46);
-  box-shadow: 0 20px 56px rgba(37, 99, 235, 0.18);
-}
-
-.core-icon {
+.planning-icon {
   width: 46px;
   height: 46px;
-  border-radius: 16px;
-  background: rgba(219, 234, 254, 0.82);
+  border-radius: 12px;
+}
+
+.planning-identity span,
+.delivery-copy > span {
+  display: block;
+  color: #6e83af;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
+.planning-identity strong,
+.delivery-copy strong {
+  display: block;
+  margin-top: 3px;
+  color: #1e2b41;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.planning-identity p {
+  margin: 3px 0 0;
+  color: #748196;
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.node-status-badge {
+  display: inline-flex;
+  height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #dce3ec;
+  border-radius: 6px;
+  color: #6f7c90;
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.node-status-badge.compact {
+  height: 26px;
+  padding: 0 8px;
+  font-size: 10px;
+}
+
+.node-status-badge i,
+.detail-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a5afbc;
+}
+
+.node-status-badge.status-running,
+.detail-status.status-running {
+  border-color: #bfd1ff;
+  color: #3159a7;
+  background: #f5f8ff;
+}
+
+.node-status-badge.status-running i,
+.detail-status.status-running i {
+  background: #4f73e8;
+  box-shadow: 0 0 0 4px rgba(79, 115, 232, 0.13);
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+.node-status-badge.status-success,
+.detail-status.status-success {
+  border-color: #bce2d4;
+  color: #157158;
+  background: #f3fbf7;
+}
+
+.node-status-badge.status-success i,
+.detail-status.status-success i {
+  background: #24a47c;
+}
+
+.node-status-badge.status-failed,
+.detail-status.status-failed {
+  border-color: #f0bdbd;
+  color: #ae4141;
+  background: #fff5f5;
+}
+
+.node-status-badge.status-failed i,
+.detail-status.status-failed i {
+  background: #d65050;
+}
+
+.planning-message {
+  margin-top: 15px;
+  padding: 11px 12px;
+  border: 1px solid #dce5f4;
+  border-radius: 10px;
+  background: rgba(247, 250, 255, 0.92);
+}
+
+.planning-message span,
+.agent-current-task > span,
+.agent-event-preview > span,
+.aggregation-inputs > span,
+.detail-io-grid span,
+.detail-metric-section > span {
+  display: block;
+  color: #748298;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+.planning-message strong {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: #34445e;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.planning-dispatch-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.planning-dispatch-grid > div {
+  padding: 9px 10px;
+  border: 1px solid #e1e7ef;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.planning-dispatch-grid span {
+  display: block;
+  color: #8490a2;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.planning-dispatch-grid strong {
+  display: block;
+  margin-top: 4px;
+  color: #41516a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.planning-footer,
+.agent-card-footer {
   display: flex;
   align-items: center;
-  justify-content: center;
-  font-size: 1.35rem;
+  gap: 10px;
+  margin-top: 13px;
 }
 
-.core-agent-node strong {
-  display: block;
-  color: var(--color-text);
-  font-size: 0.95rem;
-  line-height: 1.2;
+.planning-footer > span,
+.agent-card-footer > span {
+  color: #2f8b70;
+  font-size: 11px;
+  font-weight: 750;
+  white-space: nowrap;
 }
 
-.core-agent-node span {
-  color: var(--cat-resource);
-  font-size: 0.72rem;
-  font-weight: var(--weight-extrabold);
+.planning-footer > b,
+.agent-card-footer > b {
+  min-width: 33px;
+  color: #66758a;
+  font-size: 11px;
+  font-weight: 800;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
-.core-progress {
-  font-size: 0.72rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text);
-}
-
-.core-link-line {
-  width: 2px;
-  height: 22px;
-  background: linear-gradient(180deg, #60A5FA, #22D3EE);
+.node-progress-track {
+  height: 5px;
+  flex: 1;
+  overflow: hidden;
   border-radius: 99px;
-  position: relative;
+  background: #e7ebf1;
 }
 
-.core-link-line i {
+.node-progress-track i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  border-radius: inherit;
+  background: linear-gradient(
+      90deg,
+      #4f73e8,
+      #33b6a2
+  );
+  transition: transform 350ms ease;
+}
+
+.status-running .node-progress-track i {
+  background-size: 180% 100%;
+  animation: progress-flow 1.8s linear infinite;
+}
+
+.dispatch-bus {
+  position: relative;
+  z-index: 5;
+  width: min(760px, 94%);
+  height: 70px;
+  margin: 0 auto;
+}
+
+.dispatch-bus::before {
+  content: '';
   position: absolute;
+  top: 0;
   left: 50%;
-  bottom: -4px;
+  width: 2px;
+  height: 29px;
+  border-radius: 99px;
+  background: linear-gradient(
+      180deg,
+      #7796e4,
+      #43ac9d
+  );
+  transform: translateX(-50%);
+}
+
+.dispatch-command {
+  position: absolute;
+  top: 25px;
+  left: 50%;
+  display: flex;
+  height: 31px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid #bfd0f2;
+  border-radius: 7px;
+  color: #3e5f9e;
+  background: #ffffff;
+  box-shadow: 0 6px 18px rgba(44, 69, 117, 0.09);
+  transform: translateX(-50%);
+}
+
+.dispatch-command > span {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #06B6D4;
-  transform: translateX(-50%);
-  box-shadow: 0 0 0 6px rgba(6, 182, 212, 0.12);
+  background: #4f73e8;
+  box-shadow: 0 0 0 4px rgba(79, 115, 232, 0.11);
 }
 
-.agent-connection-field {
-  position: absolute;
-  left: 10%;
-  right: 10%;
-  top: 188px;
-  height: 120px;
-  pointer-events: none;
-  z-index: 2;
+.dispatch-command strong {
+  font-size: 11px;
+  font-weight: 800;
 }
 
-.agent-connection-field .arc {
-  position: absolute;
-  top: 0;
-  border-top: 2px solid rgba(59, 130, 246, 0.42);
-  border-radius: 50% 50% 0 0;
-  height: 88px;
-  animation: flowPulse 1.4s ease-in-out infinite;
-}
-
-.arc-a { left: 0; right: 50%; transform: rotate(-8deg); }
-.arc-b { left: 14%; right: 34%; transform: rotate(-3deg); border-color: rgba(45, 212, 191, 0.48) !important; }
-.arc-c { left: 34%; right: 14%; transform: rotate(3deg); border-color: rgba(139, 92, 246, 0.42) !important; }
-.arc-d { left: 50%; right: 0; transform: rotate(8deg); }
-
-@keyframes flowPulse {
-  0%, 100% {
-    opacity: 0.46;
-    filter: drop-shadow(0 0 0 rgba(59, 130, 246, 0));
-  }
-  50% {
-    opacity: 1;
-    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.26));
-  }
-}
-
-.agent-station-row {
-  position: relative;
-  z-index: 5;
-  display: grid;
-  gap: 14px;
-}
-
-.agent-station-row-v4 {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  max-width: 1320px;
-  margin: 108px auto 0;
-  align-items: stretch;
-}
-
-.aggregation-agent-row {
-  max-width: 920px;
-  margin-top: 30px;
-}
-
-.agent-station-card {
-  border-radius: var(--radius-card);
-  padding: 10px 11px;
-  background: var(--generator-card-bg);
-  border: var(--generator-card-border);
-  cursor: pointer;
-  transition: all 0.26s ease;
-  box-shadow: var(--generator-card-shadow);
-}
-
-.agent-station-card-v4 {
-  min-height: 116px;
-  display: flex;
-  flex-direction: column;
-}
-
-.agent-station-card:hover,
-.agent-station-card.is-selected {
-  transform: translateY(-5px);
-  border-color: var(--cat-resource);
-  box-shadow: 0 16px 36px var(--cat-resource-glow);
-}
-
-.agent-station-card.status-running {
-  border-color: rgba(59, 130, 246, 0.48);
-  box-shadow: 0 20px 48px rgba(59, 130, 246, 0.13);
-}
-
-.agent-station-card.status-success,
-.agent-station-card.has-artifact {
-  border-color: rgba(16, 185, 129, 0.42);
-  background: rgba(240, 253, 250, 0.72);
-}
-
-.agent-station-card.status-failed {
-  border-color: rgba(239, 68, 68, 0.42);
-  background: rgba(254, 242, 242, 0.82);
-}
-
-.station-header {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 7px;
-}
-
-.station-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 9px;
-  background: #f1f5fa;
-  border: 1px solid #d8e2ef;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.station-header strong {
-  display: block;
-  color: var(--color-text);
-  font-size: 0.8rem;
-  line-height: 1.2;
-}
-
-.station-header span {
-  color: var(--color-text-muted);
-  font-size: 0.68rem;
-  font-weight: var(--weight-extrabold);
-  line-height: 1.15;
-}
-
-.station-header em {
-  font-size: 0.7rem;
+.dispatch-command em {
+  color: #7d899b;
+  font-size: 10px;
   font-style: normal;
-  color: var(--cat-resource);
-  font-weight: var(--weight-extrabold);
-  white-space: nowrap;
-}
-
-.station-live-log {
-  min-height: 36px;
-  margin: 8px 0;
-  border-radius: 9px;
-  background: var(--workflow-surface-subtle);
-  border: 1px solid var(--workflow-border);
-  padding: 8px 10px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 6px;
-  overflow: hidden;
-  flex: 1;
-}
-
-/* 静态单行消息：状态点 + 文案垂直居中 */
-.station-live-log .live-message-row {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-}
-
-.station-live-log.is-running {
-  border-color: rgba(59, 130, 246, 0.22);
-  background: rgba(239, 246, 255, 0.5);
-}
-
-.station-live-log.is-success {
-  border-color: rgba(16, 185, 129, 0.22);
-  background: rgba(240, 253, 250, 0.5);
-}
-
-.station-live-log.is-failed {
-  border-color: rgba(239, 68, 68, 0.22);
-  background: rgba(254, 242, 242, 0.5);
-}
-
-.station-live-current {
-  display: grid;
-  grid-template-columns: 9px minmax(0, 1fr);
-  gap: 9px;
-  align-items: flex-start;
-  min-width: 0;
-}
-
-.station-live-dot {
-  width: 8px;
-  height: 8px;
-  margin-top: 6px;
-  border-radius: 999px;
-  background: #3B82F6;
-  box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.12);
-  flex-shrink: 0;
-}
-
-.station-live-dot.muted {
-  background: #CBD5E1;
-  box-shadow: 0 0 0 5px rgba(148, 163, 184, 0.12);
-}
-
-.station-live-current strong {
-  display: block;
-  color: var(--cat-resource);
-  font-size: 0.68rem;
-  font-weight: var(--weight-bold);
-  line-height: 1.2;
-}
-
-.station-live-current p {
-  margin: 3px 0 0;
-  color: var(--color-text);
-  font-size: 0.74rem;
-  font-weight: var(--weight-extrabold);
-  line-height: 1.32;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-family: var(--agent-body-font);
-}
-
-.station-live-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  min-width: 0;
-}
-
-.station-live-line {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 7px;
-  align-items: center;
-  margin: 0;
-  min-width: 0;
-}
-
-.station-live-line span {
-  padding: 2px var(--space-2);
-  border-radius: 999px;
-  background: var(--cat-resource-soft);
-  color: var(--cat-resource);
-  font-size: 0.66rem;
-  font-weight: var(--weight-extrabold);
-  white-space: nowrap;
-}
-
-.station-live-line em {
-  min-width: 0;
-  color: var(--color-text-muted);
-  font-size: 0.67rem;
-  font-style: normal;
-  font-weight: var(--weight-bold);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--agent-body-font);
-}
-
-.station-live-line.is-success span {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-}
-
-.station-live-line.is-failed span {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-.station-live-empty {
-  height: 100%;
-  min-height: 68px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  color: var(--color-text-faint);
-  font-size: 0.72rem;
-  font-weight: var(--weight-extrabold);
-}
-
-.station-live-empty p {
-  margin: 0;
-  color: var(--color-text-faint);
-  font-family: var(--agent-body-font);
-}
-
-.detail-live-log-item {
-  margin-top: 9px;
-  padding: 9px 10px;
-  border-radius: 14px;
-  background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.86);
-}
-
-.detail-live-log-item > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.detail-live-log-item span {
-  color: var(--cat-resource);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-}
-
-.detail-live-log-item em {
-  color: var(--color-text-faint);
-  font-size: var(--text-2xs);
-  font-style: normal;
-  font-weight: var(--weight-extrabold);
-}
-
-.detail-live-log-item p {
-  margin: 6px 0 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  font-family: var(--agent-body-font);
-}
-
-.detail-live-log-item.is-success {
-  border-color: rgba(16, 185, 129, 0.28);
-  background: rgba(240, 253, 250, 0.82);
-}
-
-.detail-live-log-item.is-failed {
-  border-color: rgba(239, 68, 68, 0.26);
-  background: rgba(254, 242, 242, 0.82);
-}
-
-.station-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  color: var(--color-success);
-  font-size: 0.68rem;
-  font-weight: var(--weight-extrabold);
-}
-
-.station-progress-track {
-  width: 64px;
-  height: 4px;
-  background: rgba(148, 163, 184, 0.16);
-  border-radius: 999px;
-  overflow: hidden;
-  display: block;
-}
-
-.station-progress-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #22C55E, #3B82F6);
-  box-shadow: 0 0 12px rgba(59, 130, 246, 0.25);
-  transition: width 0.32s ease;
-}
-
-.agent-station-enter-active,
-.agent-station-leave-active {
-  transition: all 0.3s ease;
-}
-
-.agent-station-enter-from,
-.agent-station-leave-to {
-  opacity: 0;
-  transform: translateY(18px) scale(0.96);
-}
-
-.review-station-row {
-  position: relative;
-  z-index: 5;
-  display: grid;
-  gap: 14px;
-}
-
-.review-station-row-v4 {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  width: min(1100px, 92%);
-  margin: 30px auto 0;
-}
-
-.bundle-stage-shell {
-  position: relative;
-  z-index: 5;
-  width: min(420px, 100%);
-  margin: 30px auto 0;
-}
-
-.bundle-stage-card {
-  position: relative;
-  min-height: 102px;
-  border-color: rgba(99, 102, 241, 0.26);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(99, 102, 241, 0.08), transparent 54%),
-    rgba(255, 255, 255, 0.9);
-}
-
-.bundle-stage-card::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: -18px;
-  width: 2px;
-  height: 18px;
-  transform: translateX(-50%);
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0), rgba(99, 102, 241, 0.55));
-  border-radius: 999px;
-}
-
-.bundle-stage-card.status-running {
-  border-color: rgba(59, 130, 246, 0.42);
-  box-shadow: 0 20px 48px rgba(37, 99, 235, 0.12);
-}
-
-.bundle-stage-card.status-success {
-  border-color: rgba(16, 185, 129, 0.4);
-  background:
-    radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.08), transparent 54%),
-    rgba(240, 253, 250, 0.9);
-}
-
-.review-station-card {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
-  padding: 16px;
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid rgba(226, 232, 240, 0.88);
-  cursor: pointer;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.055);
-  transition: all 0.24s ease;
-}
-
-.review-station-card-v4 {
-  min-height: 92px;
-}
-
-.review-station-card:hover,
-.review-station-card.is-selected {
-  transform: translateY(-3px);
-  border-color: rgba(59, 130, 246, 0.48);
-  box-shadow: 0 18px 42px rgba(37, 99, 235, 0.14);
-}
-
-.review-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 15px;
-  background: rgba(219, 234, 254, 0.82);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.review-station-card strong {
-  color: var(--color-text);
-  font-size: 0.82rem;
-  line-height: 1.2;
-  display: block;
-}
-
-.review-station-card span {
-  color: var(--color-text-muted);
-  font-size: 0.68rem;
-  font-weight: var(--weight-extrabold);
-}
-
-.review-station-card em {
-  font-style: normal;
-  color: var(--cat-resource);
-  font-weight: var(--weight-extrabold);
-  font-size: 0.72rem;
-}
-
-/* Legacy floating panel styles removed — modernized styles are defined below */
-
-.detail-float-enter-active,
-.detail-float-leave-active {
-  transition: opacity 0.24s ease, transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.detail-float-enter-from,
-.detail-float-leave-to {
-  opacity: 0;
-  transform: translateX(24px) scale(0.98);
-}
-
-.output-dock-section {
-  position: relative;
-  z-index: 4;
-  flex-shrink: 0;
-  display: grid;
-  grid-template-columns: 190px minmax(0, 1fr);
-  gap: 16px;
-  align-items: center;
-  min-height: 56px;
-  padding: 8px 12px;
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.05);
-}
-
-.output-dock-section-v4 {
-  margin-top: 14px;
-  padding: 14px 16px 16px;
-}
-
-.output-dock-section-v4 .panel-eyebrow {
-  color: #0f766e;
-}
-
-.output-dock-heading {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
-
-.output-dock-heading > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.output-dock-heading strong {
-  color: var(--color-text);
-  font-size: var(--text-base);
-  font-weight: var(--weight-extrabold);
-  line-height: 1.2;
-}
-
-.output-dock-heading p {
-  margin: 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  font-family: var(--agent-body-font);
-}
-
-.output-dock-list {
-  display: grid;
-  min-width: 0;
-}
-
-.output-dock-list-v4 {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-}
-
-.output-dock-item {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  padding: 8px 10px;
-  border: 1px solid var(--color-border, #e2e8f0);
-  border-radius: 16px;
-  background: var(--color-bg, #fff);
-  opacity: 0.72;
-  transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
-  cursor: default;
-}
-
-.output-dock-item-v4 {
-  min-height: 82px;
-  position: relative;
-  padding-right: 90px;
-}
-
-.output-dock-item.ready {
-  opacity: 1;
-  background: #F0FDF4;
-  border-color: #A7F3D0;
-  cursor: pointer;
-}
-
-.output-dock-item.ready:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 28px rgba(16, 185, 129, 0.10);
-}
-
-.output-dock-item > span {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: var(--color-surface, #f8fafc);
-  display: grid;
-  place-items: center;
-  flex-shrink: 0;
-  font-size: 0.95rem;
-}
-
-.output-dock-item strong {
-  display: block;
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.output-dock-item p {
-  margin: 2px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-2xs);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--agent-body-font);
-}
-
-.output-dock-item-v4 em {
-  position: absolute;
-  right: var(--space-3);
-  top: var(--space-3);
-  font-style: normal;
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-muted);
-  background: var(--color-surface-hover);
-  border-radius: 999px;
-  padding: 3px var(--space-2);
-}
-
-.output-dock-item-v4.ready em {
-  color: var(--color-success);
-  background: var(--color-success-soft);
-}
-
-.output-dock-item-v4.just-arrived {
-  animation: artifactArrive 1.35s ease both;
-}
-
-@keyframes artifactArrive {
-  0% {
-    transform: translateY(-14px) scale(0.96);
-    box-shadow: 0 0 0 rgba(16, 185, 129, 0);
-  }
-  45% {
-    transform: translateY(0) scale(1.04);
-    box-shadow: 0 22px 48px rgba(16, 185, 129, 0.22);
-  }
-  100% {
-    transform: translateY(0) scale(1);
-  }
-}
-
-.drawer-log-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 4px;
-}
-
-.drawer-log-item {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  padding: 12px;
-  border-radius: 16px;
-  background: var(--color-bg, #fff);
-  border: 1px solid var(--color-border, #e2e8f0);
-}
-
-.drawer-log-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: var(--color-border-hover, #cbd5e1);
-  margin-top: 5px;
-  flex-shrink: 0;
-}
-
-.drawer-log-item.is-running .drawer-log-dot {
-  background: #F97316;
-  box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.12);
-}
-
-.drawer-log-item.is-success .drawer-log-dot {
-  background: var(--color-success, #22c55e);
-}
-
-.drawer-log-item.is-failed .drawer-log-dot {
-  background: var(--color-danger, #ef4444);
-}
-
-.drawer-log-item strong {
-  color: var(--color-text);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-extrabold);
-}
-
-.drawer-log-item p {
-  margin: 4px 0 0;
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.45;
-  font-family: var(--agent-body-font);
-}
-
-@media (max-width: 1280px) {
-  .flow-core-stack-v4 {
-    margin-top: 24px;
-  }
-
-  .agent-connection-field {
-    top: 280px;
-  }
-
-  .agent-station-row-v4 {
-    grid-template-columns: repeat(3, minmax(190px, 1fr));
-    margin-top: 150px;
-  }
-
-  .review-station-row-v4 {
-    width: 100%;
-    grid-template-columns: repeat(2, minmax(200px, 1fr));
-  }
-}
-
-@media (max-width: 1024px) {
-  .stage-topbar-v4,
-  .stage-stat-group-v4,
-  .workbench-header-v4 {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .stage-stat-group-v4 {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .agent-flow-canvas-v4 {
-    min-height: auto;
-    padding: 20px;
-  }
-
-  .core-agent-node {
-    width: min(300px, 100%);
-  }
-
-  .agent-connection-field {
-    display: none;
-  }
-
-  .agent-station-row-v4 {
-    grid-template-columns: repeat(2, minmax(180px, 1fr));
-    margin-top: 42px;
-  }
-
-  .review-station-row-v4 {
-    grid-template-columns: 1fr 1fr;
-    margin-top: 24px;
-  }
-
-  .bundle-stage-shell {
-    width: 100%;
-  }
-
-  .output-dock-section {
-    grid-template-columns: 1fr;
-  }
-
-  .agent-detail-floating-panel {
-    top: calc(var(--navbar-height, 64px) + 70px);
-  }
-}
-
-@media (max-width: 760px) {
-  .workflow-stage-page-v4 {
-    padding: 12px;
-  }
-
-  .stage-stat-group-v4,
-  .agent-station-row-v4,
-  .review-station-row-v4,
-  .output-dock-list-v4 {
-    grid-template-columns: 1fr;
-  }
-
-  .dispatch-workbench-panel-v4,
-  .agent-flow-canvas-v4 {
-    border-radius: 20px;
-  }
-
-  .agent-detail-floating-panel {
-    right: 12px;
-    left: 12px;
-    width: auto;
-  }
-}
-
-
-/* =========================
-   v5 overflow-safe layout patch
-   目标：所有内容只能在组件容器内部自适应，不能把页面撑出右侧。
-   这段放在最后，用于覆盖前面的舞台布局规则。
-   ========================= */
-.workflow-stage-page-v4,
-.workflow-stage-page-v4 * {
-  box-sizing: border-box;
-}
-
-.workflow-stage-page-v4 {
-  width: 100%;
-  max-width: 100%;
-  overflow-x: hidden;
-  padding-inline: clamp(12px, 1.6vw, 24px);
-}
-
-.stage-topbar-v4,
-.agent-stage-shell-v4,
-.dispatch-workbench-panel-v4,
-.agent-flow-canvas-v4,
-.output-dock-section-v4 {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-}
-
-.stage-topbar-v4 {
-  flex-wrap: wrap;
-}
-
-.stage-title-area {
-  flex: 1 1 420px;
-  min-width: 0;
-}
-
-.stage-stat-group-v4 {
-  flex: 1 1 420px;
-  min-width: 0;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.stage-stat-group-v4 .stage-stat-card {
-  flex: 1 1 118px;
-  min-width: 0;
-  max-width: 178px;
-}
-
-.stage-stat-group-v4 .progress-stat-card {
-  max-width: 220px;
-}
-
-.stage-log-btn {
-  flex: 0 0 auto;
-}
-
-.workbench-header-v4 {
-  flex-wrap: wrap;
-}
-
-.workbench-header-v4 > div:first-child {
-  flex: 1 1 420px;
-  min-width: 0;
-}
-
-.workbench-actions {
-  flex: 1 1 360px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-.workbench-actions .control-pill {
-  max-width: 100%;
-}
-
-.agent-flow-canvas-v4 {
-  min-height: auto;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(18px, 2.2vw, 34px);
-  padding: clamp(18px, 2.4vw, 36px);
-  overflow: hidden;
-}
-
-.flow-core-stack-v4 {
-  margin-top: 0;
-}
-
-.core-agent-node {
-  width: min(340px, 100%);
-  max-width: 100%;
-}
-
-.agent-connection-field {
-  top: clamp(360px, 40vw, 430px);
-  left: clamp(18px, 4vw, 72px);
-  right: clamp(18px, 4vw, 72px);
-  max-width: calc(100% - 36px);
-}
-
-.agent-station-row-v4 {
-  width: 100%;
-  max-width: 100%;
-  grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr));
-  margin-top: clamp(72px, 10vw, 140px);
-}
-
-.review-station-row-v4 {
-  width: 100%;
-  max-width: 100%;
-  grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr));
-}
-
-.output-dock-section {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
-}
-
-.output-dock-list-v4 {
-  width: 100%;
-  max-width: 100%;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-}
-
-.output-dock-item-v4 {
-  min-width: 0;
-  padding-right: 86px;
-}
-
-.agent-detail-floating-panel {
-  right: max(12px, env(safe-area-inset-right));
-  width: min(420px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-}
-
-@media (max-width: 1120px) {
-  .agent-connection-field {
-    display: none;
-  }
-
-  .agent-station-row-v4 {
-    margin-top: 16px;
-  }
-}
-
-@media (max-width: 720px) {
-  .stage-stat-group-v4,
-  .output-dock-section {
-    grid-template-columns: 1fr;
-  }
-
-  .stage-stat-group-v4 {
-    display: grid;
-  }
-
-  .stage-stat-group-v4 .stage-stat-card,
-  .stage-stat-group-v4 .progress-stat-card {
-    max-width: none;
-  }
-
-  .workbench-actions {
-    justify-content: flex-start;
-  }
-
-}
-
-
-/* ===== 更紧凑的中枢调度布局：用 SVG 精准连接 Coordinator 与子 Agent 卡片 ===== */
-.agent-flow-canvas-v4 {
-  min-height: clamp(620px, 68vh, 800px);
-  padding: clamp(18px, 2vw, 28px) clamp(20px, 2.4vw, 36px) clamp(24px, 2.4vw, 36px);
-}
-
-.flow-core-stack-v4 {
-  margin-top: 52px;
-  gap: 8px;
-}
-
-.core-link-line {
-  height: 18px;
-}
-
-.core-agent-node {
-  width: min(300px, 34vw);
-  min-height: 70px;
-  padding: 12px 15px;
-}
-
-.agent-connection-field {
-  display: none;
+  font-weight: 650;
 }
 
 .agent-link-svg {
   position: absolute;
-  left: clamp(42px, 4vw, 72px);
-  right: clamp(42px, 4vw, 72px);
-  top: 292px;
-  height: 172px;
-  z-index: 4;
-  pointer-events: none;
+  inset: 0;
+  z-index: 2;
+  display: block;
+  width: 100%;
+  height: 100%;
   overflow: visible;
+  pointer-events: none;
 }
 
 .agent-link-path {
   fill: none;
   stroke: url(#agentLinkGradient);
-  stroke-width: 2.2;
+  stroke-width: 1.7;
   stroke-linecap: round;
-  stroke-dasharray: 8 8;
-  opacity: 0.52;
-  filter: url(#agentLinkGlow);
-  animation: agentLinkFlow 1.8s linear infinite;
-}
-
-.agent-link-path.status-running {
-  opacity: 0.95;
-  stroke-width: 3;
-  stroke-dasharray: 10 7;
-}
-
-.agent-link-path.status-success {
-  opacity: 0.78;
-  stroke: var(--cat-resource);
-  stroke-dasharray: 0;
-}
-
-.agent-link-dot {
-  fill: #38BDF8;
-  opacity: 0.8;
-  filter: drop-shadow(0 0 8px rgba(14, 165, 233, 0.55));
-}
-
-.agent-link-dot.status-success {
-  fill: var(--cat-resource);
-}
-
-.agent-link-dot.status-running {
-  fill: #3B82F6;
-  animation: linkDotPulse 1.4s ease-in-out infinite;
-}
-
-@keyframes agentLinkFlow {
-  to {
-    stroke-dashoffset: -32;
-  }
-}
-
-@keyframes linkDotPulse {
-  0%, 100% {
-    r: 4;
-    opacity: 0.75;
-  }
-  50% {
-    r: 6;
-    opacity: 1;
-  }
-}
-
-.agent-station-row-v4 {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  max-width: 1420px;
-  margin: 74px auto 0;
-  align-items: stretch;
-}
-
-.agent-station-card-v4 {
-  min-height: 116px;
-}
-
-.station-live-log {
-  min-height: 36px;
-  margin: 8px 0;
-}
-
-.review-station-row-v4 {
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  width: min(1120px, 88%);
-  margin: 24px auto 0;
-}
-
-.orbit-one {
-  top: 116px;
-  height: 210px;
-}
-
-.orbit-two {
-  top: 176px;
-  height: 244px;
-}
-
-.orbit-three {
-  top: 232px;
-  height: 220px;
-}
-
-@media (max-width: 1180px) {
-  .agent-link-svg {
-    display: none;
-  }
-
-  .agent-station-row-v4 {
-    margin-top: 42px;
-  }
-
-  .flow-core-stack-v4 {
-    margin-top: 52px;
-  }
-}
-
-@media (max-width: 760px) {
-  .flow-core-stack-v4 {
-    margin-top: 16px;
-  }
-
-  .agent-station-row-v4 {
-    margin-top: 28px;
-  }
-}
-
-
-/* ===== v6 precise connector patch：连线不再使用固定 top/viewBox，改为 DOM 实测坐标 ===== */
-.agent-link-svg {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 3;
-  pointer-events: none;
-  overflow: visible;
-}
-
-.agent-link-path {
+  stroke-dasharray: 6 7;
+  opacity: 0.48;
   vector-effect: non-scaling-stroke;
 }
 
-.agent-link-dot {
-  transform-box: fill-box;
-  transform-origin: center;
+.agent-link-path.status-running {
+  stroke-width: 2.3;
+  opacity: 0.96;
+  animation: link-flow 1.4s linear infinite;
 }
 
-@media (max-width: 1180px) {
-  .agent-link-svg {
-    display: block;
-  }
-}
-
-@media (max-width: 760px) {
-  .agent-link-svg {
-    display: none;
-  }
-}
-
-/* ===== v7 incremental visual polish: preserve the original component behavior ===== */
-.workflow-stage-page-v4 {
-  --workflow-border: #dfe3e8;
-  --workflow-border-strong: #c8ced6;
-  --workflow-surface: #ffffff;
-  --workflow-surface-subtle: #f7f8fa;
-  --workflow-text: #172033;
-  --workflow-muted: #667085;
-
-  background: transparent;
-}
-
-.dispatch-workbench-panel,
-.output-dock-section-v4 {
-  border-color: var(--workflow-border);
-  border-radius: 16px;
-  background: var(--workflow-surface);
-  box-shadow: 0 8px 24px rgba(23, 32, 51, 0.06);
-  backdrop-filter: none;
-}
-
-.stage-stat-card {
-  background: rgba(255, 255, 255, 0.52);
-  border: var(--generator-card-border);
-  border-radius: var(--radius-inner);
-}
-
-.route-step,
-.control-pill {
-  border-radius: 7px;
-}
-
-.panel-eyebrow {
-  color: var(--workflow-muted);
-  letter-spacing: 0.04em;
-  text-transform: none;
-}
-
-.live-dot {
-  box-shadow: none;
-}
-
-.mini-progress-track i {
-  background: #2563eb;
-  box-shadow: none;
-}
-
-.agent-flow-canvas,
-.agent-flow-canvas-v4 {
-  min-height: auto;
-  border-color: var(--workflow-border);
-  border-radius: 14px;
-  background: var(--workflow-surface-subtle);
-}
-
-.agent-flow-canvas-v4::before,
-.flow-grid-bg,
-.flow-orbit {
-  display: none !important;
-}
-
-.agent-link-svg {
-  z-index: 2;
-}
-
-.agent-link-path,
-.agent-link-path.status-running,
 .agent-link-path.status-success {
-  stroke: #aebccc;
-  stroke-width: 1.5;
-  stroke-dasharray: 5 5;
-  filter: none;
-  opacity: 0.8;
-  animation: none;
+  stroke: #55ae91;
+  stroke-dasharray: 0;
+  opacity: 0.78;
 }
 
-.agent-link-dot,
-.agent-link-dot.status-running,
-.agent-link-dot.status-success {
-  fill: #7c8da3;
-  filter: none;
+.agent-link-path.status-failed {
+  stroke: #d46161;
+  stroke-dasharray: 4 6;
+  opacity: 0.75;
+}
+
+.agent-data-packet {
+  fill: #5079ec;
+  filter: url(#agentPacketGlow);
+}
+
+.agent-data-packet.packet-secondary {
+  fill: #35b4a1;
+}
+
+.agent-link-terminal {
+  fill: #91a1b6;
   opacity: 0.85;
-  animation: none;
 }
 
-.flow-core-stack-v4 {
-  margin-top: 0;
+.agent-link-terminal.status-running {
+  fill: #4f73e8;
+  animation: terminal-pulse 1.5s ease-in-out infinite;
 }
 
-.core-agent-node {
-  min-height: 70px;
-  border-color: var(--workflow-border-strong);
-  border-radius: 12px;
-  background: var(--workflow-surface);
-  box-shadow: 0 5px 14px rgba(23, 32, 51, 0.06);
+.agent-link-terminal.status-success {
+  fill: #35a780;
 }
 
-.core-agent-node:hover,
-.core-agent-node.is-selected {
-  border-color: #7ba8ed;
-  box-shadow: 0 0 0 2px #dbeafe;
-  transform: translateY(-1px);
+.parallel-stage {
+  margin-top: 8px;
 }
 
-.core-icon,
-.station-icon,
-.review-icon,
-.focus-agent-icon {
-  border: 1px solid #d8e2ef;
-  border-radius: 9px;
-  color: #315c9d;
-  background: #f1f5fa;
-}
-
-.core-icon svg,
-.station-icon svg,
-.review-icon svg,
-.focus-agent-icon svg,
-.output-dock-item-v4 > span svg {
-  font-size: 18px;
-}
-
-.flow-stage-label,
-.aggregation-stage-heading {
-  display: flex;
+.parallel-agent-grid {
+  position: relative;
+  z-index: 4;
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 220px), 1fr)
+  );
+  gap: 15px;
   width: 100%;
-  align-items: center;
-  gap: 11px;
-  margin: 26px auto 0;
-  padding: 0 2px;
 }
 
-.flow-stage-label > span,
-.aggregation-stage-heading > span {
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  place-items: center;
-  border: 1px solid var(--workflow-border-strong);
-  border-radius: 8px;
-  color: #475467;
-  background: var(--workflow-surface);
-  font-size: 10px;
-  font-weight: 800;
-}
+.agent-card {
+  --agent-accent: #4f73e8;
+  --agent-accent-soft: rgba(79, 115, 232, 0.08);
+  --agent-accent-border: rgba(79, 115, 232, 0.28);
+  --agent-accent-glow: rgba(79, 115, 232, 0.13);
 
-.flow-stage-label > div,
-.aggregation-stage-heading > div {
-  min-width: 0;
-  flex: 1;
-}
-
-.flow-stage-label strong,
-.aggregation-stage-heading strong {
-  display: block;
-  color: var(--workflow-text);
-  font-size: 13px;
-}
-
-.flow-stage-label p,
-.aggregation-stage-heading p {
-  margin: 3px 0 0;
-  color: var(--workflow-muted);
-  font-size: 11px;
-  line-height: 1.45;
-}
-
-.aggregation-stage-heading em {
-  padding: 5px 8px;
-  border: 1px solid #cfe0ff;
-  border-radius: 6px;
-  color: #2456a6;
-  background: #f5f8ff;
-  font-size: 10px;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.agent-station-row-v4.base-agent-row,
-.agent-station-row-v4.aggregation-agent-row {
-  margin-top: 10px;
-}
-
-.agent-station-card,
-.agent-station-card-v4 {
-  border-radius: var(--radius-card);
-  background: var(--generator-card-bg);
-  border: var(--generator-card-border);
-  box-shadow: var(--generator-card-shadow);
-}
-
-.agent-station-card:hover,
-.agent-station-card.is-selected {
-  transform: translateY(-5px);
-  border-color: var(--cat-resource);
-  box-shadow: 0 16px 36px var(--cat-resource-glow);
-}
-
-.agent-station-card.status-running {
-  border-color: #79a6e8;
-  box-shadow: inset 3px 0 0 #2563eb;
-}
-
-.agent-station-card.status-success,
-.agent-station-card.has-artifact {
-  border-color: #a9d6c3;
-  background: #fbfefc;
-}
-
-.station-live-log {
-  border-color: var(--workflow-border);
-  border-radius: 9px;
-  background: var(--workflow-surface-subtle);
-  min-height: 36px;
-  margin: 8px 0;
-  padding: 8px 10px;
-}
-
-.station-live-dot {
-  box-shadow: none;
-}
-
-.flow-stage-divider {
   position: relative;
   display: flex;
-  width: min(560px, 100%);
-  align-items: center;
-  gap: 10px;
-  margin: 24px auto 14px;
-  color: #98a2b3;
-  font-size: 10px;
-  text-align: center;
-}
-
-.flow-stage-divider::before,
-.flow-stage-divider::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  width: 1px;
-  height: 14px;
-  background: #aebccc;
-  transform: translateX(-50%);
-}
-
-.flow-stage-divider::before {
-  top: -14px;
-}
-
-.flow-stage-divider::after {
-  bottom: -14px;
-}
-
-.flow-stage-divider i {
-  height: 1px;
-  flex: 1;
-  background: var(--workflow-border-strong);
-}
-
-.coordinator-checkpoint-row {
-  display: flex;
-  justify-content: center;
-}
-
-.coordinator-checkpoint {
-  width: min(420px, 100%);
-}
-
-.aggregation-stage-heading {
-  position: relative;
-  margin-top: 22px;
-  padding-top: 14px;
-  border-top: 1px solid var(--workflow-border);
-}
-
-.aggregation-stage-heading::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: -22px;
-  width: 1px;
-  height: 22px;
-  background: #aebccc;
-  transform: translateX(-50%);
-}
-
-.aggregation-agent-row {
-  max-width: 100%;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.aggregation-agent-row .agent-station-card-v4:only-child {
-  grid-column: 1 / -1;
-  width: min(100%, 640px);
-  justify-self: center;
-}
-
-.aggregation-agent-row .agent-station-card-v4.is-unselected {
-  cursor: default;
-  opacity: 0.62;
-  box-shadow: none;
-}
-
-.aggregation-agent-row .agent-station-card-v4.is-unselected:hover {
-  border-color: var(--workflow-border);
-  box-shadow: none;
-  transform: none;
-}
-
-.aggregation-agent-row .agent-station-card-v4.is-unselected .station-footer .station-progress-track {
-  visibility: hidden;
-}
-
-.dual-flow-connector {
-  position: relative;
-  width: 50%;
-  height: 22px;
-  margin: 4px auto 0;
-  color: #c8ced6;
-}
-
-.dual-flow-connector::before,
-.dual-flow-connector span,
-.dual-flow-connector i {
-  position: absolute;
-  display: block;
-  background: currentColor;
-}
-
-.dual-flow-connector::before {
-  content: '';
-  left: 50%;
-  top: 0;
-  width: 1px;
-  height: 15px;
-  transform: translateX(-50%);
-}
-
-.dual-flow-connector span {
-  left: 0;
-  right: 0;
-  top: 14px;
-  height: 1px;
-}
-
-.dual-flow-connector i {
-  top: 14px;
-  width: 1px;
-  height: 16px;
-}
-
-.dual-flow-connector i:first-of-type {
-  left: 0;
-}
-
-.dual-flow-connector i:last-of-type {
-  right: 0;
-}
-
-.dual-flow-connector + .aggregation-agent-row {
-  margin-top: 0;
-}
-
-.dual-flow-connector.is-merge {
-  margin-top: 0;
-  transform: rotate(180deg);
-}
-
-.dual-flow-connector.is-merge + .bundle-stage-shell {
-  margin-top: 0;
-}
-
-.output-dock-item-v4 > span:first-child {
-  display: grid;
-  place-items: center;
-  color: #315c9d;
-}
-
-.output-dock-section-v4 {
-  grid-template-columns: 170px minmax(0, 1fr);
-  padding: 11px 14px;
-}
-
-.output-dock-section-v4 .panel-eyebrow {
-  font-size: 9px;
-}
-
-.output-dock-section-v4 .output-dock-heading {
-  gap: 4px;
-}
-
-.output-dock-section-v4 .output-dock-heading strong {
-  font-size: 13px;
-}
-
-.output-dock-section-v4 .output-dock-heading p {
-  font-size: 10px;
-  line-height: 1.4;
-}
-
-.output-dock-list-v4 {
-  gap: 8px;
-}
-
-.output-dock-item-v4 {
-  min-height: 64px;
-  padding: 7px 76px 7px 9px;
-  border-radius: 10px;
-}
-
-.output-dock-item-v4 > span {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-}
-
-.output-dock-item-v4 > span svg {
-  font-size: 15px;
-}
-
-.output-dock-item-v4 strong {
-  font-size: 11px;
-}
-
-.output-dock-item-v4 p {
-  font-size: 9px;
-}
-
-.output-dock-item-v4 em {
-  right: 9px;
-  top: 9px;
-  padding: 2px 6px;
-  font-size: 9px;
-}
-
-.detail-close-btn:focus-visible,
-.core-agent-node:focus-visible,
-.agent-station-card:focus-visible,
-.review-station-card:focus-visible,
-.output-dock-item-v4:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.3);
-  outline-offset: 2px;
-}
-
-@media (max-width: 720px) {
-  .flow-stage-label,
-  .aggregation-stage-heading {
-    align-items: flex-start;
-  }
-
-  .aggregation-stage-heading em {
-    display: none;
-  }
-
-  .aggregation-agent-row {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .dual-flow-connector {
-    width: 1px;
-  }
-
-  .dual-flow-connector span,
-  .dual-flow-connector i {
-    display: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .workflow-stage-page-v4 *,
-  .workflow-stage-page-v4 *::before,
-  .workflow-stage-page-v4 *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-
-  .core-agent-node:hover,
-  .agent-station-card:hover {
-    transform: none;
-  }
-}
-
-/* v8 compact header: turn the oversized dashboard card into a quiet status bar */
-.stage-topbar-v4 {
-  display: grid;
-  grid-template-columns: minmax(300px, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-  margin-bottom: 10px;
-  padding: 4px 2px 12px;
-  border: 0;
-  border-bottom: 1px solid var(--workflow-border);
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.stage-title-area {
-  display: grid;
-  grid-template-columns: auto minmax(280px, 1fr);
-  align-items: center;
-  gap: 22px;
-  min-width: 0;
-}
-
-.stage-title-copy {
-  min-width: 0;
-}
-
-.stage-title-area h2 {
-  font-size: 17px;
-  line-height: 1.2;
-  letter-spacing: -0.02em;
-}
-
-.stage-title-area p {
-  max-width: 360px;
-  margin-top: 3px;
+  min-height: 242px;
+  flex-direction: column;
+  padding: 14px;
   overflow: hidden;
-  color: #7a8495;
-  font-size: 11px;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stage-route-progress {
-  flex-wrap: nowrap;
-  gap: 6px;
-  min-width: 0;
-}
-
-.route-step {
-  height: 22px;
-  padding: 0 8px;
-  font-size: 10px;
-  white-space: nowrap;
-}
-
-.route-line {
-  width: clamp(12px, 2vw, 28px);
-  min-width: 12px;
-}
-
-.stage-stat-group-v4 {
-  display: flex;
-  flex: none;
-  flex-wrap: nowrap;
-  gap: 0;
-  justify-content: flex-end;
-  min-width: 0;
-}
-
-.stage-stat-group-v4 .stage-stat-card,
-.stage-stat-group-v4 .progress-stat-card {
-  display: grid;
-  grid-template-columns: auto auto;
-  align-items: baseline;
-  column-gap: 7px;
-  flex: none;
-  width: auto;
-  min-width: 0;
-  max-width: none;
-  padding: 3px 14px;
-  border: 0;
-  border-left: 1px solid var(--workflow-border);
-  border-radius: 0;
-  background: transparent;
-}
-
-.stage-stat-card span {
-  font-size: 10px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.stage-stat-card strong {
-  font-size: 15px;
-  line-height: 1;
-}
-
-.stage-stat-card small {
-  font-size: 9px;
-}
-
-.stage-stat-group-v4 .mini-progress-track {
-  grid-column: 1 / -1;
-  width: 100%;
-  height: 3px;
-  margin-top: 5px;
-}
-
-.stage-log-btn {
-  flex: none;
-  height: 32px;
-  margin-left: 10px;
-  padding: 0 13px;
-  border-color: var(--workflow-border-strong) !important;
-  color: #44546a !important;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-@media (max-width: 1180px) {
-  .stage-topbar-v4 {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .stage-stat-group-v4 {
-    justify-content: flex-start;
-  }
-
-  .stage-stat-group-v4 .stage-stat-card:first-child {
-    padding-left: 0;
-    border-left: 0;
-  }
-}
-
-@media (max-width: 760px) {
-  .stage-title-area {
-    grid-template-columns: 1fr;
-    gap: 9px;
-  }
-
-  .stage-title-area p {
-    white-space: normal;
-  }
-
-  .stage-route-progress {
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-
-  .stage-stat-group-v4 {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  .stage-stat-group-v4 .stage-stat-card,
-  .stage-stat-group-v4 .progress-stat-card {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    padding: 3px 9px;
-  }
-
-  .stage-log-btn {
-    grid-column: 1 / -1;
-    width: 100%;
-    margin: 8px 0 0;
-  }
-}
-
-/* v9 anchored Agent detail: follows the card that opened it */
-/* Tone Theme color mappings */
-.agent-detail-floating-panel.tone-blue {
-  --agent-accent: #3b82f6;
-  --agent-accent-soft: rgba(59, 130, 246, 0.08);
-  --agent-accent-glow: rgba(59, 130, 246, 0.2);
-}
-.agent-detail-floating-panel.tone-purple {
-  --agent-accent: #8b5cf6;
-  --agent-accent-soft: rgba(139, 92, 246, 0.08);
-  --agent-accent-glow: rgba(139, 92, 246, 0.2);
-}
-.agent-detail-floating-panel.tone-rose {
-  --agent-accent: #f43f5e;
-  --agent-accent-soft: rgba(244, 63, 94, 0.08);
-  --agent-accent-glow: rgba(244, 63, 94, 0.2);
-}
-.agent-detail-floating-panel.tone-emerald {
-  --agent-accent: #10b981;
-  --agent-accent-soft: rgba(16, 185, 129, 0.08);
-  --agent-accent-glow: rgba(16, 185, 129, 0.2);
-}
-.agent-detail-floating-panel.tone-indigo {
-  --agent-accent: #6366f1;
-  --agent-accent-soft: rgba(99, 102, 241, 0.08);
-  --agent-accent-glow: rgba(99, 102, 241, 0.2);
-}
-.agent-detail-floating-panel.tone-pink {
-  --agent-accent: #ec4899;
-  --agent-accent-soft: rgba(236, 72, 153, 0.08);
-  --agent-accent-glow: rgba(236, 72, 153, 0.2);
-}
-
-.detail-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(15, 23, 42, 0.3);
-  backdrop-filter: blur(4px);
-}
-
-.agent-detail-floating-panel {
-  width: min(460px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-  max-height: 80vh;
-  padding: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: var(--radius-outer, 20px);
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.14);
-}
-
-.detail-panel-title {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  min-height: 64px;
-  margin: 0;
-  padding: 14px 48px 14px 16px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  background: rgba(255, 255, 255, 0.96);
-}
-
-.detail-panel-title .focus-agent-icon {
-  width: 38px;
-  height: 38px;
-  font-size: 15px;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-  background: var(--agent-accent-soft, #f1f5f9);
-  color: var(--agent-accent, #64748b);
-  border: 1px solid var(--agent-accent-glow, rgba(226, 232, 240, 0.8));
-}
-
-.detail-title-copy {
-  min-width: 0;
-}
-
-.detail-title-copy > span {
-  display: block;
-  margin-bottom: 1px;
-  color: #94a3b8;
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.detail-title-copy h3 {
-  margin: 0;
-  overflow: hidden;
-  color: #0f172a;
-  font-size: 13.5px;
-  font-weight: 800;
-  line-height: 1.25;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detail-title-copy p {
-  margin: 2px 0 0;
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.detail-status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #cbd5e1;
-}
-
-.detail-status-dot.status-running {
-  background: var(--agent-accent, #3b82f6);
-  box-shadow: 0 0 0 5px var(--agent-accent-glow, rgba(59, 130, 246, 0.2));
-  animation: pulse-ring 1.5s infinite ease-in-out;
-}
-
-.detail-status-dot.status-success {
-  background: #10b981;
-}
-
-.detail-status-dot.status-failed {
-  background: #ef4444;
-}
-
-@keyframes pulse-ring {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.1); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.8; }
-}
-
-.detail-close-btn {
-  position: absolute;
-  top: 17px;
-  right: 14px;
-  z-index: 3;
-  width: 28px;
-  height: 28px;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 8px;
-  background: #fff;
-  color: #64748b;
-  font-size: 16px;
-  display: grid;
-  place-items: center;
+  border: 1px solid #d6dee9;
+  border-radius: 14px;
+  background:
+      linear-gradient(
+          145deg,
+          rgba(255, 255, 255, 0.98),
+          rgba(249, 251, 254, 0.96)
+      );
+  box-shadow: 0 8px 24px rgba(20, 34, 55, 0.055);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition:
+      transform 190ms ease,
+      border-color 190ms ease,
+      box-shadow 190ms ease,
+      background-color 190ms ease;
 }
 
-.detail-close-btn:hover {
-  background: var(--agent-accent-soft, #f1f5f9);
-  color: var(--agent-accent, #0f172a);
-  border-color: var(--agent-accent-glow, #cbd5e1);
+.agent-card.tone-blue,
+.agent-detail-panel.tone-blue {
+  --agent-accent: #3676d8;
+  --agent-accent-soft: rgba(54, 118, 216, 0.085);
+  --agent-accent-border: rgba(54, 118, 216, 0.3);
+  --agent-accent-glow: rgba(54, 118, 216, 0.14);
 }
 
-.selected-agent-detail-card {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 16px;
+.agent-card.tone-violet,
+.agent-detail-panel.tone-violet {
+  --agent-accent: #7a5bd6;
+  --agent-accent-soft: rgba(122, 91, 214, 0.085);
+  --agent-accent-border: rgba(122, 91, 214, 0.3);
+  --agent-accent-glow: rgba(122, 91, 214, 0.14);
 }
 
-/* Flattened - No double card layout */
-.detail-current-task {
-  padding: 4px 4px 14px;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  border-radius: 0;
+.agent-card.tone-rose,
+.agent-detail-panel.tone-rose {
+  --agent-accent: #cf5f7d;
+  --agent-accent-soft: rgba(207, 95, 125, 0.085);
+  --agent-accent-border: rgba(207, 95, 125, 0.3);
+  --agent-accent-glow: rgba(207, 95, 125, 0.14);
 }
 
-.detail-current-task span {
+.agent-card.tone-amber,
+.agent-detail-panel.tone-amber {
+  --agent-accent: #b67731;
+  --agent-accent-soft: rgba(182, 119, 49, 0.085);
+  --agent-accent-border: rgba(182, 119, 49, 0.3);
+  --agent-accent-glow: rgba(182, 119, 49, 0.14);
+}
+
+.agent-card.tone-emerald,
+.agent-detail-panel.tone-emerald {
+  --agent-accent: #25896c;
+  --agent-accent-soft: rgba(37, 137, 108, 0.085);
+  --agent-accent-border: rgba(37, 137, 108, 0.3);
+  --agent-accent-glow: rgba(37, 137, 108, 0.14);
+}
+
+.agent-card.tone-indigo,
+.agent-detail-panel.tone-indigo {
+  --agent-accent: #5866c9;
+  --agent-accent-soft: rgba(88, 102, 201, 0.085);
+  --agent-accent-border: rgba(88, 102, 201, 0.3);
+  --agent-accent-glow: rgba(88, 102, 201, 0.14);
+}
+
+.agent-card.tone-pink,
+.agent-detail-panel.tone-pink {
+  --agent-accent: #c6539d;
+  --agent-accent-soft: rgba(198, 83, 157, 0.085);
+  --agent-accent-border: rgba(198, 83, 157, 0.3);
+  --agent-accent-glow: rgba(198, 83, 157, 0.14);
+}
+
+.agent-detail-panel.tone-cyan {
+  --agent-accent: #258d9b;
+  --agent-accent-soft: rgba(37, 141, 155, 0.085);
+  --agent-accent-border: rgba(37, 141, 155, 0.28);
+  --agent-accent-glow: rgba(37, 141, 155, 0.14);
+}
+
+.agent-card:hover,
+.agent-card.is-selected {
+  transform: translateY(-4px);
+  border-color: var(--agent-accent-border);
+  box-shadow:
+      0 16px 34px var(--agent-accent-glow),
+      0 0 0 2px var(--agent-accent-soft);
+}
+
+.agent-card.status-running {
+  border-color: var(--agent-accent-border);
+  background:
+      linear-gradient(
+          145deg,
+          #ffffff,
+          var(--agent-accent-soft)
+      );
+  box-shadow:
+      0 14px 32px var(--agent-accent-glow),
+      inset 3px 0 0 var(--agent-accent);
+}
+
+.agent-card.status-success,
+.agent-card.has-artifact {
+  border-color: #b7dece;
+  background:
+      linear-gradient(
+          145deg,
+          #ffffff,
+          #f4fbf8
+      );
+}
+
+.agent-card.status-failed {
+  border-color: #e8bcbc;
+  background:
+      linear-gradient(
+          145deg,
+          #ffffff,
+          #fff5f5
+      );
+}
+
+.agent-card-running-line {
+  position: absolute;
+  top: 0;
+  right: 100%;
+  left: -40%;
+  height: 2px;
+  opacity: 0;
+  background: linear-gradient(
+      90deg,
+      transparent,
+      var(--agent-accent),
+      transparent
+  );
+}
+
+.agent-card.status-running .agent-card-running-line {
+  opacity: 1;
+  animation: card-line-flow 2s linear infinite;
+}
+
+.agent-card-header {
+  display: grid;
+  grid-template-columns: 39px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: center;
+}
+
+.agent-icon {
+  display: grid;
+  width: 39px;
+  height: 39px;
+  place-items: center;
+  border: 1px solid var(--agent-accent-border);
+  border-radius: 10px;
+  color: var(--agent-accent);
+  background: var(--agent-accent-soft);
+}
+
+.agent-identity {
+  min-width: 0;
+}
+
+.agent-identity strong {
   display: block;
-  color: #94a3b8;
-  font-size: 9px;
-  font-weight: 700;
-  margin-bottom: 6px;
-}
-
-.detail-current-task strong {
-  display: block;
-  color: #1e293b;
-  font-size: 12.5px;
-  font-weight: 700;
-  line-height: 1.45;
-}
-
-.detail-progress-line {
-  height: 5px;
-  margin-top: 10px;
-  border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
   overflow: hidden;
-}
-
-.detail-progress-line i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--agent-accent, #3b82f6), #22d3ee);
-  transition: width 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.detail-current-task em {
-  display: block;
-  text-align: right;
-  margin-top: 4px;
-  font-style: normal;
-  color: var(--agent-accent, #64748b);
-  font-size: 10px;
+  color: #28364b;
+  font-size: 13px;
   font-weight: 800;
+  line-height: 1.3;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Light borderless metrics */
-.detail-metrics-v3 {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  border: none;
-  background: transparent;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  padding: 4px 4px 14px;
-  border-radius: 0;
-  margin: 0;
-}
-
-.detail-metrics-v3 > div {
-  padding: 9px 11px;
-  border: none !important;
-  background: #f8fafc;
-  border-radius: 8px;
-}
-
-.detail-metrics-v3 dt {
-  font-size: 9px;
-  color: #94a3b8;
-  font-weight: 700;
-}
-
-.detail-metrics-v3 dd {
-  margin-top: 2px;
-  color: #334155;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-/* IO grid */
-.detail-io-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
-  padding: 4px 4px 14px;
-}
-
-.detail-io-grid div {
-  padding: 9px 11px;
-  border-radius: 8px;
-  background: #f8fafc;
-  border: none;
-}
-
-.detail-io-grid span {
-  color: var(--agent-accent, #476b9e);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.detail-io-grid p {
+.agent-identity span {
+  display: block;
   margin-top: 3px;
-  color: #475569;
+  overflow: hidden;
+  color: #7e8a9b;
   font-size: 10px;
-  line-height: 1.4;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Metric chips */
-.focus-metric-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 2px 4px;
+.agent-current-task {
+  min-height: 61px;
+  margin-top: 11px;
+  padding: 10px 11px;
+  border: 1px solid #e1e7ef;
+  border-radius: 9px;
+  background: #f8fafc;
 }
 
-.focus-metric-chips span {
-  padding: 3px 7px;
-  border-radius: 6px;
-  font-size: 9px;
-  font-weight: 700;
-  background: var(--agent-accent-soft, #f1f5f9);
-  color: var(--agent-accent, #475569);
-  border: 1px solid rgba(226, 232, 240, 0.2);
+.agent-current-task > span {
+  color: var(--agent-accent);
 }
 
-/* Sleek Timeline event stream */
-.detail-history-v3 {
-  max-height: none;
-  padding: 12px 4px 4px;
-  margin-top: 4px;
+.agent-current-task p {
+  display: -webkit-box;
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: #4e5e77;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.timeline-stream-wrapper {
-  position: relative;
-  padding-left: 14px;
-  margin-top: 10px;
-}
-
-.timeline-stream-wrapper::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  left: 3px;
-  bottom: 6px;
-  width: 1px;
-  background: rgba(226, 232, 240, 0.8);
-}
-
-.detail-live-log-item {
-  position: relative;
-  padding: 6px 0 10px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
-  margin-top: 0;
-}
-
-.timeline-dot {
-  position: absolute;
-  left: -14px;
-  top: 10px;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: #cbd5e1;
-  border: 2px solid #fff;
-  box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.5);
-  z-index: 2;
-  transform: translateX(-1px);
-  transition: background-color 0.25s ease, box-shadow 0.25s ease;
-}
-
-.detail-live-log-item.is-running .timeline-dot {
-  background: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
-}
-
-.detail-live-log-item.is-success .timeline-dot {
-  background: #10b981;
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
-}
-
-.detail-live-log-item.is-failed .timeline-dot {
-  background: #ef4444;
-  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
-}
-
-.timeline-content {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.timeline-header {
+.agent-execution-chain {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 9px;
+  gap: 4px;
+  margin-top: 12px;
 }
 
-.timeline-header span {
-  font-weight: 700;
-  color: #475569;
-}
-
-.timeline-header em {
-  font-style: normal;
-  color: #94a3b8;
-  font-family: var(--font-mono);
-}
-
-.detail-live-log-item p {
-  margin: 2px 0 0;
-  font-size: 10px;
-  color: #64748b;
-  line-height: 1.4;
-  font-family: var(--font-mono);
-}
-
-.timeline-empty-msg {
-  margin-top: 8px;
-  color: #94a3b8;
-  font-size: 10px;
+.execution-step {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
   text-align: center;
 }
 
-.detail-fade-enter-active,
-.detail-fade-leave-active {
-  transition: opacity 0.22s ease;
+.execution-step > i {
+  width: 9px;
+  height: 9px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: #ccd4df;
+  box-shadow: 0 0 0 1px #cfd8e4;
 }
 
-.detail-fade-enter-from,
-.detail-fade-leave-to {
-  opacity: 0;
+.execution-step > span {
+  overflow: hidden;
+  color: #8995a6;
+  font-size: 9px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.detail-fade-enter-active .agent-detail-floating-panel,
-.detail-fade-leave-active .agent-detail-floating-panel {
-  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease;
+.execution-step.running > i {
+  background: var(--agent-accent);
+  box-shadow:
+      0 0 0 1px var(--agent-accent-border),
+      0 0 0 4px var(--agent-accent-soft);
+  animation: execution-pulse 1.4s ease-in-out infinite;
 }
 
-.detail-fade-enter-from .agent-detail-floating-panel,
-.detail-fade-leave-to .agent-detail-floating-panel {
-  opacity: 0;
-  transform: scale(0.96);
+.execution-step.running > span {
+  color: var(--agent-accent);
 }
 
-/* v10 contextual failure status: keep errors with the workflow they belong to */
-.workflow-error-status {
+.execution-step.success > i {
+  background: #2da47d;
+  box-shadow: 0 0 0 1px #72c5a8;
+}
+
+.execution-step.success > span {
+  color: #278467;
+}
+
+.execution-step.failed > i {
+  background: #d55454;
+  box-shadow: 0 0 0 1px #e49a9a;
+}
+
+.execution-step.failed > span {
+  color: #b54343;
+}
+
+.agent-execution-chain > b {
+  width: 16px;
+  height: 1px;
+  margin-top: -14px;
+  background: #dce2ea;
+}
+
+.agent-event-preview {
+  position: relative;
+  min-height: 58px;
+  margin-top: 11px;
+  padding: 10px;
+  border-top: 1px solid #e6eaf0;
+}
+
+.agent-event-preview p {
+  margin: 5px 65px 0 0;
+  overflow: hidden;
+  color: #5f6e84;
+  font-size: 10px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-event-preview em {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  color: #8995a6;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.agent-card-footer {
+  margin-top: auto;
+  padding-top: 10px;
+}
+
+.agent-card-footer > span {
+  color: var(--agent-accent);
+}
+
+.handoff-rail {
+  position: relative;
+  z-index: 4;
+  width: min(900px, 92%);
+  margin: 20px auto;
+}
+
+.handoff-return-rail {
+  height: 76px;
+}
+
+.handoff-return-rail::before,
+.handoff-return-rail::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 1px;
+  background: #b9c6d7;
+  transform: translateX(-50%);
+}
+
+.handoff-return-rail::before {
+  top: 0;
+  height: 25px;
+}
+
+.handoff-return-rail::after {
+  bottom: 0;
+  height: 25px;
+}
+
+.handoff-return-rail > strong {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   display: inline-flex;
-  height: 30px;
+  height: 29px;
+  align-items: center;
+  padding: 0 11px;
+  border: 1px solid #cbd7e5;
+  border-radius: 7px;
+  color: #52657f;
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(33, 50, 76, 0.07);
+  font-size: 10px;
+  font-weight: 800;
+  transform: translate(-50%, -50%);
+}
+
+.handoff-packet {
+  position: absolute;
+  top: 50%;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
-  border: 1px solid #f4b8b8;
-  border-radius: 7px;
-  color: #9f2f2f;
-  background: #fff7f6;
-  font: inherit;
-  cursor: pointer;
-  transition: border-color 0.18s ease, background 0.18s ease;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 700;
+  opacity: 0;
 }
 
-.workflow-error-status:hover {
-  border-color: #e58c8c;
-  background: #fff0ee;
-}
-
-.workflow-error-status > span {
+.handoff-packet i {
   width: 7px;
   height: 7px;
-  flex: 0 0 7px;
   border-radius: 50%;
-  background: #d94a4a;
+  background: #4f73e8;
+  box-shadow: 0 0 0 4px rgba(79, 115, 232, 0.1);
 }
 
-.workflow-error-status strong {
+.workflow-canvas.is-running .handoff-packet {
+  animation: handoff-return 3.2s linear infinite;
+}
+
+.handoff-packet.packet-one {
+  left: 8%;
+  animation-delay: 0s !important;
+}
+
+.handoff-packet.packet-two {
+  left: 20%;
+  animation-delay: 1s !important;
+}
+
+.handoff-packet.packet-three {
+  left: 32%;
+  animation-delay: 2s !important;
+}
+
+.coordination-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.coordination-flow-strip {
+  width: min(920px, 100%);
+  padding: 17px 18px;
+  border: 1px solid #cedae8;
+  border-radius: 13px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: 0 8px 22px rgba(27, 46, 72, 0.055);
+}
+
+.coordination-flow-strip.status-running {
+  border-color: #8dbec8;
+  box-shadow:
+      0 10px 26px rgba(37, 141, 155, 0.11),
+      inset 3px 0 0 #2c909e;
+}
+
+.coordination-flow-strip.status-success {
+  border-color: #b9ddcf;
+  background: rgba(247, 253, 250, 0.92);
+}
+
+.coordination-flow-strip.status-failed {
+  border-color: #eabcbc;
+  background: rgba(255, 247, 247, 0.92);
+}
+
+.coordination-flow-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.coordination-flow-header > div:first-child > span {
+  display: block;
+  color: #628793;
   font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
+.coordination-flow-header > div:first-child > strong {
+  display: block;
+  margin-top: 4px;
+  color: #34465b;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.coordination-progress-copy {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.coordination-progress-copy span {
+  color: #617286;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.coordination-progress-copy b {
+  color: #2f8190;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.coordination-steps {
+  display: flex;
+  align-items: stretch;
+  gap: 9px;
+  margin-top: 15px;
+}
+
+.coordination-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  gap: 9px;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  padding: 10px 11px;
+  border: 1px solid #e0e7ef;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.coordination-step > span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: #7c8999;
+  background: #e8edf3;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.coordination-step strong {
+  display: block;
+  color: #47586e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.coordination-step p {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: #7e8a9a;
+  font-size: 10px;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coordination-step > em {
+  color: #8995a6;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.coordination-step.running {
+  border-color: #a9d1d8;
+  background: #f2fafb;
+}
+
+.coordination-step.running > span {
+  color: #ffffff;
+  background: #2c909e;
+  box-shadow: 0 0 0 4px rgba(44, 144, 158, 0.1);
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
+
+.coordination-step.running strong,
+.coordination-step.running > em {
+  color: #257985;
+}
+
+.coordination-step.success {
+  border-color: #bde0d3;
+  background: #f4fbf8;
+}
+
+.coordination-step.success > span {
+  color: #ffffff;
+  background: #2ba17a;
+}
+
+.coordination-step.success strong,
+.coordination-step.success > em {
+  color: #277b62;
+}
+
+.coordination-step.failed {
+  border-color: #edc1c1;
+  background: #fff6f6;
+}
+
+.coordination-step.failed > span {
+  color: #ffffff;
+  background: #d65353;
+}
+
+.coordination-step.failed strong,
+.coordination-step.failed > em {
+  color: #ae4141;
+}
+
+.coordination-step-line {
+  width: 24px;
+  height: 1px;
+  align-self: center;
+  background: #d4dde7;
+}
+
+.coordination-step-line.running {
+  background: #79b5bf;
+}
+
+.coordination-step-line.success {
+  background: #68ba9b;
+}
+
+.coordination-progress-track {
+  height: 4px;
+  margin-top: 14px;
+  overflow: hidden;
+  border-radius: 99px;
+  background: #e5ebf1;
+}
+
+.coordination-progress-track i {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: left;
+  background: linear-gradient(
+      90deg,
+      #3195a3,
+      #4f73e8
+  );
+  transition: transform 350ms ease;
+}
+
+.context-handoff-line,
+.delivery-merge-line {
+  position: relative;
+  z-index: 4;
+  width: min(760px, 92%);
+  height: 84px;
+  margin: 2px auto;
+}
+
+.context-handoff-line > span,
+.delivery-merge-line > span {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 1px;
+  height: 29px;
+  background: #aebdd0;
+}
+
+.context-handoff-line::after,
+.delivery-merge-line::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  height: 29px;
+  background: #aebdd0;
+}
+
+.context-handoff-line > div,
+.delivery-merge-line > div {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  grid-template-columns: 9px auto;
+  gap: 2px 8px;
+  align-items: center;
+  padding: 8px 11px;
+  border: 1px solid #cbd7e5;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 6px 16px rgba(30, 46, 70, 0.07);
+  transform: translate(-50%, -50%);
+}
+
+.context-handoff-line i {
+  grid-row: 1 / 3;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #4f73e8;
+  box-shadow: 0 0 0 4px rgba(79, 115, 232, 0.1);
+}
+
+.delivery-merge-line i {
+  grid-row: 1 / 3;
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: #4f73e8;
+  transform: rotate(45deg);
+}
+
+.context-handoff-line p,
+.delivery-merge-line p {
+  margin: 0;
+}
+
+.context-handoff-line strong,
+.delivery-merge-line strong {
+  display: block;
+  color: #4c607c;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.context-handoff-line em,
+.delivery-merge-line em {
+  display: block;
+  margin-top: 2px;
+  color: #7e8a9b;
+  font-size: 9px;
+  font-style: normal;
+}
+
+.aggregation-agent-grid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, 290px), 1fr)
+  );
+  gap: 15px;
+  width: min(850px, 100%);
+  margin: 0 auto;
+}
+
+.aggregation-agent-card {
+  min-height: 265px;
+}
+
+.aggregation-inputs {
+  margin-top: 11px;
+  padding: 9px 10px;
+  border: 1px solid #e1e6ee;
+  border-radius: 9px;
+  background: #fafbfc;
+}
+
+.aggregation-inputs > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.aggregation-inputs em {
+  padding: 4px 7px;
+  border: 1px solid var(--agent-accent-border);
+  border-radius: 5px;
+  color: var(--agent-accent);
+  background: var(--agent-accent-soft);
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.delivery-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.delivery-summary {
+  display: grid;
+  grid-template-columns: 50px minmax(0, 1fr) auto auto;
+  gap: 14px;
+  width: min(800px, 100%);
+  align-items: center;
+  padding: 17px 18px;
+  border: 1px solid #cad8e9;
+  border-radius: 14px;
+  background:
+      radial-gradient(
+          circle at 78% 0%,
+          rgba(79, 115, 232, 0.08),
+          transparent 36%
+      ),
+      linear-gradient(
+          145deg,
+          #ffffff,
+          #f8fbff
+      );
+  box-shadow: 0 10px 28px rgba(30, 51, 82, 0.065);
+}
+
+.delivery-summary.status-running {
+  border-color: #8da6dd;
+  box-shadow:
+      0 13px 32px rgba(44, 68, 119, 0.11),
+      inset 3px 0 0 #4f73e8;
+}
+
+.delivery-summary.status-success {
+  border-color: #b7dece;
+  background:
+      radial-gradient(
+          circle at 78% 0%,
+          rgba(36, 164, 124, 0.08),
+          transparent 36%
+      ),
+      linear-gradient(
+          145deg,
+          #ffffff,
+          #f3fbf7
+      );
+}
+
+.delivery-icon {
+  width: 50px;
+  height: 50px;
+  border-radius: 13px;
+}
+
+.delivery-copy {
+  min-width: 0;
+}
+
+.delivery-copy p {
+  margin: 5px 0 0;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delivery-count {
+  padding: 8px 16px;
+  border-right: 1px solid #e0e6ed;
+  border-left: 1px solid #e0e6ed;
+  text-align: center;
+}
+
+.delivery-count span {
+  display: block;
+  color: #7f8b9d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.delivery-count strong {
+  display: block;
+  margin-top: 3px;
+  color: #2f4058;
+  font-size: 20px;
+  font-weight: 850;
+}
+
+.delivery-progress {
+  grid-column: 2 / 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 9px;
+  align-items: center;
+}
+
+.delivery-progress span {
+  color: #62728a;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.delivery-progress b {
+  color: #40516a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.agent-station-enter-active,
+.agent-station-leave-active {
+  transition:
+      opacity 280ms ease,
+      transform 280ms ease;
+}
+
+.agent-station-enter-from,
+.agent-station-leave-to {
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
+}
+
+/* Agent 完整流程弹窗 */
+.detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 26px;
+  background: rgba(18, 28, 45, 0.38);
+  backdrop-filter: blur(5px);
+}
+
+.agent-detail-panel {
+  --agent-accent: #4f73e8;
+  --agent-accent-soft: rgba(79, 115, 232, 0.08);
+  --agent-accent-border: rgba(79, 115, 232, 0.26);
+  --agent-accent-glow: rgba(79, 115, 232, 0.14);
+
+  width: min(1040px, calc(100vw - 36px));
+  max-height: min(860px, 90vh);
+  overflow: hidden;
+  border: 1px solid #d8e1ec;
+  border-radius: 18px;
+  background: #ffffff;
+  box-shadow: 0 32px 86px rgba(14, 24, 40, 0.22);
+}
+
+.detail-header {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto 34px;
+  gap: 13px;
+  align-items: center;
+  min-height: 78px;
+  padding: 15px 18px;
+  border-bottom: 1px solid #e1e7ef;
+  background:
+      linear-gradient(
+          90deg,
+          var(--agent-accent-soft),
+          rgba(255, 255, 255, 0.98) 35%
+      );
+}
+
+.detail-agent-icon {
+  width: 48px;
+  height: 48px;
+  border-color: var(--agent-accent-border);
+  border-radius: 12px;
+  color: var(--agent-accent);
+  background: var(--agent-accent-soft);
+}
+
+.detail-agent-title {
+  min-width: 0;
+}
+
+.detail-agent-title > span {
+  display: block;
+  color: var(--agent-accent);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+}
+
+.detail-agent-title h3 {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: #263449;
+  font-size: 18px;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-agent-title p {
+  margin: 2px 0 0;
+  color: #718096;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.detail-status {
+  display: inline-flex;
+  height: 29px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 9px;
+  border: 1px solid #dce3eb;
+  border-radius: 7px;
+  color: #6f7c90;
+  background: #ffffff;
+  font-size: 11px;
   font-weight: 750;
   white-space: nowrap;
 }
 
-.workflow-error-status em {
-  color: #b45a5a;
-  font-size: 9px;
-  font-style: normal;
-  white-space: nowrap;
+.detail-header button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #d8e0e9;
+  border-radius: 8px;
+  color: #64748b;
+  background: #ffffff;
+  font: inherit;
+  font-size: 20px;
+  cursor: pointer;
+  transition:
+      border-color 180ms ease,
+      color 180ms ease,
+      background-color 180ms ease;
 }
 
-.workflow-error-status svg {
-  font-size: 11px;
+.detail-header button:hover {
+  border-color: var(--agent-accent-border);
+  color: var(--agent-accent);
+  background: var(--agent-accent-soft);
 }
 
-.workflow-error-status:focus-visible {
-  outline: 3px solid rgba(217, 74, 74, 0.2);
-  outline-offset: 2px;
+.detail-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(340px, 0.92fr);
+  min-height: 0;
+  max-height: calc(90vh - 78px);
 }
 
-/* Custom Styles for Simplified Cards & Neon Breathing Glow */
-.msg-queue-shell {
+.detail-overview,
+.detail-history {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.detail-overview {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  overflow: hidden;
+  gap: 14px;
+  padding: 18px;
+  border-right: 1px solid #e2e8f0;
 }
 
-.message-queue-item {
-  display: flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  min-height: 0 !important;
-  grid-template-columns: none !important;
+.detail-current-task {
+  padding: 14px;
+  border: 1px solid var(--agent-accent-border);
+  border-radius: 11px;
+  background: var(--agent-accent-soft);
 }
 
-.message-queue-item.is-head {
-  opacity: 0.5;
-}
-
-.message-queue-item.is-head .live-message-only {
-  font-size: 0.7rem !important;
-  font-weight: var(--weight-bold) !important;
-  -webkit-line-clamp: 1 !important;
-}
-
-/* Broadcast queue animation:
-   - New message (tail): slides up from below + fades in
-   - Old head leaving: slides up + fades out
-   - Tail becoming head: smoothly transitions opacity/size via is-head class */
-.msg-queue-enter-active {
-  transition: opacity 0.35s ease, transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.msg-queue-leave-active {
-  transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.4, 0, 1, 1);
-  position: absolute;
-  width: 100%;
-}
-
-.msg-queue-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
-.msg-queue-enter-from {
-  opacity: 0;
-  transform: translateY(12px);
-}
-
-.msg-queue-move {
-  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.message-only-layout {
-  display: flex !important;
-  align-items: center !important;
-  gap: 10px !important;
-  height: 100% !important;
-  grid-template-columns: none !important;
-}
-
-.live-message-only {
-  margin: 0 !important;
-  color: var(--color-text);
-  font-size: 0.74rem !important;
-  font-weight: var(--weight-bold) !important;
-  line-height: 1.4 !important;
-  display: -webkit-box;
-  -webkit-line-clamp: 2 !important;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-family: var(--agent-body-font);
-}
-
-/* Pulsing Neon border glow animation for running cards */
-@keyframes card-neon-glow {
-  0% {
-    border-color: rgba(59, 130, 246, 0.45);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2), 0 10px 25px rgba(59, 130, 246, 0.1);
-  }
-  50% {
-    border-color: rgba(59, 130, 246, 0.95);
-    box-shadow: 0 0 20px rgba(59, 130, 246, 0.55), 0 10px 40px rgba(59, 130, 246, 0.25);
-  }
-  100% {
-    border-color: rgba(59, 130, 246, 0.45);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.2), 0 10px 25px rgba(59, 130, 246, 0.1);
-  }
-}
-
-.agent-station-card.status-running {
-  animation: card-neon-glow 2s infinite ease-in-out !important;
-  border-color: rgba(59, 130, 246, 0.8) !important;
-}
-
-/* Beautiful custom status-aligned dots */
-.station-live-dot.waiting,
-.station-live-dot.skipped {
-  background: #94A3B8 !important;
-  box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.2) !important;
-}
-
-.station-live-dot.running {
-  background: #3B82F6 !important;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25) !important;
-  animation: dot-pulse-glow 1.5s infinite ease-in-out !important;
-}
-
-.station-live-dot.success {
-  background: #10B981 !important;
-  box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.25) !important;
-}
-
-.station-live-dot.failed {
-  background: #EF4444 !important;
-  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.25) !important;
-}
-
-@keyframes dot-pulse-glow {
-  0% {
-    transform: scale(0.9);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.15);
-    opacity: 1;
-    box-shadow: 0 0 8px rgba(59, 130, 246, 0.6), 0 0 0 5px rgba(59, 130, 246, 0.3) !important;
-  }
-  100% {
-    transform: scale(0.9);
-    opacity: 0.8;
-  }
-}
-
-/* 微调多智能体动画页面样式 - 保持原有布局，仅增强高级感 */
-.agent-flow-canvas {
-  background: 
-    radial-gradient(circle at 50% 25%, rgba(99, 102, 241, 0.08), transparent 45%),
-    radial-gradient(circle at 20% 75%, rgba(14, 165, 233, 0.05), transparent 35%),
-    radial-gradient(circle at 80% 80%, rgba(16, 185, 129, 0.05), transparent 35%),
-    #fafbfd !important;
-  border-color: rgba(15, 23, 42, 0.05) !important;
-}
-
-.agent-station-card-v4 {
-  background: rgba(255, 255, 255, 0.85) !important;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(15, 23, 42, 0.06) !important;
-  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.02) !important;
-  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
-}
-
-.agent-station-card-v4:hover,
-.agent-station-card-v4.is-selected {
-  transform: translateY(-4px) !important;
-  border-color: var(--color-primary) !important;
-  box-shadow: 0 12px 28px rgba(99, 102, 241, 0.08) !important;
-}
-
-/* 运行中的呼吸光晕 */
-.agent-station-card.status-running {
-  border-color: var(--color-primary) !important;
-  animation: card-premium-glow 2.5s infinite ease-in-out !important;
-}
-
-@keyframes card-premium-glow {
-  0%, 100% {
-    box-shadow: 0 4px 18px rgba(99, 102, 241, 0.03), 0 0 0 1px rgba(99, 102, 241, 0.1);
-    border-color: rgba(99, 102, 241, 0.3) !important;
-  }
-  50% {
-    box-shadow: 0 12px 30px rgba(99, 102, 241, 0.08), 0 0 0 2px rgba(99, 102, 241, 0.2);
-    border-color: rgba(99, 102, 241, 0.7) !important;
-  }
-}
-
-/* 成功状态 */
-.agent-station-card.status-success,
-.agent-station-card.has-artifact {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(16, 185, 129, 0.24) !important;
-  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.02) !important;
-}
-
-/* 连接线微妙光晕 */
-.agent-link-path {
-  stroke-width: 2;
-  transition: all 0.3s ease;
-}
-
-.agent-link-path.status-running {
-  stroke-width: 2.5;
-  stroke: var(--color-primary);
-  opacity: 0.8;
-}
-
-.agent-link-path.status-success {
-  stroke: #10B981 !important;
-  opacity: 0.6;
-}
-
-/* ==================== 内联 Outputs 样式 ==================== */
-.output-dock-section {
-  padding: 18px 24px 24px;
-  border-top: 1px solid #e3e8ef;
-  background: #f6f8fb;
-}
-
-.output-dock-section-v4 {
-  margin-top: 14px;
-  border-radius: var(--radius-outer);
-  background: var(--generator-card-bg);
-  backdrop-filter: var(--generator-card-blur);
-  -webkit-backdrop-filter: var(--generator-card-blur);
-  border: var(--generator-card-border);
-  box-shadow: var(--generator-card-shadow);
-  border-top: none;
-}
-
-.output-dock-heading {
+.detail-section-heading {
   display: flex;
-  align-items: end;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 12px;
 }
 
-.output-dock-heading > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.output-dock-heading span {
-  color: #98a2b3;
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-}
-
-.output-dock-heading strong {
-  color: #263246;
-  font-size: 14px;
-}
-
-.output-dock-heading p {
-  margin: 0;
-  color: #7a8494;
-  font-size: 10px;
-}
-
-.output-dock-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-  gap: 8px;
-}
-
-.output-dock-item {
-  position: relative;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid transparent;
-  border-left: 3px solid transparent;
-  border-radius: 10px;
-  background: #f4f6f9;
-  color: #94a3b8;
-  text-align: left;
-  opacity: 0.65;
-  cursor: default;
-  transition: opacity 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-.output-dock-item.ready {
-  opacity: 1;
-  background: #ffffff;
-  border-left-color: #20b986;
-  border-color: rgba(16, 185, 129, 0.18);
-  color: #344054;
-  cursor: pointer;
-}
-
-.output-dock-item.ready:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgb(15 23 42 / 6%), 0 0 0 1px rgba(16, 185, 129, 0.12);
-  border-left-color: #10b981;
-}
-
-.output-dock-item.running {
-  opacity: 1;
-  background: #ffffff;
-  border-left-color: #3b82f6;
-  border-color: rgba(59, 130, 246, 0.18);
-  color: #344054;
-  cursor: default;
-  animation: border-shimmer 2s infinite ease-in-out;
-}
-
-@keyframes border-shimmer {
-  0%, 100% { border-left-color: rgba(59, 130, 246, 0.48); }
-  50% { border-left-color: rgba(59, 130, 246, 0.9); }
-}
-
-.output-icon {
-  display: grid;
-  width: 28px;
-  height: 28px;
-  place-items: center;
-  border-radius: 8px;
-  background: #edf4fc;
-  color: #2c5f9f;
-  transition: background-color 0.2s ease, color 0.2s ease;
-}
-
-.output-dock-item.running .output-icon {
-  background: #dbeafe;
-  color: #3b82f6;
-}
-
-.output-dock-item.waiting .output-icon {
-  background: #f1f5f9;
-  color: #cbd5e1;
-}
-
-.output-copy {
-  min-width: 0;
-}
-
-.output-copy strong,
-.output-copy small {
+.detail-section-heading > div > span {
   display: block;
+  color: var(--agent-accent);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.detail-section-heading > div > strong {
+  display: block;
+  margin-top: 4px;
+  color: #34465d;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.detail-section-heading > b {
+  color: var(--agent-accent);
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.detail-current-task > p {
+  margin: 10px 0 0;
+  color: #47586f;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+
+.detail-progress-row {
+  margin-top: 12px;
+}
+
+.detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.detail-metrics > div {
+  padding: 11px;
+  border: 1px solid #e0e7ef;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.detail-metrics dt {
+  color: #7f8b9d;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.detail-metrics dd {
+  margin: 5px 0 0;
   overflow: hidden;
+  color: #3f5068;
+  font-size: 11px;
+  font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.output-copy strong {
-  font-size: 11px;
-  transition: color 0.2s ease;
+.detail-full-process {
+  padding: 14px;
+  border: 1px solid #e0e7ef;
+  border-radius: 11px;
+  background: #ffffff;
 }
 
-.output-dock-item.waiting .output-copy strong {
-  color: #94a3b8;
+.detail-section-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
 
-.output-copy small {
-  font-size: 9px;
-  color: #98a2b3;
+.detail-section-title span {
+  display: block;
+  color: #35465d;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.detail-section-title p {
+  margin: 4px 0 0;
+  color: #7b8798;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.detail-section-title > em {
+  padding: 4px 8px;
+  border: 1px solid var(--agent-accent-border);
+  border-radius: 6px;
+  color: var(--agent-accent);
+  background: var(--agent-accent-soft);
+  font-size: 10px;
   font-style: normal;
+  font-weight: 800;
 }
 
-.output-dock-item.waiting .output-copy small {
-  color: #cbd5e1;
+.detail-process-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-top: 14px;
 }
 
-.output-status {
-  display: inline-flex;
+.detail-process-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 11px;
+  min-height: 70px;
+}
+
+.detail-process-index {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.detail-process-index > span {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  color: #7c899a;
+  background: #e7ecf2;
+  box-shadow: 0 0 0 1px #d2dbe5;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.detail-process-index > i {
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: #dce3eb;
+  transform: translateX(-50%);
+}
+
+.detail-process-step:last-child .detail-process-index > i {
+  display: none;
+}
+
+.detail-process-copy {
+  padding: 2px 0 15px;
+}
+
+.detail-process-copy > div {
+  display: flex;
   align-items: center;
-  gap: 2px;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-process-copy strong {
+  color: #43536a;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.detail-process-copy em {
+  color: #8995a6;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.detail-process-copy p {
+  margin: 6px 0 0;
+  color: #718096;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.detail-process-step.running .detail-process-index > span {
+  color: #ffffff;
+  background: var(--agent-accent);
+  box-shadow:
+      0 0 0 1px var(--agent-accent-border),
+      0 0 0 5px var(--agent-accent-soft);
+  animation: execution-pulse 1.5s ease-in-out infinite;
+}
+
+.detail-process-step.running .detail-process-copy strong,
+.detail-process-step.running .detail-process-copy em {
+  color: var(--agent-accent);
+}
+
+.detail-process-step.success .detail-process-index > span {
+  color: #ffffff;
+  background: #2ca27b;
+  box-shadow: 0 0 0 1px #76c5aa;
+}
+
+.detail-process-step.success .detail-process-index > i {
+  background: #8acbb4;
+}
+
+.detail-process-step.success .detail-process-copy strong,
+.detail-process-step.success .detail-process-copy em {
+  color: #277b62;
+}
+
+.detail-process-step.failed .detail-process-index > span {
+  color: #ffffff;
+  background: #d65050;
+  box-shadow: 0 0 0 1px #e39898;
+}
+
+.detail-process-step.failed .detail-process-copy strong,
+.detail-process-step.failed .detail-process-copy em {
+  color: #ae4141;
+}
+
+.detail-io-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.detail-io-grid article {
+  padding: 12px;
+  border: 1px solid #e0e7ef;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.detail-io-grid span {
+  color: var(--agent-accent);
+}
+
+.detail-io-grid p {
+  margin: 6px 0 0;
+  color: #5e6d83;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.detail-metric-section {
+  padding: 12px;
+  border: 1px solid #e0e7ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.detail-metric-section > span {
+  color: #52627a;
+}
+
+.detail-metric-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.detail-metric-chips em {
+  padding: 5px 8px;
+  border: 1px solid var(--agent-accent-border);
+  border-radius: 6px;
+  color: var(--agent-accent);
+  background: var(--agent-accent-soft);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.detail-history {
+  padding: 18px;
+  background: #f8fafc;
+}
+
+.detail-history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e0e7ef;
+}
+
+.detail-history-header span {
+  display: block;
+  color: var(--agent-accent);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.detail-history-header h4 {
+  margin: 4px 0 0;
+  color: #2d3c51;
+  font-size: 15px;
+  font-weight: 850;
+}
+
+.detail-history-header p {
+  margin: 5px 0 0;
+  color: #7b8798;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.detail-history-header > em {
+  padding: 5px 8px;
+  border: 1px solid #d5dee8;
+  border-radius: 6px;
+  color: #68778b;
+  background: #ffffff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.timeline-stream {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-top: 15px;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 10px;
+  min-height: 92px;
+}
+
+.timeline-axis {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.timeline-axis > span {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 2px solid #f8fafc;
+  border-radius: 50%;
+  color: #738095;
+  background: #e3e9f0;
+  box-shadow: 0 0 0 1px #ced8e3;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.timeline-axis > i {
+  position: absolute;
+  top: 28px;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: #d4dde7;
+  transform: translateX(-50%);
+}
+
+.timeline-item:last-child .timeline-axis > i {
+  display: none;
+}
+
+.timeline-card {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid #dfe6ee;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.timeline-card > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timeline-card > header > div {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.timeline-card strong {
+  color: #43536a;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.timeline-card header span {
   padding: 3px 6px;
-  border-radius: 4px;
+  border-radius: 5px;
+  color: #718096;
+  background: #eef2f6;
   font-size: 9px;
   font-weight: 700;
+}
+
+.timeline-card header > em {
+  color: #8793a4;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
   font-style: normal;
   white-space: nowrap;
-  transition: color 0.2s ease, background-color 0.2s ease;
 }
 
-.output-dock-item.ready .output-status {
-  color: #16a34a;
-  background: rgba(16, 185, 129, 0.08);
+.timeline-card p {
+  margin: 8px 0 0;
+  color: #617086;
+  font-size: 11px;
+  line-height: 1.55;
 }
 
-.output-dock-item.running .output-status {
-  color: #2563eb;
-  background: rgba(59, 130, 246, 0.08);
+.timeline-item.is-running .timeline-axis > span {
+  color: #ffffff;
+  background: var(--agent-accent);
+  box-shadow:
+      0 0 0 1px var(--agent-accent-border),
+      0 0 0 5px var(--agent-accent-soft);
 }
 
-.output-dock-item.waiting .output-status {
-  color: #94a3b8;
-  background: transparent;
+.timeline-item.is-running .timeline-card {
+  border-color: var(--agent-accent-border);
 }
 
-.loading-dots {
-  display: inline-block;
-  animation: dots-pulse 1.2s infinite;
+.timeline-item.is-running .timeline-card strong {
+  color: var(--agent-accent);
 }
 
-@keyframes dots-pulse {
-  0%, 20% { opacity: 0.2; }
-  50% { opacity: 1; }
-  80%, 100% { opacity: 0.2; }
+.timeline-item.is-success .timeline-axis > span {
+  color: #ffffff;
+  background: #2ca27b;
+  box-shadow: 0 0 0 1px #78c6ac;
 }
 
-.output-dock-item.just-arrived {
-  animation: artifact-arrive 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+.timeline-item.is-success .timeline-axis > i {
+  background: #89cbb3;
 }
 
-@keyframes artifact-arrive {
-  0% {
-    transform: scale(0.9);
-    opacity: 0;
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-  }
-  60% {
-    transform: scale(1.02);
-    opacity: 1;
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0.25);
-  }
-  100% {
-    transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
-  }
+.timeline-item.is-success .timeline-card {
+  border-color: #bfe0d4;
 }
 
-/* ==================== 内联 Logs 样式 ==================== */
-.custom-modal-overlay {
+.timeline-item.is-failed .timeline-axis > span {
+  color: #ffffff;
+  background: #d65050;
+  box-shadow: 0 0 0 1px #e49b9b;
+}
+
+.timeline-item.is-failed .timeline-card {
+  border-color: #edc0c0;
+  background: #fffafa;
+}
+
+.timeline-item.is-failed .timeline-card strong {
+  color: #ae4141;
+}
+
+.timeline-empty {
+  display: flex;
+  min-height: 260px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin-top: 15px;
+  border: 1px dashed #d6dfe9;
+  border-radius: 11px;
+  background: #ffffff;
+  text-align: center;
+}
+
+.timeline-empty > span {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #b7c1cd;
+  box-shadow: 0 0 0 6px rgba(148, 163, 184, 0.12);
+}
+
+.timeline-empty strong {
+  margin-top: 14px;
+  color: #52627a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.timeline-empty p {
+  margin: 5px 0 0;
+  color: #8793a4;
+  font-size: 11px;
+}
+
+/* 日志抽屉 */
+.drawer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
-  background: rgb(15 23 42 / 28%);
+  z-index: 1300;
+  background: rgba(17, 27, 43, 0.31);
 }
 
 .log-drawer {
@@ -4105,85 +4865,129 @@ function isOutputRunning(id: string) {
   top: 0;
   right: 0;
   display: flex;
-  width: min(420px, 100%);
+  width: min(450px, 100%);
   height: 100%;
   flex-direction: column;
-  padding: 24px;
-  background: #fff;
-  box-shadow: -18px 0 48px rgb(15 23 42 / 14%);
+  background: #ffffff;
+  box-shadow: -20px 0 55px rgba(12, 22, 38, 0.16);
 }
 
-.log-drawer header {
+.log-drawer > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #e8ecf1;
+  padding: 21px 22px 17px;
+  border-bottom: 1px solid #e2e7ee;
 }
 
-.log-drawer h3 {
-  margin: 0;
-  color: #263246;
-  font-size: 14px;
+.log-drawer > header span {
+  display: block;
+  color: #8793a4;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.1em;
 }
 
-.log-drawer button {
-  border: 0;
-  color: #98a2b3;
-  background: transparent;
-  font-size: 22px;
+.log-drawer > header h3 {
+  margin: 4px 0 0;
+  color: #28364a;
+  font-size: 16px;
+  font-weight: 850;
+}
+
+.log-drawer > header button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid #dce3eb;
+  border-radius: 7px;
+  color: #7a8799;
+  background: #ffffff;
+  font: inherit;
+  font-size: 20px;
   cursor: pointer;
 }
 
 .drawer-log-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0;
   overflow-y: auto;
-  padding-top: 14px;
+  padding: 9px 22px 22px;
 }
 
 .drawer-log-item {
   display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid #eef1f5;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 11px;
+  padding: 14px 0;
+  border-bottom: 1px solid #edf0f4;
 }
 
 .drawer-log-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   margin-top: 5px;
   border-radius: 50%;
-  background: #98a2b3;
+  background: #a7b1bf;
 }
 
 .drawer-log-item.is-running .drawer-log-dot {
-  background: #3b75bd;
+  background: #4f73e8;
+  box-shadow: 0 0 0 4px rgba(79, 115, 232, 0.1);
 }
 
 .drawer-log-item.is-success .drawer-log-dot {
-  background: #168357;
+  background: #28a07a;
 }
 
 .drawer-log-item.is-failed .drawer-log-dot {
-  background: #c04444;
+  background: #d45050;
 }
 
 .drawer-log-item strong {
-  color: #344054;
-  font-size: 11px;
+  display: block;
+  color: #405068;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .drawer-log-item p,
 .empty-log {
-  margin: 3px 0 0;
-  color: #7a8494;
-  font-size: 10px;
-  line-height: 1.5;
+  margin: 5px 0 0;
+  color: #718096;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.detail-fade-enter-active,
+.detail-fade-leave-active {
+  transition: opacity 220ms ease;
+}
+
+.detail-fade-enter-from,
+.detail-fade-leave-to {
+  opacity: 0;
+}
+
+.detail-fade-enter-active .agent-detail-panel,
+.detail-fade-leave-active .agent-detail-panel {
+  transition:
+      opacity 220ms ease,
+      transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.detail-fade-enter-from .agent-detail-panel,
+.detail-fade-leave-to .agent-detail-panel {
+  opacity: 0;
+  transform: translateY(12px) scale(0.97);
 }
 
 .slide-over-enter-active,
 .slide-over-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 210ms ease;
 }
 
 .slide-over-enter-from,
@@ -4191,14 +4995,389 @@ function isOutputRunning(id: string) {
   opacity: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .output-dock-item.just-arrived,
-  .output-dock-item.running,
-  .loading-dots {
-    animation: none !important;
+.slide-over-enter-active .log-drawer,
+.slide-over-leave-active .log-drawer {
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide-over-enter-from .log-drawer,
+.slide-over-leave-to .log-drawer {
+  transform: translateX(100%);
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(0.94);
   }
-  .output-dock-item.ready:hover {
-    transform: none;
+
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+}
+
+@keyframes planning-running {
+  0%,
+  100% {
+    box-shadow:
+        0 18px 44px rgba(59, 91, 170, 0.13),
+        0 0 0 5px rgba(79, 115, 232, 0.045);
+  }
+
+  50% {
+    box-shadow:
+        0 23px 52px rgba(59, 91, 170, 0.19),
+        0 0 0 7px rgba(79, 115, 232, 0.08);
+  }
+}
+
+@keyframes planning-ring {
+  0% {
+    opacity: 0.42;
+    transform: scale(0.94);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes progress-flow {
+  to {
+    background-position: -180% 0;
+  }
+}
+
+@keyframes link-flow {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+
+@keyframes terminal-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    r: 4;
+  }
+
+  50% {
+    opacity: 1;
+    r: 6;
+  }
+}
+
+@keyframes card-line-flow {
+  to {
+    right: -40%;
+    left: 100%;
+  }
+}
+
+@keyframes execution-pulse {
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+@keyframes handoff-return {
+  0% {
+    left: 5%;
+    opacity: 0;
+  }
+
+  12% {
+    opacity: 1;
+  }
+
+  75% {
+    opacity: 1;
+  }
+
+  100% {
+    left: 46%;
+    opacity: 0;
+  }
+}
+
+@media (max-width: 1320px) {
+  .workflow-summary {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .summary-metrics {
+    justify-content: flex-start;
+  }
+
+  .summary-progress:first-child {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+@media (max-width: 1100px) {
+  .summary-main {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 11px;
+  }
+
+  .route-progress {
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .workbench-header {
+    flex-direction: column;
+  }
+
+  .workbench-controls {
+    justify-content: flex-start;
+  }
+
+  .parallel-agent-grid {
+    grid-template-columns: repeat(
+      2,
+      minmax(0, 1fr)
+    );
+  }
+
+  .coordination-steps {
+    flex-direction: column;
+  }
+
+  .coordination-step-line {
+    width: 1px;
+    height: 14px;
+    margin-left: 14px;
+  }
+
+  .detail-body {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+
+  .detail-overview,
+  .detail-history {
+    overflow: visible;
+  }
+
+  .detail-overview {
+    border-right: 0;
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .agent-detail-panel {
+    overflow-y: auto;
+  }
+
+  .detail-body {
+    max-height: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .workflow-page {
+    padding: 13px 10px 38px;
+  }
+
+  .workflow-workbench {
+    padding: 13px;
+    border-radius: 14px;
+  }
+
+  .workflow-canvas {
+    padding: 19px 14px;
+  }
+
+  .summary-metrics {
+    display: grid;
+    grid-template-columns: repeat(
+      3,
+      minmax(0, 1fr)
+    );
+    width: 100%;
+  }
+
+  .summary-progress,
+  .summary-metric {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 5px 9px;
+  }
+
+  .summary-progress {
+    border-left: 0;
+  }
+
+  .summary-progress-track {
+    width: 100%;
+  }
+
+  .summary-log-button {
+    grid-column: 1 / -1;
+    width: 100%;
+    justify-content: center;
+    margin: 9px 0 0;
+  }
+
+  .stage-heading {
+    grid-template-columns: 36px minmax(0, 1fr);
+  }
+
+  .stage-heading > em,
+  .stage-live-summary {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .parallel-agent-grid,
+  .aggregation-agent-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .agent-link-svg {
+    display: none;
+  }
+
+  .planning-dispatch-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .planning-card-header,
+  .agent-card-header {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .planning-card-header > .node-status-badge,
+  .agent-card-header > .node-status-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .agent-card {
+    min-height: 235px;
+  }
+
+  .coordination-flow-header {
+    flex-direction: column;
+  }
+
+  .delivery-summary {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .delivery-count {
+    grid-column: 2;
+    border: 0;
+    padding: 5px 0;
+    text-align: left;
+  }
+
+  .delivery-summary > .node-status-badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .delivery-progress {
+    grid-column: 1 / -1;
+  }
+
+  .detail-overlay {
+    padding: 10px;
+  }
+
+  .agent-detail-panel {
+    width: calc(100vw - 20px);
+    max-height: 94vh;
+  }
+
+  .detail-header {
+    grid-template-columns: 44px minmax(0, 1fr) 32px;
+  }
+
+  .detail-status {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .detail-header button {
+    grid-column: 3;
+    grid-row: 1;
+  }
+
+  .detail-metrics,
+  .detail-io-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .handoff-packet span {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .summary-metrics {
+    grid-template-columns: repeat(
+      2,
+      minmax(0, 1fr)
+    );
+  }
+
+  .summary-progress,
+  .summary-metric {
+    border-left: 0;
+  }
+
+  .summary-progress {
+    grid-column: 1 / -1;
+  }
+
+  .route-connector {
+    min-width: 10px;
+  }
+
+  .workbench-controls {
+    flex-wrap: wrap;
+  }
+
+  .detail-metrics,
+  .detail-io-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-overview,
+  .detail-history {
+    padding: 14px;
+  }
+
+  .timeline-item {
+    grid-template-columns: 32px minmax(0, 1fr);
+  }
+
+  .timeline-card > header {
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workflow-page *,
+  .workflow-page *::before,
+  .workflow-page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .agent-data-packet {
+    display: none;
   }
 }
 </style>

@@ -33,6 +33,7 @@ from app.infra.models import (
     PathNodeResource,
     PathNodeTutorial,
     User,
+    WrongQuestion,
 )
 from app.profile.service import get_profile_service
 from app.resource.schemas import AgentResult
@@ -45,13 +46,48 @@ from app.path.schemas import (
     PlanNode,
     AgentStage,
     PathRequest,
+    PathPreferences,
     LearnState,
     AgentQuestionSet,
     LearningPathTutorialDTO,
-    PathResourceRequest,
 )
 
 logger = get_logger(__name__)
+
+# ======================================================================
+# 偏好参数语义化映射
+# ======================================================================
+
+# 学习场景 → 自然语言描述
+SCENE_DESCRIPTIONS: dict[str, str] = {
+    "general": "通用学习场景，注重知识体系完整性和循序渐进",
+    "exam": "考试复习场景，重点覆盖高频考点和易错点，强化记忆和练习",
+    "beginner": "基础入门场景，从零开始讲解，强调概念清晰和示例丰富",
+    "project": "项目实战场景，以实际项目为主线，边做边学，强调动手实践",
+    "interview": "面试准备场景，聚焦高频面试题和核心概念，强调表达和总结",
+}
+
+# 学习节奏 → 自然语言描述
+PACE_DESCRIPTIONS: dict[str, str] = {
+    "slow": "慢速细学，每个知识点展开讲解，提供更多背景知识和延伸阅读",
+    "normal": "正常节奏，平衡讲解深度和推进速度",
+    "fast": "快速推进，精简内容，聚焦核心要点，减少冗余讲解",
+}
+
+# 路径粒度 → 自然语言描述
+GRANULARITY_DESCRIPTIONS: dict[str, str] = {
+    "coarse": "粗略路径，阶段和节点数量较少（建议3-5个阶段，每阶段2-3个节点）",
+    "standard": "标准路径，阶段和节点数量适中（建议4-6个阶段，每阶段3-5个节点）",
+    "fine": "细节点路径，阶段和节点数量较多（建议5-8个阶段，每阶段4-6个节点）",
+}
+
+# 规划重点 → 自然语言描述
+FOCUS_DESCRIPTIONS: dict[str, str] = {
+    "foundation": "补基础：优先安排基础概念和前置知识，确保根基稳固",
+    "key_points": "抓重点：聚焦核心考点和关键机制，减少边缘内容",
+    "practice": "多练习：增加练习题和实战环节，强化动手能力",
+    "weakness": "补薄弱点：针对已知薄弱环节强化，重点攻克易错点",
+}
 
 # ======================================================================
 # 1. 兜底与修复规划函数
@@ -199,7 +235,7 @@ def _parse_markdown_metadata(text: str) -> tuple[dict, str]:
     Returns:
         (metadata_dict, body_text) — 无法解析时返回 ({}, text)。
     """
-    stripped = text.lstrip()
+    stripped = _normalize_tutorial_markdown(text)
     meta: dict = {}
 
     # 1. 提取一级标题作为 title
@@ -251,6 +287,29 @@ def _parse_markdown_metadata(text: str) -> tuple[dict, str]:
     return meta, body
 
 
+def _normalize_tutorial_markdown(text: str) -> str:
+    """Return the canonical Markdown document produced by the tutorial agent."""
+    stripped = text.strip().lstrip("\ufeff")
+    if not stripped:
+        return ""
+
+    opening = re.match(
+        r"^(?P<fence>`{3,}|~{3,})(?P<language>markdown|md|text)?[ \t]*\r?\n",
+        stripped,
+        flags=re.IGNORECASE,
+    )
+    if opening is None:
+        return stripped
+
+    fence = re.escape(opening.group("fence"))
+    closing = re.search(rf"\r?\n{fence}[ \t]*$", stripped)
+    document_end = closing.start() if closing is not None else len(stripped)
+    document = stripped[opening.end():document_end].strip()
+    if re.match(r"^#\s+\S", document) and re.search(r"^##\s+\S", document, re.MULTILINE):
+        return document
+    return stripped
+
+
 # ======================================================================
 # 2. 路径规划智能体
 # ======================================================================
@@ -268,6 +327,7 @@ class PathState(TypedDict):
     search_context: str
     progress_callback: ProgressCallback | None
     final_plan: LearningPlan | None
+    guidance_strategy: dict[str, Any]
 
 
 # 路径规划智能体：联网检索 + LLM 生成阶段与节点
@@ -325,9 +385,9 @@ class PathPlannerAgent:
             )
 
             # 根据用户偏好决定是否融合个人画像
-            use_profile = state["request"].preferences.get("use_profile", True)
-            if use_profile is False or use_profile == "false":
-                profile_md = "用户已关闭个人画像融合，请勿结合画像数据，仅根据学习主题与目标进行最优路径推演规划。"
+            use_profile = state["request"].preferences.use_profile
+            if not use_profile:
+                profile_md = ""
             else:
                 profile_md = state.get("profile_markdown", "")
                 if not profile_md:
@@ -371,7 +431,7 @@ class PathPlannerAgent:
 
         return workflow.compile()
 
-    async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "") -> LearningPlan:
+    async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "", guidance_strategy: dict[str, Any] = None) -> LearningPlan:
         """执行路径规划工作流，返回 LearningPlan。
 
         失败时自动降级到 build_fallback_plan。
@@ -385,6 +445,7 @@ class PathPlannerAgent:
                 "search_context": "",
                 "progress_callback": progress_callback,
                 "final_plan": None,
+                "guidance_strategy": guidance_strategy or {},
             }
             final_state = await self.generate_graph.ainvoke(initial_state)
             plan = final_state.get("final_plan")
@@ -461,16 +522,37 @@ def _build_planner_messages(
     search_context: str,
     profile_markdown: str,
 ) -> list[Any]:
+    """组装路径规划的 LLM 消息。
+
+    消息结构：
+    - System: 规划系统提示（从 prompts 读取）
+    - Human: 结构化的请求上下文 + 画像 + 检索参考
+    """
     sys_msg = SystemMessage(
         content=prompts.get("path").get("planner_system")
     )
+
+    # 构建画像融合提示
+    profile_section = ""
+    if profile_markdown:
+        profile_section = (
+            "\n\n## 学习者画像\n\n"
+            "以下是学习者的个人画像，请结合画像特点进行个性化规划：\n\n"
+            f"{profile_markdown}"
+        )
+
+    # 构建检索参考提示
+    search_section = ""
+    if search_context:
+        search_section = f"\n\n## 联网参考\n\n{search_context}"
+
     human_msg = HumanMessage(
         content=(
             "请根据以下信息生成学习路径 JSON。\n\n"
-            f"用户请求：\n{request_context}\n\n"
-            f"联网参考：\n{search_context or '未启用或无可用参考'}\n\n"
-            f"学习者画像：\n{profile_markdown or '未提供'}\n\n"
-            "再次强调：只输出符合 schema 的 JSON 根对象，不要输出 Markdown，不要输出解释文字。"
+            f"## 学习请求\n\n{request_context}"
+            f"{profile_section}"
+            f"{search_section}"
+            "\n\n再次强调：只输出符合 schema 的 JSON 根对象，不要输出 Markdown，不要输出解释文字。"
         )
     )
     return [sys_msg, human_msg]
@@ -478,22 +560,54 @@ def _build_planner_messages(
 
 # 将 PathRequest 格式化为可读的请求上下文文本
 def _format_request(request: PathRequest) -> str:
+    """格式化请求参数为可读文本，供 LLM prompt 使用。
+
+    将结构化的偏好参数转换为自然语言描述，让 LLM 更好理解用户意图。
+    """
     current_knowledge = (
         "、".join(request.current_knowledge)
         if request.current_knowledge
         else "未提供"
     )
-    preferences = (
-        json.dumps(request.preferences, ensure_ascii=False, indent=2)
-        if request.preferences
-        else "未提供"
-    )
+
+    # 语义化偏好参数
+    preferences_desc = _format_preferences(request.preferences)
+
     return (
         f"学习目标: {request.goal}\n"
         f"学习主题: {request.topic or '未提供'}\n"
         f"已掌握知识: {current_knowledge}\n"
-        f"学习偏好:\n{preferences}"
+        f"学习偏好:\n{preferences_desc}"
     )
+
+
+# 将结构化偏好参数转换为自然语言描述
+def _format_preferences(preferences: PathPreferences) -> str:
+    """将结构化偏好参数转换为自然语言描述。"""
+    lines: list[str] = []
+
+    # 学习场景
+    scene_desc = SCENE_DESCRIPTIONS.get(preferences.scene, "通用学习场景")
+    lines.append(f"- 学习场景：{scene_desc}")
+
+    # 学习节奏
+    pace_desc = PACE_DESCRIPTIONS.get(preferences.pace, "正常节奏")
+    lines.append(f"- 学习节奏：{pace_desc}")
+
+    # 路径粒度
+    granularity_desc = GRANULARITY_DESCRIPTIONS.get(preferences.granularity, "标准路径")
+    lines.append(f"- 路径粒度：{granularity_desc}")
+
+    # 规划重点
+    if preferences.focus:
+        focus_items = [FOCUS_DESCRIPTIONS.get(f, f) for f in preferences.focus]
+        lines.append(f"- 规划重点：{'；'.join(focus_items)}")
+
+    # 是否使用画像（在 prompt 中单独处理，此处仅备注）
+    if not preferences.use_profile:
+        lines.append("- 画像融合：用户已关闭画像融合，仅根据学习目标规划")
+
+    return "\n".join(lines)
 
 
 
@@ -557,7 +671,7 @@ class NodeLearningAgent:
             logger.warning("[NodeLearningAgent] 知识库检索失败: %s", exc)
             kb_section = "无"
         # 根据 tutorial_type 选择对应的 prompt
-        prompt_key = f"tutorial_{tutorial_type}"  # tutorial_primary, tutorial_remediation, tutorial_reinforced
+        prompt_key = "tutorial_primary"  # 简化：只生成主教程
         prompt = prompts.get("path").render(
             prompt_key,
             path_goal=path_goal,
@@ -586,7 +700,9 @@ class NodeLearningAgent:
         tutorial_title: str,
         tutorial_summary: str,
         round_no: int,
+        max_retries: int = 3,
     ) -> list[dict[str, Any]]:
+        """生成测验题目，带重试机制确保返回 5 道题。"""
         prompt = prompts.get("path").render(
             "question_generation",
             path_goal=path_goal,
@@ -596,25 +712,52 @@ class NodeLearningAgent:
             tutorial_summary=tutorial_summary,
             round_no=round_no,
         )
-        result = await self.llm.ainvoke_json(AgentQuestionSet, prompt)
-        questions = result.questions if hasattr(result, "questions") else []
-        # 归一化每道题的字段结构
-        normalized: list[dict[str, Any]] = []
-        for item in questions:
-            choice = dict(getattr(item, "choice", {}) or {})
-            normalized.append(
-                {
-                    "question": getattr(item, "question", ""),
-                    "choice": choice,
-                    "answer": str(getattr(item, "answer", "")),
-                    "analysis": getattr(item, "analysis", ""),
-                    "knowledge_points": list(
-                        getattr(item, "knowledge_points", []) or [node_title]
-                    ),
-                    "type": getattr(item, "type", "single_choice"),
-                }
-            )
-        return normalized
+
+        last_error: Exception | None = None
+        for attempt in range(max_retries):
+            try:
+                result = await self.llm.ainvoke_json(AgentQuestionSet, prompt)
+                questions = result.questions if hasattr(result, "questions") else []
+                if len(questions) == PATH_QUIZ_SIZE:
+                    # 归一化每道题的字段结构
+                    normalized: list[dict[str, Any]] = []
+                    for item in questions:
+                        choice = dict(getattr(item, "choice", {}) or {})
+                        normalized.append(
+                            {
+                                "question": getattr(item, "question", ""),
+                                "choice": choice,
+                                "answer": str(getattr(item, "answer", "")),
+                                "analysis": getattr(item, "analysis", ""),
+                                "knowledge_points": list(
+                                    getattr(item, "knowledge_points", []) or [node_title]
+                                ),
+                                "type": getattr(item, "type", "single_choice"),
+                            }
+                        )
+                    logger.info(
+                        "[NodeLearningAgent] 成功生成 %d 道测验题 (attempt=%d)",
+                        len(normalized), attempt + 1,
+                    )
+                    return normalized
+                else:
+                    logger.warning(
+                        "[NodeLearningAgent] 题目数量不足: 期望 %d, 实际 %d (attempt=%d)",
+                        PATH_QUIZ_SIZE, len(questions), attempt + 1,
+                    )
+            except Exception as e:
+                last_error = e
+                logger.warning(
+                    "[NodeLearningAgent] 生成测验题失败 (attempt=%d): %s",
+                    attempt + 1, e,
+                )
+
+        # 所有重试都失败
+        logger.error(
+            "[NodeLearningAgent] 生成测验题最终失败，已重试 %d 次: %s",
+            max_retries, last_error,
+        )
+        return []
 
 
 # ======================================================================
@@ -624,8 +767,8 @@ class NodeLearningAgent:
 # 节点完成状态集合
 COMPLETED_NODE_STATUSES = frozenset({"completed", "completed_with_gaps"})
 
-# 节点活跃状态集合
-ACTIVE_NODE_STATUSES = frozenset({"available", "in_progress", "remediation", "reinforced"})
+# 节点活跃状态集合（简化：移除 remediation 和 reinforced）
+ACTIVE_NODE_STATUSES = frozenset({"available", "in_progress"})
 
 
 # 工作流路由函数：根据 phase 字段决定下一个节点
@@ -634,14 +777,9 @@ def _route_by_phase(state: LearnState) -> str:
     return state["phase"]
 
 
-# 工作流路由函数：根据测验结果决定下一步（补救/强化/解锁）
+# 工作流路由函数：根据测验结果决定下一步（直接解锁）
 def _route_by_outcome(state: LearnState) -> str:
-    """路由函数：根据测验结果决定下一步（补救/强化/解锁）。"""
-    outcome = state.get("outcome", "completed")
-    if outcome == "remediation":
-        return "gen_remediation_tutorial"
-    if outcome == "completed_with_gaps" and state.get("tutorial_type") == "reinforced":
-        return "gen_reinforced_tutorial"
+    """路由函数：根据测验结果决定下一步（简化流程：直接解锁后续节点）。"""
     return "unlock_progress"
 
 
@@ -666,13 +804,7 @@ def _build_learn_workflow() -> StateGraph:
     wf.add_node("score_answers", node_score_answers)
     wf.add_node("advance_state", node_advance_state)
     wf.add_node("unlock_progress", node_unlock_and_update_progress)
-    wf.add_node("gen_remediation_tutorial", node_generate_tutorial)
-    wf.add_node("persist_remediation_tutorial", node_persist_tutorial_and_mark)
-    wf.add_node("gen_reinforced_tutorial", node_generate_tutorial)
-    wf.add_node("persist_reinforced_tutorial", node_persist_tutorial_and_mark)
     wf.add_node("record_event", node_record_quiz_event)
-    wf.add_node("gen_resource", node_generate_resource)
-    wf.add_node("persist_resource", node_persist_resource)
 
     wf.add_edge(START, "load_context")
 
@@ -683,7 +815,6 @@ def _build_learn_workflow() -> StateGraph:
             "start": "gen_primary_tutorial",
             "questions": "gen_questions",
             "quiz": "score_answers",
-            "resource": "gen_resource",
         },
     )
 
@@ -694,27 +825,9 @@ def _build_learn_workflow() -> StateGraph:
     wf.add_edge("persist_questions", END)
 
     wf.add_edge("score_answers", "advance_state")
-    wf.add_conditional_edges(
-        "advance_state",
-        _route_by_outcome,
-        {
-            "gen_remediation_tutorial": "gen_remediation_tutorial",
-            "gen_reinforced_tutorial": "gen_reinforced_tutorial",
-            "unlock_progress": "unlock_progress",
-        },
-    )
-
-    wf.add_edge("gen_remediation_tutorial", "persist_remediation_tutorial")
-    wf.add_edge("persist_remediation_tutorial", "record_event")
-    wf.add_edge("record_event", END)
-
-    wf.add_edge("gen_reinforced_tutorial", "persist_reinforced_tutorial")
-    wf.add_edge("persist_reinforced_tutorial", "unlock_progress")
+    wf.add_edge("advance_state", "unlock_progress")
 
     wf.add_edge("unlock_progress", "record_event")
-
-    wf.add_edge("gen_resource", "persist_resource")
-    wf.add_edge("persist_resource", END)
 
     return wf.compile()
 
@@ -922,18 +1035,31 @@ async def node_persist_questions(state: LearnState) -> dict:
 
 # 工作流节点：评分用户答案，计算得分和薄弱知识点
 async def node_score_answers(state: LearnState) -> dict:
-    """评分用户答案，计算得分和薄弱知识点。"""
+    """评分用户答案，计算得分和薄弱知识点，并将错题写入错题本。"""
     if state.get("error"):
         return {}
+    session = state["session"]
     questions = state.get("quiz_questions", [])
     if len(questions) != PATH_QUIZ_SIZE:
         return {"error": "当前节点还没有完整的五道题"}
+    if any(question.submitted_at is not None for question in questions):
+        return {"error": "当前轮次已经提交，不能重复提交"}
     answers = state.get("quiz_answers", [])
+    submitted_ids = [item["question_id"] for item in answers]
+    expected_ids = {question.id for question in questions}
+    if len(set(submitted_ids)) != len(submitted_ids) or set(submitted_ids) != expected_ids:
+        return {"error": "提交答案必须对应当前轮次的全部题目"}
+    if any(not str(item.get("response", "")).strip() for item in answers):
+        return {"error": "答案不能为空"}
     answer_map = {item["question_id"]: item["response"] for item in answers}
+
+    node = state["node"]
+    path = state["path"]
 
     # 逐题比对答案，累计得分并收集错题知识点
     score = 0
     weak_points: list[str] = []
+    wrong_questions: list[dict] = []  # 收集错题信息用于写入错题本
     for question in questions:
         response = answer_map.get(question.id)
         is_correct = response == question.answer
@@ -947,6 +1073,27 @@ async def node_score_answers(state: LearnState) -> dict:
             for point in question.knowledge_points or []:
                 if point not in weak_points:
                     weak_points.append(point)
+            # 收集错题信息
+            wrong_questions.append({
+                "question_id": f"path-{path.id}-{node.node_id}-{question.id}",
+                "subject": path.title,
+                "question_type": question.type or "single_choice",
+                "content": question.question,
+                "options_json": question.choice or {},
+                "standard_answer": question.answer,
+                "analysis": question.analysis,
+                "user_answer": response,
+                "knowledge_points": question.knowledge_points or [],
+            })
+
+    # 将错题写入错题本
+    if wrong_questions:
+        await _save_wrong_questions(
+            session=session,
+            user_id=state["user_id"],
+            wrong_questions=wrong_questions,
+        )
+
     return {
         "score": score,
         "passed": score >= PATH_PASS_SCORE,
@@ -954,9 +1101,9 @@ async def node_score_answers(state: LearnState) -> dict:
     }
 
 
-# 工作流节点：推进节点状态（完成/补救/有缺陷完成）
+# 工作流节点：推进节点状态（简化流程：一次测验即完成）
 async def node_advance_state(state: LearnState) -> dict:
-    """推进节点状态：completed/remediation/completed_with_gaps。"""
+    """推进节点状态：completed/completed_with_gaps（简化：不再生成补救/强化教程）。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -966,18 +1113,11 @@ async def node_advance_state(state: LearnState) -> dict:
 
     node.attempt_count += 1
 
-    # 根据是否通过与尝试次数决定节点最终状态
+    # 简化逻辑：测验后直接标记为完成（通过或有缺陷完成）
     if passed:
         node.status = "completed"
         node.completed_at = datetime.now(timezone.utc)
         outcome = "completed"
-    elif node.attempt_count == 1:
-        node.status = "remediation"
-        outcome = "remediation"
-    elif node.attempt_count == 2:
-        node.status = "completed_with_gaps"
-        node.completed_at = datetime.now(timezone.utc)
-        outcome = "completed_with_gaps"
     else:
         node.status = "completed_with_gaps"
         node.completed_at = datetime.now(timezone.utc)
@@ -985,7 +1125,7 @@ async def node_advance_state(state: LearnState) -> dict:
 
     await session.commit()
 
-    # 节点完成时记录学习事件
+    # 记录学习事件
     if outcome in ("completed", "completed_with_gaps"):
         try:
             from app.path.events import record_node_completed_event
@@ -1007,16 +1147,10 @@ async def node_advance_state(state: LearnState) -> dict:
         except Exception:
             pass
 
-    result: dict = {"outcome": outcome}
-    if outcome == "remediation":
-        result["tutorial_type"] = "remediation"
-        result["weak_knowledge_points"] = weak_points
-    elif outcome == "completed_with_gaps" and node.attempt_count == 2:
-        primary = await _primary_tutorial(session, node.id)
-        result["tutorial_type"] = "reinforced"
-        result["weak_knowledge_points"] = weak_points
-        result["based_on_tutorial_id"] = primary.id if primary else None
-    return result
+    return {
+        "outcome": outcome,
+        "weak_knowledge_points": weak_points if outcome == "completed_with_gaps" else [],
+    }
 
 
 # 工作流节点：解锁后续节点并更新路径进度百分比
@@ -1046,7 +1180,10 @@ async def node_unlock_and_update_progress(state: LearnState) -> dict:
         )
         path.current_node_key = next_node.node_id if next_node else None
         if completed_count == len(nodes):
+            path.overall_progress = 100
             path.status = "completed"
+        else:
+            path.status = "active"
         path.updated_at = datetime.now(timezone.utc)
 
     await session.commit()
@@ -1059,7 +1196,7 @@ async def node_unlock_and_update_progress(state: LearnState) -> dict:
 
 # 工作流节点：记录测验事件到评估系统
 async def node_record_quiz_event(state: LearnState) -> dict:
-    """记录测验事件到评估系统，触发画像更新。"""
+    """记录测验事件到评估系统。"""
     if state.get("error"):
         return {}
     session = state["session"]
@@ -1089,155 +1226,6 @@ async def node_record_quiz_event(state: LearnState) -> dict:
     return {}
 
 
-# 工作流节点：生成节点辅助资源（委托 resource 模块）
-async def node_generate_resource(state: LearnState) -> dict:
-    """生成节点辅助资源 — 使用统一接口 PathResourceRequest。"""
-    from app.shared.ppt import PPTService
-    from app.shared.cartoon import CartoonService
-    from app.resource.agents import AGENT_REGISTRY
-
-    if state.get("error"):
-        return {}
-    node = state["node"]
-    path = state["path"]
-    user_id = state["user_id"]
-    resource_type = state.get("resource_type", "mindmap")
-
-    # 资源生成只使用 primary 教程，不使用 remediation/reinforced 教程
-    tutorials = state.get("tutorials", [])
-    primary_tutorial = next(
-        (t for t in tutorials if t.tutorial_type == "primary"), None
-    )
-    if primary_tutorial is None:
-        return {"error": "当前节点还没有主教程，请先生成主教程再生成辅助资源"}
-
-    # 获取用户画像
-    profile_service = get_profile_service()
-    profile_markdown = await profile_service.build_profile_markdown(user_id=user_id)
-
-    # 将 ORM 对象转换为 DTO
-    tutorial_dto = LearningPathTutorialDTO.from_model(primary_tutorial)
-
-    # 构建统一请求
-    request = PathResourceRequest(
-        user_id=user_id,
-        path_id=path.id,
-        node_id=node.id,
-        profile={"markdown": profile_markdown},
-        tutorial=tutorial_dto,
-        username=state.get("username", ""),
-        path_title=path.title,
-        path_goal=path.goal,
-        node_title=node.title,
-        node_key=node.node_id,
-        difficulty=node.difficulty or "beginner",
-    )
-
-    # 统一调用 generate_for_path 接口
-    if resource_type == "ppt":
-        service = PPTService()
-        result = await service.generate_for_path(request)
-    elif resource_type == "cartoon":
-        service = CartoonService()
-        result = await service.generate_for_path(request)
-    elif resource_type in {"mindmap", "code", "reading"}:
-        agent = AGENT_REGISTRY[resource_type]()
-        result = await agent.generate_for_path(request)
-    else:
-        result = AgentResult(
-            success=False,
-            title="资源生成失败",
-            file_type="markdown",
-            error=f"不支持的资源类型: {resource_type}",
-        )
-
-    return {"resource_result": result, "resource_type": resource_type}
-
-
-# 工作流节点：持久化辅助资源到数据库
-async def node_persist_resource(state: LearnState) -> dict:
-    """持久化辅助资源到 PathNodeResource 表。"""
-    if state.get("error"):
-        return {}
-    session = state["session"]
-    node = state["node"]
-    path = state["path"]
-    user_id = state["user_id"]
-    # 资源生成只使用 primary 教程
-    tutorials = state.get("tutorials", [])
-    primary_tutorial = next(
-        (t for t in tutorials if t.tutorial_type == "primary"), None
-    )
-    resource_type = state.get("resource_type", "mindmap")
-    result = state["resource_result"]
-
-    existing_count = await _count_resources(session, node.id, resource_type)
-    version_no = existing_count + 1
-    title = (
-        result.title
-        if hasattr(result, "title") and result.title
-        else f"{node.title} - {resource_type}"
-    )
-
-    if hasattr(result, "success") and not result.success:
-        resource = PathNodeResource(
-            path_id=path.id,
-            node_id=node.id,
-            tutorial_id=primary_tutorial.id if primary_tutorial else None,
-            user_id=user_id,
-            resource_type=resource_type,
-            version_no=version_no,
-            title=title,
-            content_format="markdown",
-            status="failed",
-            error_message=(
-                result.error if hasattr(result, "error") else "unknown"
-            ),
-            summary=result.summary if hasattr(result, "summary") else None,
-            metadata_json=(
-                result.metadata if hasattr(result, "metadata") else None
-            ),
-        )
-        session.add(resource)
-        await session.commit()
-        await session.refresh(resource)
-        return {"resource_dto": _resource_to_dict(resource)}
-
-    content_text = None
-    content_json_val = None
-    file_type = getattr(result, "file_type", "markdown")
-    raw_content = getattr(result, "content", "")
-    if file_type == "json":
-        try:
-            content_json_val = (
-                json.loads(raw_content)
-                if isinstance(raw_content, str)
-                else raw_content
-            )
-        except (json.JSONDecodeError, TypeError):
-            content_text = str(raw_content)
-    else:
-        content_text = str(raw_content)
-
-    resource = PathNodeResource(
-        path_id=path.id,
-        node_id=node.id,
-        tutorial_id=primary_tutorial.id if primary_tutorial else None,
-        user_id=user_id,
-        resource_type=resource_type,
-        version_no=version_no,
-        title=title,
-        content_format=file_type,
-        content_text=content_text,
-        content_json=content_json_val,
-        summary=result.summary if hasattr(result, "summary") else None,
-        status="completed",
-        metadata_json=result.metadata if hasattr(result, "metadata") else None,
-    )
-    session.add(resource)
-    await session.commit()
-    await session.refresh(resource)
-    return {"resource_dto": _resource_to_dict(resource)}
 
 
 # ── 内部辅助函数 ──────────────────────────────────────────────────────────
@@ -1298,6 +1286,56 @@ def _resource_to_dict(resource) -> dict:
             resource.created_at.isoformat() if resource.created_at else ""
         ),
     }
+
+
+# 将路径测验错题写入错题本
+async def _save_wrong_questions(
+    session,
+    user_id: int,
+    wrong_questions: list[dict],
+) -> None:
+    """将路径测验错题写入错题本。
+
+    对已存在的错题，累加错误次数并更新用户答案；
+    对新错题，创建完整记录（包含题目快照）。
+    """
+    for item in wrong_questions:
+        question_id = item["question_id"]
+
+        # 查询该题是否已存在于错题本
+        existing = (await session.exec(
+            select(WrongQuestion).where(
+                WrongQuestion.user_id == user_id,
+                WrongQuestion.question_id == question_id,
+            )
+        )).scalars().first()
+
+        if existing:
+            # 已存在则累加错误次数并更新用户答案、取消归档
+            existing.wrong_count += 1
+            existing.user_answer = item["user_answer"]
+            existing.is_archived = False
+        else:
+            # 创建新错题记录
+            wrong = WrongQuestion(
+                user_id=user_id,
+                question_id=question_id,
+                subject=item["subject"],
+                question_type=item["question_type"],
+                content=item["content"],
+                options_json=item["options_json"],
+                standard_answer=item["standard_answer"],
+                analysis=item["analysis"],
+                user_answer=item["user_answer"],
+                wrong_count=1,
+            )
+            session.add(wrong)
+
+    await session.flush()
+    logger.info(
+        "[PathWorkflows] 已将 %d 道错题写入错题本: user_id=%s",
+        len(wrong_questions), user_id,
+    )
 
 
 __all__ = [

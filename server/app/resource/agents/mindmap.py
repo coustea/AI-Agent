@@ -8,13 +8,9 @@ from typing import TYPE_CHECKING
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import (
-    build_node_context,
-    build_resource_context,
-    build_path_context,
-)
+from app.resource.agents.common import build_path_context, build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, NodeInput, ResourceInput
+from app.resource.schemas import AgentResult, ResourceInput
 
 if TYPE_CHECKING:
     from app.path.schemas import PathResourceRequest
@@ -39,17 +35,6 @@ class MindmapAgent(BaseResourceAgent):
             title_prefix=input_data.learning_need[:32],
             config=input_data.agent_config,
         )
-
-    async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        result = await self._generate_mindmap(
-            input_text="\n\n".join(build_node_context(input_data)),
-            title_prefix=input_data.node_title,
-            config=input_data.agent_config,
-        )
-        # 记录路径节点归属
-        result.metadata["path_id"] = input_data.path_id
-        result.metadata["node_id"] = input_data.node_id
-        return result
 
     async def generate_for_path(self, request: "PathResourceRequest") -> AgentResult:
         """路径规划统一接口 — 接收 PathResourceRequest，返回 AgentResult。"""
@@ -83,20 +68,6 @@ class MindmapAgent(BaseResourceAgent):
             "\n\n请务必使用 `#` 一级标题、`##` 二级标题和 `-` 列表符号来构建导图结构。\n"
             "【注意】绝对不要使用 Mermaid 语法！请只输出标准的 Markdown 标题 and 列表文本。"
         )
-
-        # 执行搜索以丰富导图中的分支深度与细化概念
-        await self.emitter.send(self.agent_id, "running", "正在搜索相关知识导图大纲...", 30)
-        search_query = f"{title_prefix} 知识图谱 知识链路"
-        search_report = await self.search(search_query)
-        search_text = self.format_search_result(search_report)
-        search_elapsed = int((time.perf_counter() - started) * 1000)
-        logger.info(
-            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
-            self.agent_id, search_query, len(search_report.sources), search_elapsed,
-        )
-        # 将搜索到的参考大纲前置拼入提示词
-        if search_text:
-            input_text = f"## 搜索到的相关知识大纲参考\n{search_text}\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建知识导图提示词...", 45)
         prompt = prompts.get("resource").get("mindmap")

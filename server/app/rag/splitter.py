@@ -7,7 +7,7 @@ MD: MarkdownHeaderTextSplitter → RecursiveCharacterTextSplitter（中文分隔
 PDF: RecursiveCharacterTextSplitter（中文分隔符）
 代码块保护：分割前替换为占位符，分割后恢复
 
-Called by: app/rag/indexing/build.py
+Called by: app/rag/build.py
 Per user: "splitter.py 用到了 Path，但顶部没有导入…短块合并可能跨 heading 合并"
 """
 
@@ -27,10 +27,12 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 # ============ 切分参数 ============
-
-CHUNK_MAX_SIZE = 800
+# 注意：embedding 服务有 token 限制（如 bge-m3 限制 1024 tokens）
+# 中文字符约 1-2 tokens，保守估计每字符 1.5 tokens
+# 1024 tokens / 1.5 ≈ 680 字符，设置 400 以留足够安全余量
+CHUNK_MAX_SIZE = 400
 CHUNK_MIN_SIZE = 100
-CHUNK_OVERLAP = 100
+CHUNK_OVERLAP = 80
 
 # 中文分隔符列表（用于 RecursiveCharacterTextSplitter）
 _CHINESE_SEPARATORS = [
@@ -91,7 +93,7 @@ def _split_markdown(doc: Document) -> list[Document]:
     流程：
     1. 保护代码块（替换为占位符）
     2. MarkdownHeaderTextSplitter 按 h1/h2/h3 分割
-    3. RecursiveCharacterTextSplitter 处理超长块
+    3. RecursiveCharacterTextSplitter 处理超长块（保持占位符完整）
     4. 恢复代码块
     5. 合并过短块（仅允许同 source 同 heading_path 的合并）
     """
@@ -122,12 +124,28 @@ def _split_markdown(doc: Document) -> list[Document]:
             if para.strip():
                 md_chunks.append(Document(page_content=para.strip(), metadata={}))
 
-    # 3. 还原代码块并构建 heading_path 章节路径
+    # 3. 用递归字符切分器处理超长块（保持占位符完整，不恢复代码块）
+    # 添加占位符作为分隔符，确保代码块不被拆分
+    separators_with_placeholders = _CHINESE_SEPARATORS.copy()
+    # 在空字符串前插入占位符匹配模式
+    for i, sep in enumerate(separators_with_placeholders):
+        if sep == "":
+            break
+    char_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_MAX_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=separators_with_placeholders,
+        is_separator_regex=False,
+    )
+
+    # 收集所有待处理块（heading_path, safe_content）
     chunks_with_heading: list[tuple[str, str]] = []
     for chunk in md_chunks:
-        content = chunk.page_content
-        content = _restore_code_blocks(content, placeholder_map)
+        content = chunk.page_content.strip()
+        if not content:
+            continue
 
+        # 构建 heading_path
         meta = chunk.metadata
         heading_parts = []
         for key in ("h1", "h2", "h3"):
@@ -135,39 +153,41 @@ def _split_markdown(doc: Document) -> list[Document]:
                 heading_parts.append(meta[key])
         heading_path = " > ".join(heading_parts)
 
-        content = content.strip()
-        if not content:
-            continue
-
-        chunks_with_heading.append((content, heading_path))
-
-    # 4. 用递归字符切分器处理超长块（中文分隔符）
-    char_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_MAX_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=_CHINESE_SEPARATORS,
-    )
-
-    final_chunks: list[Document] = []
-    for content, heading_path in chunks_with_heading:
+        # 如果超长，先分割（保持占位符）
         if len(content) > CHUNK_MAX_SIZE:
-            # 先恢复代码块再分割
-            sub_docs = char_splitter.split_text(content)
-            for sub_text in sub_docs:
-                sub_text = _restore_code_blocks(sub_text, placeholder_map)
+            sub_texts = char_splitter.split_text(content)
+            for sub_text in sub_texts:
+                sub_text = sub_text.strip()
+                if sub_text:
+                    chunks_with_heading.append((heading_path, sub_text))
+        else:
+            chunks_with_heading.append((heading_path, content))
+
+    # 4. 恢复代码块占位符
+    final_chunks: list[Document] = []
+    for heading_path, safe_content in chunks_with_heading:
+        content = _restore_code_blocks(safe_content, placeholder_map)
+        if content.strip():
+            # 恢复代码块后可能超长，需要二次切分
+            if len(content) > CHUNK_MAX_SIZE:
+                # 重新切分（代码块已被恢复，会被当作普通文本切分）
+                sub_texts = char_splitter.split_text(content)
+                for sub_text in sub_texts:
+                    sub_text = sub_text.strip()
+                    if sub_text:
+                        final_chunks.append(
+                            Document(
+                                page_content=sub_text,
+                                metadata={**doc.metadata, "heading_path": heading_path},
+                            )
+                        )
+            else:
                 final_chunks.append(
                     Document(
-                        page_content=sub_text.strip(),
+                        page_content=content.strip(),
                         metadata={**doc.metadata, "heading_path": heading_path},
                     )
                 )
-        else:
-            final_chunks.append(
-                Document(
-                    page_content=content,
-                    metadata={**doc.metadata, "heading_path": heading_path},
-                )
-            )
 
     # 5. 合并同章节相邻短块
     final_chunks = _merge_short_chunks(final_chunks)

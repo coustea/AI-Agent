@@ -1,17 +1,10 @@
-"""算法可视化模块 API 路由。 
+"""算法可视化模块 API 路由。
 
 当前设计：
   GET  /algorithm-visualizer/languages   — 公开
   GET  /algorithm-visualizer/algorithms  — 公开
-  GET  /algorithm-visualizer/templates   — 需认证，返回干净模板代码（无 tracer）
-  POST /algorithm-visualizer/run         — 需认证，运行代码（自动插装 + 沙箱执行）
-
-运行流程：
-  1. 前端获取干净模板代码展示在编辑器
-  2. 用户点击运行，提交代码
-  3. 后端检测代码是否包含 tracer 调用
-  4. 若无 tracer → LLM 自动插装 → 沙箱执行
-  5. 若已有 tracer → 直接沙箱执行
+  GET  /algorithm-visualizer/templates   — 需认证，返回官方模板源码与默认输入
+  POST /algorithm-visualizer/run         — 需认证，运行官方模板或用户代码
 """
 
 from __future__ import annotations
@@ -22,21 +15,24 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.algorithm_visualizer.events import record_visualizer_run_event
 from app.algorithm_visualizer.schemas import (
     AlgorithmResponse,
+    AnalyzeCustomCodeRequest,
+    CustomCodeContractResponse,
+    CustomFunctionResponse,
     LanguageResponse,
-    RunErrorResponse,
     RunRequest,
     RunSuccessResponse,
     TemplateResponse,
 )
 from app.algorithm_visualizer.service import (
     VisualizerRunError,
-    run_visualization_in_sandbox,
+    run_custom_visualization,
+    run_official_visualization,
 )
+from app.algorithm_visualizer.custom_contract import CustomCodeContractError, inspect_custom_code
 from app.algorithm_visualizer.template_registry import (
-    LANGUAGES,
-    get_all_algorithms,
-    get_algorithm_info,
-    get_template_code,
+    TemplateNotFoundError,
+    get_all_template_specs,
+    get_template_spec,
 )
 from app.auth.security import get_current_user
 from app.infra.database import get_session
@@ -52,7 +48,7 @@ logger = get_logger(__name__)
 # 公开接口：返回所有支持的可视化编程语言列表
 @router.get("/algorithm-visualizer/languages")
 async def get_languages():
-    return HttpResponse.success(data=[LanguageResponse(**lang) for lang in LANGUAGES])
+    return HttpResponse.success(data=[LanguageResponse(key="python", label="Python", extension="py")])
 
 
 # 公开接口：按 domain / language 过滤并列出算法模板
@@ -64,18 +60,23 @@ async def get_algorithms(domain: str = "all", language: str | None = None):
     language 可选，用于前端在已选语言后过滤算法。
     """
     try:
-        raw_algorithms = get_all_algorithms(domain)
-
+        specs = get_all_template_specs()
         algorithms = []
-        for alg in raw_algorithms:
-            supported_languages = alg["supported_languages"]
-
-            # 仅保留当前所选语言支持的算法
-            if language and language not in supported_languages:
+        for spec in specs:
+            if domain != "all" and spec.domain != domain:
+                continue
+            # Only Python is supported now.
+            if language and language != "python":
                 continue
 
-            alg_response = AlgorithmResponse(**alg)
-            # 使用 by_alias=False 确保序列化时使用字段名（camelCase）
+            alg_response = AlgorithmResponse(
+                key=spec.key,
+                name=spec.name,
+                domain=spec.domain,
+                visualizer_type=spec.visualizer_type,
+                difficulty=spec.difficulty,
+                supported_languages=["python"],
+            )
             algorithms.append(alg_response.model_dump(by_alias=False))
 
         return HttpResponse.success(data=algorithms)
@@ -84,85 +85,99 @@ async def get_algorithms(domain: str = "all", language: str | None = None):
         return HttpResponse.error(code=400, message=str(e))
 
 
-# 需认证接口：返回干净的模板代码及前端默认输入数据（不含 tracer 调用）
+# 需认证接口：返回官方模板源码及前端默认输入数据
 @router.get("/algorithm-visualizer/templates")
 async def get_templates(
     algorithm: str,
     language: str,
     current_user: User = Depends(get_current_user),
 ):
-    """获取算法可视化模板代码（干净代码，无 tracer 调用）。
-
-    返回的代码是纯算法实现，不包含任何 tracer 调用。
-    用户点击运行时，后端会自动插装 tracer 调用。
-    """
+    """获取官方算法模板源码和其输入契约。"""
     try:
-        info = get_algorithm_info(algorithm)
+        spec = get_template_spec(algorithm)
 
-        # 校验该算法是否支持请求的语言
-        if language not in info["supported_languages"]:
+        if language != "python":
             return HttpResponse.error(
                 code=400,
                 message=f"算法 {algorithm} 不支持语言 {language}",
             )
 
-        code = get_template_code(algorithm, language)
-        default_data = build_default_data(algorithm)
-
         payload = TemplateResponse(
             algorithm=algorithm,
-            domain=info["domain"],
-            visualizer_type=info["visualizer_type"],
-            required_events=info.get("required_events", []),
-            supported_languages=info["supported_languages"],
-            language=language,
-            template_code=code,
-            default_data=default_data,
+            domain=spec.domain,
+            visualizer_type=spec.visualizer_type,
+            language="python",
+            template_code=spec.source_code,
+            default_data=spec.default_input,
+            input_schema=spec.input_schema,
         )
 
-        # 使用 by_alias=False 确保序列化时使用字段名（camelCase）而不是别名（snake_case）
         return HttpResponse.success(data=payload.model_dump(by_alias=False))
 
-    except ValueError as ve:
+    except TemplateNotFoundError as ve:
         return HttpResponse.error(code=400, message=str(ve))
     except Exception as e:
         return HttpResponse.error(code=400, message=f"加载模板失败: {str(e)}")
 
 
-# 需认证接口：运行提交的可视化代码（自动插装 tracer + 沙箱执行）
+@router.post("/algorithm-visualizer/custom-contract")
+async def get_custom_contract(
+    request_data: AnalyzeCustomCodeRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Derive selectable entry functions and a normal form schema without an LLM call."""
+    if len(request_data.code) > 24_000:
+        return HttpResponse.error(code=400, message="自定义代码不能超过 24000 个字符。")
+    try:
+        contract = inspect_custom_code(request_data.code, request_data.entryFunction)
+        payload = CustomCodeContractResponse(
+            sourceHash="sha256:" + "0" * 64,
+            entryFunction=contract.entry_function,
+            functions=[
+                CustomFunctionResponse(name=item.name, line=1, parameters=[])
+                for item in contract.functions
+            ],
+            inputSchema=contract.input_schema,
+            defaultInput=contract.default_input,
+        )
+        return HttpResponse.success(data=payload.model_dump())
+    except CustomCodeContractError as exc:
+        return HttpResponse.error(code=400, message=str(exc))
+
+
+# 需认证接口：运行注册算法模板
 @router.post("/algorithm-visualizer/run")
 async def run_visualization(
     request_data: RunRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """执行提交的可视化代码，返回 TraceEvent[]。
-
-    如果代码不包含 tracer 调用，后端自动进行 LLM 插装。
-    如果代码已包含 tracer 调用，直接执行。
-    """
+    """按显式模式运行官方模板或用户代码。"""
     algorithm = request_data.algorithm or ""
     language = request_data.language or ""
 
-    vis_type = request_data.visualizerType or ""
-
-    # 在沙箱中运行用户代码（缺失 tracer 时自动插装）
     try:
-        result = await run_visualization_in_sandbox(
-            language=language,
-            code=request_data.code,
-            algorithm=algorithm,
-            visualizer_type=vis_type,
-            domain=request_data.domain,
-            input_data=request_data.inputData,
-        )
+        if request_data.mode == "official":
+            result = run_official_visualization(
+                algorithm=algorithm,
+                language=language,
+                input_data=request_data.inputData,
+            )
+        else:
+            result = await run_custom_visualization(
+                code=request_data.code or "",
+                language=language,
+                visualizer_type=request_data.visualizerType,
+                input_data=request_data.inputData,
+                entry_function=request_data.entryFunction,
+            )
 
     # 插装或执行失败，记录失败事件并返回错误
     except VisualizerRunError as e:
         await _safe_record_event(
             session,
             current_user.id,
-            algorithm or "__missing_algorithm__",
+            algorithm or ("custom_python" if request_data.mode == "custom" else "__missing_algorithm__"),
             language or "__missing_language__",
             success=False,
             error_message=f"{e.error_type}: {e.message}",
@@ -228,205 +243,3 @@ async def _safe_record_event(
             algorithm,
             event_exc,
         )
-
-
-# 根据算法类型返回前端默认输入数据（仅用于模板展示与填充）
-def build_default_data(algorithm: str) -> dict:
-    """根据算法模板返回前端默认数据。
-
-    只用于前端展示或填充模板，不参与后端自动插装。
-    """
-    if algorithm in (
-        "bubble_sort",
-        "selection_sort",
-        "insertion_sort",
-        "shell_sort",
-        "quick_sort",
-        "merge_sort",
-        "heap_sort",
-        "counting_sort",
-        "bucket_sort",
-        "radix_sort",
-        "array_base",
-        "double_pointers",
-        "quick_partition",
-        "merge_divide",
-    ):
-        return {"arr": [6, 1, 8, 3, 9, 2, 5, 7, 4]}
-
-    if algorithm in (
-        "binary_search",
-        "sequential_search",
-        "interpolation_search",
-        "fibonacci_search",
-        "binary_divide",
-    ):
-        return {"arr": [1, 2, 3, 5, 8], "target": 5}
-
-    if algorithm in ("hash_search", "hash_table_base"):
-        return {"arr": [5, 3, 8, 1, 2], "target": 8}
-
-    if algorithm in ("bracket_match", "palindrome_check", "interval_dp"):
-        return {"string": "({[]})"}
-
-    if algorithm in (
-        "queue_simulation",
-        "queue_base",
-        "stack_base",
-        "monotonic_stack",
-        "monotonic_queue",
-    ):
-        return {
-            "operations": [
-                ["enqueue", 10],
-                ["enqueue", 20],
-                ["dequeue", None],
-                ["enqueue", 30],
-            ],
-        }
-
-    if algorithm in ("linked_list_reverse", "linked_list_base"):
-        return {"arr": [1, 2, 3, 4, 5]}
-
-    if algorithm in (
-        "binary_tree_traverse",
-        "binary_tree_recursion",
-        "bst",
-        "heap_tree",
-        "segment_tree",
-        "fenwick_tree",
-        "heap_base",
-    ):
-        return {"arr": [1, 2, 3, 4, 5, 6, 7]}
-
-    if algorithm in (
-        "graph_dfs",
-        "graph_bfs",
-        "graph_representation",
-        "shortest_path",
-        "topological_sort",
-        "mst_kruskal",
-        "dsu_union",
-    ):
-        return {
-            "num_nodes": 6,
-            "edges": [
-                [0, 1],
-                [0, 2],
-                [1, 3],
-                [1, 4],
-                [2, 5],
-            ],
-            "start": 0,
-        }
-
-    if algorithm in (
-        "dp_fibonacci",
-        "recursion_fib",
-        "one_d_dp",
-        "basic_bit",
-        "prime_sieve",
-        "combination_num",
-    ):
-        return {"n": 6}
-
-    if algorithm in ("string_match_naive", "kmp_match", "rabin_karp"):
-        return {"text": "abacaabadcabacaba", "pattern": "abacaba"}
-
-    if algorithm in ("trie_tree", "trie_string_search"):
-        return {"words": ["cat", "car"]}
-
-    if algorithm in (
-        "permutations",
-        "subsets",
-        "combinations",
-        "subset_enum",
-        "xor_trick",
-    ):
-        return {"arr": [1, 2, 3]}
-
-    if algorithm == "n_queens":
-        return {"n": 4}
-
-    if algorithm == "maze_search":
-        return {
-            "maze": [
-                [0, 1, 0, 0],
-                [0, 0, 0, 1],
-                [1, 0, 1, 0],
-                [0, 0, 0, 0],
-            ],
-        }
-
-    if algorithm == "two_d_dp":
-        return {"grid": [[1, 3, 1], [1, 5, 1], [4, 2, 1]]}
-
-    if algorithm == "knapsack_dp":
-        return {
-            "weights": [2, 3, 4, 5],
-            "values": [3, 4, 5, 6],
-            "capacity": 5,
-        }
-
-    if algorithm == "state_compress_dp":
-        return {
-            "dist": [
-                [0, 10, 15, 20],
-                [10, 0, 35, 25],
-                [15, 35, 0, 30],
-                [20, 25, 30, 0],
-            ],
-        }
-
-    if algorithm == "sliding_window":
-        return {"arr": [1, 4, 2, 10, 2, 3, 1, 0, 20], "k": 4}
-
-    if algorithm == "difference_array":
-        return {"arr": [1, 2, 3, 4, 5], "updates": [[1, 3, 2], [2, 4, 1]]}
-
-    if algorithm == "interval_greedy":
-        return {"intervals": [[1, 2], [2, 3], [3, 4], [1, 3]]}
-
-    if algorithm == "stock_problem":
-        return {"prices": [7, 1, 5, 3, 6, 4]}
-
-    if algorithm == "jump_game":
-        return {"arr": [2, 3, 1, 1, 4]}
-
-    if algorithm == "huffman_coding":
-        return {
-            "char_freqs": {
-                "a": 5,
-                "b": 9,
-                "c": 12,
-                "d": 13,
-                "e": 16,
-                "f": 45,
-            },
-        }
-
-    if algorithm == "covering_problem":
-        return {
-            "states_needed": ["mt", "wa", "or"],
-            "stations": {
-                "kone": ["id", "nv"],
-                "ktwo": ["wa", "id"],
-            },
-        }
-
-    if algorithm == "recursive_divide":
-        return {"n": 3}
-
-    if algorithm == "bit_mask":
-        return {"state": 5, "mask": 2, "action": "set"}
-
-    if algorithm == "gcd_euclidean":
-        return {"a": 48, "b": 18}
-
-    if algorithm == "quick_power":
-        return {"x": 2, "n": 10}
-
-    if algorithm == "mod_arithmetic":
-        return {"base": 2, "exp": 10, "mod": 1000}
-
-    return {}

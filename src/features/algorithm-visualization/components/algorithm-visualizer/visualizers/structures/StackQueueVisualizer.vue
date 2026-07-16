@@ -6,6 +6,11 @@
         <span class="legend-item"><i class="legend-dot visited"></i>已处理</span>
       </div>
 
+      <div v-if="currentValue" class="current-token">
+        <span>当前字符</span>
+        <code>{{ currentValue }}</code>
+      </div>
+
       <div v-if="items.length" :class="['linear-strip', mode]">
         <div
           v-for="(item, index) in items"
@@ -34,7 +39,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { TraceEvent } from '@/features/algorithm-visualization/types'
+import type { TraceEvent, VisualPointer } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
   currentEvent: TraceEvent | null
@@ -58,10 +63,16 @@ const pointers = computed(() => {
   const raw = props.currentEvent?.state?.structure?.pointers
   return Array.isArray(raw) ? raw : []
 })
+const currentValue = computed(() => {
+  const value = props.currentEvent?.state?.structure?.currentValue
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : ''
+})
 
 // 获取特定索引上的指针标签
 function getPointers(index: number) {
-  return pointers.value.filter((p: any) => p.nodeIndex === index || p.itemIndex === index)
+  return (pointers.value as VisualPointer[]).filter(pointer => (
+    pointer.nodeIndex === index || pointer.itemIndex === index
+  ))
 }
 </script>
 
@@ -93,7 +104,7 @@ function getPointers(index: number) {
   align-items: center;
   gap: 4px;
   font-size: 11px;
-  color: #475569;
+  color: var(--color-text-secondary);
 }
 
 .legend-dot {
@@ -103,13 +114,13 @@ function getPointers(index: number) {
 }
 
 .legend-dot.default {
-  background: #cbd5e1;
-  border: 1px solid #94a3b8;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
 .legend-dot.visited {
-  background: #ecfdf5;
-  border: 1px solid #10b981;
+  background: var(--color-success-soft);
+  border: 1px solid var(--color-success);
 }
 
 .chart-shell {
@@ -119,7 +130,33 @@ function getPointers(index: number) {
   border-radius: var(--radius-sm);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
-  padding: 12px;
+  padding: 48px 12px 12px;
+}
+
+.current-token {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text-secondary);
+  font-size: 11px;
+}
+
+.current-token code {
+  min-width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0 7px;
+  border: 1px solid var(--color-primary-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .linear-strip {
@@ -144,19 +181,19 @@ function getPointers(index: number) {
   gap: 6px;
   padding: 8px;
   border-radius: 4px;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
 }
 
 .linear-node.visited {
-  border-color: #10b981;
-  background: #ecfdf5;
+  border-color: var(--color-success);
+  background: var(--color-success-soft);
 }
 
 .node-value {
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--color-text-strong);
 }
 
 .pointer-stack {
@@ -177,21 +214,21 @@ function getPointers(index: number) {
 }
 
 .pointer-pill.accent {
-  background: #eff6ff;
-  color: #2563eb;
-  border: 1px solid #bfdbfe;
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border: 1px solid var(--color-primary-border);
 }
 
 .pointer-pill.warning {
-  background: #fffbeb;
-  color: #b45309;
-  border: 1px solid #fde68a;
+  background: var(--color-warning-soft);
+  color: var(--color-warning);
+  border: 1px solid var(--color-warning);
 }
 
 .pointer-pill.success {
-  background: #ecfdf5;
-  color: #047857;
-  border: 1px solid #a7f3d0;
+  background: var(--color-success-soft);
+  color: var(--color-success);
+  border: 1px solid var(--color-success);
 }
 
 .empty-state {
@@ -201,6 +238,6 @@ function getPointers(index: number) {
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--color-text-faint);
 }
 </style>

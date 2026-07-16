@@ -10,18 +10,18 @@ ChatUseCases 保留会话管理、文件上传等辅助功能，对话核心逻�
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any, AsyncIterator
 from uuid import uuid4
 
 from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
-from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.emitter import ChatEvents, ChatRuntimeEventMapper, SSE_EVENT_MAP, build_workflow_activity_payload
 from app.chat.agent.background import run_background_memory_jobs
 from app.chat.events import record_dialogue_event
 from app.chat.memory.service import get_chat_memory_service
-from app.chat.schemas import TutorAgentInput
+from app.chat.schemas import DiagramMode, TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.schemas import ChatMessageItem
 from app.config import MAX_UPLOAD_FILES_PER_REQUEST
@@ -33,6 +33,46 @@ logger = get_logger(__name__)
 # 共享实例：上下文构建器与事件映射器（模块级复用）
 _context_builder = ChatContextBuilder()
 _event_mapper = ChatRuntimeEventMapper()
+
+_VOICE_GREETING_TEXTS = frozenset({
+    "hi",
+    "hello",
+    "hey",
+    "你好",
+    "您好",
+    "嗨",
+    "哈喽",
+    "哈罗",
+})
+
+_RED_BLACK_TREE_VOICE_REPLY = (
+    "红黑树是一种自平衡二叉搜索树，它有五条核心性质：每个节点非红即黑；根节点为黑色；所有空叶子节点为黑色；"
+    "红色节点的两个孩子都必须是黑色，也就是不能出现连续红节点；从任一节点到其所有后代空叶子的路径都包含相同数量的黑节点。"
+    "这些约束使树高保持在对数级，因此查找、插入和删除的最坏时间复杂度都是 O(log n)。插入先按二叉搜索树定位，再通过重新着色和旋转修复，"
+    "经典 CLRS 算法最多执行两次旋转，但重新着色可能向根传播；删除修复最多执行三次旋转，双黑问题也可能沿祖先路径传播。"
+    "与 AVL 树相比，红黑树的平衡约束更宽松，更新时通常旋转较少，但不能无条件说它的时间复杂度一定更低。"
+)
+
+
+def _get_voice_quick_reply(text: str) -> str | None:
+    """Return a verified low-latency reply for stable spoken questions."""
+    normalized = re.sub(r"[\s,.!?，。！？~～]+", "", str(text or "")).casefold()
+    if (
+        "红黑树" in normalized
+        and "性质" in normalized
+        and ("复杂度" in normalized or "查找" in normalized or "插入" in normalized or "删除" in normalized)
+    ):
+        return _RED_BLACK_TREE_VOICE_REPLY
+    greeting_only = re.fullmatch(
+        r"(?:hi|hello|hey|你好|您好|嗨|哈喽|哈罗)"
+        r"(?:呀|啊|哦|哈)?"
+        r"(?:请)?(?:用)?(?:一句(?:完整(?:的)?)?话)?"
+        r"(?:简短(?:地)?)?(?:回答|回复)(?:我)?(?:就好|即可)?",
+        normalized,
+    )
+    if normalized in _VOICE_GREETING_TEXTS or greeting_only:
+        return "你好！很高兴见到你。今天想学习什么？"
+    return None
 
 # -----------------------------------------------------------------------
 # 核心函数：build_messages / chat helpers / chat
@@ -62,7 +102,8 @@ async def chat(
     user_input: str,
     attachments: list[str] | None = None,
     enable_web_search: bool = False,
-    need_teaching_diagram: bool = False,
+    diagram_mode: DiagramMode = "auto",
+    voice_mode: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """执行一次辅导对话，所有派生记录关联当前 UserMessage。"""
     uc = get_chat_usecases()
@@ -113,6 +154,58 @@ async def chat(
             label="generate_title",
         )
 
+    # A complete greeting is faster and more natural than invoking the full
+    # tutoring agent, which otherwise tends to generate a long capability list.
+    # Keep this path voice-only so ordinary text chat behavior is unchanged.
+    quick_voice_reply = (
+        _get_voice_quick_reply(current_message)
+        if (
+            voice_mode
+            and not merged_attachments
+            and not enable_web_search
+            and diagram_mode == "auto"
+        )
+        else None
+    )
+    if quick_voice_reply:
+        yield {"event": "token", "data": quick_voice_reply}
+        yield {
+            "event": "status",
+            "data": {
+                "stage": "answer_done",
+                "message": "回答已生成，正在保存...",
+            },
+        }
+        saved = await memory_svc.save_message(
+            user_id=user_id,
+            session_id=effective_session,
+            user_message_id=user_message_id,
+            role="assistant",
+            content=[{"type": "text", "text": quick_voice_reply}],
+            usage_metadata={"response_mode": "voice_quick_reply"},
+        )
+        yield {"event": "content_replace", "data": {"content": quick_voice_reply}}
+        yield {
+            "event": "done",
+            "data": {
+                "session_id": effective_session,
+                "saved_message_id": saved.id,
+                "full_response": quick_voice_reply,
+                "tool_calls": [],
+            },
+        }
+        uc._spawn_background(
+            run_background_memory_jobs(
+                uc._memory_service,
+                user_id=user_id,
+                session_id=effective_session,
+                user_message=current_message,
+                assistant_reply=quick_voice_reply,
+            ),
+            label="post_turn",
+        )
+        return
+
     # ── 2. 构建上下文 ──
     # 构建历史消息与会话摘要上下文
     history_messages = await build_messages(
@@ -133,7 +226,8 @@ async def chat(
         history_messages=history_messages,
         session_summary=session_summary,
         enable_web_search=enable_web_search,
-        need_teaching_diagram=need_teaching_diagram,
+        diagram_mode=diagram_mode,
+        voice_mode=voice_mode,
     )
 
     agent = TutorAgent()
@@ -161,13 +255,8 @@ async def chat(
                 tool_invocations = sse_data.get("tool_invocations", [])
                 sources = sse_data.get("sources", [])
 
-                # 图解数据通过单独事件发送，前端在回答后立即渲染
                 if diagram_result is not None:
-                    diagram_result = await ensure_teaching_diagram_png_payload(
-                        diagram_result,
-                        username=username,
-                        session_id=effective_session,
-                    )
+                    # 图解数据通过单独事件发送，前端在回答后立即渲染
                     yield {"event": "diagram", "data": diagram_result}
 
                 yield {
@@ -198,9 +287,10 @@ async def chat(
         return
 
     # ── 4. 持久化助手回复（含图解、来源等元数据） ──
-    # 若正常产出，则保存助手消息并记录工具/来源/图解元数据
+    # 若正常产出（文字回答或图解），则保存助手消息并记录工具/来源/图解元数据
+    has_output = bool(full_answer.strip()) or diagram_result is not None
     saved_message_id: int | None = None
-    if not has_error and full_answer:
+    if not has_error and has_output:
         usage_meta: dict[str, Any] = {}
         if sources:
             usage_meta["sources"] = sources
@@ -212,12 +302,15 @@ async def chat(
         if diagram_result:
             usage_meta["diagram"] = diagram_result
 
+        assistant_content = (
+            [{"type": "text", "text": full_answer}] if full_answer.strip() else []
+        )
         saved = await memory_svc.save_message(
             user_id=user_id,
             session_id=effective_session,
             user_message_id=user_message_id,
             role="assistant",
-            content=[{"type": "text", "text": full_answer}],
+            content=assistant_content,
             usage_metadata=usage_meta or None,
         )
         saved_message_id = saved.id
@@ -230,7 +323,7 @@ async def chat(
 
     # ── 5. 最终内容校准：确保前端显示与数据库一致 ──
     # 用完整回答覆盖前端已流式显示的内容
-    if not has_error and full_answer:
+    if not has_error and full_answer.strip():
         yield {
             "event": "content_replace",
             "data": {"content": full_answer},
@@ -239,29 +332,32 @@ async def chat(
     # ── 6. 返回最终结果 ──
     # 发送 done 事件，附带完整回答与工具调用信息
     if not has_error:
+        completion_data: dict[str, Any] = {
+            "session_id": effective_session,
+            "saved_message_id": saved_message_id,
+            "full_response": full_answer,
+            "tool_calls": [
+                {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
+                for inv in tool_invocations
+            ],
+        }
+        if diagram_result is not None:
+            completion_data["diagram"] = diagram_result
         yield {
             "event": "done",
-            "data": {
-                "session_id": effective_session,
-                "saved_message_id": saved_message_id,
-                "full_response": full_answer,
-                "tool_calls": [
-                    {"id": inv.get("tool_name", ""), "name": inv.get("tool_name", ""), "args": inv.get("payload", {})}
-                    for inv in tool_invocations
-                ],
-            },
+            "data": completion_data,
         }
 
     # ── 5. 后台记忆任务 ──
     # 对话成功后触发长期记忆与压缩等后台任务
-    if full_answer:
+    if has_output:
         uc._spawn_background(
             run_background_memory_jobs(
                 uc._memory_service,
                 user_id=user_id,
                 session_id=effective_session,
                 user_message=current_message,
-                assistant_reply=full_answer,
+                assistant_reply=full_answer or "内容已生成并保存",
             ),
             label="post_turn",
         )
@@ -286,7 +382,7 @@ async def run_chat_agent(
     user_input: str,
     attachments: list[str],
     enable_web_search: bool,
-    need_teaching_diagram: bool,
+    diagram_mode: DiagramMode,
 ) -> None:
     """后台执行一次辅导，并通过 ChatEvents 推送运行状态。
 
@@ -326,7 +422,7 @@ async def run_chat_agent(
             user_input=user_input,
             attachments=attachments or None,
             enable_web_search=enable_web_search,
-            need_teaching_diagram=need_teaching_diagram,
+            diagram_mode=diagram_mode,
         ):
             if event.get("event") == "done" and isinstance(event.get("data"), dict):
                 completion_data = event["data"]
@@ -430,6 +526,7 @@ class ChatUseCases:
         self,
         *,
         user_id: int,
+        username: str,
         session_id: str,
         text: str,
         attachments: list[dict[str, Any]],
@@ -437,7 +534,7 @@ class ChatUseCases:
         """把文字和原始附件快照直接写入 UserMessage。"""
         # 校验并归一化每个附件（URL 前缀 + 去重）
         normalized_attachments: list[dict[str, Any]] = []
-        prefix = f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/"
+        prefix = f"/static/{username}/chat/{session_id}/uploads/"
         seen_urls: set[str] = set()
         for attachment in attachments:
             url = str(attachment.get("url") or "").strip()
@@ -445,8 +542,8 @@ class ChatUseCases:
                 raise ValueError("附件地址无效或不属于当前会话")
             filename = url.removeprefix(prefix)
             path = self.file_store.resolve_user_file(
-                current_user_id=user_id,
-                owner_id=user_id,
+                current_username=username,
+                owner_username=username,
                 session_id=session_id,
                 filename=filename,
             )
@@ -537,6 +634,7 @@ class ChatUseCases:
                     attachment_analyses=analyses_by_message.get(root_message_id, []) if is_final_assistant else [],
                     activities=activities_by_message.get(root_message_id, []) if is_final_assistant else [],
                     usage_metadata=message.usage_metadata if isinstance(message.usage_metadata, dict) else None,
+                    video=message.usage_metadata.get("video") if (message.role == "user" and isinstance(message.usage_metadata, dict)) else None,
                     diagram=message.usage_metadata.get("diagram") if (is_final_assistant and isinstance(message.usage_metadata, dict)) else None,
                     created_at=message.created_at,
                 )

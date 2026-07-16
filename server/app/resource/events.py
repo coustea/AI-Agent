@@ -1,7 +1,7 @@
 """资源生成模块事件埋点。
 
 在资源生成完成（或失败）后记录 ``resource_generated`` 事件到 ``learning_events`` 表，
-供画像评分按时间窗口聚合统计。
+供学习评估按时间窗口聚合统计。
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ async def record_resource_generated_event(
         db: 异步数据库会话。
         user_id: 用户 ID。
         resource_id: 资源 ID。
-        status: 生成状态（completed / partial_completed / failed）。
+    status: 生成状态（completed / partial / failed）。
         course: 可选的学习课程/科目。
         topic: 可选的学习主题。
         agent_types: 成功生成的智能体类型列表。
@@ -50,7 +50,7 @@ async def record_resource_generated_event(
             "agent_types": list(agent_types) if agent_types else [],
         },
     )
-    # 将资源生成事件写入 learning_events 供画像评分聚合
+    # 将资源生成事件写入 learning_events 供学习评估聚合
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
     logger.info(
         "[Resource] event recorded: user_id=%s resource_id=%s status=%s",

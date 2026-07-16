@@ -11,7 +11,7 @@
 随版本漂移，曾导致整库加载失败（0 文档）。直接用 pathlib.read_text(errors="replace")
 既稳定又能容忍个别坏字节，PDF 才需要 PyMuPDFLoader 的版面/分页解析。
 
-Called by: app/rag/indexing/build.py
+Called by: app/rag/build.py
 """
 
 from __future__ import annotations
@@ -24,6 +24,10 @@ from langchain_community.document_loaders import PyMuPDFLoader
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class DocumentLoadError(RuntimeError):
+    """A source document could not be loaded safely for index publication."""
 
 # 支持的文件扩展名（.md/.txt 纯文本 + .pdf 版面解析）
 SUPPORTED_EXTENSIONS: set[str] = {".md", ".txt", ".pdf"}
@@ -132,12 +136,11 @@ def load_directory(
         if _should_skip(rel_path):
             continue
 
-        # 单文件加载失败不影响整体
+        # 索引构建必须是完整快照；跳过失败文件会让发布的知识库与源目录不一致。
         try:
             docs = _load_file(path)
         except Exception as exc:
-            logger.warning("[load] failed to load %s: %s", rel_path, exc)
-            continue
+            raise DocumentLoadError(f"Failed to load source document: {rel_path}") from exc
 
         for doc in docs:
             if not doc.page_content or not doc.page_content.strip():

@@ -19,6 +19,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -28,11 +30,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import PATH_QUIZ_SIZE
 from app.evaluation.request import LearningEventCreate
-from app.evaluation.response import LearningEventItem
-from app.evaluation.service import (
-    EvaluationService,
-    build_summary_from_events,
-)
+from app.evaluation.service import EvaluationService
 from app.infra.database import session_scope
 from app.path.event import PathEvents
 from app.infra.logging import get_logger
@@ -56,8 +54,10 @@ from app.path.schemas import (
     PathResponse,
     LearningPathQuestionDTO,
     LearningPathResourceDTO,
+    PathResourceTaskResponse,
     LearningPathTutorialDTO,
     LearningSignalSnapshot,
+    PathLearningEventItem,
     PathLearningEvaluationResponse,
     PathQuizRoundResponse,
     PathQuizSubmitRequest,
@@ -81,9 +81,13 @@ logger = get_logger(__name__)
 AUX_RESOURCE_TYPES = {"mindmap", "code", "reading", "ppt", "cartoon"}
 
 # 节点状态常量
-STARTED_NODE_STATUSES = {"in_progress", "remediation", "reinforced"}
+STARTED_NODE_STATUSES = {"in_progress"}
 ACCESSIBLE_NODE_STATUSES = ACTIVE_NODE_STATUSES | COMPLETED_NODE_STATUSES
-DEEP_LEARNING_NODE_STATUSES = STARTED_NODE_STATUSES | COMPLETED_NODE_STATUSES
+RESOURCE_READY_NODE_STATUSES = STARTED_NODE_STATUSES | COMPLETED_NODE_STATUSES
+QUIZ_SUBMIT_NODE_STATUSES = STARTED_NODE_STATUSES
+
+_node_tutorial_locks: dict[int, asyncio.Lock] = {}
+_node_question_locks: dict[int, asyncio.Lock] = {}
 
 
 class PathService:
@@ -108,12 +112,13 @@ class PathService:
     async def create_path(self, user_id: int, request: PathRequest) -> int:
         """创建学习路径任务，返回路径 ID。"""
         logger.info("[PathService] 创建路径任务: user_id=%s goal=%s", user_id, request.goal[:50])
-        await self._archive_active(user_id, "mentor")
         path = LearningPath(
             user_id=user_id,
             title=request.topic or "学习路径",
             goal=request.goal,
             topic=request.topic or None,
+            current_knowledge=request.current_knowledge,
+            preferences=request.preferences.model_dump(mode="json"),
             overall_progress=0,
             status="generating",
             stages_json=[],
@@ -191,11 +196,14 @@ class PathService:
                 progress=10,
             )
 
+            from app.evaluation.guidance import get_effective_guidance_strategy
+            guidance_strategy = await get_effective_guidance_strategy(self.session, user_id)
             plan = await self.path_planner.generate_plan(
                 request,
                 profile,
                 progress_callback=progress_cb,
                 profile_markdown=profile_md,
+                guidance_strategy=guidance_strategy,
             )
 
             await events.send(
@@ -228,10 +236,16 @@ class PathService:
 
     # ── 路径查询 ────────────────────────────────────────────────────────────
 
-    # 获取用户当前激活的路径概览
-    async def get_active_path_overview(self, user_id: int, module: str = "mentor") -> PathResponse | None:
-        """获取用户当前激活的路径概览。"""
-        path = await self._get_active_path(user_id, module)
+    # 获取用户所有可继续学习的路径概览
+    async def list_active_path_overviews(self, user_id: int, module: str = "mentor") -> list[PathResponse]:
+        """获取用户所有可继续学习的路径概览。"""
+        paths = await self._get_active_paths(user_id, module)
+        return [await self._build_response(path) for path in paths]
+
+    # 获取最近更新的可继续学习路径概览
+    async def get_latest_active_path_overview(self, user_id: int, module: str = "mentor") -> PathResponse | None:
+        """获取最近更新的可继续学习路径概览。"""
+        path = await self._get_latest_active_path(user_id, module)
         if path is None:
             return None
         return await self._build_response(path)
@@ -271,15 +285,15 @@ class PathService:
             for path in paths
         ]
 
-    # 激活一条历史路径并归档其他激活路径
+    # 继续学习一条历史路径，不影响其他未完成路径
     async def activate_history_path(
         self, user_id: int, path_id: int
     ) -> PathResponse:
         path = await self._must_get_path(user_id, path_id)
-        await self._archive_active(
-            user_id, path.module, exclude_path_id=path.id
-        )
-        path.status = "active"
+        if path.status in {"failed", "generating"}:
+            raise ValueError("该学习路径当前不可继续学习")
+        if path.status != "completed":
+            path.status = "active"
         path.updated_at = datetime.now(timezone.utc)
         await self.session.commit()
         return await self._build_response(path)
@@ -338,29 +352,31 @@ class PathService:
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
 
-        tutorials = await self._get_node_tutorials(node.id)
-        current = next((t for t in tutorials if t.is_current), None)
+        lock = _node_tutorial_locks.setdefault(node.id, asyncio.Lock())
+        async with lock:
+            tutorials = await self._get_node_tutorials(node.id)
+            current = next((t for t in tutorials if t.is_current), None)
 
-        if current is not None:
-            logger.info(
-                "[PathService] 节点已有教程(id=%d)，跳过生成，直接返回工作区",
-                current.id,
+            if current is not None:
+                logger.info(
+                    "[PathService] 节点已有教程(id=%d)，跳过生成，直接返回工作区",
+                    current.id,
+                )
+                return await self._build_workspace_response(node)
+
+            state = LearnState(
+                user_id=user_id,
+                node_id=node_id,
+                phase="start",
+                session=self.session,
+                tutorial_type="primary",
             )
+            result = await self.learn_graph.ainvoke(state)
+            if result.get("error"):
+                raise ValueError(result["error"])
+
+            node = await self._must_get_node(user_id, node_id)
             return await self._build_workspace_response(node)
-
-        state = LearnState(
-            user_id=user_id,
-            node_id=node_id,
-            phase="start",
-            session=self.session,
-            tutorial_type="primary",
-        )
-        result = await self.learn_graph.ainvoke(state)
-        if result.get("error"):
-            raise ValueError(result["error"])
-
-        node = await self._must_get_node(user_id, node_id)
-        return await self._build_workspace_response(node)
 
     # 聚合节点工作区数据（教程、资源、测验轮次）
     async def _build_workspace_response(
@@ -389,66 +405,50 @@ class PathService:
             quiz_available=await self._has_quiz_questions(node.id),
         )
 
-    # 生成节点辅助资源（思维导图/代码/PPT/阅读/动画）
-    async def generate_node_resource(
+    # 创建节点辅助资源生成任务（思维导图/代码/PPT/阅读/动画）
+    async def create_node_resource_task(
         self,
         user_id: int,
         node_id: int,
         resource_type: str,
-    ) -> LearningPathResourceDTO:
-        """生成节点辅助资源。
-
-        统一接口：所有资源类型都通过 generate_for_path 方法生成，
-        接收 PathResourceRequest，返回 AgentResult。
-        """
+        run_id: str,
+    ) -> PathResourceTaskResponse:
+        """创建节点辅助资源生成任务，后台完成实际生成。"""
         logger.info(
-            "[PathService] 生成节点资源: user_id=%s node_id=%s type=%s",
-            user_id, node_id, resource_type,
+            "[PathService] 创建节点资源任务: user_id=%s node_id=%s type=%s run_id=%s",
+            user_id, node_id, resource_type, run_id,
         )
         if resource_type not in AUX_RESOURCE_TYPES:
             raise ValueError(f"不支持的资源类型: {resource_type}")
 
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
-        self._ensure_node_in_deep_learning(node)
+        self._ensure_node_resource_ready(node)
 
-        # 获取当前教程
         current_tutorial = await self._get_current_tutorial(node.id)
         if current_tutorial is None:
             raise ValueError("当前节点还没有教程，请先生成主教程再生成辅助资源")
 
-        # 获取用户画像和上下文信息
-        profile_markdown = await self.profile_builder.build_profile_markdown(user_id=user_id)
-        path = await self.session.get(LearningPath, node.path_id)
-        user = await self.session.get(User, user_id)
-
-        # 构建统一请求（包含所有上下文）
-        request = PathResourceRequest(
-            user_id=user_id,
+        version_no = await self._count_resources(node.id, resource_type) + 1
+        resource = PathNodeResource(
             path_id=node.path_id,
             node_id=node.id,
-            profile={"markdown": profile_markdown},
-            tutorial=LearningPathTutorialDTO.from_model(current_tutorial),
-            username=user.username if user else "",
-            path_title=path.title if path else "",
-            path_goal=path.goal if path else "",
-            node_title=node.title,
-            node_key=node.node_id,
-            difficulty=node.difficulty or "beginner",
-        )
-
-        # 统一调用 generate_for_path 接口
-        result = await self._call_generate_for_path(resource_type, request)
-
-        # 持久化到数据库
-        resource_dto = await self._persist_resource_result(
+            tutorial_id=current_tutorial.id,
             user_id=user_id,
-            node=node,
-            tutorial=current_tutorial,
             resource_type=resource_type,
-            result=result,
+            version_no=version_no,
+            title=f"{node.title} - {resource_type}",
+            content_format={"ppt": "html", "cartoon": "mp4"}.get(resource_type, "markdown"),
+            status="generating",
+            input_json={"run_id": run_id},
         )
-        return resource_dto
+        self.session.add(resource)
+        await self.session.commit()
+        await self.session.refresh(resource)
+        return PathResourceTaskResponse(
+            resource=LearningPathResourceDTO.from_model(resource),
+            run_id=run_id,
+        )
 
     async def _call_generate_for_path(
         self,
@@ -456,16 +456,25 @@ class PathService:
         request: PathResourceRequest,
     ) -> "AgentResult":
         """统一调用各服务的 generate_for_path 接口。"""
+        logger.info(
+            "[PathService] 调用资源生成服务: type=%s node_id=%s node_title=%s",
+            resource_type, request.node_id, request.node_title,
+        )
         services = self._resource_services
         if resource_type == "ppt":
+            logger.info("[PathService] 调用 PPTService.generate_for_path")
             return await services["ppt"].generate_for_path(request)
         elif resource_type == "cartoon":
-            return await services["cartoon"].generate_for_path(request)
+            logger.info("[PathService] 调用 PathCartoonAdapter.generate")
+            return await services["cartoon"].generate(request)
         elif resource_type == "mindmap":
+            logger.info("[PathService] 调用 MindmapAgent.generate_for_path")
             return await services["mindmap"].generate_for_path(request)
         elif resource_type == "code":
+            logger.info("[PathService] 调用 CodeAgent.generate_for_path")
             return await services["code"].generate_for_path(request)
         elif resource_type == "reading":
+            logger.info("[PathService] 调用 ReadingAgent.generate_for_path")
             return await services["reading"].generate_for_path(request)
         raise ValueError(f"不支持的资源类型: {resource_type}")
 
@@ -473,11 +482,11 @@ class PathService:
     def _init_resource_services() -> dict:
         """预创建资源生成服务实例。"""
         from app.shared.ppt import PPTService
-        from app.shared.cartoon import CartoonService
+        from app.path.cartoon import PathCartoonAdapter
         from app.resource.agents import AGENT_REGISTRY
         return {
             "ppt": PPTService(),
-            "cartoon": CartoonService(),
+            "cartoon": PathCartoonAdapter(),
             "mindmap": AGENT_REGISTRY["mindmap"](),
             "code": AGENT_REGISTRY["code"](),
             "reading": AGENT_REGISTRY["reading"](),
@@ -536,27 +545,29 @@ class PathService:
         logger.info("[PathService] 生成测验题目: user_id=%s node_id=%s", user_id, node_id)
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
-        self._ensure_node_in_deep_learning(node)
+        self._ensure_node_quiz_ready(node)
 
-        state = LearnState(
-            user_id=user_id,
-            node_id=node_id,
-            phase="questions",
-            session=self.session,
-        )
-        result = await self.learn_graph.ainvoke(state)
-        if result.get("error"):
-            raise ValueError(result["error"])
+        lock = _node_question_locks.setdefault(node.id, asyncio.Lock())
+        async with lock:
+            state = LearnState(
+                user_id=user_id,
+                node_id=node_id,
+                phase="questions",
+                session=self.session,
+            )
+            result = await self.learn_graph.ainvoke(state)
+            if result.get("error"):
+                raise ValueError(result["error"])
 
-        questions = result.get("quiz_questions", [])
-        current_tutorial = result.get("current_tutorial")
-        round_no = result.get("round_no", 1)
-        return PathQuizRoundResponse(
-            node_id=node.id,
-            tutorial_id=current_tutorial.id if current_tutorial else None,
-            round_no=round_no,
-            questions=[LearningPathQuestionDTO.from_model(q) for q in questions],
-        )
+            questions = result.get("quiz_questions", [])
+            current_tutorial = result.get("current_tutorial")
+            round_no = result.get("round_no", 1)
+            return PathQuizRoundResponse(
+                node_id=node.id,
+                tutorial_id=current_tutorial.id if current_tutorial else None,
+                round_no=round_no,
+                questions=[LearningPathQuestionDTO.from_model(q) for q in questions],
+            )
 
     # 提交测验答案，评分并推进节点状态
     async def submit_node_quiz(self, user_id: int, node_id: int, payload: PathQuizSubmitRequest) -> PathQuizSubmitResponse:
@@ -564,12 +575,13 @@ class PathService:
         logger.info("[PathService] 提交测验: user_id=%s node_id=%s answers=%d", user_id, node_id, len(payload.answers))
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
-        self._ensure_node_in_deep_learning(node)
+        self._ensure_node_quiz_ready(node)
 
         round_no = await self._get_latest_round(node.id)
+        if round_no == 0:
+            raise ValueError("当前节点还没有测验题")
         questions = await self._get_round_questions(node.id, round_no)
-        if len(questions) != PATH_QUIZ_SIZE:
-            raise ValueError("当前节点还没有完整的五道题")
+        self._validate_quiz_submission(questions, payload)
 
         state = LearnState(
             user_id=user_id,
@@ -608,28 +620,20 @@ class PathService:
         """计算路径学习效果评估。"""
         path = await self._must_get_path(user_id, path_id)
         stmt = (
-    select(LearningEvent)
-    .where(
-        LearningEvent.user_id == user_id,
-        LearningEvent.module == "path",
-    )
-    .order_by(col(LearningEvent.created_at).desc())
-    .limit(50)
+            select(LearningEvent)
+            .where(
+                LearningEvent.user_id == user_id,
+                LearningEvent.module == "path",
+                LearningEvent.entity_id == str(path.id),
+            )
+            .order_by(col(LearningEvent.created_at).desc())
+            .limit(50)
         )
         events = list((await self.session.exec(stmt)).all())
         active_minutes = await self._get_path_active_minutes(
             user_id=user_id, path_id=path.id
         )
-        summary = build_summary_from_events(events)
-        signal_snapshot = LearningSignalSnapshot(
-            average_score=summary.average_score,
-            weak_topics=list(summary.weak_topics),
-            preferred_resources=list(summary.preferred_resources),
-            completed_resource_count=summary.completed_resources,
-            viewed_resource_count=summary.viewed_resources,
-            active_minutes=active_minutes,
-            recommendations=list(summary.recommendations),
-        )
+        signal_snapshot = build_path_signal_snapshot(events, active_minutes)
         current_node = await self._get_current_path_node(
             path.id, path.current_node_key
         )
@@ -672,19 +676,27 @@ class PathService:
         path = await self._must_get_path(user_id, path_id)
         meta = dict(payload.event_metadata or {})
         meta["path_id"] = path.id
-        if payload.event_metadata and "path_node_id" in payload.event_metadata:
-            pnid = payload.event_metadata["path_node_id"]
-            node = await self._must_get_node(user_id, pnid)
+        path_node_id = meta.get("path_node_id") or payload.path_node_id
+        if path_node_id is not None:
+            node = await self._must_get_node(user_id, int(path_node_id))
             if node.path_id != path.id:
                 raise ValueError("学习事件节点不属于当前学习路径")
             meta["path_node_id"] = node.id
             meta["node_id"] = node.node_id
-        payload = payload.model_copy(update={"entity_id": str(path.id), "event_metadata": meta})
-        return await self.evaluation_service.record_event(
+        payload = payload.model_copy(update={
+            "path_id": path.id,
+            "path_node_id": meta.get("path_node_id"),
+            "node_id": meta.get("node_id"),
+            "entity_id": str(path.id),
+            "event_metadata": meta,
+        })
+        record_result = await self.evaluation_service.record_event(
             self.session,
             user_id=user_id,
             payload=payload,
         )
+        event = record_result[0] if isinstance(record_result, tuple) else record_result
+        return event
 
     # ── 共享内部方法 ────────────────────────────────────────────────────────
 
@@ -708,10 +720,35 @@ class PathService:
         if node.status not in ACCESSIBLE_NODE_STATUSES:
             raise ValueError("路径节点尚未解锁")
 
-    # 校验节点已进入深入学习阶段（生成资源前置条件）
-    def _ensure_node_in_deep_learning(self, node: PathNode) -> None:
-        if node.status not in DEEP_LEARNING_NODE_STATUSES:
+    # 校验节点已进入可生成资源阶段
+    def _ensure_node_resource_ready(self, node: PathNode) -> None:
+        if node.status not in RESOURCE_READY_NODE_STATUSES:
             raise ValueError("请先进入深入学习，再生成该节点的学习资源")
+
+    # 校验节点可进行正式测验
+    def _ensure_node_quiz_ready(self, node: PathNode) -> None:
+        if node.status not in QUIZ_SUBMIT_NODE_STATUSES:
+            raise ValueError("该节点当前不能提交或生成正式测验")
+
+    def _validate_quiz_submission(
+        self,
+        questions: list[PathNodeQuestion],
+        payload: PathQuizSubmitRequest,
+    ) -> None:
+        """校验测验提交必须完整、唯一、属于当前轮且未提交过。"""
+        if len(questions) != PATH_QUIZ_SIZE:
+            raise ValueError("当前节点还没有完整的五道题")
+        if any(question.submitted_at is not None for question in questions):
+            raise ValueError("当前轮次已经提交，不能重复提交")
+
+        expected_ids = {int(question.id) for question in questions if question.id is not None}
+        submitted_ids = [answer.question_id for answer in payload.answers]
+        if len(set(submitted_ids)) != len(submitted_ids):
+            raise ValueError("不能重复提交同一道题")
+        if set(submitted_ids) != expected_ids:
+            raise ValueError("提交答案必须对应当前轮次的全部题目")
+        if any(not answer.response.strip() for answer in payload.answers):
+            raise ValueError("答案不能为空")
 
     # 获取路径下全部节点（按优先级排序）
     async def _get_nodes_for_path(
@@ -839,7 +876,7 @@ class PathService:
                 "base_info": base_info,
                 "dimensions": dimensions,
             }
-        except ProgrammingError as exc:
+        except (ProgrammingError, AttributeError) as exc:
             logger.warning(
                 "[PathService] 画像表暂不可用，路径规划降级为空画像: "
                 "user_id=%s error=%s",
@@ -881,20 +918,28 @@ class PathService:
             item.updated_at = datetime.now(timezone.utc)
         await self.session.flush()
 
-    # 查询用户当前激活的路径（最近更新优先）
-    async def _get_active_path(
+    # 查询用户所有可继续学习路径（最近更新优先）
+    async def _get_active_paths(
         self, user_id: int, module: str = "mentor"
-    ) -> LearningPath | None:
+    ) -> list[LearningPath]:
         stmt = (
             select(LearningPath)
             .where(
                 LearningPath.user_id == user_id,
                 LearningPath.module == module,
                 LearningPath.status == "active",
+                LearningPath.overall_progress < 100,
             )
             .order_by(col(LearningPath.updated_at).desc())
         )
-        return (await self.session.exec(stmt)).first()
+        return list((await self.session.exec(stmt)).all())
+
+    # 查询用户最近更新的可继续学习路径
+    async def _get_latest_active_path(
+        self, user_id: int, module: str = "mentor"
+    ) -> LearningPath | None:
+        paths = await self._get_active_paths(user_id, module)
+        return paths[0] if paths else None
 
     # 组装路径概览响应（含所有节点 DTO）
     async def _build_response(
@@ -952,43 +997,139 @@ class PathService:
             return stage.model_dump(mode="json")
         return dict(stage)
 
-    async def _persist_resource_result(
+    async def complete_resource_task(
         self,
         *,
         user_id: int,
+        resource_id: int,
+        run_id: str,
+    ) -> None:
+        """执行资源生成任务并更新任务记录。"""
+        logger.info(
+            "[PathService] 开始执行资源生成任务: user_id=%s resource_id=%s run_id=%s",
+            user_id, resource_id, run_id,
+        )
+        events = PathEvents(user_id=user_id, path_id=resource_id, run_id=run_id)
+        await events.open()
+        resource = await self.session.get(PathNodeResource, resource_id)
+        if resource is None or resource.user_id != user_id:
+            logger.error(
+                "[PathService] 资源任务不存在或无权限: resource_id=%s user_id=%s",
+                resource_id, user_id,
+            )
+            await events.send(event="resource.failed", message="资源任务不存在", progress=0)
+            return
+
+        resource_type = resource.resource_type
+        logger.info(
+            "[PathService] 资源任务信息: resource_id=%s type=%s node_id=%s status=%s",
+            resource_id, resource_type, resource.node_id, resource.status,
+        )
+
+        await events.send(
+            event="resource.started",
+            message="资源生成任务已开始",
+            progress=5,
+            data={"resource_id": resource_id, "resource_type": resource_type},
+        )
+        try:
+            node = await self._must_get_node(user_id, resource.node_id)
+            self._ensure_node_accessible(node)
+            self._ensure_node_resource_ready(node)
+            tutorial = await self._get_current_tutorial(node.id)
+            if tutorial is None:
+                raise ValueError("当前节点还没有教程，请先生成主教程再生成辅助资源")
+            logger.info(
+                "[PathService] 构建资源生成请求: node_id=%s tutorial_id=%s type=%s",
+                node.id, tutorial.id, resource_type,
+            )
+            request = await self._build_resource_request(user_id, node, tutorial)
+            await events.send(event="resource.running", message="正在调用资源智能体", progress=35)
+            logger.info(
+                "[PathService] 调用资源生成服务: type=%s node_title=%s",
+                resource_type, node.title,
+            )
+            result = await self._call_generate_for_path(resource_type, request)
+            logger.info(
+                "[PathService] 资源生成完成: type=%s success=%s title=%s",
+                resource_type, result.success, result.title,
+            )
+            await self._apply_resource_result(resource, tutorial, result)
+            await events.send(
+                event="resource.completed" if result.success else "resource.failed",
+                message="资源生成完成" if result.success else (result.error or "资源生成失败"),
+                progress=100,
+                data={"resource_id": resource.id, "status": resource.status},
+            )
+        except Exception as exc:
+            logger.error(
+                "[PathService] 路径节点资源任务异常: resource_id=%s type=%s error=%s",
+                resource_id, resource_type, exc, exc_info=True,
+            )
+            resource.status = "failed"
+            resource.error_message = str(exc)
+            resource.updated_at = datetime.now(timezone.utc)
+            await self.session.commit()
+            await events.send(
+                event="resource.failed",
+                message=str(exc) or "资源生成失败",
+                progress=100,
+                data={"resource_id": resource.id, "status": "failed"},
+            )
+
+    async def _build_resource_request(
+        self,
+        user_id: int,
         node: PathNode,
         tutorial: PathNodeTutorial,
-        resource_type: str,
-        result: "AgentResult",
-    ) -> LearningPathResourceDTO:
-        """持久化资源生成结果到数据库。"""
-        from app.resource.schemas import AgentResult
+    ) -> PathResourceRequest:
+        """构建路径节点资源生成请求。"""
+        from app.path.schemas import PathPreferences
 
-        existing_count = await self._count_resources(node.id, resource_type)
-        version_no = existing_count + 1
+        path = await self._must_get_path(user_id, node.path_id)
+        user = await self.session.get(User, user_id)
+        profile = await self._get_profile_dict(user_id)
 
-        title = result.title if result.success else f"{node.title} - {resource_type}"
+        # 解析路径偏好参数（使用安全方法处理可能格式错误的数据）
+        preferences_data = path.preferences or {}
+        preferences = PathPreferences.from_dict_safe(preferences_data)
 
-        resource = PathNodeResource(
+        return PathResourceRequest(
+            user_id=user_id,
             path_id=node.path_id,
             node_id=node.id,
-            tutorial_id=tutorial.id,
-            user_id=user_id,
-            resource_type=resource_type,
-            version_no=version_no,
-            title=title,
-            content_format="html" if resource_type in {"ppt", "cartoon"} else "markdown",
-            content_text=result.content if result.success else None,
-            status="completed" if result.success else "failed",
-            error_message=result.error if not result.success else None,
-            summary=result.summary if result.success else None,
-            metadata_json=result.metadata if result.success else None,
+            profile=profile,
+            tutorial=LearningPathTutorialDTO.from_model(tutorial),
+            username=user.username if user else str(user_id),
+            path_title=path.title,
+            path_goal=path.goal,
+            node_title=node.title,
+            node_key=node.node_id,
+            difficulty=node.difficulty or "beginner",
+            current_knowledge=list(path.current_knowledge or []),
+            preferences=preferences,
         )
-        self.session.add(resource)
+
+    async def _apply_resource_result(
+        self,
+        resource: PathNodeResource,
+        tutorial: PathNodeTutorial,
+        result: "AgentResult",
+    ) -> LearningPathResourceDTO:
+        """将资源生成结果写回既有任务记录。"""
+        resource.tutorial_id = tutorial.id
+        resource.title = result.title if result.success and result.title else resource.title
+        resource.content_format = result.file_type or resource.content_format
+        resource.content_text = result.content if result.success else None
+        resource.status = "completed" if result.success else "failed"
+        resource.error_message = None if result.success else result.error
+        resource.summary = result.summary if result.success else None
+        resource.metadata_json = result.metadata if result.success else None
+        resource.updated_at = datetime.now(timezone.utc)
         await self.session.commit()
         await self.session.refresh(resource)
-
         return LearningPathResourceDTO.from_model(resource)
+
 
     async def _count_resources(self, node_id: int, resource_type: str) -> int:
         """统计节点指定类型的资源数量。"""
@@ -1002,12 +1143,62 @@ class PathService:
         return result.first() or 0
 
 
-# 将 LearningEvent ORM 转换为响应 DTO
-def build_learning_event_item(event: LearningEvent) -> LearningEventItem:
-    return LearningEventItem(
+# 根据路径学习事件构建路径专属学习信号快照
+def build_path_signal_snapshot(
+    events: list[LearningEvent],
+    active_minutes: int,
+) -> LearningSignalSnapshot:
+    score_values = [event.score for event in events if event.score is not None]
+    average_score = round(sum(score_values) / len(score_values), 1) if score_values else None
+
+    weak_counter: Counter[str] = Counter()
+    preferred_counter: Counter[str] = Counter()
+    for event in events:
+        topic = event.topic or event.course
+        if event.score is not None and event.score < 70 and topic:
+            weak_counter[topic] += 1
+
+        metadata = event.event_metadata or {}
+        feedback = str(metadata.get("feedback") or getattr(event, "feedback", "") or "")
+        if topic and any(keyword in feedback for keyword in ("太难", "看不懂", "不会", "卡住", "薄弱", "错")):
+            weak_counter[topic] += 1
+        for keyword, label in {
+            "图解": "图解材料",
+            "案例": "案例讲解",
+            "代码": "代码实操",
+            "视频": "视频讲解",
+            "题": "练习题库",
+        }.items():
+            if keyword in feedback:
+                preferred_counter[label] += 1
+
+    recommendations: list[str] = []
+    if average_score is not None and average_score < 70:
+        recommendations.append("优先安排错题复盘和基础讲解资源，降低后续学习坡度。")
+    if weak_counter:
+        recommendations.append(f"下一轮资源生成应重点覆盖「{weak_counter.most_common(1)[0][0]}」。")
+    if preferred_counter:
+        recommendations.append(f"资源推送可提高「{preferred_counter.most_common(1)[0][0]}」占比。")
+    if not recommendations:
+        recommendations.append("继续按当前路径推进，并通过阶段测验积累更多评估信号。")
+
+    return LearningSignalSnapshot(
+        average_score=average_score,
+        weak_topics=[item for item, _ in weak_counter.most_common(5)],
+        preferred_resources=[item for item, _ in preferred_counter.most_common(5)],
+        completed_resource_count=0,
+        viewed_resource_count=0,
+        active_minutes=active_minutes,
+        recommendations=recommendations,
+    )
+
+
+# 将 LearningEvent ORM 转换为路径事件响应 DTO
+def build_learning_event_item(event: LearningEvent) -> PathLearningEventItem:
+    return PathLearningEventItem(
         id=event.id or 0,
-        module=event.module,
-        entity_id=event.entity_id,
+        module=event.module or "path",
+        entity_id=event.entity_id or (str(getattr(event, "path_id", "")) or None),
         event_type=event.event_type,
         course=event.course,
         topic=event.topic,
@@ -1027,3 +1218,32 @@ async def run_generation_bg(
     async with session_scope() as session:
         service = PathService(session)
         await service.run_generation(path_id, user_id, request, run_id)
+
+
+# 后台任务入口：独立会话中执行路径节点资源生成
+async def run_resource_generation_bg(
+    user_id: int,
+    resource_id: int,
+    run_id: str,
+):
+    logger.info(
+        "[PathBG] 开始后台资源生成: user_id=%s resource_id=%s run_id=%s",
+        user_id, resource_id, run_id,
+    )
+    try:
+        async with session_scope() as session:
+            service = PathService(session)
+            await service.complete_resource_task(
+                user_id=user_id,
+                resource_id=resource_id,
+                run_id=run_id,
+            )
+        logger.info(
+            "[PathBG] 后台资源生成完成: resource_id=%s run_id=%s",
+            resource_id, run_id,
+        )
+    except Exception as exc:
+        logger.error(
+            "[PathBG] 后台资源生成异常: resource_id=%s run_id=%s error=%s",
+            resource_id, run_id, exc, exc_info=True,
+        )

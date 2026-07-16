@@ -1121,3 +1121,217 @@ button:focus-visible, .btn:focus-visible {
   transform: translateY(0.5px);
 }
 
+/* ============================================================
+   PrimeVue Style Customization (Glacier Teal & Coral Red)
+   ============================================================ */
+.p-dialog-mask {
+  background-color: rgba(23, 59, 66, 0.45) !important;
+}
+
+.p-dialog {
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border-light) !important;
+  font-family: var(--font-sans) !important;
+}
+
+.p-dialog-header {
+  background: var(--color-surface) !important;
+  padding: var(--space-5) var(--space-5) var(--space-2) !important;
+}
+
+.p-dialog-title {
+  font-size: var(--text-lg) !important;
+  color: var(--color-text-strong) !important;
+  font-weight: var(--weight-semibold) !important;
+}
+
+.p-dialog-content {
+  background: var(--color-surface) !important;
+  color: var(--color-text-secondary) !important;
+  padding: var(--space-3) var(--space-5) var(--space-5) !important;
+  font-size: var(--text-base) !important;
+  line-height: var(--leading-relaxed) !important;
+}
+
+.p-dialog-footer {
+  background: var(--color-surface) !important;
+  padding: var(--space-2) var(--space-5) var(--space-5) !important;
+}
+
+.p-dialog-header-close,
+.p-dialog-header-close-button,
+.p-dialog-header-icon,
+.p-dialog-header-btn,
+.p-dialog-close-button {
+  display: inline-flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: transparent !important;
+  border: none !important;
+  color: var(--color-text-muted) !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: var(--transition-fast) !important;
+  cursor: pointer !important;
+}
+
+.p-dialog-header-close:hover,
+.p-dialog-header-close-button:hover,
+.p-dialog-header-icon:hover,
+.p-dialog-header-btn:hover,
+.p-dialog-close-button:hover {
+  background: var(--color-bg) !important;
+  color: var(--color-text-strong) !important;
+}
+
+.p-dialog-header-close svg,
+.p-dialog-header-close-button svg,
+.p-dialog-header-icon svg,
+.p-dialog-header-btn svg,
+.p-dialog-close-button svg {
+  width: 14px !important;
+  height: 14px !important;
+  display: block !important;
+}
+
+/* PrimeVue Buttons */
+.p-button {
+  height: 40px !important;
+  padding: 0 var(--space-5) !important;
+  border-radius: var(--radius-sm) !important;
+  font-size: var(--text-sm) !important;
+  font-weight: var(--weight-medium) !important;
+  transition: var(--btn-transition) !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: var(--space-2) !important;
+  user-select: none !important;
+}
+
+/* Primary/Teal Button */
+.p-button:not(.p-button-danger):not(.p-button-secondary) {
+  background: var(--color-primary) !important;
+  border: 1px solid var(--color-primary) !important;
+  color: #FFFFFF !important;
+}
+
+.p-button:not(.p-button-danger):not(.p-button-secondary):hover {
+  background: var(--color-primary-hover) !important;
+  border-color: var(--color-primary-hover) !important;
+  transform: translateY(-1px) !important;
+}
+
+.p-button:not(.p-button-danger):not(.p-button-secondary):active {
+  transform: translateY(0) !important;
+}
+
+/* Secondary Button (Cancel style) */
+.p-button-secondary,
+.p-button.p-button-outlined,
+.p-button-text {
+  background: #FFFFFF !important;
+  border: 1px solid var(--color-border) !important;
+  color: var(--color-text-secondary) !important;
+}
+
+.p-button-secondary:hover,
+.p-button.p-button-outlined:hover,
+.p-button-text:hover {
+  background: var(--color-bg) !important;
+  border-color: var(--color-border-hover) !important;
+  color: var(--color-text-strong) !important;
+  transform: translateY(-1px) !important;
+}
+
+.p-button-secondary:active,
+.p-button.p-button-outlined:active,
+.p-button-text:active {
+  transform: translateY(0) !important;
+}
+
+/* Danger Button (Logout/Delete style) */
+.p-button-danger {
+  background: var(--color-danger) !important;
+  border: 1px solid var(--color-danger) !important;
+  color: #FFFFFF !important;
+}
+
+.p-button-danger:hover {
+  background: #B3304E !important;
+  border-color: #B3304E !important;
+  transform: translateY(-1px) !important;
+}
+
+.p-button-danger:active {
+  transform: translateY(0) !important;
+}
+
+/* ConfirmDialog specific styling (compact card size) */
+.p-confirmdialog {
+  max-width: 360px !important;
+}
+
+/* Button contrast: make cancel button in ConfirmDialog a ghost/text button */
+.p-confirmdialog .p-dialog-footer .p-button-secondary,
+.p-confirmdialog .p-dialog-footer .p-button-text {
+  background: transparent !important;
+  border: none !important;
+  color: var(--color-text-secondary) !important;
+  box-shadow: none !important;
+}
+
+.p-confirmdialog .p-dialog-footer .p-button-secondary:hover,
+.p-confirmdialog .p-dialog-footer .p-button-text:hover {
+  background: var(--color-bg) !important;
+  color: var(--color-text-strong) !important;
+}
+
+/* Top-center Toast Custom styling (resembles Element Message) */
+.p-toast-top-center {
+  top: 24px !important;
+  width: auto !important;
+  max-width: 500px !important;
+}
+
+.p-toast-top-center .p-toast-message {
+  box-shadow: var(--shadow-sm) !important;
+  border-radius: var(--radius-sm) !important;
+  border: 1px solid var(--color-border-light) !important;
+  background: var(--color-surface) !important;
+  padding: var(--space-3) var(--space-5) !important;
+}
+
+.p-toast-top-center .p-toast-message-content {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: var(--space-3) !important;
+}
+
+.p-toast-top-center .p-toast-summary {
+  font-size: var(--text-sm) !important;
+  font-weight: var(--weight-semibold) !important;
+  color: var(--color-text-strong) !important;
+}
+
+.p-toast-top-center .p-toast-detail {
+  font-size: var(--text-sm) !important;
+  color: var(--color-text-secondary) !important;
+  margin-top: 0 !important;
+  line-height: var(--leading-tight) !important;
+}
+
+.p-toast-top-center .p-toast-message-icon {
+  font-size: var(--text-base) !important;
+  width: auto !important;
+  height: auto !important;
+}
+

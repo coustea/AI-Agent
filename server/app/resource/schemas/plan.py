@@ -1,89 +1,61 @@
-"""多智能体资源规划 — Markdown 格式。
-
-PlanningAgent 输出纯 Markdown 协同计划，不再使用结构化 JSON schema。
-
-设计原则：
-- LLM 生成 Markdown 远比生成复杂 JSON schema 可靠
-- 计划只在 Agent 之间传递，不需要展示给用户
-- 每个 Agent 从完整 Markdown 中提取自己的任务段落
-- 后端只做最轻量的校验：非空 + agent_id 覆盖检查
-"""
+"""版本化的资源协同计划与基础产物交接模型。"""
 
 from __future__ import annotations
 
-import re
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-# ── 资源规划 ────────────────────────────────────────────────────────────
+class ResourcePlanTask(BaseModel):
+    """一个 Agent 的可执行任务，不允许用 Markdown 标题隐式编码。"""
+    model_config = ConfigDict(extra="forbid")
+
+    agent_id: str
+    objective: str = Field(min_length=8, max_length=500)
+    focus: list[str] = Field(min_length=1, max_length=8)
+    required_elements: list[str] = Field(min_length=1, max_length=10)
+    avoid: list[str] = Field(default_factory=list, max_length=8)
 
 
 class ResourcePlan(BaseModel):
-    """PlanningAgent 输出的 Markdown 协同计划。
+    """规划 Agent 唯一允许交付的结构化、版本化控制协议。"""
+    model_config = ConfigDict(extra="forbid")
 
-    content 是完整的 Markdown 文本，包含 7 个标准段落：
-    1. 用户需求理解
-    2. 整体资源生成纲要
-    3. 统一学习主线
-    4. 资源之间的协同关系
-    5. Agent 协同任务（每个 Agent 一个子段落）
-    6. 聚合资源整合要求
-    7. 全局一致性要求
+    schema_version: Literal[1] = 1
+    learner_goal: str = Field(min_length=8, max_length=600)
+    scope: list[str] = Field(min_length=1, max_length=10)
+    tasks: list[ResourcePlanTask] = Field(min_length=1, max_length=7)
 
-    agent_ids 从 content 中的 `### [agent_id]` 标题自动提取。
-    """
+    @field_validator("scope")
+    @classmethod
+    def reject_empty_strings(cls, values: list[str]) -> list[str]:
+        cleaned = [value.strip() for value in values if value and value.strip()]
+        if len(cleaned) != len(values):
+            raise ValueError("计划列表不能包含空项")
+        return cleaned
 
-    model_config = ConfigDict(extra="ignore")
-
-    content: str = Field(min_length=1, description="完整的 Markdown 协同计划")
-    title: str = Field(default="", max_length=200, description="资源包标题")
+    @model_validator(mode="after")
+    def reject_duplicate_tasks(self) -> "ResourcePlan":
+        agent_ids = [task.agent_id for task in self.tasks]
+        if len(agent_ids) != len(set(agent_ids)):
+            raise ValueError("计划中不能为同一 Agent 分配重复任务")
+        return self
 
     @property
     def agent_ids(self) -> list[str]:
-        """从 Markdown 中提取所有 Agent 协同任务段落对应的 agent_id。
+        return [task.agent_id for task in self.tasks]
 
-        匹配格式：### [content] 或 ### [mindmap] 等
-        """
-        # 用正则提取所有 ### [agent_id] 标题中的 agent_id
-        return re.findall(r"^###\s*\[(\w+)\]", self.content, re.MULTILINE)
-
-    def has_agent(self, agent_id: str) -> bool:
-        """检查计划中是否包含指定 Agent 的协同任务段落。"""
-        return f"[{agent_id}]" in self.content
-
-    def extract_agent_section(self, agent_id: str) -> str:
-        """提取指定 Agent 的协同任务段落内容。
-
-        从 ### [agent_id] 开始，到下一个 ### 或文档结束。
-        """
-        pattern = rf"^###\s*\[{re.escape(agent_id)}\]\s*$"
-        lines = self.content.splitlines()
-        in_section = False
-        section_lines: list[str] = []
-
-        # 从匹配标题开始收集，直到下一个 ### 段落为止
-        for line in lines:
-            if re.match(pattern, line.strip()):
-                in_section = True
-                section_lines.append(line)
-                continue
-            if in_section:
-                # 下一个 ### 开头表示新段落开始
-                if line.strip().startswith("### "):
-                    break
-                section_lines.append(line)
-
-        return "\n".join(section_lines).strip()
-
-
-# ── 交接与下游 ─────────────────────────────────────────────────────────
+    def task_for(self, agent_id: str) -> ResourcePlanTask:
+        for task in self.tasks:
+            if task.agent_id == agent_id:
+                return task
+        raise KeyError(f"计划未包含 Agent: {agent_id}")
 
 
 class DownstreamContext(BaseModel):
-    """基础 Agent 给聚合 Agent 的交接内容。"""
-
-    model_config = ConfigDict(extra="ignore")
+    """基础 Agent 向聚合 Agent 提供的显式交接内容。"""
+    model_config = ConfigDict(extra="forbid")
 
     source_agent: str
     title: str = ""
@@ -91,36 +63,16 @@ class DownstreamContext(BaseModel):
     materials: list[str] = Field(default_factory=list, max_length=12)
 
 
-# ── 后端校验 ────────────────────────────────────────────────────────────
-
-
 class PlanValidationError(ValueError):
-    """ResourcePlan 校验失败。"""
+    pass
 
 
-def validate_resource_plan(plan: ResourcePlan, expected_agent_ids: list[str] | None = None) -> ResourcePlan:
-    """对 PlanningAgent 输出的 Markdown 计划执行后端校验。
-
-    校验规则：
-    1. content 非空
-    2. 如果提供了 expected_agent_ids，检查计划中是否包含所有预期的 Agent
-    """
-    errors: list[str] = []
-
-    # 计划体必须非空
-    if not plan.content.strip():
-        errors.append("计划内容为空")
-
-    # 若提供了预期 agent，校验计划是否覆盖全部
-    if expected_agent_ids:
-        plan_ids = set(plan.agent_ids)
-        expected_ids = set(expected_agent_ids)
-        missing = expected_ids - plan_ids
-        if missing:
-            errors.append(f"计划缺少以下 Agent 的协同任务段落: {sorted(missing)}")
-
-    # 存在错误则抛出，否则原样返回
-    if errors:
-        raise PlanValidationError("; ".join(errors))
-
+def validate_resource_plan(plan: ResourcePlan, expected_agent_ids: list[str]) -> ResourcePlan:
+    expected = set(expected_agent_ids)
+    actual = set(plan.agent_ids)
+    if actual != expected:
+        raise PlanValidationError(
+            "计划任务分配与已选 Agent 不一致: "
+            f"missing={sorted(expected - actual)} unexpected={sorted(actual - expected)}"
+        )
     return plan

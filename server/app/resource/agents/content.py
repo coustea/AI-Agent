@@ -7,13 +7,9 @@ import time
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
-from app.resource.agents.common import (
-    build_node_context,
-    build_resource_context,
-)
+from app.resource.agents.common import build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, NodeInput, ResourceInput
-from app.rag.tools import build_knowledge_tool
+from app.resource.schemas import AgentResult, ResourceInput
 
 logger = get_logger(__name__)
 
@@ -36,17 +32,6 @@ class ContentAgent(BaseResourceAgent):
             config=input_data.agent_config,
         )
 
-    async def generate_node(self, input_data: NodeInput) -> AgentResult:
-        result = await self._generate_content(
-            input_text="\n\n".join(build_node_context(input_data)),
-            title_prefix=input_data.node_title,
-            config=input_data.agent_config,
-        )
-        # 记录路径节点归属，便于后续关联
-        result.metadata["path_id"] = input_data.path_id
-        result.metadata["node_id"] = input_data.node_id
-        return result
-
     async def _generate_content(
         self,
         *,
@@ -58,43 +43,6 @@ class ContentAgent(BaseResourceAgent):
         logger.info("Agent[%s] 开始生成: learning_need=%s", self.agent_id, title_prefix)
         input_text += "\n\n请生成专业课程讲解文档，只输出 Markdown 内容。"
         started = time.perf_counter()
-
-        # 收集参考资料：本地知识库检索（教材）+ 联网搜索，两者独立进行
-        context_parts: list[str] = []
-
-        # 1. 本地知识库检索 —— 直接调用 RAG 工具，独立于联网搜索
-        await self.emitter.send(self.agent_id, "running", "正在检索本地教材资料...", 25)
-        try:
-            kb_result = await build_knowledge_tool().handler(query=title_prefix)
-            # 仅当返回状态为 ok 时取正文
-            kb_text = (
-                kb_result.get("text")
-                if isinstance(kb_result, dict) and kb_result.get("status") == "ok"
-                else None
-            )
-        except Exception as exc:
-            logger.warning("Agent[%s] 知识库检索失败: %s", self.agent_id, exc)
-            kb_text = None
-        if kb_text:
-            context_parts.append(f"## 本地教材资料\n{kb_text}")
-            logger.info("Agent[%s] 知识库命中", self.agent_id)
-
-        # 2. 联网搜索 —— 获取最新/更全面的参考信息
-        await self.emitter.send(self.agent_id, "running", "正在搜索相关课程讲解素材...", 35)
-        search_query = f"{title_prefix} 教程 概念"
-        search_report = await self.search(search_query)
-        search_text = self.format_search_result(search_report)
-        search_elapsed = int((time.perf_counter() - started) * 1000)
-        logger.info(
-            "Agent[%s] 搜索完成: query=%s → sources=%d elapsed_ms=%d",
-            self.agent_id, search_query, len(search_report.sources), search_elapsed,
-        )
-        if search_text:
-            context_parts.append(f"## 联网参考资料\n{search_text}")
-
-        # 将检索到的参考资料前置拼入提示词
-        if context_parts:
-            input_text = "\n\n".join(context_parts) + "\n\n" + input_text
 
         await self.emitter.send(self.agent_id, "running", "正在构建课程讲解提示词...", 45)
         prompt = prompts.get("resource").get("content")

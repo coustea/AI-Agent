@@ -1,10 +1,12 @@
 <template>
   <router-view />
-  <Toaster />
+  <Toast position="top-center" />
+  <ConfirmDialog />
 </template>
 
 <script setup lang="ts">
-import { Toaster } from '@/components/ui/sonner' // 导入全局 Toast 通知组件
+import Toast from 'primevue/toast'
+import ConfirmDialog from 'primevue/confirmdialog'
 </script>
 
 <style>

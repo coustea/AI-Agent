@@ -1,0 +1,466 @@
+"""HyperFrames execution, typed diagnostics and publication quality policy."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import shutil
+from fractions import Fraction
+from pathlib import Path
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+FindingCategory = Literal["lint", "runtime", "layout", "motion", "contrast", "unknown"]
+
+
+class QualityFinding(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    category: FindingCategory = "unknown"
+    code: str = "unknown"
+    severity: Literal["error", "warning", "info"] = "error"
+    message: str = ""
+
+
+class HyperFramesReport(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ok: bool
+    findings: list[QualityFinding] = Field(default_factory=list)
+    raw: dict[str, Any] = Field(default_factory=dict)
+    exit_code: int = 0
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: dict[str, Any],
+        *,
+        exit_code: int = 0,
+    ) -> "HyperFramesReport":
+        findings: list[QualityFinding] = []
+        flat_findings = payload.get("findings")
+        if isinstance(flat_findings, list):
+            for item in flat_findings:
+                if isinstance(item, dict):
+                    findings.append(cls._finding(item, str(item.get("category") or "unknown")))
+
+        for category in ("lint", "runtime", "layout", "motion", "contrast"):
+            section = payload.get(category)
+            if not isinstance(section, dict):
+                continue
+            section_findings = section.get("findings")
+            if not isinstance(section_findings, list):
+                continue
+            for item in section_findings:
+                if isinstance(item, dict):
+                    findings.append(cls._finding(item, category))
+
+        return cls(
+            ok=bool(payload.get("ok", False)),
+            findings=findings,
+            raw=payload,
+            exit_code=exit_code,
+        )
+
+    @staticmethod
+    def _finding(payload: dict[str, Any], category: str) -> QualityFinding:
+        normalized_category = category if category in {
+            "lint", "runtime", "layout", "motion", "contrast"
+        } else "unknown"
+        severity = str(payload.get("severity") or "error").lower()
+        if severity not in {"error", "warning", "info"}:
+            severity = "error"
+        return QualityFinding.model_validate(
+            {
+                **payload,
+                "category": normalized_category,
+                "severity": severity,
+                "code": str(payload.get("code") or "unknown"),
+                "message": str(payload.get("message") or ""),
+            }
+        )
+
+    def count(self, category: FindingCategory) -> int:
+        return sum(item.category == category for item in self.findings)
+
+    @property
+    def runtime_count(self) -> int:
+        return self.count("runtime")
+
+    @property
+    def contrast_count(self) -> int:
+        return self.count("contrast")
+
+    @property
+    def layout_count(self) -> int:
+        return self.count("layout")
+
+
+class QualityGateError(RuntimeError):
+    def __init__(self, problems: list[str]) -> None:
+        super().__init__("; ".join(problems))
+        self.problems = problems
+
+
+class QualityPolicy:
+    """One explicit publication policy for all HyperFrames findings."""
+
+    _LAYOUT_BLOCKERS = {
+        "content_overlap",
+        "text_occluded",
+        "element_occluded",
+        "content_overflow",
+        "caption_zone_overlap",
+    }
+
+    def enforce(self, report: HyperFramesReport) -> None:
+        problems: list[str] = []
+        for category in ("runtime", "contrast", "lint", "motion"):
+            blocking = [
+                item for item in report.findings
+                if item.category == category and item.severity in {"error", "warning"}
+            ]
+            if blocking:
+                problems.append(f"{category} findings: {self._summarize(blocking)}")
+
+        layout = [
+            item for item in report.findings
+            if item.category == "layout"
+            and (
+                item.severity in {"error", "warning"}
+                or item.code in self._LAYOUT_BLOCKERS
+                or "overlap" in item.code
+                or "occlud" in item.code
+            )
+        ]
+        if layout:
+            problems.append(f"layout findings: {self._summarize(layout)}")
+
+        unknown = [
+            item for item in report.findings
+            if item.category == "unknown" and item.severity in {"error", "warning"}
+        ]
+        if unknown:
+            problems.append(f"unknown findings: {self._summarize(unknown)}")
+        if not report.ok and not problems:
+            problems.append("HyperFrames check reported ok=false without a categorized finding")
+        if problems:
+            raise QualityGateError(problems)
+
+    @staticmethod
+    def _summarize(findings: list[QualityFinding]) -> str:
+        values: list[str] = []
+        for item in findings:
+            value = f"{item.code}: {item.message}".strip()
+            if value not in values:
+                values.append(value)
+            if len(values) == 8:
+                break
+        return " | ".join(values)
+
+
+class MediaProbe(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    duration_seconds: float = Field(gt=0)
+    width: int = Field(gt=0)
+    height: int = Field(gt=0)
+    fps: int = Field(gt=0)
+    size_bytes: int = Field(gt=0)
+    has_audio: bool
+
+
+class CartoonMedia:
+    """Run the fixed repository toolchain and verify the final media artifact."""
+
+    def __init__(
+        self,
+        *,
+        check_timeout_seconds: int = 360,
+        render_timeout_seconds: int = 1_800,
+    ) -> None:
+        self.check_timeout_seconds = check_timeout_seconds
+        self.render_timeout_seconds = render_timeout_seconds
+        self.policy = QualityPolicy()
+
+    @staticmethod
+    def hyperframes_path() -> Path:
+        path = Path(__file__).resolve().parents[4] / "node_modules" / ".bin" / "hyperframes"
+        if not path.is_file():
+            raise RuntimeError("仓库缺少固定版本 HyperFrames，请先执行 npm install")
+        return path
+
+    @staticmethod
+    def gsap_path() -> Path:
+        path = Path(__file__).resolve().parents[4] / "node_modules" / "gsap" / "dist" / "gsap.min.js"
+        if not path.is_file():
+            raise RuntimeError("仓库缺少 GSAP 运行时，请先执行 npm install")
+        return path
+
+    def install_runtime(self, output_dir: Path) -> None:
+        vendor_dir = output_dir / "assets" / "vendor"
+        vendor_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(self.gsap_path(), vendor_dir / "gsap.min.js")
+
+    async def check(self, output_dir: Path) -> HyperFramesReport:
+        command = [
+            str(self.hyperframes_path()),
+            "check",
+            ".",
+            "--json",
+            "--strict",
+            "--at-transitions",
+            "--max-issues=200",
+            "--frame-check=severity=error;seek=.25,.75;tol=3",
+        ]
+        exit_code, stdout, stderr = await self._run(
+            command,
+            cwd=output_dir,
+            timeout_seconds=self.check_timeout_seconds,
+        )
+        try:
+            payload = self._json_payload(stdout)
+        except ValueError as exc:
+            detail = stderr.strip() or stdout.strip() or str(exc)
+            raise QualityGateError([f"HyperFrames check returned invalid JSON: {detail[:800]}"]) from exc
+        report = HyperFramesReport.from_payload(payload, exit_code=exit_code)
+        self.policy.enforce(report)
+        await self._check_caption_visibility(output_dir)
+        return report
+
+    @staticmethod
+    async def _check_caption_visibility(output_dir: Path) -> None:
+        timeline_path = output_dir / "timeline.json"
+        if not timeline_path.is_file():
+            raise QualityGateError(["caption visibility check requires timeline.json"])
+        try:
+            timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
+            cues = timeline["captions"]
+        except (json.JSONDecodeError, KeyError, TypeError) as exc:
+            raise QualityGateError([f"caption timeline is invalid: {exc}"]) from exc
+        if not isinstance(cues, list) or not cues:
+            raise QualityGateError(["caption timeline contains no cues"])
+
+        from playwright.async_api import async_playwright
+        from functools import partial
+        from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+        from threading import Thread
+
+        class QuietHandler(SimpleHTTPRequestHandler):
+            def log_message(self, _format: str, *_args: object) -> None:
+                return
+
+        problems: list[str] = []
+        browser_messages: list[str] = []
+        browser_state: dict[str, Any] = {}
+        server = ThreadingHTTPServer(
+            ("127.0.0.1", 0),
+            partial(QuietHandler, directory=str(output_dir)),
+        )
+        server_thread = Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        try:
+            async with async_playwright() as playwright:
+                browser = await playwright.chromium.launch(headless=True)
+                try:
+                    page = await browser.new_page(viewport={"width": 1920, "height": 1080})
+                    page.on(
+                        "console",
+                        lambda message: browser_messages.append(
+                            f"console[{message.type}]: {message.text}"
+                        ),
+                    )
+                    page.on(
+                        "pageerror",
+                        lambda error: browser_messages.append(f"pageerror: {error}"),
+                    )
+                    await page.goto(
+                        f"http://127.0.0.1:{server.server_port}/index.html",
+                        wait_until="load",
+                    )
+                    browser_state = await page.evaluate(
+                        """() => ({
+                          href: location.href,
+                          gsap: Boolean(window.gsap),
+                          runtime: Boolean(window.CartoonRuntime),
+                          timelines: Object.keys(window.__timelines || {}),
+                          scripts: Array.from(document.scripts).map(item => item.src || 'inline')
+                        })"""
+                    )
+                    await page.wait_for_function(
+                        "Boolean(window.__timelines && window.__timelines['cartoon-teaching-video'])",
+                        timeout=10_000,
+                    )
+                    for index, cue in enumerate(cues):
+                        start_ms = int(cue["start_ms"])
+                        end_ms = int(cue["end_ms"])
+                        midpoint = (start_ms + end_ms) / 2_000
+                        await page.evaluate(
+                            """time => {
+                              window.__timelines['cartoon-teaching-video'].time(time, false);
+                              return true;
+                            }""",
+                            midpoint,
+                        )
+                        info = await page.locator(f"#caption-{index}").evaluate(
+                            """element => {
+                              const style = getComputedStyle(element);
+                              const rect = element.getBoundingClientRect();
+                              return {
+                                opacity: Number(style.opacity),
+                                visibility: style.visibility,
+                                display: style.display,
+                                text: element.textContent.trim(),
+                                width: rect.width,
+                                height: rect.height,
+                                top: rect.top,
+                                bottom: rect.bottom
+                              };
+                            }"""
+                        )
+                        if (
+                            info["opacity"] < 0.95
+                            or info["visibility"] != "visible"
+                            or info["display"] == "none"
+                            or not info["text"]
+                            or info["width"] < 400
+                            or info["height"] < 40
+                            or info["top"] < 850
+                            or info["bottom"] > 1080
+                        ):
+                            problems.append(f"caption-{index} is not visibly rendered at {midpoint:.3f}s")
+                finally:
+                    await browser.close()
+        except QualityGateError:
+            raise
+        except Exception as exc:
+            detail = " | ".join(browser_messages[-8:])
+            message = f"caption browser check failed: {exc}"
+            if browser_state:
+                message += f" | state={browser_state}"
+            if detail:
+                message += f" | {detail}"
+            raise QualityGateError([message]) from exc
+        finally:
+            server.shutdown()
+            server.server_close()
+            server_thread.join(timeout=2)
+        if problems:
+            raise QualityGateError(problems)
+
+    async def render(self, output_dir: Path, output_name: str = "video.mp4") -> Path:
+        if Path(output_name).name != output_name or not output_name.endswith(".mp4"):
+            raise ValueError("output_name must be a local MP4 filename")
+        output_path = output_dir / output_name
+        command = [
+            str(self.hyperframes_path()),
+            "render",
+            ".",
+            "--output",
+            str(output_path),
+            "--fps",
+            "30",
+            "--resolution",
+            "landscape",
+        ]
+        exit_code, stdout, stderr = await self._run(
+            command,
+            cwd=output_dir,
+            timeout_seconds=self.render_timeout_seconds,
+        )
+        if exit_code != 0 or not output_path.is_file() or output_path.stat().st_size <= 1024:
+            output_path.unlink(missing_ok=True)
+            detail = stderr.strip() or stdout.strip()
+            raise RuntimeError(f"HyperFrames render failed: {detail[-1200:]}")
+        return output_path
+
+    async def probe(self, video_path: Path, *, expected_duration_ms: int) -> MediaProbe:
+        ffprobe = shutil.which("ffprobe")
+        if not ffprobe:
+            raise RuntimeError("ffprobe 未安装，无法验证 MP4")
+        exit_code, stdout, stderr = await self._run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-show_streams",
+                "-show_format",
+                "-of",
+                "json",
+                str(video_path),
+            ],
+            cwd=video_path.parent,
+            timeout_seconds=60,
+        )
+        if exit_code != 0:
+            raise RuntimeError(f"ffprobe failed: {stderr[-800:]}")
+        payload = self._json_payload(stdout)
+        streams = payload.get("streams") or []
+        video_stream = next((item for item in streams if item.get("codec_type") == "video"), None)
+        audio_stream = next((item for item in streams if item.get("codec_type") == "audio"), None)
+        if not isinstance(video_stream, dict):
+            raise RuntimeError("rendered MP4 has no video stream")
+        duration = float((payload.get("format") or {}).get("duration") or 0)
+        frame_rate = str(video_stream.get("avg_frame_rate") or "0/0")
+        fps = round(float(Fraction(frame_rate))) if frame_rate != "0/0" else 0
+        probe = MediaProbe(
+            duration_seconds=duration,
+            width=int(video_stream.get("width") or 0),
+            height=int(video_stream.get("height") or 0),
+            fps=fps,
+            size_bytes=video_path.stat().st_size,
+            has_audio=audio_stream is not None,
+        )
+        problems: list[str] = []
+        if (probe.width, probe.height) != (1920, 1080):
+            problems.append(f"unexpected resolution {probe.width}x{probe.height}")
+        if probe.fps != 30:
+            problems.append(f"unexpected frame rate {probe.fps}")
+        if not probe.has_audio:
+            problems.append("rendered MP4 has no audio stream")
+        expected_seconds = expected_duration_ms / 1000
+        if abs(probe.duration_seconds - expected_seconds) > 0.75:
+            problems.append(
+                f"duration mismatch: expected {expected_seconds:.3f}s, got {probe.duration_seconds:.3f}s"
+            )
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        return probe
+
+    @staticmethod
+    async def _run(
+        command: list[str],
+        *,
+        cwd: Path,
+        timeout_seconds: int,
+    ) -> tuple[int, str, str]:
+        process = await asyncio.create_subprocess_exec(
+            *command,
+            cwd=cwd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
+        except TimeoutError:
+            process.kill()
+            await process.communicate()
+            raise RuntimeError(f"command timed out after {timeout_seconds}s: {command[1]}")
+        return (
+            int(process.returncode or 0),
+            stdout.decode("utf-8", errors="replace"),
+            stderr.decode("utf-8", errors="replace"),
+        )
+
+    @staticmethod
+    def _json_payload(output: str) -> dict[str, Any]:
+        decoder = json.JSONDecoder()
+        for index, character in enumerate(output):
+            if character != "{":
+                continue
+            try:
+                payload, _end = decoder.raw_decode(output[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(payload, dict):
+                return payload
+        raise ValueError("no JSON object found")

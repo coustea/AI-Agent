@@ -3,7 +3,7 @@
 公共接口：
   enrich_metadata()   批量为 Document 填充元数据
 
-Called by: app/rag/indexing/build.py.
+Called by: app/rag/build.py.
 User instruction: "需要设计好rag系统的文件加载，切割文档，以及嵌入向量和存入向量数据库，
 每个模块要划分开，不要耦合"
 """
