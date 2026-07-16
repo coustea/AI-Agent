@@ -123,6 +123,7 @@ class CartoonPipeline:
                 bundle.html_path,
                 bundle.scene_data_path,
                 bundle.caption_path,
+                *bundle.scene_paths,
                 output_dir / "assets" / "runtime.js",
                 output_dir / "assets" / "theme.css",
                 output_dir / "assets" / "vendor" / "gsap.min.js",

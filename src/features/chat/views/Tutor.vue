@@ -487,7 +487,7 @@
                     type="button"
                     class="input-tool-btn"
                     :disabled="!canGenerateVideo"
-                    :title="canGenerateVideo ? '根据当前输入生成动画讲解视频' : '请输入视频主题，视频不支持附件'"
+                    :title="canGenerateVideo ? '生成动画讲解视频' : '视频不支持附件模式'"
                     @click="startVideoGeneration"
                   >
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
@@ -1159,11 +1159,11 @@ const canSendMessage = computed(() => (
 
 // Video creation is a separate, user-triggered workflow and must not inherit
 // the text-agent's long-running "responding" lock.
+// The button is always clickable; if the input is empty a toast prompts the user.
 const canGenerateVideo = computed(() => (
   chatMode.value === 'standard'
   && !uploadingFile.value
   && pendingFiles.value.length === 0
-  && Boolean(userInput.value.trim())
 ))
 
 // 流式消息管理器（全局单例）
@@ -2134,6 +2134,39 @@ const loadHistoryFromAPI = async (sessionId: string) => {
       || Boolean(item.video)
     ))
 
+    // Move video artifacts from user-side messages to the adjacent AI-side message,
+    // matching the live UX where video generation appears under the AI avatar.
+    for (let i = 0; i < renderableHistory.length; i++) {
+      const item = renderableHistory[i]!
+      if (item.role === 'user' && item.video) {
+        // Look for the next AI message to attach the video to
+        let target = -1
+        for (let j = i + 1; j < renderableHistory.length; j++) {
+          if (renderableHistory[j]!.role === 'ai') {
+            target = j
+            break
+          }
+        }
+        if (target >= 0) {
+          renderableHistory[target]!.video = item.video
+        } else {
+          // No AI message follows — insert a synthetic AI message
+          renderableHistory.splice(i + 1, 0, {
+            id: Date.now() + i,
+            userMessageId: undefined,
+            role: 'ai' as const,
+            content: '',
+            time: item.time,
+            attachments: null,
+            agentActivities: [],
+            teachingDiagram: null,
+            video: item.video,
+          })
+        }
+        item.video = null
+      }
+    }
+
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = renderableHistory.filter((item, idx) => {
       if (idx === 0) return true
@@ -2149,7 +2182,12 @@ const loadHistoryFromAPI = async (sessionId: string) => {
     })
     for (const message of messages.value) {
       if (message.video?.status === 'queued' || message.video?.status === 'running') {
-        watchChatVideo(sessionId, message.id)
+        // The video is now on an AI message; find its preceding user message
+        // to get the user_message_id for polling.
+        const idx = messages.value.indexOf(message)
+        const userMsg = idx > 0 ? messages.value[idx - 1] : null
+        const pollId = userMsg?.id || message.id
+        watchChatVideo(sessionId, pollId)
       }
     }
   } catch (err) {
@@ -2471,32 +2509,57 @@ const handleAvatarSpeechRateChange = (val: number) => {
 
 const watchChatVideo = (sessionId: string, userMessageId: number) => {
   videoTasks.watch(sessionId, userMessageId, (video) => {
-    const message = messages.value.find(item => item.id === userMessageId)
+    // The video artifact lives on the AI-side message.
+    // Find the AI message whose video.task_id matches, or fall back to
+    // the last AI message with a video still in an active state.
+    const message = messages.value.find(
+      item => item.role === 'ai' && item.video?.task_id === video.task_id,
+    ) ?? messages.value.find(
+      item => item.role === 'ai' && item.video
+        && (item.video.status === 'queued' || item.video.status === 'running'),
+    )
     if (message) message.video = video
     if (video.status === 'completed') scrollToBottom()
   })
 }
 
 const startVideoGeneration = async () => {
+  if (!canGenerateVideo.value) return
+
   const topic = userInput.value.trim()
-  if (!canGenerateVideo.value || !topic) return
+  if (!topic) {
+    toast.warning({ message: '请输入视频主题后再点击', plain: true })
+    return
+  }
+
   if (!await ensureCurrentSession('standard')) return
   const sessionId = currentSessionId.value
   if (!sessionId) return
 
-  const localMessageId = Date.now()
+  // Push a user message showing the topic request
+  const localUserMessageId = Date.now()
+  messages.value.push({
+    id: localUserMessageId,
+    role: 'user',
+    content: topic,
+    time: now(),
+  })
+
+  // Push an AI-side message that will carry the video artifact
+  const localAiMessageId = Date.now() + 1
   const localVideo: ChatVideoArtifactData = {
-    task_id: `pending-${localMessageId}`,
+    task_id: `pending-${localAiMessageId}`,
     status: 'queued',
     topic,
   }
   messages.value.push({
-    id: localMessageId,
-    role: 'user',
-    content: topic,
+    id: localAiMessageId,
+    role: 'ai',
+    content: '',
     time: now(),
     video: localVideo,
   })
+
   userInput.value = ''
   isExpandedInput.value = false
   if (textareaRef.value) textareaRef.value.style.height = '24px'
@@ -2505,16 +2568,17 @@ const startVideoGeneration = async () => {
   try {
     const response = await createChatVideo(topic, sessionId)
     const task = response.data.data
-    const message = messages.value.find(item => item.id === localMessageId)
-    if (!message) return
-    message.id = task.user_message_id
-    message.video = task.video
+    const aiMessage = messages.value.find(item => item.id === localAiMessageId)
+    if (aiMessage) {
+      // Update task_id to the real server-assigned one so watchChatVideo can match it
+      aiMessage.video = { ...task.video, task_id: task.video.task_id }
+    }
     watchChatVideo(task.session_id, task.user_message_id)
   } catch (error) {
-    const message = messages.value.find(item => item.id === localMessageId)
-    if (message?.video) {
-      message.video = {
-        ...message.video,
+    const aiMessage = messages.value.find(item => item.id === localAiMessageId)
+    if (aiMessage?.video) {
+      aiMessage.video = {
+        ...aiMessage.video,
         status: 'failed',
         error: getErrorMessage(error, '视频任务创建失败，请重新发起请求。'),
       }
@@ -5538,7 +5602,7 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100vw;
   max-width: 100vw;
-  height: 100vh;
+  height: var(--content-height, 100vh);
   overflow: hidden;
   background: transparent;
   border: 0;
@@ -5546,8 +5610,8 @@ onBeforeUnmount(() => {
 }
 
 .diagram-image-dialog .diagram-preview-body {
-  height: 100vh;
-  max-height: 100vh;
+  height: var(--content-height, 100vh);
+  max-height: var(--content-height, 100vh);
   padding: 0;
   overflow: auto;
   background: transparent;

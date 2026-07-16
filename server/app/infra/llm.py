@@ -260,9 +260,12 @@ def _parse_json(
 # 从 Pydantic schema 生成实例模板，而非 schema 定义
 # 避免模型输出 schema 本身而非 JSON 实例
 def _schema_instance_template(schema: type[BaseModel]) -> str:
-    """生成 JSON 实例模板，包含字段描述注释，而非 JSON Schema 定义。
+    """Generate a syntactically valid JSON instance outline for *schema*.
 
-    解决问题：某些模型看到 JSON Schema 定义时会输出 schema 本身，而非符合 schema 的实例。
+    The outline is deliberately small: domain prompts own the complete,
+    semantically valid examples.  This shared hint must never contain JSONC
+    comments, because models copy examples literally and comments make their
+    response unparsable by :func:`json.loads`.
     """
     json_schema = schema.model_json_schema()
     props = json_schema.get("properties", {})
@@ -290,19 +293,11 @@ def _schema_instance_template(schema: type[BaseModel]) -> str:
         else:
             return '""'
 
-    lines = ["{"]
+    payload: dict[str, Any] = {}
     for prop_name, prop_info in props.items():
-        desc = prop_info.get("description", "")
         example = get_example_value(prop_info)
-        # Include enum constraint in comment if available
-        enum_values = prop_info.get("enum")
-        if enum_values:
-            enum_comment = f" [可选值: {', '.join(str(v) for v in enum_values)}]"
-            lines.append(f'  "{prop_name}": {example},  // {desc}{enum_comment}')
-        else:
-            lines.append(f'  "{prop_name}": {example},  // {desc}')
-    lines.append("}")
-    return "\n".join(lines)
+        payload[prop_name] = json.loads(example)
+    return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
 # 将字符串 / 单条消息 / 消息列表统一为 LangChain messages
@@ -812,7 +807,7 @@ class Llm:
     ) -> Any:
         temp = temperature if temperature is not None else DEFAULT_TEMPERATURE
         bound_model = _bind(
-            self._main_model,
+            self.model,
             temperature=temp,
             max_tokens=max_tokens,
         )
@@ -820,6 +815,32 @@ class Llm:
             bound_model,
             input_data,
             operation="ainvoke",
+        )
+
+    async def ainvoke_text(
+        self,
+        input_data: Any,
+        *,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
+    ) -> str:
+        """Generate non-empty plain text from any supported provider response.
+
+        Providers disagree on whether generated text lives in ``content``, a
+        multipart response, or tool-call arguments.  Resource agents need the
+        normalized text, not the provider-specific message object, so this is
+        the shared boundary for ordinary text generation.
+        """
+        temp = temperature if temperature is not None else DEFAULT_TEMPERATURE
+        bound_model = _bind(
+            self._main_model,
+            temperature=temp,
+            max_tokens=max_tokens,
+        )
+        return await _ainvoke_text_with_retries(
+            bound_model,
+            input_data,
+            operation="ainvoke_text",
         )
 
     # 流式文本生成：绑定温度后逐块 yield

@@ -1,33 +1,33 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
 import type {
-  LearningAssessmentReport,
-  ReportsHistoryResponse,
+  LearningAssessment,
+  AssessmentsHistoryResponse,
   GuidanceStrategyResponse,
 } from '@/features/learning-assessment/model/assessment'
 
 export type {
-  LearningAssessmentReport,
-  ReportsHistoryResponse,
+  LearningAssessment,
+  AssessmentsHistoryResponse,
   GuidanceStrategyResponse,
 }
 
-export function generateAssessmentReport(rangeDays: 3 | 7 | 14) {
-  return http.post<ApiResponse<LearningAssessmentReport>>('/ai/evaluation/reports', { range_days: rangeDays })
+export function generateAssessment(rangeDays: 3 | 7 | 14) {
+  return http.post<ApiResponse<LearningAssessment>>('/ai/evaluation/assessments', { range_days: rangeDays })
 }
 
-export function getLatestReport() {
-  return http.get<ApiResponse<LearningAssessmentReport | null>>('/ai/evaluation/reports/latest')
+export function getLatestAssessment() {
+  return http.get<ApiResponse<LearningAssessment | null>>('/ai/evaluation/assessments/latest')
 }
 
-export function getReportsHistory(page = 1, pageSize = 10) {
-  return http.get<ApiResponse<ReportsHistoryResponse>>('/ai/evaluation/reports', {
+export function getAssessmentsHistory(page = 1, pageSize = 10) {
+  return http.get<ApiResponse<AssessmentsHistoryResponse>>('/ai/evaluation/assessments', {
     params: { page, page_size: pageSize },
   })
 }
 
-export function getReportDetail(reportId: number) {
-  return http.get<ApiResponse<LearningAssessmentReport>>(`/ai/evaluation/reports/${reportId}`)
+export function getAssessmentDetail(assessmentId: number) {
+  return http.get<ApiResponse<LearningAssessment>>(`/ai/evaluation/assessments/${assessmentId}`)
 }
 
 export function getGuidanceStrategy() {

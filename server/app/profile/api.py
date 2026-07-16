@@ -472,14 +472,14 @@ async def get_quick_actions(
 
     weak_topics = _weak_topics_from_events(recent_events)
 
-    # Check if user has a ready assessment report
-    from app.infra.models import LearningAssessmentReport
-    report_count = (await session.exec(
+    # Check if user has a ready assessment
+    from app.infra.models import LearningAssessment
+    assessment_count = (await session.exec(
         select(func.count())
-        .select_from(LearningAssessmentReport)
-        .where(LearningAssessmentReport.user_id == current_user.id, LearningAssessmentReport.status == 'ready')
+        .select_from(LearningAssessment)
+        .where(LearningAssessment.user_id == current_user.id, LearningAssessment.status == 'ready')
     )).one()
-    has_ready_report = report_count > 0
+    has_ready_report = assessment_count > 0
 
     action_defs = [
         {

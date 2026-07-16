@@ -162,16 +162,14 @@
           </div>
 
           <div class="generation-log-box">
-            <transition-group name="log">
-              <div
-                  v-for="(message, index) in visibleGeneratingMessages"
-                  :key="`${message}-${index}`"
-                  class="generation-log-row"
-              >
-                <span></span>
-                <p>{{ message }}</p>
-              </div>
-            </transition-group>
+            <div
+                v-for="message in visibleGeneratingMessages"
+                :key="message"
+                class="generation-log-row"
+            >
+              <span></span>
+              <p>{{ message }}</p>
+            </div>
           </div>
 
           <p class="generation-persistence-note">
@@ -622,16 +620,14 @@
               </div>
 
               <div class="generation-log-box">
-                <transition-group name="log">
-                  <div
-                      v-for="(message, index) in visibleTutorialMessages"
-                      :key="`${message}-${index}`"
-                      class="generation-log-row"
-                  >
-                    <span></span>
-                    <p>{{ message }}</p>
-                  </div>
-                </transition-group>
+                <div
+                    v-for="message in visibleTutorialMessages"
+                    :key="message"
+                    class="generation-log-row"
+                >
+                  <span></span>
+                  <p>{{ message }}</p>
+                </div>
               </div>
 
               <p class="generation-persistence-note">
@@ -776,8 +772,10 @@ let tutorialMonitorToken = 0
 let pathFinishing = false
 let tutorialFinishing = false
 
-let pathProgressTimer: number | null = null
 let tutorialProgressTimer: number | null = null
+let pendingPathEvents: PathEvent[] = []
+let pathEventFrame: number | null = null
+let handledPathEventSequences = new Set<number>()
 
 const sharedStepTones = [
   {
@@ -1767,48 +1765,6 @@ function findPendingTutorialForPath(
   return latest
 }
 
-function estimatePlanningProgress(
-    task: CachedPlanningTask,
-) {
-  const elapsedSeconds =
-      Math.max(
-          0,
-          (
-              Date.now() -
-              task.startedAt
-          ) / 1000,
-      )
-
-  if (elapsedSeconds < 10) {
-    return Math.min(
-        30,
-        10 + elapsedSeconds * 2,
-    )
-  }
-
-  if (elapsedSeconds < 35) {
-    return Math.min(
-        64,
-        30 +
-        (elapsedSeconds - 10) * 1.36,
-    )
-  }
-
-  if (elapsedSeconds < 70) {
-    return Math.min(
-        86,
-        64 +
-        (elapsedSeconds - 35) * 0.63,
-    )
-  }
-
-  return Math.min(
-      94,
-      86 +
-      (elapsedSeconds - 70) * 0.12,
-  )
-}
-
 function estimateTutorialProgress(
     task: CachedTutorialGeneration,
 ) {
@@ -1853,6 +1809,7 @@ function estimateTutorialProgress(
 
 function addPlanningMessage(
     message: string,
+    shouldPersist = true,
 ) {
   if (
       !message ||
@@ -1868,13 +1825,80 @@ function addPlanningMessage(
     message,
   ].slice(-5)
 
-  if (isGenerating.value) {
+  if (shouldPersist && isGenerating.value) {
     persistPlanningTask({
       logs: [
         ...generatingMessages.value,
       ],
     })
   }
+}
+
+function clearPendingPathEvents() {
+  pendingPathEvents = []
+  handledPathEventSequences.clear()
+
+  if (pathEventFrame !== null) {
+    window.cancelAnimationFrame(pathEventFrame)
+    pathEventFrame = null
+  }
+}
+
+function flushPathEvents() {
+  if (!pendingPathEvents.length) {
+    return
+  }
+
+  const events = pendingPathEvents
+  pendingPathEvents = []
+
+  let nextProgress = generatingProgress.value
+  const messages: string[] = []
+
+  for (const event of events) {
+    if (typeof event.progress === 'number') {
+      nextProgress = Math.max(
+          nextProgress,
+          Math.min(event.progress, 96),
+      )
+    }
+
+    if (event.message) {
+      messages.push(event.message)
+    }
+  }
+
+  generatingProgress.value = nextProgress
+
+  for (const message of messages) {
+    addPlanningMessage(message, false)
+  }
+
+  if (isGenerating.value) {
+    persistPlanningTask({
+      status: 'running',
+      progress: generatingProgress.value,
+      logs: [...generatingMessages.value],
+    })
+  }
+}
+
+function queuePathEvent(event: PathEvent) {
+  if (handledPathEventSequences.has(event.sequence)) {
+    return
+  }
+
+  handledPathEventSequences.add(event.sequence)
+  pendingPathEvents.push(event)
+
+  if (pathEventFrame !== null) {
+    return
+  }
+
+  pathEventFrame = window.requestAnimationFrame(() => {
+    pathEventFrame = null
+    flushPathEvents()
+  })
 }
 
 function addTutorialMessage(
@@ -1909,38 +1933,6 @@ function addTutorialMessage(
   }
 }
 
-function syncPlanningMessagesByProgress() {
-  if (generatingProgress.value >= 10) {
-    addPlanningMessage(
-        '已读取学习目标、当前基础和学习偏好。',
-    )
-  }
-
-  if (generatingProgress.value >= 30) {
-    addPlanningMessage(
-        '正在拆解学习阶段并确定阶段目标。',
-    )
-  }
-
-  if (generatingProgress.value >= 52) {
-    addPlanningMessage(
-        '正在编排核心知识节点和学习顺序。',
-    )
-  }
-
-  if (generatingProgress.value >= 74) {
-    addPlanningMessage(
-        '正在检查节点覆盖度和前置依赖。',
-    )
-  }
-
-  if (generatingProgress.value >= 90) {
-    addPlanningMessage(
-        '路径结构已基本完成，正在保存结果。',
-    )
-  }
-}
-
 function syncTutorialMessagesByProgress() {
   if (tutorialProgress.value >= 8) {
     addTutorialMessage(
@@ -1971,72 +1963,6 @@ function syncTutorialMessagesByProgress() {
         '教程内容已基本完成，正在保存并校验。',
     )
   }
-}
-
-function stopPathProgressAnimation() {
-  if (pathProgressTimer === null) {
-    return
-  }
-
-  window.clearInterval(pathProgressTimer)
-  pathProgressTimer = null
-}
-
-function startPathProgressAnimation(
-    initialProgress =
-        generatingProgress.value,
-) {
-  stopPathProgressAnimation()
-
-  generatingProgress.value =
-      Math.max(
-          generatingProgress.value,
-          initialProgress,
-      )
-
-  pathProgressTimer =
-      window.setInterval(() => {
-        if (
-            !pageActive ||
-            !isGenerating.value ||
-            pathFinishing
-        ) {
-          return
-        }
-
-        if (generatingProgress.value < 28) {
-          generatingProgress.value += 2.6
-        } else if (
-            generatingProgress.value < 56
-        ) {
-          generatingProgress.value += 1.7
-        } else if (
-            generatingProgress.value < 78
-        ) {
-          generatingProgress.value += 0.95
-        } else if (
-            generatingProgress.value < 94
-        ) {
-          generatingProgress.value += 0.32
-        }
-
-        generatingProgress.value =
-            Math.min(
-                generatingProgress.value,
-                94,
-            )
-
-        syncPlanningMessagesByProgress()
-
-        persistPlanningTask({
-          status: 'running',
-          progress:
-              generatingProgress.value,
-          logs: [
-            ...generatingMessages.value,
-          ],
-        })
-      }, 700)
 }
 
 function stopTutorialProgressAnimation() {
@@ -2630,31 +2556,7 @@ function stopSSE() {
 function handlePathEvent(
     event: PathEvent,
 ) {
-  if (
-      typeof event.progress === 'number'
-  ) {
-    generatingProgress.value =
-        Math.max(
-            generatingProgress.value,
-            Math.min(
-                event.progress,
-                96,
-            ),
-        )
-  }
-
-  if (event.message) {
-    addPlanningMessage(event.message)
-  }
-
-  persistPlanningTask({
-    status: 'running',
-    progress:
-        generatingProgress.value,
-    logs: [
-      ...generatingMessages.value,
-    ],
-  })
+  queuePathEvent(event)
 }
 
 function startSSE(
@@ -2662,13 +2564,17 @@ function startSSE(
     runId: string,
 ) {
   stopSSE()
+  clearPendingPathEvents()
 
   pathEvents.connect(
       pathId,
       runId,
       {
         onEvent: handlePathEvent,
-        onCompleted: () => {
+        onCompleted: event => {
+          queuePathEvent(event)
+          flushPathEvents()
+
           generatingProgress.value =
               Math.max(
                   generatingProgress.value,
@@ -2814,17 +2720,13 @@ async function finishPathGeneration(
   pathFinishing = true
   pathMonitorToken += 1
   stopSSE()
-  stopPathProgressAnimation()
+  clearPendingPathEvents()
 
   addPlanningMessage(
       '路径结构生成完成，正在打开学习路径总览。',
   )
 
-  await animateProgressTo(
-      generatingProgress,
-      100,
-      760,
-  )
+  generatingProgress.value = 100
 
   persistPlanningTask({
     status: 'completed',
@@ -2867,8 +2769,10 @@ async function finishPathGeneration(
       latest.status === 'generating'
   ) {
     pathFinishing = false
-    generatingProgress.value = 94
-    startPathProgressAnimation(94)
+    generatingProgress.value = Math.min(
+        generatingProgress.value,
+        96,
+    )
 
     const pathId =
         path.value?.id ??
@@ -2899,7 +2803,7 @@ function failPathGeneration(
     message: string,
 ) {
   stopSSE()
-  stopPathProgressAnimation()
+  clearPendingPathEvents()
 
   pathGenerationError.value = message
 
@@ -2931,10 +2835,6 @@ async function retryPathStatus() {
 
   addPlanningMessage(
       '正在重新连接路径规划任务。',
-  )
-
-  startPathProgressAnimation(
-      generatingProgress.value,
   )
 
   if (activeRunId.value) {
@@ -3179,9 +3079,6 @@ async function loadPath() {
             Math.max(
                 12,
                 cached.progress,
-                estimatePlanningProgress(
-                    cached,
-                ),
             )
 
         generatingMessages.value =
@@ -3197,7 +3094,6 @@ async function loadPath() {
           pathGenerationError.value =
               cached.error ||
               '路径生成失败'
-          stopPathProgressAnimation()
           return
         }
       } else {
@@ -3238,10 +3134,6 @@ async function loadPath() {
           startedAt: Date.now(),
         })
       }
-
-      startPathProgressAnimation(
-          generatingProgress.value,
-      )
 
       if (activeRunId.value) {
         startSSE(
@@ -3287,7 +3179,7 @@ async function loadPath() {
     generatingProgress.value = 100
     pathGenerationError.value = ''
     stopSSE()
-    stopPathProgressAnimation()
+    clearPendingPathEvents()
     clearPlanningCache(
         currentPathId,
     )
@@ -3317,7 +3209,7 @@ function deactivatePage() {
   tutorialMonitorToken += 1
 
   stopSSE()
-  stopPathProgressAnimation()
+  clearPendingPathEvents()
   stopTutorialProgressAnimation()
 }
 
@@ -4210,17 +4102,6 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-.log-enter-active,
-.log-leave-active {
-  transition: all 0.24s ease;
-}
-
-.log-enter-from,
-.log-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
-}
-
 .cockpit-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -4863,15 +4744,17 @@ onBeforeUnmount(() => {
 }
 
 .generation-log-box {
-  min-height: 82px;
+  height: 108px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 7px;
   margin-top: 17px;
   padding: 12px 15px;
   border-left: 2px solid #82cbc7;
   background: #fbfdfd;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .generation-log-row {

@@ -143,7 +143,7 @@ class StateTransition(VisualIRModel):
 
 
 class StateMachineVisual(VisualIRModel):
-    """A finite state machine with explicit entry and terminal states."""
+    """A state diagram with one entry state and optional terminal states."""
 
     kind: Literal["state_machine"]
     states: list[StateNode] = Field(min_length=2, max_length=12)
@@ -155,9 +155,6 @@ class StateMachineVisual(VisualIRModel):
 
         if sum(state.initial for state in self.states) != 1:
             raise ValueError("state machine must contain exactly one initial state")
-        if not any(state.final for state in self.states):
-            raise ValueError("state machine must contain at least one final state")
-
         state_count = len(self.states)
         for transition in self.transitions:
             _require_index(transition.source_index, state_count, "transition source")
@@ -513,10 +510,17 @@ class CircuitVisual(VisualIRModel):
 
 
 class QuantitativeAxis(VisualIRModel):
-    """One labelled quantitative axis with an explicit unit."""
+    """One labelled quantitative axis with an optional display unit."""
 
     label: CompactLabel
-    unit: CompactLabel
+    unit: str = Field(default="", max_length=32)
+
+    @field_validator("unit", mode="before")
+    @classmethod
+    def normalize_unit(cls, value: object) -> object:
+        """Treat a missing or JSON-null unit as the unitless default."""
+
+        return "" if value is None else value
 
 
 class QuantitativePoint(VisualIRModel):

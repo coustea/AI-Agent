@@ -34,6 +34,8 @@ import {
 // 资源生成向导的四个阶段：输入需求 → 个性化配置 → 生成中 → 结果展示
 export type Phase = 'input' | 'personalize' | 'generating' | 'result'
 
+const ACTIVE_RESOURCE_ID_KEY = 'resource-generation:active-resource:v1'
+
 // 资源生成编排核心组合式函数：管理全流程状态、DAG 节点、SSE 事件流与轮询兜底
 export function useGeneration() {
   const router = useRouter()
@@ -55,8 +57,8 @@ export function useGeneration() {
     quiz: { question_count: 5, difficulty_mode: 'adaptive', emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
-    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'], include_speaker_notes: true },
-    cartoon: { visual_density: 'rich', pace: 'balanced', target_duration_seconds: 180, voice: 'teacher' },
+    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'] },
+    cartoon: { lesson_depth: 'standard', visual_density: 'rich', voice: 'teacher' },
   })
 
   // DAG 选中的智能体 id 列表（直接使用 enabledAgentIds）
@@ -109,6 +111,22 @@ export function useGeneration() {
 
   function generationStateCacheKey(resourceId: number) {
     return `resource-generation:state:v2:${resourceId}`
+  }
+
+  function rememberActiveResource(resourceId: number) {
+    sessionStorage.setItem(ACTIVE_RESOURCE_ID_KEY, String(resourceId))
+  }
+
+  function readActiveResourceId(): number | null {
+    const resourceId = Number(sessionStorage.getItem(ACTIVE_RESOURCE_ID_KEY))
+    return Number.isInteger(resourceId) && resourceId > 0 ? resourceId : null
+  }
+
+  function forgetActiveResource(resourceId?: number) {
+    const activeResourceId = readActiveResourceId()
+    if (!resourceId || activeResourceId === resourceId) {
+      sessionStorage.removeItem(ACTIVE_RESOURCE_ID_KEY)
+    }
   }
 
   function cacheSelectedAgents(resourceId: number, agentIds: ResourceAgentId[]) {
@@ -496,6 +514,7 @@ export function useGeneration() {
     generationFinalized.value = true
     stopPolling()
     stopResourceStream()
+    forgetActiveResource(resourceId)
 
     // 拉取最终资源包，失败不阻断流程
     let bundle: GeneratedResourceBundle | null = null
@@ -538,16 +557,31 @@ export function useGeneration() {
     }
   }
 
+  // 后端不可达时：清理缓存并回到输入页，不保留断线任务状态
+  const handleBackendDisconnected = () => {
+    stopPolling()
+    stopResourceStream()
+    if (activeResourceId.value) {
+      clearGenerationCache(activeResourceId.value)
+      forgetActiveResource(activeResourceId.value)
+    }
+    resetGenerationState()
+    currentPhase.value = 'input'
+    const query = { ...route.query }
+    delete query.resourceId
+    delete query.prompt
+    void router.replace({ query })
+    toast.error('与服务器连接中断，请稍后重试')
+  }
+
   // 启动轮询兜底：SSE 不稳定时每 4 秒轮询一次状态作为保底
   function startPollingFallback(resourceId: number) {
     if (pollingInterval.value) return
     void checkStatusOnce(resourceId)
     pollingInterval.value = setInterval(() => {
-      void checkStatusOnce(resourceId).catch((error: unknown) => {
-        stopPolling()
-        generationError.value = getErrorMessage(error, '生成中断，请稍后重试')
-        isGenerating.value = false
-        toast.error(generationError.value || '生成中断，请稍后重试')
+      void checkStatusOnce(resourceId).catch(() => {
+        // 后端不可达，清理缓存回到输入页
+        handleBackendDisconnected()
       })
     }, 4000)
   }
@@ -577,11 +611,15 @@ export function useGeneration() {
           void completeGeneration(resourceId, { status: 'completed' })
         })
       },
-      // SSE 连接失败回调：尝试拉取状态，失败则按失败处理
+      // SSE 收到 generation.failed 业务失败：尝试拉取状态，失败则按失败处理
       onFailed: () => {
         void checkStatusOnce(resourceId).catch(() => {
           void completeGeneration(resourceId, { status: 'failed' })
         })
+      },
+      // SSE 连接永久断开（后端不可达）：清理缓存回到输入页
+      onDisconnected: () => {
+        handleBackendDisconnected()
       },
     })
   }
@@ -604,6 +642,7 @@ export function useGeneration() {
       // 发起生成请求并获取资源 id
       const { resource_id } = (await startResourceGeneration(requestParams)).data.data
       activeResourceId.value = resource_id
+      rememberActiveResource(resource_id)
       selectedAgentsHydrated.value = true
       // 缓存选中的智能体和生成状态，支持刷新恢复
       cacheSelectedAgents(resource_id, enabledAgentIds.value)
@@ -663,6 +702,7 @@ export function useGeneration() {
     resetGenerationState()
     initializeWaitingNodes()
     activeResourceId.value = resourceId
+    rememberActiveResource(resourceId)
     isGenerating.value = true
 
     // 先尝试从缓存恢复生成状态
@@ -700,6 +740,7 @@ export function useGeneration() {
       currentPhase.value = 'input'
       // 恢复失败则清除 URL 中的 resourceId 参数和缓存
       clearGenerationCache(resourceId)
+      forgetActiveResource(resourceId)
       const query = { ...route.query }
       delete query.resourceId
       await router.replace({ query })
@@ -713,11 +754,17 @@ export function useGeneration() {
     stopResourceStream()
   }
 
-  // 恢复生成：先同步一次状态再重新建立事件流
+  // 恢复生成：先同步一次状态再重新建立事件流；后端不可达则清理缓存回到输入页
   const resume = async () => {
     const resourceId = activeResourceId.value
     if (!resourceId || !isGenerating.value || generationFinalized.value) return
-    try { await checkStatusOnce(resourceId) } catch { latestWorkflowMessage.value = '状态同步失败，正在重试实时连接' }
+    try {
+      await checkStatusOnce(resourceId)
+    } catch {
+      // 后端不可达，清理缓存回到输入页
+      handleBackendDisconnected()
+      return
+    }
     if (activeResourceId.value === resourceId && isGenerating.value && !generationFinalized.value) startResourceStream(resourceId)
   }
 
@@ -728,6 +775,7 @@ export function useGeneration() {
     // 清理当前任务的缓存
     if (activeResourceId.value) {
       clearGenerationCache(activeResourceId.value)
+      forgetActiveResource(activeResourceId.value)
     }
     naturalInput.value = ''
     resetGenerationState()
@@ -777,6 +825,7 @@ export function useGeneration() {
     submitInput,
     start,
     restore,
+    readActiveResourceId,
     reset,
     pause,
     resume,

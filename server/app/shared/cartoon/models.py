@@ -85,10 +85,6 @@ class VisualEntity(_Model):
     id: str = Field(min_length=1, max_length=48, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
     label: str = Field(min_length=1, max_length=28)
     kind: EntityKind
-    detail: str = Field(default="", max_length=72)
-    initial_value: str = Field(default="", max_length=200)
-    orientation: Literal["vertical", "horizontal", "radial"] = "vertical"
-    tone: Literal["primary", "secondary", "accent", "warning"] = "primary"
 
 
 class EntityPlacement(_Model):
@@ -111,8 +107,6 @@ class Relation(_Model):
     source_id: str = Field(min_length=1, max_length=48)
     target_id: str = Field(min_length=1, max_length=48)
     label: str = Field(default="", max_length=30)
-    directed: bool = True
-    tone: Literal["primary", "secondary", "accent", "warning"] = "primary"
 
     @model_validator(mode="after")
     def reject_self_relation(self) -> "Relation":
@@ -123,8 +117,6 @@ class Relation(_Model):
 
 class VisualState(_Model):
     id: str = Field(min_length=1, max_length=48)
-    label: str = Field(min_length=1, max_length=42)
-    annotation: str = Field(default="", max_length=72)
     placements: list[EntityPlacement] = Field(min_length=1, max_length=16)
     relations: list[Relation] = Field(default_factory=list, max_length=24)
 
@@ -145,7 +137,6 @@ class VisualState(_Model):
 class Transition(_Model):
     kind: TransitionKind
     entity_ids: list[str] = Field(min_length=1, max_length=8)
-    relation_label: str = Field(default="", max_length=30)
 
     @field_validator("entity_ids")
     @classmethod
@@ -157,8 +148,7 @@ class Transition(_Model):
 
 class TeachingBeat(_Model):
     id: str = Field(min_length=1, max_length=48)
-    claim: str = Field(min_length=1, max_length=72)
-    narration: str = Field(min_length=16, max_length=80)
+    narration: str = Field(min_length=16, max_length=48)
     caption: str = Field(min_length=1, max_length=48)
     before_state_id: str = Field(min_length=1, max_length=48)
     after_state_id: str = Field(min_length=1, max_length=48)
@@ -202,7 +192,7 @@ class StateChanges:
 
 class TeachingScene(_Model):
     id: str = Field(min_length=1, max_length=48)
-    title: str = Field(min_length=1, max_length=54)
+    title: str = Field(min_length=1, max_length=28)
     grammar: VisualGrammar
     entities: list[VisualEntity] = Field(min_length=2, max_length=16)
     states: list[VisualState] = Field(min_length=2, max_length=8)
@@ -317,11 +307,11 @@ class TeachingScene(_Model):
                 statuses.add(entity_id)
 
         before_relations = {
-            (item.source_id, item.target_id, item.label, item.directed)
+            (item.source_id, item.target_id, item.label)
             for item in before.relations
         }
         after_relations = {
-            (item.source_id, item.target_id, item.label, item.directed)
+            (item.source_id, item.target_id, item.label)
             for item in after.relations
         }
         return StateChanges(
@@ -335,7 +325,6 @@ class TeachingScene(_Model):
 
 class Lesson(_Model):
     title: str = Field(min_length=1, max_length=72)
-    course: str = Field(default="计算机类本科课程", min_length=1, max_length=40)
     scenes: list[TeachingScene] = Field(min_length=5, max_length=6)
 
     @model_validator(mode="after")
@@ -369,8 +358,8 @@ class CaptionCue(_Model):
         duration = self.end_ms - self.start_ms
         if duration <= 0:
             raise ValueError("caption cue must end after it starts")
-        if duration > 6_000:
-            raise ValueError("caption cue cannot exceed six seconds")
+        if duration > 10_000:
+            raise ValueError("caption cue cannot exceed ten seconds")
         if len([line for line in self.text.splitlines() if line.strip()]) > 2:
             raise ValueError("caption cue must use at most two lines")
         return self
@@ -402,10 +391,10 @@ class Timeline(_Model):
         if ordered_beats[-1].end_ms > self.duration_ms:
             raise ValueError("timeline beat exceeds total duration")
         if any(
-            right.start_ms - left.start_ms > 4_500
+            right.start_ms - left.start_ms > 9_000
             for left, right in zip(ordered_beats, ordered_beats[1:])
         ):
-            raise ValueError("timeline cannot go more than roughly four seconds without a semantic change")
+            raise ValueError("timeline cannot go more than roughly nine seconds without a semantic change")
         ordered_captions = sorted(self.captions, key=lambda item: item.start_ms)
         if ordered_captions != self.captions:
             raise ValueError("caption cues must be ordered")
@@ -421,6 +410,7 @@ class CartoonBundle(_Model):
     html_path: Path
     scene_data_path: Path
     caption_path: Path
+    scene_paths: list[Path] = Field(min_length=5, max_length=6)
 
 
 class CartoonArtifact(_Model):

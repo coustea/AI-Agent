@@ -12,6 +12,11 @@ import math
 from collections import defaultdict
 from typing import Callable
 
+from pygments import lex
+from pygments.lexers import TextLexer, get_lexer_by_name
+from pygments.token import Comment, Keyword, Name, Number, Operator, String
+from pygments.util import ClassNotFound
+
 from app.shared.ppt.visual_ir import (
     AlgorithmFramesVisual,
     CircuitVisual,
@@ -57,6 +62,11 @@ def render_visual(visual: VisualModel, slide_id: str) -> str:
 
 def _escape(value: object) -> str:
     return html.escape(str(value), quote=True)
+
+
+def _paren_unit(unit: str) -> str:
+    """Return `` (unit)`` if *unit* is non-empty, else empty string."""
+    return f" ({_escape(unit)})" if unit.strip() else ""
 
 
 def _svg_arrow_marker(marker_id: str) -> str:
@@ -477,9 +487,8 @@ def _render_memory_layout(visual: VisualModel, slide_id: str) -> str:
     total_size = sum(seg.size for seg in v.segments) or 1
     max_height = 440
     top_margin = 60
-    left_x = 200
-    right_x = 800
-    seg_width = 300
+    left_x = 270
+    seg_width = 430
 
     segments_html = ""
     seg_positions: dict[int, tuple[float, float, float]] = {}  # (y_center, top, bottom)
@@ -505,11 +514,14 @@ def _render_memory_layout(visual: VisualModel, slide_id: str) -> str:
     for ref in v.references:
         _, src_top, src_bottom = seg_positions[ref.source_segment_index]
         _, tgt_top, tgt_bottom = seg_positions[ref.target_segment_index]
-        src_y = (src_top + src_bottom) / 2
-        tgt_y = (tgt_top + tgt_bottom) / 2
+        connector_x = left_x + seg_width / 2
+        if tgt_top >= src_bottom:
+            src_y, tgt_y = src_bottom, tgt_top
+        else:
+            src_y, tgt_y = src_top, tgt_bottom
         refs_html += _svg_edge(
-            left_x + seg_width, src_y,
-            left_x + seg_width + 60, tgt_y,
+            connector_x, src_y,
+            connector_x, tgt_y,
             label=ref.label or ref.relation,
             marker_id=marker_id,
         )
@@ -618,18 +630,18 @@ def _render_mapping(visual: VisualModel, slide_id: str) -> str:
     left_count = len(v.left_elements)
     right_count = len(v.right_elements)
     max_count = max(left_count, right_count, 1)
-    row_height = 50
-    top_margin = 80
+    row_height = 115
+    top_margin = 180
     left_x = 200
     right_x = 800
-    svg_height = top_margin + max_count * row_height + 40
+    svg_height = 560
 
     # Set labels
     labels_html = (
-        f'<text x="{left_x:.1f}" y="50" text-anchor="middle" '
+        f'<text x="{left_x:.1f}" y="90" text-anchor="middle" '
         f'font-size="18" font-weight="bold" fill="var(--ink)">'
         f'{_escape(v.left_set_label)}</text>'
-        f'<text x="{right_x:.1f}" y="50" text-anchor="middle" '
+        f'<text x="{right_x:.1f}" y="90" text-anchor="middle" '
         f'font-size="18" font-weight="bold" fill="var(--ink)">'
         f'{_escape(v.right_set_label)}</text>'
     )
@@ -642,21 +654,21 @@ def _render_mapping(visual: VisualModel, slide_id: str) -> str:
         y = top_margin + i * row_height
         left_positions[i] = y
         elements_html += (
-            f'<rect x="{left_x - 80:.1f}" y="{y - 16:.1f}" '
-            f'width="160" height="32" rx="8" '
+            f'<rect x="{left_x - 110:.1f}" y="{y - 29:.1f}" '
+            f'width="220" height="58" rx="12" '
             f'fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>'
             f'<text x="{left_x:.1f}" y="{y + 5:.1f}" text-anchor="middle" '
-            f'font-size="15" fill="var(--ink)">{_escape(elem)}</text>'
+            f'font-size="18" fill="var(--ink)">{_escape(elem)}</text>'
         )
     for i, elem in enumerate(v.right_elements):
         y = top_margin + i * row_height
         right_positions[i] = y
         elements_html += (
-            f'<rect x="{right_x - 80:.1f}" y="{y - 16:.1f}" '
-            f'width="160" height="32" rx="8" '
+            f'<rect x="{right_x - 110:.1f}" y="{y - 29:.1f}" '
+            f'width="220" height="58" rx="12" '
             f'fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>'
             f'<text x="{right_x:.1f}" y="{y + 5:.1f}" text-anchor="middle" '
-            f'font-size="15" fill="var(--ink)">{_escape(elem)}</text>'
+            f'font-size="18" fill="var(--ink)">{_escape(elem)}</text>'
         )
 
     # Pair connections
@@ -666,8 +678,8 @@ def _render_mapping(visual: VisualModel, slide_id: str) -> str:
         sy = left_positions[pair.source_index]
         ty = right_positions[pair.target_index]
         pairs_html += _svg_edge(
-            left_x + 80, sy,
-            right_x - 80, ty,
+            left_x + 110, sy,
+            right_x - 110, ty,
             marker_id=marker_id,
         )
 
@@ -879,12 +891,12 @@ def _render_quantitative(visual: VisualModel, slide_id: str) -> str:
         # X axis label
         f'<text x="{(chart_left + chart_right) / 2:.1f}" y="{chart_bottom + 40:.1f}" '
         f'text-anchor="middle" font-size="14" fill="var(--muted)">'
-        f'{_escape(v.x_axis.label)} ({_escape(v.x_axis.unit)})</text>'
+        f'{_escape(v.x_axis.label)}{_paren_unit(v.x_axis.unit)}</text>'
         # Y axis label
         f'<text x="{chart_left - 40:.1f}" y="{(chart_top + chart_bottom) / 2:.1f}" '
         f'text-anchor="middle" font-size="14" fill="var(--muted)" '
         f'transform="rotate(-90 {chart_left - 40:.1f} {(chart_top + chart_bottom) / 2:.1f})">'
-        f'{_escape(v.y_axis.label)} ({_escape(v.y_axis.unit)})</text>'
+        f'{_escape(v.y_axis.label)}{_paren_unit(v.y_axis.unit)}</text>'
     )
 
     # Grid lines (5 horizontal)
@@ -940,16 +952,76 @@ register_renderer("quantitative", _render_quantitative)
 # ---------------------------------------------------------------------------
 
 
+def _code_token_class(token_type: object) -> str | None:
+    """Map Pygments token families to the compact deck colour palette."""
+    if token_type in Comment:
+        return "tok-comment"
+    if token_type in Keyword:
+        return "tok-keyword"
+    if token_type in String:
+        return "tok-string"
+    if token_type in Number:
+        return "tok-number"
+    if token_type in Operator:
+        return "tok-operator"
+    if token_type in Name.Function:
+        return "tok-function"
+    if token_type in Name.Class:
+        return "tok-class"
+    if token_type in Name.Builtin:
+        return "tok-builtin"
+    if token_type in Name.Decorator:
+        return "tok-decorator"
+    return None
+
+
+def _highlight_code_lines(lines: list[str], language: str) -> list[str]:
+    """Return escaped, syntax-coloured HTML for each source line.
+
+    The tokenisation happens while generating the deck, so exported HTML stays
+    self-contained and does not rely on a browser-side highlighting library.
+    """
+    source = "\n".join(lines)
+    try:
+        lexer = get_lexer_by_name(language, stripall=False)
+    except ClassNotFound:
+        lexer = TextLexer(stripall=False)
+
+    rendered: list[list[str]] = [[]]
+    for token_type, value in lex(source, lexer):
+        token_class = _code_token_class(token_type)
+        for fragment in value.splitlines(keepends=True):
+            text = fragment.rstrip("\r\n")
+            if text:
+                escaped = _escape(text)
+                rendered[-1].append(
+                    f'<span class="{token_class}">{escaped}</span>'
+                    if token_class
+                    else escaped
+                )
+            if fragment.endswith(("\n", "\r")):
+                rendered.append([])
+
+    # Pygments preserves the input line structure, but keep the renderer
+    # deterministic even if a lexer emits an unexpected trailing newline.
+    return ["".join(line) for line in rendered[: len(lines)]] + [
+        "" for _ in range(len(lines) - len(rendered))
+    ]
+
+
 def _render_code(visual: VisualModel, slide_id: str) -> str:
     v = visual  # type: ignore[assignment]
     assert isinstance(v, CodeVisual)
-    lines_html = ""
-    for i, line in enumerate(v.lines):
-        cls = "highlighted" if i in v.highlighted_line_indices else ""
-        cls_attr = f' class="{cls}"' if cls else ""
-        lines_html += f'<span{cls_attr}>{_escape(line)}</span>\n'
+    highlighted_lines = set(v.highlighted_line_indices)
+    panel_height = min(640, max(220, 86 + len(v.lines) * 31))
+    lines_html = "\n".join(
+        f'<span class="code-line{" highlighted" if index in highlighted_lines else ""}">'
+        f"{line}</span>"
+        for index, line in enumerate(_highlight_code_lines(v.lines, v.language))
+    )
     return (
-        f'<section class="code-panel">'
+        f'<section class="code-panel" style="--code-lines:{len(v.lines)};'
+        f'--code-panel-height:{panel_height}px">'
         f'<div class="code-head"><i></i><i></i><i></i>'
         f'<b>{_escape(v.language)}</b></div>'
         f'<pre><code>{lines_html}</code></pre></section>'

@@ -49,6 +49,7 @@ dependencies = [
     "langchain-tavily>=0.2.18",
     "mutagen>=1.47.0",
     "pypdf>=6.10.0",
+    "pygments>=2.20.0",
     "xfyunsdkspeech>=0.0.4",
     "edge-tts>=7.2.8",
 ]

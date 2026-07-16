@@ -51,8 +51,8 @@ class ContentAgent(BaseResourceAgent):
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
         llm_started = time.perf_counter()
         # 长耗时生成，期间定时发送心跳
-        response = await self.run_with_heartbeat(
-            self.llm.ainvoke(full_prompt),
+        content = await self.run_with_heartbeat(
+            self.llm.ainvoke_text(full_prompt),
             messages=[
                 "正在生成讲解文档主体内容...",
                 "正在补充关键概念与学习提示...",
@@ -60,7 +60,6 @@ class ContentAgent(BaseResourceAgent):
             interval_seconds=12.0,
             progress=70,
         )
-        content = response.content if hasattr(response, "content") else str(response)
         llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
         logger.info(
             "Agent[%s] LLM 完成: output_len=%d elapsed_ms=%d",

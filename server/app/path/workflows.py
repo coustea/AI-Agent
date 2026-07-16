@@ -1308,7 +1308,7 @@ async def _save_wrong_questions(
                 WrongQuestion.user_id == user_id,
                 WrongQuestion.question_id == question_id,
             )
-        )).scalars().first()
+        )).first()
 
         if existing:
             # 已存在则累加错误次数并更新用户答案、取消归档

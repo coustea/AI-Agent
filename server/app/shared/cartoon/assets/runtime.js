@@ -53,7 +53,7 @@
     const index = Math.max(0, containers.findIndex(function (item) { return item.id === entity.id; }));
     const count = containers.length;
     const base = REGION_POSITIONS[placement.region] || REGION_POSITIONS.main;
-    if (entity.orientation === "horizontal") {
+    if (scene.grammar === "model" && index % 2 === 1) {
       return { x: base[0], y: base[1] + (index - (count - 1) / 2) * 32, w: 58, h: 25 };
     }
     if (count > 1) {
@@ -73,7 +73,9 @@
       const containerPlacement = placementById(state, placement.container_id);
       const parent = geometry(scene, state, container, containerPlacement, cache);
       const slot = placement.slot === null ? 0 : placement.slot;
-      if (container.orientation === "horizontal") {
+      if (scene.grammar === "model" && scene.entities.filter(function (item) {
+        return item.kind === "container";
+      }).indexOf(container) % 2 === 1) {
         cache[entity.id] = {
           x: parent.x - parent.w / 2 + 8 + slot * 10,
           y: parent.y + (entity.kind === "pointer" ? parent.h / 2 + 8 : 3),
@@ -104,7 +106,7 @@
   }
 
   function relationKey(relation) {
-    return [relation.source_id, relation.target_id, relation.label, relation.directed].join("|");
+    return [relation.source_id, relation.target_id, relation.label].join("|");
   }
 
   function relationCatalog(scene) {
@@ -156,7 +158,7 @@
       const entity = entityById(scene, placement.entity_id);
       const node = byId("entity-" + scene.id + "-" + entity.id);
       if (!node) return;
-      const value = placement.value || entity.initial_value || "";
+      const value = placement.value || "";
       const valueNode = node.querySelector(".entity-value");
       if (valueNode) {
         valueNode.textContent = value;
@@ -164,8 +166,6 @@
       }
       node.dataset.status = placement.status;
     });
-    const note = byId("state-note-" + scene.id);
-    if (note) note.textContent = state.annotation || state.label;
   }
 
   function setState(scene, state, immediate) {

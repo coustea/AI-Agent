@@ -51,7 +51,7 @@
               <ChevronDownIcon class="dropdown-icon" data-icon="inline-end" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent class="w-44" align="end">
+          <DropdownMenuContent class="navbar-dropdown w-44" align="end">
             <DropdownMenuGroup>
               <DropdownMenuItem @select="navigateToProfile">
                 <UserIcon data-icon="inline-start" />
@@ -485,6 +485,11 @@ const handleLogout = () => {
   color: var(--color-text-faint);
 }
 
+/* 导航栏内下拉菜单必须高于导航栏自身 z-index，否则被遮挡 */
+.navbar-dropdown {
+  z-index: 200 !important;
+}
+
 /* ================== 页面内容区 ================== */
 .page-content {
   flex: 1;
@@ -498,6 +503,8 @@ const handleLogout = () => {
   isolation: isolate;
   display: flex;
   flex-direction: column;
+  /* 暴露内容区实际可用高度，子页面用此变量代替 100vh 计算高度，避免被导航栏遮挡 */
+  --content-height: calc(100vh - var(--navbar-height));
 }
 
 /* ================== 响应式媒体查询 ================== */

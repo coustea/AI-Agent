@@ -2,15 +2,22 @@
   <main class="algorithm-visualizer-page">
     <header class="workspace-toolbar">
       <div class="toolbar-left">
+        <div class="workspace-identity">
+          <span class="workspace-kicker">学习工作台</span>
+          <strong>算法可视化</strong>
+        </div>
+
         <div class="execution-mode-switch">
           <button
             type="button"
+            aria-label="切换到官方算法模板"
             :class="{ active: executionMode === 'official' }"
             :disabled="generating"
             @click="setExecutionMode('official')"
           >官方模板</button>
           <button
             type="button"
+            aria-label="切换到自定义代码"
             :class="{ active: executionMode === 'custom' }"
             :disabled="generating"
             @click="setExecutionMode('custom')"
@@ -474,13 +481,13 @@ watch(customVisualizerType, () => {
 }
 
 .workspace-toolbar {
-  min-height: 58px;
+  min-height: 68px;
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 8px 16px;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-5);
   border-bottom: 1px solid var(--color-border);
   background: var(--color-surface);
 }
@@ -489,7 +496,29 @@ watch(customVisualizerType, () => {
   min-width: 0;
   display: flex;
   align-items: center;
-  gap: 18px;
+  gap: var(--space-4);
+}
+
+.workspace-identity {
+  min-width: 112px;
+  display: grid;
+  gap: 1px;
+  padding-right: var(--space-4);
+  border-right: 1px solid var(--color-border-light);
+}
+
+.workspace-kicker {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.02em;
+}
+
+.workspace-identity strong {
+  color: var(--color-text-strong);
+  font-size: var(--text-md);
+  line-height: 1.25;
+  font-weight: var(--weight-bold);
 }
 
 .execution-mode-switch {
@@ -515,6 +544,12 @@ watch(customVisualizerType, () => {
 .execution-mode-switch button.active {
   background: var(--color-primary-soft);
   color: var(--color-primary-text);
+}
+
+.execution-mode-switch button:focus-visible,
+.custom-visualizer-select select:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .custom-visualizer-select {
@@ -661,6 +696,29 @@ watch(customVisualizerType, () => {
     justify-content: flex-end;
   }
 
+  .workspace-identity {
+    border-right: 0;
+    padding-right: 0;
+  }
+
+}
+
+@media (max-width: 620px) {
+  .workspace-toolbar {
+    padding: var(--space-3);
+  }
+
+  .toolbar-left {
+    align-items: flex-start;
+  }
+
+  .execution-mode-switch {
+    width: 100%;
+  }
+
+  .execution-mode-switch button {
+    flex: 1;
+  }
 }
 
 @media (max-width: 960px) {

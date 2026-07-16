@@ -2144,7 +2144,7 @@ function scrollQuestionBankViewportToTop() {
 
 <style scoped>
 .question-bank-layout {
-  min-height: calc(100vh - var(--navbar-height, 64px));
+  min-height: calc(100vh - var(--navbar-height, 72px));
   padding: 0;
   box-sizing: border-box;
   color: #172033;
@@ -2177,7 +2177,7 @@ function scrollQuestionBankViewportToTop() {
   display: grid;
   grid-template-columns: 236px minmax(0, 1fr) 300px;
   gap: 0;
-  min-height: calc(100vh - var(--navbar-height, 64px));
+  min-height: calc(100vh - var(--navbar-height, 72px));
   border: none;
   border-radius: 0;
   background: transparent;
@@ -2190,8 +2190,8 @@ function scrollQuestionBankViewportToTop() {
   position: sticky;
   top: 0;
   align-self: start;
-  min-height: calc(100vh - var(--navbar-height, 64px));
-  max-height: calc(100vh - var(--navbar-height, 64px));
+  min-height: calc(100vh - var(--navbar-height, 72px));
+  max-height: calc(100vh - var(--navbar-height, 72px));
   overflow-y: auto;
   padding: 24px 12px 28px 20px;
   border-right: 1px solid rgba(226, 232, 240, 0.82);
@@ -3216,7 +3216,7 @@ function scrollQuestionBankViewportToTop() {
   position: sticky;
   top: 16px;
   align-self: start;
-  max-height: calc(100vh - var(--navbar-height, 64px) - 32px);
+  max-height: calc(100vh - var(--navbar-height, 72px) - 32px);
   overflow-y: auto;
   padding: 24px 18px 28px;
   border-left: 1px solid rgba(226, 232, 240, 0.82);

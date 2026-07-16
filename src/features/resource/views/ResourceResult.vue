@@ -79,6 +79,7 @@
           </button>
 
           <div class="header-title">
+            <span class="result-context">本次生成</span>
             <div class="title-row">
               <h1>个性化学习资源包</h1>
 
@@ -518,17 +519,17 @@ function goBack() {
 }
 
 .resource-result-page {
-  --page-background: #f5f7fb;
-  --surface: #ffffff;
-  --surface-soft: #f8fafc;
+  --page-background: var(--color-bg);
+  --surface: var(--color-surface);
+  --surface-soft: var(--color-surface-hover);
 
-  --border: #dfe6ef;
-  --border-soft: #e9eef4;
-  --border-strong: #c1ccda;
+  --border: var(--color-border);
+  --border-soft: var(--color-border-light);
+  --border-strong: var(--color-border-hover);
 
-  --text: #172033;
-  --text-secondary: #536176;
-  --text-muted: #8a96a7;
+  --text: var(--color-text-strong);
+  --text-secondary: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
 
   width: 100%;
   min-height: 100%;
@@ -556,15 +557,13 @@ function goBack() {
    ========================= */
 
 .result-header {
-  min-height: 66px;
+  min-height: 76px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 24px;
 
-  padding:
-    0 2px
-    16px;
+  padding: 0 var(--space-1) var(--space-4);
 
   border-bottom:
     1px solid var(--border);
@@ -578,7 +577,7 @@ function goBack() {
 }
 
 .back-button {
-  min-height: 34px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -586,7 +585,7 @@ function goBack() {
   border:
     1px solid
     var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0 11px;
 
   background: var(--surface);
@@ -606,9 +605,27 @@ function goBack() {
 }
 
 .back-button:hover {
-  border-color: #94acd0;
-  background: #f8fbff;
-  color: #2563eb;
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+  color: var(--color-primary-text);
+}
+
+.back-button:focus-visible,
+.resource-card:focus-visible,
+.empty-state button:focus-visible,
+.primary-button:focus-visible,
+.secondary-button:focus-visible,
+button.generation-status:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+.result-context {
+  display: inline-flex;
+  margin-bottom: 3px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
 }
 
 .back-button svg {
@@ -631,9 +648,8 @@ function goBack() {
   margin: 0;
 
   color: var(--text);
-  font-size:
-    clamp(18px, 1.6vw, 22px);
-  font-weight: 850;
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
   line-height: 1.25;
   letter-spacing: -0.025em;
 }
@@ -646,8 +662,8 @@ function goBack() {
   overflow: hidden;
 
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-normal);
   line-height: 1.45;
 
   text-overflow: ellipsis;
@@ -674,9 +690,9 @@ button.generation-status {
 }
 
 .generation-status.completed {
-  border: 1px solid #b8e0d0;
-  background: #effaf5;
-  color: #087853;
+  border: 1px solid var(--color-primary-border);
+  background: var(--color-success-soft);
+  color: var(--color-success);
 }
 
 .generation-status.completed svg {
@@ -746,7 +762,7 @@ button.generation-status {
    ========================= */
 
 .resource-main {
-  margin-top: 18px;
+  margin-top: var(--space-5);
 }
 
 .resource-grid {
@@ -760,7 +776,7 @@ button.generation-status {
       )
     );
   grid-auto-rows: 1fr;
-  gap: 15px;
+  gap: var(--space-4);
 }
 
 .resource-card {
@@ -769,7 +785,7 @@ button.generation-status {
 
   position: relative;
   min-width: 0;
-  min-height: 342px;
+  min-height: 350px;
   height: 100%;
 
   display: flex;
@@ -780,13 +796,11 @@ button.generation-status {
   border:
     1px solid
     var(--border);
-  border-radius: 13px;
+  border-radius: var(--radius-md);
 
   background: var(--surface);
 
-  box-shadow:
-    0 3px 12px
-    rgba(25, 42, 64, 0.035);
+  box-shadow: none;
 
   cursor: pointer;
   outline: none;
@@ -798,36 +812,16 @@ button.generation-status {
 }
 
 .resource-card::before {
-  content: "";
-
-  position: absolute;
-  top: 0;
-  right: 16px;
-  left: 16px;
-  z-index: 2;
-
-  height: 3px;
-  border-radius:
-    0 0 999px 999px;
-
-  background:
-    var(--resource-accent);
+  display: none;
 }
 
 .resource-card:hover {
   transform: translateY(-2px);
-
-  border-color: #b6c4d5;
-
-  box-shadow:
-    0 10px 25px
-    rgba(25, 42, 64, 0.075);
+  border-color: var(--color-primary-border);
+  background: var(--color-surface-hover);
 }
 
 .resource-card:focus-visible {
-  outline:
-    3px solid
-    rgba(37, 99, 235, 0.2);
   outline-offset: 3px;
 }
 
@@ -871,7 +865,7 @@ button.generation-status {
    ========================= */
 
 .card-header {
-  min-height: 86px;
+  min-height: 92px;
   padding:
     16px 14px 11px;
 }
@@ -890,8 +884,8 @@ button.generation-status {
   gap: 7px;
 
   color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 800;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
 }
 
 .resource-kind i {
@@ -917,7 +911,7 @@ button.generation-status {
   border-radius: 6px;
   padding: 0 7px;
 
-  background: var(--surface-soft);
+  background: var(--resource-accent-soft);
   color: var(--text-muted);
 
   font-size: 9px;
@@ -931,8 +925,8 @@ button.generation-status {
 
   color: var(--text);
 
-  font-size: 13px;
-  font-weight: 850;
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
   line-height: 1.45;
   letter-spacing: -0.012em;
 
@@ -953,10 +947,8 @@ button.generation-status {
   margin: 0 14px;
   overflow: hidden;
 
-  border:
-    1px solid
-    #e4eaf1;
-  border-radius: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
 
   background:
     linear-gradient(
@@ -968,7 +960,7 @@ button.generation-status {
       rgba(148, 163, 184, 0.06) 1px,
       transparent 1px
     ),
-    #fafbfd;
+    var(--surface-soft);
 
   background-size:
     24px 24px,
@@ -1716,7 +1708,7 @@ button.generation-status {
 
   color: var(--text-secondary);
 
-  font-size: 11px;
+  font-size: var(--text-sm);
   line-height: 1.62;
 
   display: -webkit-box;
@@ -1737,11 +1729,11 @@ button.generation-status {
     var(--border-soft);
   padding: 0 14px;
 
-  background: #ffffff;
-  color: #2563eb;
+  background: transparent;
+  color: var(--color-primary-text);
 
-  font-size: 11px;
-  font-weight: 800;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
 
   transition:
     background-color 0.18s ease;
@@ -1757,7 +1749,7 @@ button.generation-status {
 
 .resource-card:hover
   .card-action {
-  background: #f8fbff;
+  background: var(--color-primary-soft);
 }
 
 .resource-card:hover
@@ -1776,10 +1768,8 @@ button.generation-status {
   align-content: center;
   gap: 10px;
 
-  border:
-    1px dashed
-    #c6d1dd;
-  border-radius: 13px;
+  border: 1px dashed var(--color-border-hover);
+  border-radius: var(--radius-md);
 
   background: var(--surface);
 
@@ -1814,7 +1804,7 @@ button.generation-status {
   border:
     1px solid
     var(--border-strong);
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0 14px;
 
   background: var(--surface);
@@ -1843,16 +1833,14 @@ button.generation-status {
   border:
     1px solid
     var(--border);
-  border-radius: 15px;
+  border-radius: var(--radius-md);
   padding: 38px 32px;
 
   background: var(--surface);
 
   text-align: center;
 
-  box-shadow:
-    0 18px 44px
-    rgba(15, 23, 42, 0.07);
+  box-shadow: var(--shadow-sm);
 }
 
 .error-icon {
@@ -1901,11 +1889,9 @@ button.generation-status {
 }
 
 .primary-button {
-  border:
-    1px solid #3b82f6;
-
-  background: #3b82f6;
-  color: #ffffff;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: var(--color-text-strong);
 }
 
 .secondary-button {
@@ -2149,7 +2135,7 @@ button.generation-status {
   }
 
   .title-row h1 {
-    font-size: 17px;
+    font-size: var(--text-lg);
   }
 
   .header-title > p {
