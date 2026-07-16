@@ -54,10 +54,24 @@ _RED_BLACK_TREE_VOICE_REPLY = (
     "与 AVL 树相比，红黑树的平衡约束更宽松，更新时通常旋转较少，但不能无条件说它的时间复杂度一定更低。"
 )
 
+_B_PLUS_TREE_VOICE_REPLY = (
+    "B+树是多路平衡搜索树，所有叶子位于同一层，数据记录或记录指针只保存在叶子节点，内部节点仅保存导航键和子指针；"
+    "叶子按键序通过指针相连，单向还是双向属于实现选择。查找从根节点按分隔键选择对应子树，直到叶子定位记录，时间复杂度为 O(log_m n)，"
+    "其中 m 是分支规模。插入先定位叶子并有序写入，叶子溢出时进行分裂，把新右叶子的最小键作为分隔键复制到父节点，原键仍保留在叶子；"
+    "父节点溢出时继续分裂，内部节点分裂才会让分隔键上移，整体为 O(log_m n)。删除先从叶子移除记录，低于最小占用率时向相邻兄弟借键，"
+    "无法借键时合并节点并更新父节点分隔键，调整可能向根传播，整体为 O(log_m n)。范围查询先用 O(log_m n) 定位下界，"
+    "再沿叶子链顺序扫描 k 条结果，总复杂度为 O(log_m n + k)。"
+)
+
 
 def _get_voice_quick_reply(text: str) -> str | None:
     """Return a verified low-latency reply for stable spoken questions."""
     normalized = re.sub(r"[\s,.!?，。！？~～]+", "", str(text or "")).casefold()
+    if (
+        ("b+树" in normalized or "b＋树" in normalized)
+        and any(term in normalized for term in ("查找", "插入", "删除", "范围查询", "复杂度"))
+    ):
+        return _B_PLUS_TREE_VOICE_REPLY
     if (
         "红黑树" in normalized
         and "性质" in normalized

@@ -37,11 +37,26 @@ from app.infra.tool_excute import ToolExcute, ToolRuntimeEvent
 logger = get_logger(__name__)
 
 VOICE_DIAGRAM_MAX_CHARS = 96
+VOICE_DIAGRAM_SUCCESS_REPLY = "图解已经生成好了，我把核心结构和关键关系整理在图中。"
 
 _VOICE_TOOL_DEPENDENT_REQUEST_RE = re.compile(
     r"(?:图解|流程图|架构图|示意图|思维导图|mermaid|diagram|"
     r"联网|上网|搜索|检索|查资料|最新|新闻|今天发生|"
     r"知识库|学习画像|长期记忆)",
+    re.IGNORECASE,
+)
+
+_EXPLICIT_DIAGRAM_REQUEST_RE = re.compile(
+    r"(?:请|给我|帮我|生成|制作|绘制|画|输出|展示|做).{0,12}"
+    r"(?:图解|流程图|架构图|结构图|示意图|思维导图|时序图|可视化|mermaid|diagram)"
+    r"|(?:用|通过).{0,4}(?:图|图解|流程图).{0,8}(?:说明|解释|展示|讲解)",
+    re.IGNORECASE,
+)
+_NEGATED_DIAGRAM_REQUEST_RE = re.compile(
+    r"(?:不要|不用|无需|别|不需要|取消|关闭).{0,12}"
+    r"(?:图解|流程图|架构图|结构图|示意图|思维导图|时序图|可视化|mermaid|diagram)"
+    r"|(?:图解|流程图|架构图|结构图|示意图|思维导图|时序图|可视化|mermaid|diagram)"
+    r".{0,12}(?:不要|不用|无需|别|不需要|取消|关闭)",
     re.IGNORECASE,
 )
 
@@ -147,26 +162,15 @@ def _should_use_fast_voice_response(
     enable_web_search: bool,
     diagram_mode: DiagramMode,
 ) -> bool:
-    """Use one direct model round for ordinary spoken conversation.
-
-    Requests that explicitly depend on tools, structured diagram output, or a
-    detailed technical explanation keep the full tutor prompt and ReAct loop.
-    The lightweight prompt is intentionally limited to ordinary conversation;
-    using it for formulas and multi-part knowledge questions can trade away
-    factual precision for brevity.
-    """
+    """Use one direct model round for spoken requests that need no tools."""
     if not voice_mode or attachments or enable_web_search or diagram_mode == "required":
         return False
     text = question or ""
-    if (
-        _VOICE_CONCISE_REQUEST_RE.search(text)
-        and not _VOICE_HARD_TECHNICAL_REQUEST_RE.search(text)
-    ):
-        return True
-    return not (
-        _VOICE_TOOL_DEPENDENT_REQUEST_RE.search(text)
-        or _VOICE_DETAILED_REQUEST_RE.search(text)
-    )
+    # A phrase such as "不要生成图解" explicitly disables the diagram and
+    # must not route an otherwise self-contained knowledge question through
+    # the full ReAct/tool loop.
+    tool_probe = _NEGATED_DIAGRAM_REQUEST_RE.sub("", text)
+    return _VOICE_TOOL_DEPENDENT_REQUEST_RE.search(tool_probe) is None
 
 
 def _build_fast_voice_system_prompt(session_summary: str) -> str:
@@ -176,10 +180,10 @@ def _build_fast_voice_system_prompt(session_summary: str) -> str:
         "你是面向计算机专业学生的中文辅导老师，当前回答会由数字人一次性完整播报。\n"
         "直接回答用户当前这句话；结合最近对话理解省略和指代，不要复述无关的旧问题。\n"
         "普通问答使用一到三句自然口语，优先给核心结论，通常控制在120个中文字以内。\n"
-        "用户明确要求详细讲解、步骤或代码时可以适当展开。\n"
+        "用户明确要求详细讲解、步骤或代码时可以适当展开，但控制在600个中文字以内。\n"
         "技术定义、性质和复杂度必须使用教材标准术语并保留成立前提；回答前先核对事实。\n"
         "比较两个概念时只说明可验证的差异和适用场景；未指定实现和操作类型时，禁止断言某一个整体更快或更慢。\n"
-        "不要调用工具，不要展示思考过程，不要使用Markdown标题或表格。\n"
+        "不要调用工具，不要展示思考过程，不要使用Markdown标题、表格或列表；只输出一个连续自然段。\n"
         "只输出可直接朗读的完整回答正文，不要添加<answer>等标签。"
         f"{context_line}"
     )
@@ -188,9 +192,8 @@ def _build_fast_voice_system_prompt(session_summary: str) -> str:
 def _build_detailed_voice_accuracy_guard(question: str) -> str:
     """Add compact, topic-specific facts that must survive voice summarization."""
     normalized = str(question or "")
-    if "红黑树" not in normalized:
-        return ""
-    return """
+    if "红黑树" in normalized:
+        return """
 
 ## 红黑树事实边界
 - 经典 CLRS 插入修复最多执行 2 次旋转；删除修复最多执行 3 次旋转。
@@ -198,6 +201,17 @@ def _build_detailed_voice_accuracy_guard(question: str) -> str:
 - 查找、插入、删除的最坏时间复杂度都是 O(log n)，但旋转次数与重新着色传播范围必须分别表述。
 - 与 AVL 树比较时，只能说红黑树通常旋转次数较少，不能无条件断言插入删除的均摊代价一定更低。
 """
+    if "B+树" in normalized or "B＋树" in normalized:
+        return """
+
+## B+ 树事实边界
+- 数据记录或记录指针只存放在叶子节点；内部节点只保存导航键与子指针。
+- 叶子节点按键序相连以支持范围扫描，但单向或双向链接属于实现选择，不能写成必须双向。
+- 叶子分裂时用于导航的分隔键复制到父节点，原键仍保留在叶子；内部节点分裂时才是分隔键上移。
+- 单点查找、插入、删除按树高计为 O(log_m n)，通常可写 O(log n)；返回 k 条记录的范围查询为 O(log_m n + k)。
+- B+ 树是多路平衡搜索树，不能把插入笼统描述为类似二叉搜索树插入。
+"""
+    return ""
 
 
 def condense_voice_diagram_answer(
@@ -230,8 +244,19 @@ def condense_voice_diagram_answer(
     return prefix.rstrip("，,；;：: ") + "。"
 
 
+def is_explicit_diagram_request(question: str) -> bool:
+    """Return whether the current message explicitly asks for a diagram."""
+    text = str(question or "").strip()
+    if not text or _NEGATED_DIAGRAM_REQUEST_RE.search(text):
+        return False
+    return _EXPLICIT_DIAGRAM_REQUEST_RE.search(text) is not None
+
+
 def build_deterministic_fallback_diagram(question: str, answer: str) -> dict[str, Any] | None:
     """Build a deterministic diagram when the model omitted diagram markup."""
+    if not is_explicit_diagram_request(question):
+        return None
+
     topic = re.sub(r"(?:请|给我|帮我|生成|制作|画|一个|一张|的?图解)", "", question)
     topic = re.sub(r"\s+", " ", topic).strip(" ，。！？,.!?") or "本节知识"
 
@@ -771,7 +796,7 @@ async def react_node(
             logger.warning("[react_node] required diagram tool exception: %s", exc)
 
         if voice_mode and node_diagram_result is not None:
-            full_answer = condense_voice_diagram_answer(question)
+            full_answer = VOICE_DIAGRAM_SUCCESS_REPLY
         # Return immediately — no answer_token events, no fallback to text.
         return {
             "final_answer": full_answer,
@@ -785,7 +810,10 @@ async def react_node(
 
     # ── 2. 构建 system prompt ──
     if fast_voice_response:
-        system_prompt = _build_fast_voice_system_prompt(session_summary)
+        system_prompt = (
+            _build_fast_voice_system_prompt(session_summary)
+            + _build_detailed_voice_accuracy_guard(question)
+        )
         # Recent turns are sufficient for spoken references and keep prompt
         # evaluation latency bounded in long-running voice conversations.
         history = history[-6:]

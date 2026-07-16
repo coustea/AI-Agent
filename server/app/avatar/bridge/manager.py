@@ -26,7 +26,11 @@ from app.avatar.bridge.state import MessageType
 from app.avatar.services import AvatarController
 from app.avatar.services.audio_ingress import AudioIngress
 from app.avatar.services.streaming_asr import AdaptiveVADController, StreamingASRSession
-from app.chat.agent.nodes import build_deterministic_fallback_diagram
+from app.chat.agent.nodes import (
+    VOICE_DIAGRAM_SUCCESS_REPLY,
+    build_deterministic_fallback_diagram,
+    is_explicit_diagram_request,
+)
 from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import chat, get_chat_usecases
@@ -1325,6 +1329,7 @@ class RealtimeBridge:
         """执行一轮完整的对话 turn：调用 chat 服务 → 流式处理事件 → 触发 Avatar 播报。"""
         turn_started_at = time.perf_counter()
         turn_id = self._current_turn_id
+        diagram_requested = need_diagram or is_explicit_diagram_request(user_text)
         # 合并附件 URL 并去重
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()
@@ -1412,7 +1417,7 @@ class RealtimeBridge:
                     session_id=self.session_id,
                     user_input=user_text,
                     attachments=merged_attachments,
-                    diagram_mode="required" if need_diagram else "auto",
+                    diagram_mode="required" if diagram_requested else "auto",
                     enable_web_search=enable_search,
                     voice_mode=True,
                 )
@@ -1423,7 +1428,7 @@ class RealtimeBridge:
                                 anext(event_stream),
                                 timeout=(
                                     DIAGRAM_STREAM_IDLE_TIMEOUT_SECONDS
-                                    if need_diagram
+                                    if diagram_requested
                                     else CHAT_STREAM_IDLE_TIMEOUT_SECONDS
                                 ),
                             )
@@ -1504,7 +1509,7 @@ class RealtimeBridge:
             # idle timeout. Repeated format/diagram repairs must not keep a
             # digital-human turn in the thinking state indefinitely.
             try:
-                if need_diagram:
+                if diagram_requested:
                     await asyncio.wait_for(
                         _consume_stream_events(),
                         timeout=DIAGRAM_STREAM_TOTAL_TIMEOUT_SECONDS,
@@ -1528,13 +1533,17 @@ class RealtimeBridge:
             stream_failed = True
             fail_reason = str(exc)
             logger.exception("[Bridge] stream failed user=%s session=%s", self.user_id, self.session_id)
-            diagram_timeout_fallback = need_diagram and "长时间没有进展" in fail_reason
+            diagram_timeout_fallback = diagram_requested and "长时间没有进展" in fail_reason
             if self.frontend_ws and not diagram_timeout_fallback:
                 await self._send_event_with_turn_id("error", content=f"数字人回答失败: {fail_reason}")
         finally:
             generated_timeout_response = False
+            if last_diagram_payload is not None and not full_response.strip():
+                full_response = VOICE_DIAGRAM_SUCCESS_REPLY
+                generated_timeout_response = True
+
             if (
-                need_diagram
+                diagram_requested
                 and "长时间没有进展" in fail_reason
                 and last_diagram_payload is None
             ):
