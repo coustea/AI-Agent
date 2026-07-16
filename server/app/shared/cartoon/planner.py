@@ -166,7 +166,7 @@ class _TransitionDraft(_Draft):
 
 class _BeatDraft(_Draft):
     claim: str = Field(min_length=1, max_length=72)
-    narration: str = Field(min_length=16, max_length=120)
+    narration: str = Field(min_length=16, max_length=60)
     caption: str = Field(min_length=1, max_length=30)
     before_state_index: int = Field(ge=0, le=4)
     after_state_index: int = Field(ge=1, le=5)

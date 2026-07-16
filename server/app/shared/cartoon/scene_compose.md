@@ -108,7 +108,7 @@
 ```json
 {
   "claim": "本节拍的教学主张",
-  "narration": "16到36个中文字符的旁白",
+  "narration": "16到60个中文字符的旁白",
   "caption": "屏幕上正在发生的事",
   "before_state_index": 0,
   "after_state_index": 1,
@@ -118,7 +118,7 @@
 ```
 
 - `claim`：1～72 字符
-- `narration`：16～120 个中文字符，只解释当前变化
+- `narration`：16～60 个中文字符，只解释当前变化
 - `caption`：1～30 字符，概括屏幕上正在发生的事
 - `before_state_index`/`after_state_index`：states 零基索引；第 0 个节拍 (0,1)，第 1 个 (1,2)，依次类推
 - `focus_entity_indexes`：1～6 个 entities 零基索引
@@ -153,7 +153,7 @@
 3. container_index 只能指向 kind=container 的实体；slot 表示容器内部的语义顺序，不是像素坐标。
 4. beats 必须形成严格状态链：第 0 个节拍从状态 0 到 1，第 1 个从 1 到 2，依次类推。
 5. 每个节拍的前后状态必须有真实语义变化。只改变 focus、透明度或强调色无效。
-6. narration 使用 16 到 120 个中文字符，只解释当前变化；caption 使用不超过 30 个字符概括屏幕上正在发生的事。
+6. narration 使用 16 到 60 个中文字符，只解释当前变化；caption 使用不超过 30 个字符概括屏幕上正在发生的事。
 7. claim、narration、caption 与可见变化一一对应，不得讲解画面中不存在的操作。
 
 ## 语法约束（必须严格遵守，否则校验失败）

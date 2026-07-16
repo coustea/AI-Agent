@@ -158,7 +158,7 @@ class Transition(_Model):
 class TeachingBeat(_Model):
     id: str = Field(min_length=1, max_length=48)
     claim: str = Field(min_length=1, max_length=72)
-    narration: str = Field(min_length=16, max_length=220)
+    narration: str = Field(min_length=16, max_length=80)
     caption: str = Field(min_length=1, max_length=48)
     before_state_id: str = Field(min_length=1, max_length=48)
     after_state_id: str = Field(min_length=1, max_length=48)
