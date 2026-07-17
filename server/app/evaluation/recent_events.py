@@ -69,19 +69,6 @@ class RecentLearningContext:
         return "\n".join(lines)
 
 
-def serialize_learning_event(event: LearningEvent) -> dict[str, object]:
-    """将学习事件转换为前端安全的时间线 JSON，不暴露内部 metadata。"""
-    return {
-        "id": event.id,
-        "occurred_at": event.occurred_at.isoformat(),
-        "module": event.module,
-        "event_type": event.event_type,
-        "course": event.course,
-        "topic": event.topic,
-        "score": event.score,
-    }
-
-
 async def get_recent_learning_context(
     session: AsyncSession,
     *,

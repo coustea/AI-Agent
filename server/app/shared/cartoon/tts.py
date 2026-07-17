@@ -8,6 +8,7 @@ from typing import Any
 
 from mutagen import File as MutagenFile
 
+from app.infra.logging import get_logger
 from app.shared.cartoon.models import (
     CaptionCue,
     CartoonGenerationError,
@@ -16,6 +17,9 @@ from app.shared.cartoon.models import (
     TimedBeat,
     Timeline,
 )
+
+
+logger = get_logger(__name__)
 
 
 _VOICES = {
@@ -42,6 +46,13 @@ class _EdgeTts:
 
         selected_voice = _VOICES.get(voice, _VOICES["teacher"])
         rate = _PACE_RATES.get(pace, _PACE_RATES["balanced"])
+        logger.debug(
+            "[CartoonTTS] 合成语音: voice=%s rate=%s text_len=%d output=%s",
+            selected_voice,
+            rate,
+            len(text),
+            output_path.name,
+        )
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.unlink(missing_ok=True)
         last_error: Exception | None = None
@@ -52,19 +63,33 @@ class _EdgeTts:
                     communicate.save(str(output_path)),
                     timeout=self.timeout_seconds,
                 )
-                return SpeechClip(
+                clip = SpeechClip(
                     beat_id=output_path.stem,
                     path=output_path,
                     duration_ms=_audio_duration_ms(output_path),
                     provider="edge",
                     voice=selected_voice,
                 )
+                logger.debug(
+                    "[CartoonTTS] 合成成功: beat=%s duration_ms=%d",
+                    clip.beat_id,
+                    clip.duration_ms,
+                )
+                return clip
             except Exception as exc:
                 last_error = exc
+                logger.warning(
+                    "[CartoonTTS] 合成重试 %d/%d: beat=%s error=%s",
+                    attempt,
+                    self.retries,
+                    output_path.stem,
+                    exc,
+                )
                 output_path.unlink(missing_ok=True)
                 if attempt < self.retries:
                     await asyncio.sleep(attempt * 1.2)
         assert last_error is not None
+        logger.error("[CartoonTTS] 合成最终失败: beat=%s", output_path.stem)
         raise last_error
 
 
@@ -83,9 +108,15 @@ class CartoonSpeech:
         voice: str,
         pace: str = "balanced",
     ) -> Timeline:
+        ordered_beats = [beat for scene in lesson.scenes for beat in scene.beats]
+        logger.info(
+            "[CartoonSpeech] 开始旁白合成: voice=%s pace=%s total_beats=%d",
+            voice,
+            pace,
+            len(ordered_beats),
+        )
         audio_dir = output_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
-        ordered_beats = [beat for scene in lesson.scenes for beat in scene.beats]
         semaphore = asyncio.Semaphore(self._parallelism)
 
         async def synthesize_beat(beat: Any) -> SpeechClip:
@@ -101,8 +132,14 @@ class CartoonSpeech:
             async with asyncio.TaskGroup() as group:
                 tasks = [group.create_task(synthesize_beat(beat)) for beat in ordered_beats]
             clips = [task.result() for task in tasks]
+            logger.info(
+                "[CartoonSpeech] 全部旁白合成完成: clips=%d total_duration_ms=%d",
+                len(clips),
+                sum(c.duration_ms for c in clips),
+            )
         except Exception as exc:
             details = self._exception_details(exc)
+            logger.error("[CartoonSpeech] 旁白合成失败: %s", " | ".join(details))
             raise CartoonGenerationError(
                 "旁白合成失败: " + " | ".join(details),
                 stage="speech",
@@ -142,6 +179,12 @@ class CartoonSpeech:
                 )
                 cursor += duration_ms
 
+        logger.info(
+            "[CartoonSpeech] 时间线构建完成: duration_ms=%d beats=%d captions=%d",
+            cursor,
+            len(timed_beats),
+            len(captions),
+        )
         return Timeline(duration_ms=cursor, beats=timed_beats, captions=captions)
 
     @classmethod

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -70,7 +70,8 @@ async def record_learning_session(
 
 
 class AssessmentGenerateRequest(BaseModel):
-    range_days: Literal[3, 7, 14] = Field(..., description="评估天数，必须为 3、7 或 14")
+    """评估生成请求 — range_days 固定为 7，前端不再提供选择。"""
+    range_days: int = Field(default=7, description="评估天数，固定为 7")
 
 
 # 1. POST /api/v1/ai/evaluation/assessments -> 生成学习评估
@@ -281,13 +282,13 @@ async def get_guidance_strategy(
 # 6. GET /api/v1/ai/evaluation/dashboard -> 个人中心看板数据
 @router.get("/evaluation/dashboard")
 async def get_dashboard_data(
-    range_days: int = Query(default=7, description="统计天数窗口，仅支持 3/7/14/30"),
+    range_days: int = Query(default=7, description="统计天数窗口"),
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
     """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。"""
-    if range_days not in (3, 7, 14, 30):
-        return HttpResponse.error(code=400, message="range_days must be 3, 7, 14, or 30")
+    if range_days < 1 or range_days > 90:
+        return HttpResponse.error(code=400, message="range_days must be between 1 and 90")
 
     now_utc = datetime.now(timezone.utc)
     window_start = now_utc - timedelta(days=range_days)
@@ -411,6 +412,7 @@ async def _build_dashboard_data(
         {"key": "chat", "name": "AI 辅导", "count": module_counts.get("chat", 0)},
         {"key": "path", "name": "路径规划", "count": module_counts.get("path", 0)},
         {"key": "resource", "name": "智能推荐", "count": module_counts.get("resource", 0)},
+        {"key": "assessment", "name": "学习评估", "count": module_counts.get("assessment", 0)},
     ]
 
     # 练习正确率按主题

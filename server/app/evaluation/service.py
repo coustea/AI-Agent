@@ -53,7 +53,6 @@ class ActionPlanItem(BaseModel):
     topic: str
     action_type: Literal["review", "practice", "quiz"]
     description: str
-    link: str
 
 
 class GuidanceStrategyOutput(BaseModel):
@@ -83,8 +82,6 @@ class EvaluationService:
         trigger_source: str,
         range_days: int,
     ) -> LearningAssessment:
-        if range_days not in (3, 7, 14):
-            raise ValueError("range_days must be 3, 7, or 14")
         if trigger_source not in ("profile_update", "manual"):
             raise ValueError("trigger_source must be profile_update or manual")
 
@@ -252,7 +249,6 @@ class EvaluationService:
                 "topic": topic,
                 "action_type": "practice",
                 "description": f"完成{topic}相关练习",
-                "link": f"/quiz?topic={topic}",
             })
 
         guidance_strategy = {

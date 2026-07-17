@@ -193,6 +193,12 @@ class PathResourceRequest(BaseModel):
     current_knowledge: list[str] = Field(default_factory=list)
     preferences: PathPreferences = Field(default_factory=PathPreferences)
 
+    # 用户语言偏好（由 PathService 从 User.programming_languages 和路径目标推断填充）
+    programming_language: str = ""
+    """用户偏好的编程语言 — 供 CodeAgent 使用；空串时由 Agent 自行默认。"""
+    language_preference: str = ""
+    """阅读资料语言偏好 — 供 ReadingAgent 使用；空串时由 Agent 自行默认。"""
+
     @property
     def knowledge_points(self) -> list[str]:
         """从教程获取知识点列表。"""

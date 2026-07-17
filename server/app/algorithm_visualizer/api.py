@@ -18,7 +18,9 @@ from app.algorithm_visualizer.schemas import (
     AnalyzeCustomCodeRequest,
     CustomCodeContractResponse,
     CustomFunctionResponse,
+    CustomParameterResponse,
     LanguageResponse,
+    ObservableVariableResponse,
     RunRequest,
     RunSuccessResponse,
     TemplateResponse,
@@ -130,13 +132,40 @@ async def get_custom_contract(
         return HttpResponse.error(code=400, message="自定义代码不能超过 24000 个字符。")
     try:
         contract = inspect_custom_code(request_data.code, request_data.entryFunction)
+        # 从 input_schema 推导参数属性，用于构建 CustomParameterResponse
+        schema_properties = contract.input_schema.get("properties", {})
+        schema_required = set(contract.input_schema.get("required", []))
         payload = CustomCodeContractResponse(
             sourceHash="sha256:" + "0" * 64,
             entryFunction=contract.entry_function,
             functions=[
-                CustomFunctionResponse(name=item.name, line=1, parameters=[])
+                CustomFunctionResponse(
+                    name=item.name,
+                    line=1,
+                    parameters=[
+                        CustomParameterResponse(
+                            name=param,
+                            kind="positional_or_keyword",
+                            required=(item.name == contract.entry_function and param in schema_required),
+                            schema=schema_properties.get(param, {"type": "integer"}),
+                        )
+                        for param in item.parameters
+                    ],
+                )
                 for item in contract.functions
             ],
+            observableVariables=(
+                [
+                    ObservableVariableResponse(
+                        name=param,
+                        scope="parameter",
+                        line=1,
+                    )
+                    for param in contract.functions[0].parameters
+                ]
+                if contract.functions
+                else []
+            ),
             inputSchema=contract.input_schema,
             defaultInput=contract.default_input,
         )

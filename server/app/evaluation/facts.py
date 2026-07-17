@@ -148,6 +148,7 @@ async def build_assessment_facts(
         "resource": "资源生成",
         "AlgorithmVisualizer": "算法可视化",
         "visualizer": "算法可视化",
+        "assessment": "学习评估",
     }
     module_time_map: dict[str, int] = {}
     for sess in sessions:

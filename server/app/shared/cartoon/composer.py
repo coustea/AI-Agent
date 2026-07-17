@@ -7,7 +7,11 @@ import json
 import shutil
 from pathlib import Path
 
+from app.infra.logging import get_logger
 from app.shared.cartoon.models import CartoonBundle, Lesson, TeachingScene, Timeline
+
+
+logger = get_logger(__name__)
 
 
 COMPOSITION_ID = "cartoon-teaching-video"
@@ -29,6 +33,13 @@ class CartoonComposer:
     """Own HTML structure, layout runtime and the parent caption track."""
 
     def write(self, lesson: Lesson, timeline: Timeline, output_dir: Path) -> CartoonBundle:
+        logger.info(
+            "[CartoonComposer] 开始合成: title=%s scenes=%d beats=%d duration_ms=%d",
+            lesson.title,
+            len(lesson.scenes),
+            len(timeline.beats),
+            timeline.duration_ms,
+        )
         output_dir.mkdir(parents=True, exist_ok=True)
         assets_dir = output_dir / "assets"
         assets_dir.mkdir(exist_ok=True)
@@ -57,6 +68,12 @@ class CartoonComposer:
         html_path.write_text(
             self._html(lesson, timeline, payload, scene_windows),
             encoding="utf-8",
+        )
+        logger.info(
+            "[CartoonComposer] 合成完成: html=%s scenes=%d captions=%d",
+            html_path.name,
+            len(scene_paths),
+            len(timeline.captions),
         )
         return CartoonBundle(
             output_dir=output_dir,

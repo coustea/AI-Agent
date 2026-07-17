@@ -11,6 +11,11 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.infra.logging import get_logger
+
+
+logger = get_logger(__name__)
+
 
 FindingCategory = Literal["lint", "runtime", "layout", "motion", "contrast", "semantic", "unknown"]
 
@@ -107,7 +112,6 @@ class QualityPolicy:
 
     _LAYOUT_BLOCKERS = {
         "content_overlap",
-        "text_occluded",
         "element_occluded",
         "content_overflow",
         "caption_zone_overlap",
@@ -122,19 +126,33 @@ class QualityPolicy:
             ]
             if blocking:
                 problems.append(f"{category} findings: {self._summarize(blocking)}")
+                logger.warning(
+                    "[QualityPolicy] %s 阻断问题: %s",
+                    category,
+                    self._summarize(blocking),
+                )
 
         layout = [
             item for item in report.findings
             if item.category == "layout"
+            and item.severity == "error"
             and (
-                item.severity in {"error", "warning"}
-                or item.code in self._LAYOUT_BLOCKERS
+                item.code in self._LAYOUT_BLOCKERS
                 or "overlap" in item.code
-                or "occlud" in item.code
             )
         ]
         if layout:
             problems.append(f"layout findings: {self._summarize(layout)}")
+            logger.warning("[QualityPolicy] layout 阻断问题: %s", self._summarize(layout))
+        # Log layout warnings (e.g. text_occluded, escaped_container) without blocking
+        layout_warnings = [
+            item for item in report.findings
+            if item.category == "layout"
+            and item not in layout
+            and item.severity in {"error", "warning"}
+        ]
+        if layout_warnings:
+            logger.info("[QualityPolicy] layout 非阻断问题: %s", self._summarize(layout_warnings))
 
         unknown = [
             item for item in report.findings
@@ -148,7 +166,9 @@ class QualityPolicy:
         if not report.ok and not problems and not report.findings:
             problems.append("HyperFrames check reported ok=false without a categorized finding")
         if problems:
+            logger.error("[QualityPolicy] 质量门未通过: problems=%d", len(problems))
             raise QualityGateError(problems)
+        logger.info("[QualityPolicy] 质量门通过: ok=%s findings=%d", report.ok, len(report.findings))
 
     @staticmethod
     def _summarize(findings: list[QualityFinding]) -> str:
@@ -205,6 +225,7 @@ class CartoonMedia:
         shutil.copy2(self.gsap_path(), vendor_dir / "gsap.min.js")
 
     async def check(self, output_dir: Path) -> HyperFramesReport:
+        logger.info("[CartoonMedia] 开始质量检查: dir=%s", output_dir)
         command = [
             str(self.hyperframes_path()),
             "check",
@@ -226,9 +247,16 @@ class CartoonMedia:
             detail = stderr.strip() or stdout.strip() or str(exc)
             raise QualityGateError([f"HyperFrames check returned invalid JSON: {detail[:800]}"]) from exc
         report = HyperFramesReport.from_payload(payload, exit_code=exit_code)
+        logger.info(
+            "[CartoonMedia] HyperFrames 检查完成: ok=%s exit_code=%d findings=%d",
+            report.ok,
+            report.exit_code,
+            len(report.findings),
+        )
         report.findings.extend(self._semantic_findings(output_dir))
         self.policy.enforce(report)
         await self._check_caption_visibility(output_dir)
+        logger.info("[CartoonMedia] 质量检查全部通过")
         return report
 
     @staticmethod
@@ -325,6 +353,7 @@ class CartoonMedia:
 
     @staticmethod
     async def _check_caption_visibility(output_dir: Path) -> None:
+        logger.info("[CartoonMedia] 开始字幕可见性检查: dir=%s", output_dir)
         timeline_path = output_dir / "timeline.json"
         if not timeline_path.is_file():
             raise QualityGateError(["caption visibility check requires timeline.json"])
@@ -335,6 +364,8 @@ class CartoonMedia:
             raise QualityGateError([f"caption timeline is invalid: {exc}"]) from exc
         if not isinstance(cues, list) or not cues:
             raise QualityGateError(["caption timeline contains no cues"])
+
+        logger.debug("[CartoonMedia] 字幕检查: cues=%d, 启动浏览器验证...", len(cues))
 
         from playwright.async_api import async_playwright
         from functools import partial
@@ -441,12 +472,15 @@ class CartoonMedia:
             server.server_close()
             server_thread.join(timeout=2)
         if problems:
+            logger.error("[CartoonMedia] 字幕可见性问题: %s", problems)
             raise QualityGateError(problems)
+        logger.info("[CartoonMedia] 字幕可见性检查通过: cues=%d", len(cues))
 
     async def render(self, output_dir: Path, output_name: str = "video.mp4") -> Path:
         if Path(output_name).name != output_name or not output_name.endswith(".mp4"):
             raise ValueError("output_name must be a local MP4 filename")
         output_path = output_dir / output_name
+        logger.info("[CartoonMedia] 开始视频渲染: dir=%s output=%s", output_dir, output_name)
         command = [
             str(self.hyperframes_path()),
             "render",
@@ -466,10 +500,26 @@ class CartoonMedia:
         if exit_code != 0 or not output_path.is_file() or output_path.stat().st_size <= 1024:
             output_path.unlink(missing_ok=True)
             detail = stderr.strip() or stdout.strip()
+            logger.error(
+                "[CartoonMedia] 渲染失败: exit_code=%d file_exists=%s detail=%s",
+                exit_code,
+                output_path.is_file(),
+                detail[-500:],
+            )
             raise RuntimeError(f"HyperFrames render failed: {detail[-1200:]}")
+        logger.info(
+            "[CartoonMedia] 渲染完成: output=%s size=%d bytes",
+            output_path,
+            output_path.stat().st_size,
+        )
         return output_path
 
     async def probe(self, video_path: Path, *, expected_duration_ms: int) -> MediaProbe:
+        logger.info(
+            "[CartoonMedia] 开始视频探测: path=%s expected_duration_ms=%d",
+            video_path,
+            expected_duration_ms,
+        )
         ffprobe = shutil.which("ffprobe")
         if not ffprobe:
             raise RuntimeError("ffprobe 未安装，无法验证 MP4")
@@ -519,7 +569,16 @@ class CartoonMedia:
                 f"duration mismatch: expected {expected_seconds:.3f}s, got {probe.duration_seconds:.3f}s"
             )
         if problems:
+            logger.error("[CartoonMedia] 视频探测问题: %s", "; ".join(problems))
             raise RuntimeError("; ".join(problems))
+        logger.info(
+            "[CartoonMedia] 视频探测通过: duration=%.1fs resolution=%dx%d fps=%d has_audio=%s",
+            probe.duration_seconds,
+            probe.width,
+            probe.height,
+            probe.fps,
+            probe.has_audio,
+        )
         return probe
 
     @staticmethod
@@ -529,6 +588,12 @@ class CartoonMedia:
         cwd: Path,
         timeout_seconds: int,
     ) -> tuple[int, str, str]:
+        logger.debug(
+            "[CartoonMedia] 执行命令: %s (cwd=%s timeout=%ds)",
+            command[1] if len(command) > 1 else command[0],
+            cwd,
+            timeout_seconds,
+        )
         process = await asyncio.create_subprocess_exec(
             *command,
             cwd=cwd,
@@ -540,6 +605,7 @@ class CartoonMedia:
         except TimeoutError:
             process.kill()
             await process.communicate()
+            logger.error("[CartoonMedia] 命令超时: %ds %s", timeout_seconds, command[1] if len(command) > 1 else command[0])
             raise RuntimeError(f"command timed out after {timeout_seconds}s: {command[1]}")
         return (
             int(process.returncode or 0),

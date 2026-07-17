@@ -114,6 +114,15 @@ def build_path_context(request: "PathResourceRequest") -> list[str]:
     if profile_text:
         parts.append("## 学习者画像\n" + profile_text)
 
+    # 注入用户语言偏好
+    if request.programming_language:
+        parts.append(f"## 编程语言偏好\n请使用 {request.programming_language} 编写代码示例。")
+    if request.language_preference:
+        lang_desc = {"chinese": "中文", "english": "英文", "both": "中英文兼顾"}.get(
+            request.language_preference, request.language_preference
+        )
+        parts.append(f"## 阅读资料语言偏好\n优先推荐{lang_desc}资料。")
+
     # 注入教程内容
     tutorial = request.tutorial
     if tutorial:

@@ -1094,6 +1094,20 @@ class PathService:
         preferences_data = path.preferences or {}
         preferences = PathPreferences.from_dict_safe(preferences_data)
 
+        # 推断用户编程语言偏好：优先从路径目标/主题中提取，否则取用户 onboarding 填写的首选语言
+        programming_language = _infer_programming_language(
+            goal=path.goal,
+            topic=path.topic or "",
+            user_languages=list(user.programming_languages or []) if user else [],
+        )
+
+        # 推断阅读资料语言偏好
+        language_preference = _infer_language_preference(
+            goal=path.goal,
+            topic=path.topic or "",
+            user_languages=list(user.programming_languages or []) if user else [],
+        )
+
         return PathResourceRequest(
             user_id=user_id,
             path_id=node.path_id,
@@ -1108,6 +1122,8 @@ class PathService:
             difficulty=node.difficulty or "beginner",
             current_knowledge=list(path.current_knowledge or []),
             preferences=preferences,
+            programming_language=programming_language,
+            language_preference=language_preference,
         )
 
     async def _apply_resource_result(
@@ -1247,3 +1263,104 @@ async def run_resource_generation_bg(
             "[PathBG] 后台资源生成异常: resource_id=%s run_id=%s error=%s",
             resource_id, run_id, exc, exc_info=True,
         )
+
+
+# ── 语言推断辅助函数 ──────────────────────────────────────────────────────────
+
+# 用户输入中常见编程语言关键词 → CodeAgent 识别的 language key 映射
+_GOAL_LANGUAGE_MAP: dict[str, str] = {
+    "python": "python",
+    "c++": "cpp",
+    "cpp": "cpp",
+    "java": "java",
+    "javascript": "javascript",
+    "js": "javascript",
+    "typescript": "typescript",
+    "ts": "typescript",
+    "go": "go",
+    "golang": "go",
+    "c#": "c",
+    "csharp": "c",
+    "rust": "python",  # 不在 CodeAgent 支持列表，降级为 python
+    "kotlin": "python",
+    "swift": "python",
+    "ruby": "python",
+    "php": "python",
+    "r": "python",
+}
+
+# onboarding 填写的语言名 → CodeAgent language key 映射
+_ONBOARDING_LANGUAGE_MAP: dict[str, str] = {
+    **{k: v for k, v in _GOAL_LANGUAGE_MAP.items()},
+    "C": "c",
+    "C++": "cpp",
+    "C#": "c",
+    "Python": "python",
+    "Java": "java",
+    "JavaScript": "javascript",
+    "TypeScript": "typescript",
+    "Go": "go",
+    "Golang": "go",
+}
+
+
+def _infer_programming_language(
+    *,
+    goal: str,
+    topic: str,
+    user_languages: list[str],
+) -> str:
+    """推断 CodeAgent 应使用的编程语言。
+
+    优先级：
+    1. 路径目标/主题中明确指定的语言（如"学习 Java 面向对象"）
+    2. 用户 onboarding 填写的首选编程语言
+    3. 空串（由 Agent 自行默认为 python）
+    """
+    # 1. 从目标/主题文本中提取语言关键词
+    combined = f"{goal} {topic}".lower()
+    for keyword, lang_key in _GOAL_LANGUAGE_MAP.items():
+        if keyword in combined:
+            return lang_key
+
+    # 2. 从用户 onboarding 填写的编程语言列表中取第一个
+    if user_languages:
+        first = user_languages[0]
+        # 尝试精确匹配
+        lang_key = _ONBOARDING_LANGUAGE_MAP.get(first)
+        if lang_key:
+            return lang_key
+        # 尝试大小写不敏感匹配
+        lower_first = first.lower()
+        for key, value in _ONBOARDING_LANGUAGE_MAP.items():
+            if key.lower() == lower_first:
+                return value
+
+    # 3. 无明确偏好，返回空串让 Agent 使用默认值
+    return ""
+
+
+def _infer_language_preference(
+    *,
+    goal: str,
+    topic: str,
+    user_languages: list[str],
+) -> str:
+    """推断 ReadingAgent 应使用的阅读资料语言偏好。
+
+    优先级：
+    1. 路径目标/主题中明确指定了英文关键词 → "english"
+    2. 用户 onboarding 填写的语言列表中包含非中文语言 → "both"
+    3. 默认 "chinese"
+    """
+    combined = f"{goal} {topic}".lower()
+
+    # 如果目标/主题中明确提到英文资料
+    if any(kw in combined for kw in ("english", "英文", "英语", "原版", "original")):
+        return "english"
+
+    # 如果用户填写了编程语言，说明可能需要英文技术资料
+    if user_languages:
+        return "both"
+
+    return "chinese"
