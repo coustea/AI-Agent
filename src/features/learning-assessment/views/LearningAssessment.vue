@@ -590,7 +590,7 @@ const moduleRanking = computed<ModuleRankItem[]>(() => {
       totalSeconds > 0
         ? Math.round((Number(item.seconds || 0) / totalSeconds) * 100)
         : 0,
-    color: PIE_COLORS[index % PIE_COLORS.length],
+    color: PIE_COLORS[index % PIE_COLORS.length] || '#46b8b4',
   }))
 })
 
@@ -657,6 +657,10 @@ const trendInsight = computed(() => {
   const peak = [...validDays].sort(
     (a, b) => Number(b.seconds || 0) - Number(a.seconds || 0),
   )[0]
+
+  if (!peak) {
+    return '当前周期暂无学习时长，完成学习后这里会展示趋势变化。'
+  }
 
   return `本周期累计 ${totalStudyMinutes.value} 分钟，${formatShortDate(peak.date)} 达到峰值 ${Math.round(Number(peak.seconds || 0) / 60)} 分钟。`
 })
