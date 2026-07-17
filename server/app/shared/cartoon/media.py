@@ -534,7 +534,7 @@ class CartoonMedia:
             "--output",
             str(output_path),
             "--fps",
-            "30",
+            "24",
             "--resolution",
             "landscape",
         ]
@@ -625,7 +625,7 @@ class CartoonMedia:
         problems: list[str] = []
         if (probe.width, probe.height) != (1920, 1080):
             problems.append(f"unexpected resolution {probe.width}x{probe.height}")
-        if probe.fps != 30:
+        if probe.fps != 24:
             problems.append(f"unexpected frame rate {probe.fps}")
         if not probe.has_audio:
             problems.append("rendered MP4 has no audio stream")
@@ -667,6 +667,7 @@ class CartoonMedia:
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            limit=10485760,  # 10MB limit to prevent LimitOverrunError on huge lines
         )
         try:
             stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
@@ -708,6 +709,7 @@ class CartoonMedia:
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            limit=10485760,  # 10MB limit to prevent LimitOverrunError on huge lines
         )
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []

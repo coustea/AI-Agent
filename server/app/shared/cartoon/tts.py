@@ -31,7 +31,7 @@ _PACE_RATES = {
     "balanced": "+12%",
     "calm": "+0%",
 }
-_MIN_BEAT_MS = 3_200
+_MIN_BEAT_MS = 2_500
 _AUDIO_TAIL_MS = 120
 _CAPTION_DISPLAY_TARGET = 34
 
@@ -106,7 +106,7 @@ class CartoonSpeech:
         output_dir: Path,
         *,
         voice: str,
-        pace: str = "balanced",
+        pace: str = "fast",
     ) -> Timeline:
         ordered_beats = [beat for scene in lesson.scenes for beat in scene.beats]
         logger.info(

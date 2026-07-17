@@ -12,7 +12,7 @@
 ```
 
 - `title`：课程标题应直接点明学习主题，不使用内部流程或生成阶段术语
-- `scenes`：{{scene_count}} 个场景，深度为 {{lesson_depth}}，信息密度为 {{density}}
+- `scenes`：{{scene_count}} 个场景，深度为 {{lesson_depth}}，信息密度为 {{density}}。场景数量必须严格为 {{scene_count}} 个，不得多一个或少一个。
 
 ## scenes 字段规范
 
@@ -37,10 +37,24 @@
 ## 教学顺序约束
 
 1. 第一幕使用 `"concept"`，明确学习者要理解的核心问题。
-2. 整套分镜必须同时包含 `"concept"`、`"model"`、`"trace"`、`"evidence"`。
+2. 整套分镜必须包含至少三种不同的 grammar，优先覆盖 `"concept"`、`"model"`、`"trace"`。
 3. 最后一幕使用 `"concept"` 或 `"model"`，收束可迁移的判断方法。
 4. 每幕只承担一个清晰的教学推进任务，不重复标题或目标。
-5. 每幕的 `teaching_goal` 必须能导向一个可观察的画面结论：公式或不变量、结构关系、过程状态变化、或可比较的证据；不要写成泛泛的“理解概念”或“掌握方法”。
+5. 每幕的 `teaching_goal` 必须能导向一个可观察的画面结论：公式或不变量、结构关系、过程状态变化、或可比较的证据；不要写成泛泛的"理解概念"或"掌握方法"。
+
+## 4 场景示例
+
+```json
+{
+  "title": "二叉树核心机制与高频考点",
+  "scenes": [
+    {"title": "二叉树性质与遍历核心公式", "teaching_goal": "建立节点数与深度的数学约束直觉", "grammar": "concept"},
+    {"title": "非递归中序遍历的栈执行模型", "teaching_goal": "展示栈容器与指针在遍历中的协作关系", "grammar": "model"},
+    {"title": "AVL树插入与旋转调整过程", "teaching_goal": "追踪节点插入引发失衡后四种旋转操作的指针迁移", "grammar": "trace"},
+    {"title": "线索化与哈夫曼树的应试判定", "teaching_goal": "通过WPL计算验证提供决策证据", "grammar": "evidence"}
+  ]
+}
+```
 
 ## 禁止输出
 
