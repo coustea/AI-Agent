@@ -70,3 +70,17 @@ export function computeChromaRenderSize(
     height: Math.max(1, Math.round(safeHeight * scale)),
   }
 }
+
+export function resolveAvatarColorFrame(
+  sourceWidth: number,
+  sourceHeight: number,
+): { width: number; height: number; stackedAlpha: boolean } {
+  const safeWidth = Math.max(1, Math.floor(sourceWidth))
+  const safeHeight = Math.max(1, Math.floor(sourceHeight))
+  const stackedAlpha = safeHeight / safeWidth > 2.5
+  return {
+    width: safeWidth,
+    height: stackedAlpha ? Math.floor(safeHeight / 2) : safeHeight,
+    stackedAlpha,
+  }
+}
