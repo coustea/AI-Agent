@@ -33,8 +33,97 @@ from app.shared.ppt.models import (
     SlideBrief,
     SlidePoint,
 )
-from app.shared.ppt.visual_ir import VisualModel
+from app.shared.ppt.visual_ir import (
+    VisualModel,
+    HierarchyVisual,
+    GraphVisual,
+    StateMachineVisual,
+    TimelineVisual,
+    MemoryLayoutVisual,
+    DataFlowVisual,
+    MappingVisual,
+    TableMatrixVisual,
+    AlgorithmFramesVisual,
+    CircuitVisual,
+    QuantitativeVisual,
+    CodeVisual,
+    FormulaVisual,
+)
 from app.shared.ppt.visual_planner import VisualPlanner
+from app.shared.ppt.contract import layout_supports_relation, LayoutKind
+from app.infra.llm import get_llm
+import asyncio
+from pydantic import BaseModel, Field
+from typing import Literal, Any
+
+class SlideBriefPayload(BaseModel):
+    kind: SlideKind
+    title: str
+    teaching_goal: str
+    content_focus: str
+    chapter_id: str | None = None
+    logic_node_ids: list[str]
+    question: str = ""
+    claim: str = ""
+    bridge: str = ""
+    logic_relation: LogicRelation | None = None
+    layout: LayoutKind
+
+class StoryboardPayload(BaseModel):
+    title: str
+    visual_direction: str
+    slides: list[SlideBriefPayload]
+
+class SlideContentPayload(BaseModel):
+    lead: str
+    points: list[SlidePoint] = Field(default_factory=list)
+    speaker_notes: str = ""
+    visual_kind: Literal[
+        "hierarchy", "graph", "state_machine", "timeline", "memory_layout",
+        "data_flow", "mapping", "table_matrix", "algorithm_frames", "circuit",
+        "quantitative", "code", "formula"
+    ]
+    visual_data: dict[str, Any]
+
+VISUAL_MODEL_MAPPING = {
+    "hierarchy": HierarchyVisual,
+    "graph": GraphVisual,
+    "state_machine": StateMachineVisual,
+    "timeline": TimelineVisual,
+    "memory_layout": MemoryLayoutVisual,
+    "data_flow": DataFlowVisual,
+    "mapping": MappingVisual,
+    "table_matrix": TableMatrixVisual,
+    "algorithm_frames": AlgorithmFramesVisual,
+    "circuit": CircuitVisual,
+    "quantitative": QuantitativeVisual,
+    "code": CodeVisual,
+    "formula": FormulaVisual,
+}
+
+def _validate_slide_visual(payload: SlideContentPayload) -> None:
+    import json
+    kind = payload.visual_kind
+    data = payload.visual_data
+    if not isinstance(data, dict):
+        raise ValueError("visual_data must be a JSON object")
+    
+    full_data = {**data, "kind": kind}
+    
+    model_cls = VISUAL_MODEL_MAPPING.get(kind)
+    if not model_cls:
+        raise ValueError(f"Unsupported visual kind: {kind}")
+        
+    try:
+        model_cls.model_validate(full_data)
+    except Exception as exc:
+        err_msg = f"Failed to validate visual_data for {kind} against Pydantic schema.\n"
+        err_msg += f"Pydantic Validation Error: {exc}\n"
+        err_msg += f"Your invalid visual_data JSON was: {json.dumps(data, ensure_ascii=False, indent=2)}\n"
+        err_msg += f"Please make sure it strictly follows the schema rules for {kind}."
+        raise ValueError(err_msg)
+
+
 
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
@@ -302,25 +391,19 @@ class PPTGenerator:
 
             stage = "designing_logic"
             await self._progress(progress, "教学逻辑架构师正在建立知识依赖模型…", 20)
-            logic_model = self._generate_logic_model(context)
+            logic_model = await self._generate_logic_model_llm(context)
 
             stage = "designing_story"
             await self._progress(progress, "正在将知识链编译为教学故事板…", 34)
-            storyboard = self._compile_storyboard(context, logic_model)
+            storyboard = await self._compile_storyboard_llm(context, logic_model)
             self._validate_storyboard_logic(storyboard, logic_model)
 
             stage = "compiling_visuals"
-            await self._progress(progress, "正在编译每页的教学图解…", 40)
-            visuals = self._planner.plan(storyboard, logic_model)
+            await self._progress(progress, "正在设计每页幻灯片的图解和排版…", 48)
 
             stage = "composing_slides"
-            await self._progress(progress, "正在按全局逻辑确定性编排页面文案…", 48)
-            deck = self._compose_deck(
-                context,
-                logic_model,
-                storyboard,
-                visuals,
-            )
+            await self._progress(progress, "正在并行生成每一页课件的详细内容与深度图解…", 60)
+            deck = await self._compose_deck_llm(context, logic_model, storyboard)
 
             stage = "rendering_html"
             await self._progress(progress, "正在将语义版式渲染为 HTML/SVG 课件…", 88)
@@ -341,6 +424,423 @@ class PPTGenerator:
             generated_at=publication.generated_at,
             slide_count=len(deck.slides),
         )
+
+    async def _generate_logic_model_llm(self, context: PPTGenerationContext) -> DeckLogicModel:
+        llm = get_llm()
+        
+        materials_text = ""
+        for i, mat in enumerate(context.source_materials, 1):
+            materials_text += f"--- 材料段落 {i} ---\n{mat}\n\n"
+            
+        prereqs_text = "、".join(context.prerequisites) if context.prerequisites else "无"
+        constraints_text = "\n".join(f"- {c}" for c in context.constraints) if context.constraints else "无"
+        emphasis_text = "、".join(context.preferences.emphasis) if context.preferences.emphasis else "无"
+        
+        prompt = f"""你是一个顶级的计算机科学教育专家与课程设计师。
+请根据以下输入，为课程主题“{context.topic}”设计一个严格、连通且无环的教学逻辑图模型（DeckLogicModel）。
+
+【课程基本信息】
+- 主题：{context.topic}
+- 学习目标：{context.learning_goal}
+- 学员画像：{context.learner_profile or '标准学员'}
+- 前置知识：{prereqs_text}
+- 偏好设定：叙事风格={context.preferences.narrative_style}，内容密度={context.preferences.density}，教学重点={emphasis_text}
+- 额外约束：
+{constraints_text}
+
+【可用的基础材料】
+{materials_text}
+
+【设计与验证规则 - 极其重要】
+1. 课程领域 `course_domain`：请在以下值中选择最契合的一个：'algorithms', 'operating_systems', 'networks', 'computer_architecture', 'databases', 'compilers', 'discrete_theory', 'software_distributed', 'general_cs'。
+2. 核心问题 `central_question`：本课程的核心疑问（例如：“如何利用栈的后进先出特性解决括号匹配问题？”），字数控制在 40 字内。
+3. 核心主张 `thesis`：本课程想传达的最终学术主张/结论（例如：“栈通过限定一端操作确保后进先出，是函数调用和语法解析的物理基础。”），控制在 80 字内。
+4. 教学章节 `chapters`：对于 10 页左右的精简课件，**必须且仅能规划 2 个章节**：
+   - 第一章（ID 为 `c01`）：侧重于概念与结构，标题如“概念与结构”、“基础与表示”等。
+   - 第二章（ID 为 `c02`）：侧重于方法与应用，标题如“机制与操作”、“算法与应用”等。
+   - 每个章节必须有核心问题（`question`）、最终输出结论（`outcome`），以及包含的逻辑节点 ID 列表（`node_ids`）。
+5. 逻辑节点 `nodes`：根据材料，设计 4 到 8 个核心知识节点。
+   - 节点 ID 必须按顺序为 `l01`, `l02`, `l03`...。
+   - 每个节点必须归属于 `c01` 或 `c02`，确保所有节点被 chapters 覆盖且仅覆盖一次。
+   - 角色 `role` 必须属于：'question', 'premise', 'concept', 'mechanism', 'method', 'evidence', 'case', 'conclusion'。
+   - 每个节点必须设定学术性的核心结论 `claim`，并且必须包含 1-3 个具体的非空支持论据 `evidence`（在 evidence 列表中，绝对不能留空或全为空白字符）。
+6. 逻辑关系边 `edges`：用有向边连接逻辑节点，描述它们之间的递进关系。
+   - 必须构成一个**单一的、连通的、无环的有向图（DAG）**。不能有孤立节点，也不能有环。
+   - 每条边包含 `source_id`、`target_id`。
+   - 关系类型 `relation` 必须是：'prerequisite', 'decomposes', 'supports', 'derives', 'causes', 'contrasts', 'applies', 'verifies', 'summarizes'。
+   - 过渡桥梁 `bridge` 说明为什么从 source 到 target 推进（例如：“在掌握了顺序栈的物理表示后，接下来分析其关键操作入栈的代码实现。”），控制在 60 字内。
+
+请输出符合 DeckLogicModel 结构的 JSON 对象。"""
+        
+        return await llm.ainvoke_json(DeckLogicModel, prompt)
+
+    async def _compile_storyboard_llm(
+        self,
+        context: PPTGenerationContext,
+        logic_model: DeckLogicModel,
+    ) -> PPTStoryboard:
+        llm = get_llm()
+        
+        logic_summary = f"中心问题：{logic_model.central_question}\n核心结论：{logic_model.thesis}\n"
+        logic_summary += "章节与节点结构：\n"
+        for i, chapter in enumerate(logic_model.chapters, 1):
+            logic_summary += f"章节 {chapter.id}: {chapter.title} (问题: {chapter.question})\n"
+            for node_id in chapter.node_ids:
+                node = next(n for n in logic_model.nodes if n.id == node_id)
+                logic_summary += f"  - 节点 {node.id}: {node.title} (角色: {node.role.value}, 结论: {node.claim})\n"
+                
+        prompt = f"""你是一个顶级的高端多媒体教学编剧。
+请根据以下教学逻辑模型，为课程主题“{context.topic}”编译一份精致的幻灯片故事板（PPTStoryboard）。
+
+【当前课程的教学逻辑模型】
+{logic_summary}
+
+【故事板设计与校验规则 - 极其重要】
+1. 幻灯片页面列表 `slides` 总数必须在 7 到 18 页之间。
+2. 幻灯片 ID 必须依次为 `s01`, `s02`, `s03`...。
+3. 故事板必须符合严格的经典教学弧线：
+   - 第一页必须是封面（`kind` 为 'cover'，ID 为 `s01`），`layout` 为 'hero'。
+   - 第二页必须是学习路线（`kind` 为 'roadmap'，ID 为 `s02`），`layout` 为 'route'。
+   - 中间为内容幻灯片，必须按照逻辑章节的顺序连续排布（例如，c01 章节的所有幻灯片在前面，c02 章节的所有幻灯片紧随其后，绝对不能交错）。
+   - 最后一页必须是课程总结（`kind` 为 'summary'），`layout` 为 'recap'。
+4. 对于内容幻灯片：
+   - `kind` 必须是：'question', 'concept', 'process', 'explanation', 'comparison', 'correction', 'map', 'objective'。
+   - 必须指明所属章节 `chapter_id`（'c01' 或 'c02'）。
+   - 必须关联 1 到 3 个逻辑节点 `logic_node_ids`。内容页必须完整覆盖 logic_model 中的所有节点。
+   - 必须指定它的主导逻辑关系 `logic_relation`（'prerequisite', 'decomposes', 'supports', 'derives', 'causes', 'contrasts', 'applies', 'verifies', 'summarizes'）。
+   - 必须指定其版式 `layout`。版式必须与 `logic_relation` 严格契合：
+     * `prerequisite` -> 支持 'diagram', 'sequence', 'statement'
+     * `decomposes` -> 支持 'diagram', 'mosaic', 'recap'
+     * `supports` -> 支持 'statement', 'diagram', 'mosaic'
+     * `derives` -> 支持 'sequence', 'studio'
+     * `causes` -> 支持 'sequence', 'diagram'
+     * `contrasts` -> 支持 'comparison'
+     * `applies` -> 支持 'studio', 'diagram', 'mosaic'
+     * `verifies` -> 支持 'studio', 'statement', 'mosaic'
+     * `summarizes` -> 支持 'recap', 'diagram'
+   - `title`：页面的主标题，控制在 15 字以内，要精准、抓人。
+   - `teaching_goal`：设定本页的具体教学意图或认知目标。
+   - `content_focus`：本页面的教学点或知识细节聚焦。
+   - `question`、`claim`、`bridge`：根据关联的逻辑节点填入对应的核心问答与逻辑过渡桥梁。
+
+请输出符合 StoryboardPayload 结构的 JSON 对象。"""
+
+        payload: StoryboardPayload = await llm.ainvoke_json(StoryboardPayload, prompt)
+        
+        slides: list[SlideBrief] = []
+        for index, item in enumerate(payload.slides, start=1):
+            slide_id = f"s{index:02d}"
+            layout = item.layout
+            
+            # Correct layout mismatch
+            if item.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
+                relation = item.logic_relation or LogicRelation.SUPPORTS
+                if not layout_supports_relation(layout, relation):
+                    layout = select_provisional_layout(item.kind, relation)
+                
+                # Auto-fill missing fields from associated logic nodes to guarantee validation stability
+                question = (item.question or "").strip()
+                claim = (item.claim or "").strip()
+                bridge = (item.bridge or "").strip()
+                chapter_id = item.chapter_id
+                
+                nodes_by_id = {node.id: node for node in logic_model.nodes}
+                if item.logic_node_ids:
+                    first_node = nodes_by_id.get(item.logic_node_ids[0])
+                    if first_node:
+                        if not question:
+                            question = first_node.question
+                        if not claim:
+                            claim = first_node.claim
+                        if not chapter_id:
+                            chapter_id = first_node.chapter_id
+                            
+                if not question:
+                    question = "如何理解本页的核心教学点？"
+                if not claim:
+                    claim = item.title
+                if not bridge:
+                    bridge = "下面继续探讨核心知识点的逻辑关系。"
+                if not chapter_id:
+                    chapter_id = "c01"
+            else:
+                if item.kind == SlideKind.COVER:
+                    layout = LayoutKind.HERO
+                elif item.kind == SlideKind.ROADMAP:
+                    layout = LayoutKind.ROUTE
+                elif item.kind == SlideKind.SUMMARY:
+                    layout = LayoutKind.RECAP
+                question = item.question
+                claim = item.claim
+                bridge = item.bridge
+                chapter_id = item.chapter_id
+
+            slides.append(
+                SlideBrief(
+                    id=slide_id,
+                    kind=item.kind,
+                    title=item.title,
+                    teaching_goal=item.teaching_goal,
+                    content_focus=item.content_focus,
+                    chapter_id=chapter_id,
+                    logic_node_ids=item.logic_node_ids,
+                    question=question,
+                    claim=claim,
+                    bridge=bridge,
+                    logic_relation=item.logic_relation,
+                    layout=layout,
+                    density=context.preferences.density,
+                )
+            )
+            
+        return PPTStoryboard(
+            title=payload.title,
+            visual_direction=payload.visual_direction,
+            slides=slides,
+        )
+
+    async def _compose_deck_llm(
+        self,
+        context: PPTGenerationContext,
+        logic_model: DeckLogicModel,
+        storyboard: PPTStoryboard,
+    ) -> PPTDeck:
+        tasks = []
+        for brief in storyboard.slides:
+            if brief.kind in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
+                continue
+            tasks.append(self._compose_content_slide_llm(context, logic_model, storyboard, brief))
+            
+        content_slides = await asyncio.gather(*tasks)
+        content_slides_by_id = {slide.id: slide for slide in content_slides}
+        
+        slides = []
+        for brief in storyboard.slides:
+            if brief.kind in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
+                lead, points, notes = self._compose_copy(brief, logic_model, context)
+                slide = PPTSlide(
+                    id=brief.id,
+                    kind=brief.kind,
+                    title=brief.title,
+                    chapter_id=brief.chapter_id,
+                    logic_node_ids=brief.logic_node_ids,
+                    question=brief.question,
+                    claim=brief.claim,
+                    bridge=brief.bridge,
+                    logic_relation=brief.logic_relation,
+                    layout=brief.layout,
+                    density=brief.density,
+                    visual=None,
+                    lead=lead,
+                    points=points,
+                    speaker_notes=notes,
+                )
+            else:
+                slide = content_slides_by_id[brief.id]
+            slides.append(slide)
+            
+        return PPTDeck(
+            title=storyboard.title,
+            language=storyboard.language,
+            visual_direction=storyboard.visual_direction,
+            logic_model=logic_model,
+            slides=slides,
+        )
+
+    async def _compose_content_slide_llm(
+        self,
+        context: PPTGenerationContext,
+        logic_model: DeckLogicModel,
+        storyboard: PPTStoryboard,
+        brief: SlideBrief,
+    ) -> PPTSlide:
+        llm = get_llm()
+        
+        # Build storyboard overview for contextual continuity and preventing repetitions
+        storyboard_overview = ""
+        for slide_brief in storyboard.slides:
+            marker = " <--- 当前正在设计并撰写此页内容" if slide_brief.id == brief.id else ""
+            storyboard_overview += f"- 页面 {slide_brief.id} (类型: {slide_brief.kind.value}): {slide_brief.title}{marker}\n"
+            
+        nodes_by_id = {node.id: node for node in logic_model.nodes}
+        associated_nodes = [nodes_by_id[nid] for nid in brief.logic_node_ids]
+        node_details = ""
+        for node in associated_nodes:
+            node_details += f"--- 知识节点 {node.id} ({node.title}) ---\n"
+            node_details += f"核心结论 (claim): {node.claim}\n"
+            node_details += "论据 (evidence):\n"
+            for ev in node.evidence:
+                node_details += f"  - {ev}\n"
+            node_details += f"最终产出 (output): {node.output}\n\n"
+            
+        prompt = f"""你是一个高级的计算机科学教学板面和视觉图解设计师。
+请为以下标有 `<---` 的幻灯片页面设计其详细的内容文案，并提供最符合该页教学点和语义的图解（Visual IR）。
+
+【整个 PPT 故事板大纲】
+{storyboard_overview}
+
+【当前幻灯片基本信息】
+- 页面 ID：{brief.id}
+- 类型：{brief.kind.value}
+- 标题：{brief.title}
+- 教学目标：{brief.teaching_goal}
+- 内容重心：{brief.content_focus}
+- 逻辑关系：{brief.logic_relation.value if brief.logic_relation else '无'}
+- 推荐版式：{brief.layout.value}
+
+【关联的教学逻辑节点信息】
+{node_details}
+
+【设计与验证规则 - 极其重要】
+1. 页面核心结论 `lead`：主导画面的核心一句话，必须有学术深度且精练，不超过 80 字。
+2. 页面要点 `points`：包含 1 到 3 个支撑要点。
+   - 每个要点包含标签 `label` 和说明 `detail`。
+   - 标签 `label` 必须极其精炼且具有场景特异性（如 '操作步骤'、'边界处理'、'物理结构'、'性能特征'等，禁止使用无意义的通用标签如'补充事实'、'应用提示'）。
+   - 说明 `detail` 展开叙述该教学点。
+3. 讲稿旁白 `speaker_notes`：口语化的讲稿，指导讲师如何展开技术细节、提示授课重点，控制在 150 字以内。
+4. 图解类型 `visual_kind` 与图解数据 `visual_data`：
+   - 从以下列表中选择最契合当前页面内容的 `visual_kind`，并在 `visual_data` 中填写其对应的字段。
+   - **绝对不能提供与类型不相符的字段**，所有索引编号必须从 0 开始且在合法范围内。
+
+【可用的 Visual IR 列表与字段格式说明】
+- 'code'：代码块。格式：
+  {{
+    "language": "cpp",  // cpp, python, etc.
+    "lines": ["line 1", "line 2", ...],  // 4 到 18 行代码
+    "highlighted_line_indices": [1, 3]  // 0-indexed 行号列表，可以为空
+  }}
+- 'algorithm_frames'：算法/执行步骤序列帧。格式：
+  {{
+    "frames": [
+      {{ "title": "步骤1", "cells": ["元素A", "元素B"], "highlighted_cell_indices": [0] }},
+      ...
+    ]  // 2 到 8 个 frame
+  }}
+- 'memory_layout'：内存布局。格式：
+  {{
+    "segments": [
+      {{ "label": "栈顶", "size": 4.0 }},
+      {{ "label": "栈底", "size": 8.0 }}
+    ],  // size 必须大于 0
+    "references": [
+      {{ "source_segment_index": 0, "target_segment_index": 1, "relation": "pointer", "label": "指向" }}
+    ]  // references 可以为空
+  }}
+- 'table_matrix'：表格矩阵。格式：
+  {{
+    "headers": ["表头1", "表头2"],
+    "rows": [
+      {{ "cells": ["单元格1", "单元格2"] }}
+    ],  // cells 数量必须与 headers 一致
+    "highlighted_row_indices": [0],
+    "highlighted_column_indices": [1]
+  }}
+- 'state_machine'：状态机图解。格式：
+  {{
+    "states": [
+      {{ "label": "空栈", "initial": true, "final": false }},
+      {{ "label": "满栈", "initial": false, "final": true }}
+    ],  // 必须且仅有一个 initial 为 true 的状态
+    "transitions": [
+      {{ "source_index": 0, "target_index": 1, "label": "入栈直到满" }}
+    ]
+  }}
+- 'graph'：节点关系图。格式：
+  {{
+    "directed": true,
+    "nodes": [
+      {{ "label": "节点A" }},
+      {{ "label": "节点B" }}
+    ],
+    "edges": [
+      {{ "source_index": 0, "target_index": 1, "label": "依赖" }}
+    ]
+  }}
+- 'hierarchy'：层级树图。格式：
+  {{
+    "nodes": [
+      {{ "label": "根节点", "parent_index": null }},
+      {{ "label": "子节点1", "parent_index": 0 }}
+    ]  // 必须有且仅有一个 parent_index 为 null 的根节点，必须连通无环
+  }}
+- 'timeline'：时序步骤。格式：
+  {{
+    "lanes": [{{ "label": "发送方" }}, {{ "label": "接收方" }}],
+    "events": [
+      {{ "lane_index": 0, "start": 0.0, "end": 1.5, "label": "打包数据" }}
+    ],  // start 必须小于 end
+    "messages": [
+      {{ "source_lane_index": 0, "target_lane_index": 1, "at": 1.5, "label": "发送请求" }}
+    ]
+  }}
+- 'mapping'：映射对比。格式：
+  {{
+    "mode": "relation",  // relation 或 function
+    "left_set_label": "输入",
+    "right_set_label": "输出",
+    "left_elements": ["A"],
+    "right_elements": ["B"],
+    "pairs": [{{ "source_index": 0, "target_index": 0 }}]
+  }}
+- 'quantitative'：定量图表。格式：
+  {{
+    "x_axis": {{ "label": "规模", "unit": "N" }},
+    "y_axis": {{ "label": "耗时", "unit": "ms" }},
+    "series": [
+      {{
+        "label": "算法A",
+        "points": [{{ "x_value": 10, "y_value": 5.0 }}]
+      }}
+    ]
+  }}
+- 'formula'：公式推导。格式：
+  {{
+    "expression": "f(n) = O(g(n))",
+    "steps": [
+      {{ "expression": "第一步", "explanation": "说明" }}
+    ],
+    "variables": [
+      {{ "symbol": "n", "meaning": "输入规模" }}
+    ]
+  }}
+
+请输出符合 SlideContentPayload 结构的 JSON 对象。"""
+
+        payload: SlideContentPayload = await llm.ainvoke_json(
+            SlideContentPayload,
+            prompt,
+            validator=_validate_slide_visual,
+        )
+        
+        kind = payload.visual_kind
+        full_data = {**payload.visual_data, "kind": kind}
+        visual_model = VISUAL_MODEL_MAPPING[kind].model_validate(full_data)
+        
+        layout = select_layout(
+            brief.kind,
+            VisualFamily(kind),
+            brief.logic_relation,
+        )
+        
+        return PPTSlide(
+            id=brief.id,
+            kind=brief.kind,
+            title=brief.title,
+            chapter_id=brief.chapter_id,
+            logic_node_ids=brief.logic_node_ids,
+            question=brief.question,
+            claim=brief.claim,
+            bridge=brief.bridge,
+            logic_relation=brief.logic_relation,
+            layout=layout,
+            density=brief.density,
+            visual=visual_model,
+            lead=payload.lead,
+            points=payload.points,
+            speaker_notes=payload.speaker_notes,
+        )
+
+
 
     _NARRATIVE_CHAPTER_TITLES: dict[str, tuple[str, str]] = {
         "concept": ("概念与结构", "方法与应用"),
@@ -853,9 +1353,13 @@ class PPTGenerator:
         """
 
         if brief.kind is SlideKind.COVER:
+            if context.source == "path" or context.topic.lower() not in context.learning_goal.lower():
+                goal_text = f"掌握{context.topic}的核心机制，理解“{logic_model.central_question}”，并能够分析与应用相关结论。"
+            else:
+                goal_text = context.learning_goal
             return (
                 cls._text(logic_model.thesis),
-                [cls._point("学习目标", context.learning_goal)],
+                [cls._point("学习目标", goal_text)],
                 f"本课围绕{context.topic}展开，先建立问题框架，再进入机制与应用。",
             )
         if brief.kind is SlideKind.ROADMAP:

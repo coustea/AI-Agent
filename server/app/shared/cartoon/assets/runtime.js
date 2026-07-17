@@ -37,22 +37,130 @@
     return { columns: columns, width: width, height: height, xs: xs, ys: ys };
   }
 
-  function stateLayout(scene, state) {
-    // A scene owns fixed cells. Reordering cells during a tween creates crossing
-    // paths, which can temporarily put an opaque card over another card's text.
-    // State changes are communicated through visibility, emphasis, values and edges.
-    const ordered = scene.entities;
-    const grid = gridSpec(ordered.length);
+  function grammarLayout(scene) {
+    const count = scene.entities.length;
+    const grid = gridSpec(count);
     const layout = {};
-    ordered.forEach(function (entity, index) {
+    if (scene.grammar === "model") {
+      scene.entities.forEach(function (entity, index) {
+        if (index === 0) {
+          layout[entity.id] = { x: 50, y: 40, w: 72, h: 42 };
+          return;
+        }
+        const columns = Math.min(4, Math.max(1, count - 1));
+        layout[entity.id] = {
+          x: 50 + (index - (columns + 1) / 2) * (76 / columns),
+          y: 72, w: Math.min(23, 76 / columns - 3), h: 28
+        };
+      });
+      return layout;
+    }
+    if (scene.grammar === "trace") {
+      return layout;
+    }
+    if (scene.grammar === "evidence") {
+      scene.entities.forEach(function (entity, index) {
+        if (index === 0) {
+          layout[entity.id] = { x: 31, y: 50, w: 48, h: 70 };
+          return;
+        }
+        const metricIndex = index - 1;
+        const metricCount = Math.max(1, count - 1);
+        layout[entity.id] = {
+          x: 77, y: 24 + metricIndex * (54 / metricCount), w: 31, h: 46 / metricCount
+        };
+      });
+      return layout;
+    }
+    scene.entities.forEach(function (entity, index) {
       const column = index % grid.columns;
       const row = Math.floor(index / grid.columns);
       layout[entity.id] = {
-        x: grid.xs[column],
-        y: grid.ys[row],
-        w: grid.width,
-        h: grid.height
+        x: grid.xs[column], y: grid.ys[row], w: grid.width, h: grid.height
       };
+    });
+    return layout;
+  }
+
+  function stateLayout(scene, state) {
+    if (scene.grammar === "trace" && scene.execution_program) {
+      return executionLayout(scene, state);
+    }
+    return grammarLayout(scene);
+  }
+
+  function executionLayout(scene, state) {
+    const layout = {};
+    const program = scene.execution_program;
+    const objectById = {};
+    program.objects.forEach(function (object) { objectById[object.id] = object; });
+    const containers = program.objects.filter(function (object) { return object.role === "container"; });
+    const outputIds = state.placements
+      .filter(function (placement) { return placement.region === "output" && placement.visible; })
+      .map(function (placement) { return placement.entity_id; });
+    const inputIds = state.placements
+      .filter(function (placement) { return placement.region === "input" && placement.visible; })
+      .map(function (placement) { return placement.entity_id; });
+    const rackWidth = containers.length > 1 ? 62 : 58;
+    containers.forEach(function (container, index) {
+      const width = Math.min(58, rackWidth / Math.max(1, containers.length));
+      layout[container.id] = {
+        x: 50 + (index - (containers.length - 1) / 2) * (width + 4),
+        y: 52, w: width, h: 48
+      };
+    });
+    const loose = state.placements.filter(function (placement) {
+      const object = objectById[placement.entity_id];
+      return object && object.role !== "container" && object.role !== "pointer"
+        && !placement.container_id && placement.region === "main";
+    });
+    const looseGrid = gridSpec(Math.max(1, loose.length));
+    loose.forEach(function (placement, index) {
+      const column = index % looseGrid.columns;
+      const row = Math.floor(index / looseGrid.columns);
+      layout[placement.entity_id] = {
+        x: looseGrid.xs[column], y: looseGrid.ys[row], w: looseGrid.width, h: looseGrid.height
+      };
+    });
+    state.placements.forEach(function (placement) {
+      const object = objectById[placement.entity_id];
+      if (!object || object.role === "container" || object.role === "pointer") return;
+      if (placement.container_id && placement.slot !== null && placement.slot !== undefined) {
+        const container = layout[placement.container_id];
+        const capacity = (objectById[placement.container_id] || {}).capacity || 1;
+        if (container) {
+          layout[object.id] = {
+            x: container.x - container.w / 2 + ((placement.slot + 0.5) * container.w / capacity),
+            y: container.y, w: Math.min(14, Math.max(8, container.w / capacity - 2)), h: 24
+          };
+        }
+        return;
+      }
+      if (layout[object.id]) return;
+      if (placement.region === "input") {
+        const inputIndex = Math.max(0, inputIds.indexOf(object.id));
+        layout[object.id] = { x: 10.5, y: 50 + inputIndex * 17, w: 11, h: 16 };
+        return;
+      }
+      if (placement.region === "output") {
+        const outputIndex = Math.max(0, outputIds.indexOf(object.id));
+        layout[object.id] = { x: 89.5, y: 50 + outputIndex * 17, w: 11, h: 16 };
+        return;
+      }
+      const regions = {
+        left: { x: 14, y: 50 }, right: { x: 86, y: 50 }, top: { x: 50, y: 18 },
+        bottom: { x: 50, y: 84 }, result: { x: 82, y: 76 }, code: { x: 22, y: 78 }
+      };
+      const region = regions[placement.region] || { x: 50, y: 50 };
+      layout[object.id] = { x: region.x, y: region.y, w: 16, h: 16 };
+    });
+    state.placements.forEach(function (placement) {
+      const object = objectById[placement.entity_id];
+      if (!object || object.role !== "pointer") return;
+      const anchor = placement.anchor_id ? layout[placement.anchor_id] : null;
+      layout[object.id] = anchor
+        ? { x: anchor.x, y: Math.max(11, anchor.y - anchor.h / 2 - 8), w: 12, h: 10 }
+        : { x: 50, y: 16, w: 12, h: 10 };
     });
     return layout;
   }
@@ -77,7 +185,18 @@
     const source = layout[parts[0]];
     const target = layout[parts[1]];
     if (!source || !target) return null;
-    return { x1: source.x, y1: source.y, x2: target.x, y2: target.y };
+    const dx = target.x - source.x;
+    const dy = target.y - source.y;
+    const denominator = Math.max(Math.abs(dx) / Math.max(source.w, 1), Math.abs(dy) / Math.max(source.h, 1), 1);
+    const sourceScale = 0.5 / denominator;
+    const targetDenominator = Math.max(Math.abs(dx) / Math.max(target.w, 1), Math.abs(dy) / Math.max(target.h, 1), 1);
+    const targetScale = 0.5 / targetDenominator;
+    return {
+      x1: source.x + dx * sourceScale,
+      y1: source.y + dy * sourceScale,
+      x2: target.x - dx * targetScale,
+      y2: target.y - dy * targetScale
+    };
   }
 
   function setTextScale(node) {
@@ -172,30 +291,36 @@
     setRelations(scene, state, layout, true);
   }
 
-  function addStateTween(timeline, scene, state, at, duration, focusIds, transitionKind, transitionEntityIds) {
+  function addStateTween(timeline, scene, beforeState, state, at, duration, focusIds, transitionKind, transitionEntityIds) {
     const layout = stateLayout(scene, state);
+    const beforeLayout = stateLayout(scene, beforeState);
     timeline.call(function () { applyEntityContent(scene, state); }, null, at);
     state.placements.forEach(function (placement) {
       const entity = entityById(scene, placement.entity_id);
       const node = byId("entity-" + scene.id + "-" + entity.id);
       const box = layout[entity.id];
       if (!node || !box) return;
+      const beforePlacement = placementById(beforeState, entity.id);
+      const beforeBox = beforeLayout[entity.id];
       // Text must never be partially transparent: sampled transition frames
       // would blend its ink with the paper and make contrast nondeterministic.
       // Visibility changes are atomic; emphasis still moves through scale.
-      timeline.set(node, { autoAlpha: placement.visible ? 1 : 0 }, at);
+      const movedBetweenStates = beforePlacement && beforeBox && (
+        beforePlacement.container_id !== placement.container_id ||
+        beforePlacement.slot !== placement.slot ||
+        beforePlacement.region !== placement.region
+      );
+      if (movedBetweenStates) {
+        timeline.set(node, Object.assign({}, entityVars(beforeBox, beforePlacement, false), { autoAlpha: 1 }), at);
+      } else {
+        timeline.set(node, { autoAlpha: placement.visible ? 1 : 0 }, at);
+      }
       const motion = entityMotionVars(box, focusIds.includes(entity.id));
-      const isMove = transitionKind === "move" && transitionEntityIds.includes(entity.id);
+      const isMove = movedBetweenStates || (transitionKind === "move" && transitionEntityIds.includes(entity.id));
       if (isMove) {
-        const vector = moveVector(placement.region);
-        // Keep a card inside its own grid cell. This makes a move explicit
-        // without reintroducing inter-card crossings or text occlusion.
-        timeline.to(node, Object.assign({}, motion, vector, {
-          duration: duration * 0.45, ease: "power2.out"
-        }), at);
         timeline.to(node, Object.assign({}, motion, {
-          x: 0, y: 0, duration: duration * 0.55, ease: "power2.in"
-        }), at + duration * 0.45);
+          autoAlpha: placement.visible ? 1 : 0, duration: duration, ease: "power2.inOut"
+        }), at);
       } else {
         timeline.to(node, Object.assign(motion, {
           duration: duration, ease: "power2.inOut"
@@ -234,12 +359,14 @@
     payload.beats.forEach(function (timedBeat) {
       const scene = scenes[timedBeat.scene_id];
       const beat = scene.beats.find(function (item) { return item.id === timedBeat.beat_id; });
+      const beforeState = stateById(scene, beat.before_state_id);
       const state = stateById(scene, beat.after_state_id);
       const at = (timedBeat.start_ms + Math.min(900, timedBeat.duration_ms * 0.22)) / 1000;
       const duration = Math.min(1.1, Math.max(0.62, timedBeat.duration_ms / 5000));
       addStateTween(
         timeline,
         scene,
+        beforeState,
         state,
         at,
         duration,

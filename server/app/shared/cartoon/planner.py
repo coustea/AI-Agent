@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.shared.cartoon.execution import ExecutionCompiler, ExecutionSceneDraft
 from app.shared.cartoon.models import (
     CartoonBrief,
     EntityKind,
@@ -128,15 +129,16 @@ class _StoryboardDraft(_Draft):
 
 class _BeatDraft(_Draft):
     narration: str = Field(min_length=1)
+    visual: str = Field(min_length=1)
     action: TransitionKind
     targets: list[str] = Field(min_length=1, max_length=6)
 
-    @field_validator("narration")
+    @field_validator("narration", "visual")
     @classmethod
-    def normalize_narration(cls, value: str) -> str:
+    def normalize_required_text(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
-            raise ValueError("beat narration cannot be blank")
+            raise ValueError("beat text cannot be blank")
         return normalized
 
     @field_validator("targets")
@@ -150,25 +152,36 @@ class _BeatDraft(_Draft):
         return normalized
 
 
+class _EntityDraft(_Draft):
+    """One stable visual object, expressed without renderer implementation details."""
+
+    label: str = Field(min_length=1)
+    detail: str = Field(min_length=1)
+
+    @field_validator("label", "detail")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("entity text cannot be blank")
+        return normalized
+
+
 class _SceneDraft(_Draft):
-    entities: list[str] = Field(min_length=2, max_length=6)
+    entities: list[_EntityDraft] = Field(min_length=2, max_length=6)
     beats: list[_BeatDraft] = Field(min_length=3, max_length=4)
 
     @field_validator("entities")
     @classmethod
-    def normalize_entities(cls, values: list[str]) -> list[str]:
-        normalized = [value.strip() for value in values]
-        if any(not value for value in normalized):
-            raise ValueError("entities cannot contain blank labels")
-        if len(normalized) != len(set(normalized)):
+    def unique_entity_labels(cls, values: list[_EntityDraft]) -> list[_EntityDraft]:
+        labels = [value.label for value in values]
+        if len(labels) != len(set(labels)):
             raise ValueError("scene contains duplicate entity labels")
-        return normalized
+        return values
 
     @model_validator(mode="after")
     def validate_references(self) -> "_SceneDraft":
-        labels = [value.strip() for value in self.entities]
-        if any(not value for value in labels):
-            raise ValueError("entities cannot contain blank labels")
+        labels = [value.label for value in self.entities]
         if len(labels) != len(set(labels)):
             raise ValueError("scene contains duplicate entity labels")
         known = set(labels)
@@ -240,7 +253,6 @@ class CartoonPlanner:
                 ),
             ],
             temperature=0.1,
-            max_tokens=2_200,
         )
         storyboard = response if isinstance(response, _StoryboardDraft) else _StoryboardDraft.model_validate(response)
         if len(storyboard.scenes) != profile.scene_count:
@@ -260,8 +272,8 @@ class CartoonPlanner:
             {
                 "grammar": outline.grammar.value,
                 "beat_count": profile.beats_per_scene,
-                "entity_limit": profile.entity_limit,
                 "density": brief.configuration.visual_density,
+                "scene_contract": self._scene_contract(outline.grammar),
             }
         )
         context = {
@@ -271,8 +283,11 @@ class CartoonPlanner:
             "grammar": outline.grammar.value,
         }
         async with semaphore:
+            schema: type[BaseModel] = (
+                ExecutionSceneDraft if outline.grammar is VisualGrammar.TRACE else _SceneDraft
+            )
             response = await self._invoke(
-                _SceneDraft,
+                schema,
                 [
                     SystemMessage(content=prompt),
                     self._material_message(
@@ -283,21 +298,88 @@ class CartoonPlanner:
                     ),
                 ],
                 temperature=0.12,
-                max_tokens=2_800,
-                validator=lambda value: self._validate_scene_draft(value, profile=profile),
+                validator=lambda value: self._validate_scene_draft(
+                    value, grammar=outline.grammar, profile=profile
+                ),
             )
+        if outline.grammar is VisualGrammar.TRACE:
+            draft = response if isinstance(response, ExecutionSceneDraft) else ExecutionSceneDraft.model_validate(response)
+            self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
+            return self._materialize_execution_scene(outline, draft, scene_index)
         draft = response if isinstance(response, _SceneDraft) else _SceneDraft.model_validate(response)
-        self._validate_scene_draft(draft, profile=profile)
+        self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
         return self._materialize_scene(outline, draft, scene_index)
 
-    @staticmethod
-    def _validate_scene_draft(value: BaseModel, *, profile: _Profile) -> None:
+    @classmethod
+    def _validate_scene_draft(
+        cls,
+        value: BaseModel,
+        *,
+        grammar: VisualGrammar,
+        profile: _Profile,
+    ) -> None:
+        if grammar is VisualGrammar.TRACE:
+            if not isinstance(value, ExecutionSceneDraft):
+                raise ValueError("trace payload must validate as ExecutionSceneDraft")
+            if len(value.beats) != profile.beats_per_scene:
+                raise ValueError(f"trace scene requires exactly {profile.beats_per_scene} beats")
+            if len(value.objects) > profile.entity_limit:
+                raise ValueError(f"trace scene exceeds object capacity {profile.entity_limit}")
+            ExecutionCompiler.compile(value, scene_id="validation-scene")
+            return
         if not isinstance(value, _SceneDraft):
             raise ValueError("scene payload must validate as _SceneDraft")
         if len(value.entities) > profile.entity_limit:
             raise ValueError(f"scene exceeds entity capacity {profile.entity_limit}")
         if len(value.beats) != profile.beats_per_scene:
             raise ValueError(f"scene requires exactly {profile.beats_per_scene} beats")
+
+    @staticmethod
+    def _scene_contract(grammar: VisualGrammar) -> str:
+        if grammar is VisualGrammar.TRACE:
+            return """你正在生成算法或计算机过程的可执行场景。只输出以下 JSON，不得输出 entities、targets、visual、action、states、placements、ID、坐标或样式：
+```json
+{
+  "objects":[
+    {"name":"buffer","label":"缓冲区","role":"container","capacity":3},
+    {"name":"packetA","label":"数据包 A","role":"token","value":"A"},
+    {"name":"cursor","label":"读指针","role":"pointer"}
+  ],
+  "beats":[
+    {"narration":"数据包进入缓冲区的第一个位置。","operation":{"verb":"place","subject":"packetA","target":"buffer","slot":0}},
+    {"narration":"读指针指向即将处理的数据包。","operation":{"verb":"point","subject":"cursor","target":"packetA"}},
+    {"narration":"处理完成后，数据包进入输出区。","operation":{"verb":"remove","subject":"packetA"}}
+  ]
+}
+```
+对象 `role` 只能是 `container`、`token`、`pointer`、`node`、`port`、`marker`；只有 `container` 声明 `capacity`。操作 `verb` 只能是 `reveal`、`place`、`move`、`remove`、`point`、`update`、`connect`、`disconnect`、`compare`、`highlight`。`place` 必须有 container `target` 和 `slot`；`point/connect/disconnect/compare` 必须有 `target`；`update` 必须有 `value`；`move` 使用 container 的 `target`+`slot`，或使用 `region`（input/output/result/left/right/top/bottom/main/code）。每个 beat 只描述一个真实操作，不要用文字代替状态变化。"""
+        return """只输出以下 JSON：
+```json
+{
+  "entities":[{"label":"稳定对象名称","detail":"对象的实际公式、值或条件"}],
+  "beats":[{"narration":"解释当前变化","visual":"画面上可见的知识表达","action":"reveal","targets":["稳定对象名称"]}]
+}
+```
+不得输出 states、placements、relations、实体 ID、位置、容器、区域、颜色、样式或焦点字段。`targets` 必须精确引用已有实体。旁白不设字符上限；`visual` 必须是可静音理解的真实知识，不能只是“更新”或“执行”。"""
+
+    @classmethod
+    def _materialize_execution_scene(
+        cls,
+        outline: _StoryboardSceneDraft,
+        draft: ExecutionSceneDraft,
+        scene_index: int,
+    ) -> TeachingScene:
+        scene_id = f"scene-{scene_index:02d}"
+        compiled = ExecutionCompiler.compile(draft, scene_id=scene_id)
+        return TeachingScene(
+            id=scene_id,
+            title=outline.title,
+            grammar=VisualGrammar.TRACE,
+            execution_program=compiled.program,
+            entities=compiled.entities,
+            states=compiled.states,
+            beats=compiled.beats,
+        )
 
     @classmethod
     def _materialize_scene(
@@ -314,10 +396,10 @@ class CartoonPlanner:
         entities = [
             VisualEntity(
                 id=entity_id,
-                label=label.strip(),
+                label=entity.label,
                 kind=cls._entity_kind(outline.grammar, index),
             )
-            for index, (entity_id, label) in enumerate(
+            for index, (entity_id, entity) in enumerate(
                 zip(entity_ids, draft.entities, strict=True)
             )
         ]
@@ -329,7 +411,11 @@ class CartoonPlanner:
             (beat, [entity_ids_by_label[label] for label in beat.targets])
             for beat in draft.beats
         ]
-        states = cls._compile_states(scene_id, entities, compiled_beats)
+        initial_values = {
+            entity_id: entity.detail
+            for entity_id, entity in zip(entity_ids, draft.entities, strict=True)
+        }
+        states = cls._compile_states(scene_id, entities, compiled_beats, initial_values)
         beats = [
             TeachingBeat(
                 id=f"{scene_id}-beat-{index:02d}",
@@ -386,6 +472,7 @@ class CartoonPlanner:
         scene_id: str,
         entities: list[VisualEntity],
         beats: list[tuple[_BeatDraft, list[str]]],
+        initial_values: dict[str, str],
     ) -> list[VisualState]:
         regions = (
             SemanticRegion.LEFT,
@@ -402,6 +489,7 @@ class CartoonPlanner:
                 entity_id=entity.id,
                 region=regions[index % len(regions)],
                 visible=(index == 0),
+                value=initial_values[entity.id],
                 status=("active" if index == 0 else "idle"),
             )
             for index, entity in enumerate(entities)
@@ -445,7 +533,10 @@ class CartoonPlanner:
         def mark_value(entity_id: str, status: str = "active") -> None:
             nonlocal changed
             placement = by_id[entity_id]
-            value = CartoonPlanner._action_caption(beat.action, beat.targets)
+            # A beat may focus several stable objects, but its visual statement
+            # belongs to one focal object.  Repeating it in every card turns a
+            # diagram into a caption wall and loses the object-level meaning.
+            value = beat.visual if entity_id == targets[0] else placement.value
             if (
                 placement.value != value
                 or placement.status != status
@@ -515,6 +606,17 @@ class CartoonPlanner:
                     status="success" if beat.action is TransitionKind.EXECUTE else "active",
                 )
 
+        # Every beat carries one learner-visible statement.  Actions such as
+        # reveal, connect and move used to mutate only presentation state, so
+        # the renderer had no domain content to show for most of the narration.
+        # Keep it on the first focus object; the remaining targets retain their
+        # own stable details instead of becoming duplicate caption cards.
+        if beat.action is not TransitionKind.REMOVE:
+            focal = by_id[targets[0]]
+            if focal.value != beat.visual:
+                focal.value = beat.visual
+                changed = True
+
         if not changed:
             mark_value(targets[0], status="success")
         return VisualState(id=state_id, placements=placements, relations=relations)
@@ -525,14 +627,12 @@ class CartoonPlanner:
         messages: list[SystemMessage | HumanMessage],
         *,
         temperature: float,
-        max_tokens: int,
         validator: Callable[[BaseModel], None] | None = None,
     ) -> Any:
         return await get_llm().ainvoke_json(
             schema,
             messages,
             temperature=temperature,
-            max_tokens=max_tokens,
             validator=validator,
         )
 

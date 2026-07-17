@@ -66,14 +66,78 @@ class SemanticRegion(StrEnum):
     RESULT = "result"
 
 
+class ExecutionObjectRole(StrEnum):
+    CONTAINER = "container"
+    TOKEN = "token"
+    POINTER = "pointer"
+    NODE = "node"
+    PORT = "port"
+    MARKER = "marker"
+
+
+class ExecutionVerb(StrEnum):
+    REVEAL = "reveal"
+    PLACE = "place"
+    MOVE = "move"
+    REMOVE = "remove"
+    POINT = "point"
+    UPDATE = "update"
+    CONNECT = "connect"
+    DISCONNECT = "disconnect"
+    COMPARE = "compare"
+    HIGHLIGHT = "highlight"
+
+
+class ExecutionObject(_Model):
+    """One server-identified object in a renderer-neutral execution program."""
+
+    id: str = Field(min_length=1, max_length=48, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
+    name: str = Field(min_length=1, max_length=32)
+    label: str = Field(min_length=1)
+    role: ExecutionObjectRole
+    value: str = ""
+    capacity: int | None = Field(default=None, ge=1, le=12)
+
+    @model_validator(mode="after")
+    def validate_structure(self) -> "ExecutionObject":
+        if self.role is ExecutionObjectRole.CONTAINER and self.capacity is None:
+            raise ValueError("execution container requires capacity")
+        if self.role is not ExecutionObjectRole.CONTAINER and self.capacity is not None:
+            raise ValueError("only execution containers may declare capacity")
+        return self
+
+
+class ExecutionOperation(_Model):
+    """One atomic, geometry-free change in an executable teaching trace."""
+
+    verb: ExecutionVerb
+    subject: str = Field(min_length=1, max_length=32)
+    target: str = Field(default="", max_length=32)
+    slot: int | None = Field(default=None, ge=0, le=15)
+    region: SemanticRegion | None = None
+    value: str = ""
+
+
+class ExecutionProgram(_Model):
+    objects: list[ExecutionObject] = Field(min_length=2, max_length=16)
+
+    @model_validator(mode="after")
+    def validate_object_names(self) -> "ExecutionProgram":
+        names = [item.name for item in self.objects]
+        if len(names) != len(set(names)):
+            raise ValueError("execution program contains duplicate object names")
+        return self
+
+
 class CartoonGenerationConfig(_Model):
     lesson_depth: LessonDepth = LessonDepth.STANDARD
     visual_density: Literal["moderate", "rich", "intensive"] = "rich"
+    pace: Literal["fast", "balanced", "calm"] = "balanced"
     voice: Literal["teacher", "coach"] = "teacher"
 
 
 class CartoonBrief(_Model):
-    learning_need: str = Field(min_length=1, max_length=500)
+    learning_need: str = Field(min_length=1)
     instruction_context: dict[str, Any] = Field(default_factory=dict)
     source_materials: list[str] = Field(default_factory=list, max_length=12)
     knowledge_points: list[str] = Field(default_factory=list, max_length=30)
@@ -90,6 +154,7 @@ class VisualEntity(_Model):
 class EntityPlacement(_Model):
     entity_id: str = Field(min_length=1, max_length=48)
     container_id: str = Field(default="", max_length=48)
+    anchor_id: str = Field(default="", max_length=48)
     slot: int | None = Field(default=None, ge=0, le=15)
     region: SemanticRegion = SemanticRegion.MAIN
     visible: bool = True
@@ -100,6 +165,8 @@ class EntityPlacement(_Model):
     def validate_slot(self) -> "EntityPlacement":
         if self.slot is not None and not self.container_id:
             raise ValueError("slot placement requires container_id")
+        if self.anchor_id == self.entity_id:
+            raise ValueError("entity cannot anchor to itself")
         return self
 
 
@@ -154,6 +221,7 @@ class TeachingBeat(_Model):
     after_state_id: str = Field(min_length=1, max_length=48)
     transition: Transition
     focus_entity_ids: list[str] = Field(min_length=1, max_length=8)
+    operation: ExecutionOperation | None = None
 
     @field_validator("focus_entity_ids")
     @classmethod
@@ -186,12 +254,17 @@ class TeachingScene(_Model):
     id: str = Field(min_length=1, max_length=48)
     title: str = Field(min_length=1)
     grammar: VisualGrammar
+    execution_program: ExecutionProgram | None = None
     entities: list[VisualEntity] = Field(min_length=2, max_length=16)
     states: list[VisualState] = Field(min_length=2, max_length=8)
     beats: list[TeachingBeat] = Field(min_length=1, max_length=6)
 
     @model_validator(mode="after")
     def validate_scene_contract(self) -> "TeachingScene":
+        if self.grammar is VisualGrammar.TRACE and self.execution_program is None:
+            raise ValueError("trace scenes require an execution_program")
+        if self.grammar is not VisualGrammar.TRACE and self.execution_program is not None:
+            raise ValueError("only trace scenes may declare an execution_program")
         entity_ids = [entity.id for entity in self.entities]
         if len(entity_ids) != len(set(entity_ids)):
             raise ValueError("scene contains duplicate entity ids")
@@ -217,9 +290,14 @@ class TeachingScene(_Model):
                     raise ValueError("placement container_id must reference a container entity")
                 if placement.container_id == placement.entity_id:
                     raise ValueError("entity cannot be placed inside itself")
+                if placement.anchor_id and placement.anchor_id not in known_entities:
+                    raise ValueError("placement anchor_id must reference a scene entity")
             for relation in state.relations:
                 if {relation.source_id, relation.target_id} - known_entities:
                     raise ValueError("relation references an unknown entity")
+
+            if self.execution_program is not None:
+                self._validate_execution_state(state, container_ids)
 
         beat_ids = [beat.id for beat in self.beats]
         if len(beat_ids) != len(set(beat_ids)):
@@ -236,7 +314,66 @@ class TeachingScene(_Model):
                 raise ValueError(
                     "every teaching beat requires a semantic state change; focus-only animation is invalid"
                 )
+            if self.grammar is VisualGrammar.TRACE and beat.operation is None:
+                raise ValueError("trace beats require an execution operation")
+            if self.grammar is VisualGrammar.TRACE and beat.operation is not None:
+                assert self.execution_program is not None
+                execution_by_name = {
+                    item.name: item for item in self.execution_program.objects
+                }
+                operation = beat.operation
+                subject = execution_by_name.get(operation.subject)
+                target = execution_by_name.get(operation.target) if operation.target else None
+                if subject is None or (operation.target and target is None):
+                    raise ValueError("execution operation references an unknown object")
+                after = self.state(beat.after_state_id)
+                after_items = {item.entity_id: item for item in after.placements}
+                subject_placement = after_items[subject.id]
+                if operation.verb is ExecutionVerb.PLACE:
+                    if target is None or subject_placement.container_id != target.id or subject_placement.slot != operation.slot:
+                        raise ValueError("place operation must occupy its declared container slot")
+                if operation.verb is ExecutionVerb.REMOVE and (
+                    subject_placement.region is not SemanticRegion.OUTPUT
+                    or not subject_placement.visible
+                ):
+                    raise ValueError("remove operation must produce visible output")
+                if operation.verb is ExecutionVerb.POINT and (
+                    target is None or subject_placement.anchor_id != target.id
+                ):
+                    raise ValueError("point operation must attach to its declared target")
         return self
+
+    def _validate_execution_state(self, state: VisualState, container_ids: set[str]) -> None:
+        assert self.execution_program is not None
+        execution_ids = {item.id for item in self.execution_program.objects}
+        if execution_ids != {entity.id for entity in self.entities}:
+            raise ValueError("execution program objects must match scene entities")
+        placements = {item.entity_id: item for item in state.placements}
+        containers = {
+            item.id: item
+            for item in self.execution_program.objects
+            if item.role is ExecutionObjectRole.CONTAINER
+        }
+        if containers and not any(placements[container_id].visible for container_id in containers):
+            raise ValueError("execution trace must keep a visible container")
+        occupied_slots: set[tuple[str, int]] = set()
+        execution_by_id = {item.id: item for item in self.execution_program.objects}
+        for entity in self.entities:
+            placement = placements[entity.id]
+            if placement.container_id:
+                if placement.container_id not in containers or placement.slot is None:
+                    raise ValueError("execution placement must use a valid container slot")
+                if not placement.visible:
+                    raise ValueError("occupied execution object must be visible")
+                if placement.slot >= (containers[placement.container_id].capacity or 0):
+                    raise ValueError("execution object exceeds container capacity")
+                if execution_by_id[entity.id].role is not ExecutionObjectRole.POINTER:
+                    key = (placement.container_id, placement.slot)
+                    if key in occupied_slots:
+                        raise ValueError("execution trace cannot place two objects in one slot")
+                    occupied_slots.add(key)
+            if entity.kind is EntityKind.POINTER and placement.visible and not placement.anchor_id:
+                raise ValueError("visible execution pointer must attach to an object")
 
     def state(self, state_id: str) -> VisualState:
         return next(state for state in self.states if state.id == state_id)
@@ -257,10 +394,11 @@ class TeachingScene(_Model):
             if left is None or right is None:
                 visibility.add(entity_id)
                 continue
-            if (left.container_id, left.slot, left.region) != (
+            if (left.container_id, left.slot, left.region, left.anchor_id) != (
                 right.container_id,
                 right.slot,
                 right.region,
+                right.anchor_id,
             ):
                 moved.add(entity_id)
             if left.visible != right.visible:

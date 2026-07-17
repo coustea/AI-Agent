@@ -12,7 +12,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 
-FindingCategory = Literal["lint", "runtime", "layout", "motion", "contrast", "unknown"]
+FindingCategory = Literal["lint", "runtime", "layout", "motion", "contrast", "semantic", "unknown"]
 
 
 class QualityFinding(BaseModel):
@@ -65,7 +65,7 @@ class HyperFramesReport(BaseModel):
     @staticmethod
     def _finding(payload: dict[str, Any], category: str) -> QualityFinding:
         normalized_category = category if category in {
-            "lint", "runtime", "layout", "motion", "contrast"
+            "lint", "runtime", "layout", "motion", "contrast", "semantic"
         } else "unknown"
         severity = str(payload.get("severity") or "error").lower()
         if severity not in {"error", "warning", "info"}:
@@ -115,7 +115,7 @@ class QualityPolicy:
 
     def enforce(self, report: HyperFramesReport) -> None:
         problems: list[str] = []
-        for category in ("runtime", "contrast", "lint", "motion"):
+        for category in ("runtime", "contrast", "lint", "motion", "semantic"):
             blocking = [
                 item for item in report.findings
                 if item.category == category and item.severity in {"error", "warning"}
@@ -226,9 +226,102 @@ class CartoonMedia:
             detail = stderr.strip() or stdout.strip() or str(exc)
             raise QualityGateError([f"HyperFrames check returned invalid JSON: {detail[:800]}"]) from exc
         report = HyperFramesReport.from_payload(payload, exit_code=exit_code)
+        report.findings.extend(self._semantic_findings(output_dir))
         self.policy.enforce(report)
         await self._check_caption_visibility(output_dir)
         return report
+
+    @staticmethod
+    def _semantic_findings(output_dir: Path) -> list[QualityFinding]:
+        lesson_path = output_dir / "lesson.json"
+        if not lesson_path.is_file():
+            return [QualityFinding(category="semantic", code="missing_lesson", message="semantic validation requires lesson.json")]
+        try:
+            from app.shared.cartoon.models import ExecutionObjectRole, ExecutionVerb, Lesson
+
+            lesson = Lesson.model_validate_json(lesson_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            return [QualityFinding(category="semantic", code="invalid_lesson", message=str(exc))]
+
+        findings: list[QualityFinding] = []
+        for scene in lesson.scenes:
+            if scene.grammar.value != "trace":
+                continue
+            if scene.execution_program is None:
+                findings.append(QualityFinding(
+                    category="semantic", code="missing_execution_model",
+                    message=f"{scene.id} trace scene has no executable model",
+                ))
+                continue
+            objects_by_name = {item.name: item for item in scene.execution_program.objects}
+            objects_by_id = {item.id: item for item in scene.execution_program.objects}
+            structural_ids = {
+                item.id for item in scene.execution_program.objects
+                if item.role in {ExecutionObjectRole.CONTAINER, ExecutionObjectRole.NODE, ExecutionObjectRole.PORT}
+            }
+            if {entity.id for entity in scene.entities} != set(objects_by_id):
+                findings.append(QualityFinding(
+                    category="semantic", code="execution_entity_mismatch",
+                    message=f"{scene.id} execution objects do not match scene entities",
+                ))
+                continue
+            for beat in scene.beats:
+                before = scene.state(beat.before_state_id)
+                after = scene.state(beat.after_state_id)
+                after_items = {item.entity_id: item for item in after.placements}
+                if structural_ids and not any(after_items[item_id].visible for item_id in structural_ids):
+                    findings.append(QualityFinding(
+                        category="semantic", code="hidden_execution_model",
+                        message=f"{scene.id}/{beat.id} hides every structural execution object",
+                    ))
+                for object_id, object_ in objects_by_id.items():
+                    placement = after_items[object_id]
+                    if object_.role is ExecutionObjectRole.POINTER and placement.visible:
+                        anchor = after_items.get(placement.anchor_id)
+                        if anchor is None or not anchor.visible:
+                            findings.append(QualityFinding(
+                                category="semantic", code="pointer_without_visible_anchor",
+                                message=f"{scene.id}/{beat.id} pointer {object_.name} has no visible anchor",
+                            ))
+                operation = beat.operation
+                if operation is None:
+                    findings.append(QualityFinding(
+                        category="semantic", code="missing_execution_operation",
+                        message=f"{scene.id}/{beat.id} has no execution operation",
+                    ))
+                    continue
+                subject = objects_by_name.get(operation.subject)
+                target = objects_by_name.get(operation.target) if operation.target else None
+                if subject is None or (operation.target and target is None):
+                    findings.append(QualityFinding(
+                        category="semantic", code="operation_unknown_object",
+                        message=f"{scene.id}/{beat.id} references an unknown execution object",
+                    ))
+                elif operation.verb is ExecutionVerb.PLACE:
+                    placed = after_items[subject.id]
+                    if target is None or placed.container_id != target.id or placed.slot != operation.slot:
+                        findings.append(QualityFinding(
+                            category="semantic", code="place_without_destination",
+                            message=f"{scene.id}/{beat.id} does not place its subject in the declared destination",
+                        ))
+                elif operation.verb is ExecutionVerb.REMOVE and not (
+                    after_items[subject.id].region.value == "output" and after_items[subject.id].visible
+                ):
+                    findings.append(QualityFinding(
+                        category="semantic", code="remove_without_output",
+                        message=f"{scene.id}/{beat.id} removes no object to the output dock",
+                    ))
+                elif operation.verb is ExecutionVerb.POINT and target is not None and after_items[subject.id].anchor_id != target.id:
+                    findings.append(QualityFinding(
+                        category="semantic", code="point_without_anchor",
+                        message=f"{scene.id}/{beat.id} does not attach its pointer to the declared target",
+                    ))
+                if not scene.state_changes(beat).has_semantic_change:
+                    findings.append(QualityFinding(
+                        category="semantic", code="operation_without_delta",
+                        message=f"{scene.id}/{beat.id} has no execution state delta",
+                    ))
+        return findings
 
     @staticmethod
     async def _check_caption_visibility(output_dir: Path) -> None:

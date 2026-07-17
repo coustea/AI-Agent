@@ -630,11 +630,17 @@ def _render_mapping(visual: VisualModel, slide_id: str) -> str:
     left_count = len(v.left_elements)
     right_count = len(v.right_elements)
     max_count = max(left_count, right_count, 1)
-    row_height = 115
-    top_margin = 180
+    if max_count <= 3:
+        row_height = 115
+        top_margin = 180
+    else:
+        top_margin = 120
+        row_height = (560 - top_margin - 35) / (max_count - 1)
+        row_height = max(row_height, 62)
     left_x = 200
     right_x = 800
     svg_height = 560
+
 
     # Set labels
     labels_html = (

@@ -22,6 +22,11 @@ _VOICES = {
     "teacher": "zh-CN-XiaoxiaoNeural",
     "coach": "zh-CN-YunxiNeural",
 }
+_PACE_RATES = {
+    "fast": "+25%",
+    "balanced": "+12%",
+    "calm": "+0%",
+}
 _MIN_BEAT_MS = 3_200
 _AUDIO_TAIL_MS = 120
 _CAPTION_DISPLAY_TARGET = 34
@@ -32,16 +37,17 @@ class _EdgeTts:
         self.retries = max(1, retries)
         self.timeout_seconds = max(10, timeout_seconds)
 
-    async def synthesize(self, text: str, output_path: Path, voice: str) -> SpeechClip:
+    async def synthesize(self, text: str, output_path: Path, voice: str, pace: str) -> SpeechClip:
         import edge_tts
 
         selected_voice = _VOICES.get(voice, _VOICES["teacher"])
+        rate = _PACE_RATES.get(pace, _PACE_RATES["balanced"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.unlink(missing_ok=True)
         last_error: Exception | None = None
         for attempt in range(1, self.retries + 1):
             try:
-                communicate = edge_tts.Communicate(text, selected_voice, rate="+12%")
+                communicate = edge_tts.Communicate(text, selected_voice, rate=rate)
                 await asyncio.wait_for(
                     communicate.save(str(output_path)),
                     timeout=self.timeout_seconds,
@@ -75,6 +81,7 @@ class CartoonSpeech:
         output_dir: Path,
         *,
         voice: str,
+        pace: str = "balanced",
     ) -> Timeline:
         audio_dir = output_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
@@ -87,6 +94,7 @@ class CartoonSpeech:
                     beat.narration,
                     audio_dir / f"{beat.id}.mp3",
                     voice,
+                    pace,
                 )
 
         try:

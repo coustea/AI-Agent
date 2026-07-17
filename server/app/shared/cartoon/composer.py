@@ -201,6 +201,7 @@ class CartoonComposer:
     @staticmethod
     def _scene_html(index: int, scene: TeachingScene) -> str:
         scene_id = html.escape(scene.id)
+        structure = CartoonComposer._structure_html(scene)
         entities = "\n".join(
             f"""<div id="entity-{scene_id}-{html.escape(entity.id)}"
                  class="visual-entity kind-{entity.kind.value} tone-{('primary', 'secondary', 'accent', 'warning')[index % 4]}"
@@ -234,6 +235,7 @@ class CartoonComposer:
             <div><span class="grammar-label">{grammar_label}</span><h1>{html.escape(scene.title)}</h1></div>
           </header>
           <div class="visual-stage">
+            {structure}
             <svg class="relation-layer" viewBox="0 0 100 100" preserveAspectRatio="none"
                  data-layout-allow-overlap aria-hidden="true">
               {relations}
@@ -241,3 +243,30 @@ class CartoonComposer:
             <div class="entity-layer">{entities}</div>
           </div>
         </section>"""
+
+    @staticmethod
+    def _structure_html(scene: TeachingScene) -> str:
+        if scene.execution_program is None:
+            return ""
+        containers = [
+            item for item in scene.execution_program.objects
+            if item.role.value == "container"
+        ]
+        racks = "".join(
+            f'''<div class="execution-container-shell" data-container-id="{html.escape(item.id)}"
+                     style="--execution-capacity:{item.capacity}">
+                  <span class="execution-container-label">{html.escape(item.label)}</span>
+                  <div class="execution-cells">{
+                      "".join(
+                          f'<div class="execution-cell" data-slot="{slot}"><span>{slot}</span></div>'
+                          for slot in range(item.capacity or 0)
+                      )
+                  }</div>
+                </div>'''
+            for item in containers
+        )
+        return f"""<div class="execution-stage" aria-hidden="true">
+              <div class="execution-dock execution-input-dock"><span>输入</span></div>
+              <div class="execution-rack">{racks}</div>
+              <div class="execution-dock execution-output-dock"><span>输出</span></div>
+            </div>"""
