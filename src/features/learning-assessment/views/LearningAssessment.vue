@@ -114,138 +114,145 @@
 
       <!-- CASE 3: 正常显示已生成的评估报告 -->
       <template v-else-if="dashboardData">
-        <!-- 查看历史评估提示 -->
-        <div v-if="viewingHistorical" class="historical-banner">
-          <History :size="14" />
-          <span>正在查看历史评估（{{ formatDateRange(historicalWindow.start, historicalWindow.end) }}）</span>
-          <Button variant="ghost" size="sm" @click="returnToLatest">
-            返回最新
-          </Button>
-        </div>
-
-        <div class="dashboard-grid">
-          <!-- 左侧：图表与文字洞察主视图 -->
-          <div class="dashboard-main">
-            <!-- 本期结论与策略 -->
-            <section class="conclusion-section ui-card conclusion-editorial">
-              <div class="conclusion-card">
-                <div class="conclusion-header">
-                  <h2>本期结论与策略调整</h2>
-                  <span class="window-badge">
-                    <Calendar :size="14" />
-                    {{ dashboardData.window.days }} 天
-                    {{ formatDateRange(dashboardData.window.start, dashboardData.window.end) }}
-                  </span>
-                </div>
-                <p class="conclusion-text">{{ activeAssessment?.assessment || guidanceStrategy?.conclusion || defaultConclusion }}</p>
-                <div v-if="guidanceStrategy" class="strategy-highlights">
-                  <div class="highlight-item">
-                    <span class="highlight-label">重点主题</span>
-                    <strong class="highlight-value">
-                      {{ guidanceStrategy.focus_topics?.length ? guidanceStrategy.focus_topics.join('、') : '暂无' }}
-                    </strong>
-                  </div>
-                  <div class="highlight-item">
-                    <span class="highlight-label">建议时长</span>
-                    <strong class="highlight-value">{{ guidanceStrategy.recommended_session_minutes }} 分钟/次</strong>
-                  </div>
-                  <div class="highlight-item">
-                    <span class="highlight-label">辅导方式</span>
-                    <strong class="highlight-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
-                  </div>
-                </div>
-                <p v-if="guidanceStrategy?.reason" class="strategy-reason">
-                  <span class="reason-label">策略依据</span>
-                  {{ guidanceStrategy.reason }}
-                </p>
+        <!-- 历史评估横向时间线导航轨 -->
+        <section v-if="assessmentsHistory.length > 0" class="timeline-nav-section" aria-label="评估历史导航">
+          <div class="timeline-nav-card ui-card">
+            <div class="timeline-nav-header">
+              <div class="nav-title-wrapper">
+                <History :size="16" class="nav-icon" />
+                <h3>评估历程</h3>
               </div>
-            </section>
-
-            <!-- 学习趋势 + 模块时长分布 -->
-            <section class="charts-section">
-              <div class="chart-panel-outer ui-card">
-                <article class="chart-panel">
-                  <div class="panel-header">
-                    <h3>每日学习趋势</h3>
-                  </div>
-                  <div class="chart-box">
-                    <v-chart class="chart" :option="lineOption" autoresize />
-                  </div>
-                </article>
+              <span class="timeline-count">共 {{ totalAssessments }} 份</span>
+            </div>
+            
+            <div class="timeline-track-container">
+              <div class="timeline-track">
+                <!-- 最新评估按钮 -->
+                <button
+                  type="button"
+                  :class="{ active: !viewingHistorical }"
+                  class="timeline-btn latest-btn"
+                  @click="returnToLatest"
+                >
+                  <span class="badge">最新</span>
+                  <strong>{{ assessmentsHistory[0]?.range_days ?? 7 }} 天评估</strong>
+                  <span class="time">{{ latestAssessmentTime }}</span>
+                </button>
+                
+                <span class="timeline-separator" />
+                
+                <!-- 历史评估列表 -->
+                <button
+                  v-for="item in assessmentsHistory.slice(1, 10)"
+                  :key="item.id"
+                  type="button"
+                  :class="{ active: viewingHistorical && activeAssessment?.id === item.id }"
+                  class="timeline-btn"
+                  @click="selectAssessment(item)"
+                >
+                  <strong>{{ item.range_days }} 天评估</strong>
+                  <span class="time">{{ formatDateTime(item.created_at) }}</span>
+                </button>
               </div>
-              <div class="chart-panel-outer ui-card">
-                <article class="chart-panel">
-                  <div class="panel-header">
-                    <h3>模块学习时长分布</h3>
-                  </div>
-                  <div class="chart-box">
-                    <v-chart class="chart" :option="pieOption" autoresize />
-                  </div>
-                </article>
-              </div>
-            </section>
+            </div>
+            
+            <div v-if="totalAssessments > 10" class="timeline-more-action">
+              <Button variant="ghost" size="sm" class="more-btn" @click="showHistoryDrawer = true">
+                查看全部 {{ totalAssessments }} 份
+                <ChevronRight :size="14" />
+              </Button>
+            </div>
           </div>
+        </section>
 
-          <!-- 右侧：行动与历史侧边栏 -->
-          <aside class="dashboard-sidebar">
-            <!-- 行动计划 -->
-            <section v-if="actionPlan.length" class="action-section ui-card sidebar-card">
-              <div class="action-card">
-                <div class="section-header">
-                  <Compass :size="16" />
-                  <h3>下一阶段学习计划</h3>
+        <!-- 单栏纵向评估内容流 -->
+        <div class="report-flow-container">
+          <!-- 1. 图表区 -->
+          <section class="report-section charts-section-layout">
+            <div class="chart-panel-outer ui-card">
+              <article class="chart-panel">
+                <div class="panel-header">
+                  <h3>每日学习趋势</h3>
                 </div>
-                <div class="action-list">
-                  <div
-                    v-for="(action, index) in actionPlan"
-                    :key="index"
-                    class="action-item"
-                  >
-                    <span class="action-index">{{ index + 1 }}</span>
-                    <div class="action-content">
+                <div class="chart-box">
+                  <v-chart class="chart" :option="lineOption" autoresize />
+                </div>
+              </article>
+            </div>
+            
+            <div class="chart-panel-outer ui-card">
+              <article class="chart-panel">
+                <div class="panel-header">
+                  <h3>模块学习时长分布</h3>
+                </div>
+                <div class="chart-box">
+                  <v-chart class="chart" :option="pieOption" autoresize />
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <!-- 2. 结论与自适应策略 -->
+          <section class="report-section conclusion-section ui-card conclusion-editorial">
+            <div class="conclusion-card">
+              <div class="conclusion-header">
+                <h2>本期结论与策略调整</h2>
+                <span class="window-badge">
+                  <Calendar :size="14" />
+                  {{ dashboardData.window.days }} 天
+                  {{ formatDateRange(dashboardData.window.start, dashboardData.window.end) }}
+                </span>
+              </div>
+              <p class="conclusion-text">{{ activeAssessment?.assessment || guidanceStrategy?.conclusion || defaultConclusion }}</p>
+              
+              <div v-if="guidanceStrategy" class="strategy-highlights">
+                <div class="highlight-item">
+                  <span class="highlight-label">重点主题</span>
+                  <strong class="highlight-value">
+                    {{ guidanceStrategy.focus_topics?.length ? guidanceStrategy.focus_topics.join('、') : '暂无' }}
+                  </strong>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-label">建议时长</span>
+                  <strong class="highlight-value">{{ guidanceStrategy.recommended_session_minutes }} 分钟/次</strong>
+                </div>
+                <div class="highlight-item">
+                  <span class="highlight-label">辅导方式</span>
+                  <strong class="highlight-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
+                </div>
+              </div>
+              
+              <p v-if="guidanceStrategy?.reason" class="strategy-reason">
+                <span class="reason-label">策略依据</span>
+                {{ guidanceStrategy.reason }}
+              </p>
+            </div>
+          </section>
+
+          <!-- 3. 下一阶段学习计划 -->
+          <section v-if="actionPlan.length" class="report-section action-section-wide ui-card">
+            <div class="action-card">
+              <div class="section-header">
+                <Compass :size="18" />
+                <h3>下一阶段学习计划</h3>
+              </div>
+              <div class="action-list-wide">
+                <div
+                  v-for="(action, index) in actionPlan"
+                  :key="index"
+                  class="action-item-wide"
+                >
+                  <span class="action-index-badge">{{ index + 1 }}</span>
+                  <div class="action-content-wide">
+                    <div class="action-desc-row">
                       <p class="action-description">{{ action.description }}</p>
-                      <span class="action-topic">{{ action.topic }}</span>
                     </div>
+                    <span class="action-topic">{{ action.topic }}</span>
                   </div>
                 </div>
               </div>
-            </section>
-
-            <!-- 历史评估 -->
-            <section class="history-section ui-card sidebar-card">
-              <div class="history-card">
-                <div class="section-header">
-                  <History :size="16" />
-                  <h3>历史评估</h3>
-                  <span class="history-count">{{ totalAssessments }} 份</span>
-                </div>
-                <div v-if="historyLoading" class="history-loading">加载中...</div>
-                <div v-else-if="assessmentsHistory.length === 0" class="history-empty">暂无历史评估</div>
-                <div v-else class="history-grid">
-                  <button
-                    v-for="item in assessmentsHistory.slice(0, 4)"
-                    :key="item.id"
-                    type="button"
-                    :class="{ active: activeAssessment?.id === item.id }"
-                    class="history-item"
-                    @click="selectAssessment(item)"
-                  >
-                    <div class="history-item-header">
-                      <strong>{{ item.range_days }} 天评估</strong>
-                      <span class="history-time">{{ formatDateTime(item.created_at) }}</span>
-                    </div>
-                    <span class="history-range">{{ formatDateRange(item.window_start, item.window_end) }}</span>
-                  </button>
-                </div>
-                <div v-if="totalAssessments > 4" class="history-more">
-                  <Button variant="ghost" size="sm" @click="showHistoryDrawer = true">
-                    查看全部 {{ totalAssessments }} 份评估
-                    <ChevronRight :size="14" />
-                  </Button>
-                </div>
-              </div>
-            </section>
-          </aside>
+            </div>
+          </section>
         </div>
       </template>
     </template>
@@ -368,6 +375,11 @@ function navigateTo(path: string) {
 
 const actionPlan = computed<ActionPlanItem[]>(() => guidanceStrategy.value?.action_plan ?? [])
 
+const latestAssessmentTime = computed(() => {
+  const latest = assessmentsHistory.value[0]
+  return latest ? formatDateTime(latest.created_at) : ''
+})
+
 const defaultConclusion = computed(() => {
   if (dashboardData.value?.evaluation_summary?.event_count === 0) {
     return '当前窗口暂无学习活动记录，建议先完成一次资源学习或练习。'
@@ -442,7 +454,7 @@ const pieOption = computed(() => {
     },
     legend: {
       orient: 'vertical',
-      right: 10,
+      right: '12%',
       top: 'center',
       textStyle: { color: '#6b7280', fontSize: 12 },
       itemWidth: 10,
@@ -453,7 +465,7 @@ const pieOption = computed(() => {
     series: [{
       type: 'pie',
       radius: ['40%', '70%'],
-      center: ['35%', '50%'],
+      center: ['40%', '50%'],
       avoidLabelOverlap: false,
       label: { show: false },
       emphasis: {
@@ -694,32 +706,246 @@ async function pollAssessmentStatus(): Promise<void> {
   gap: var(--space-6);
 }
 
-/* Dashboard Grid Layout (Bento Grid) */
-.dashboard-grid {
+/* Horizontal Timeline Navigation Track */
+.timeline-nav-section {
+  margin-top: var(--space-2);
+}
+
+.timeline-nav-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--space-6);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.timeline-nav-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--color-border-light);
+  padding-bottom: var(--space-3);
+}
+
+.nav-title-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-primary);
+}
+
+.nav-title-wrapper h3 {
+  font-size: var(--text-base);
+  font-weight: var(--weight-extrabold);
+  color: var(--color-text-strong);
+  margin: 0;
+}
+
+.nav-icon {
+  color: var(--color-primary);
+}
+
+.timeline-count {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--weight-bold);
+}
+
+.timeline-track-container {
+  overflow-x: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE 10+ */
+  display: flex;
+  width: 100%;
+}
+
+.timeline-track-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+.timeline-track {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+  min-width: max-content;
+}
+
+.timeline-btn {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding: var(--space-2.5) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-light);
+  background: var(--color-bg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  text-align: left;
+  min-width: 10rem;
+  gap: 2px;
+}
+
+.timeline-btn:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+  transform: translateY(-1px);
+}
+
+.timeline-btn.active {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.timeline-btn strong {
+  font-size: var(--text-sm);
+  color: var(--color-text-strong);
+}
+
+.timeline-btn .time {
+  font-size: 10px;
+  color: var(--color-text-muted);
+}
+
+.latest-btn {
+  position: relative;
+  border-color: var(--color-primary-border);
+}
+
+.latest-btn .badge {
+  position: absolute;
+  top: -6px;
+  left: 12px;
+  background: var(--color-primary);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: var(--radius-pill);
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+.timeline-separator {
+  width: 1px;
+  height: 2rem;
+  background: var(--color-border-light);
+  align-self: center;
+  margin: 0 4px;
+}
+
+.timeline-more-action {
+  display: flex;
+  justify-content: flex-end;
+  border-top: 1px solid var(--color-border-light);
+  padding-top: var(--space-3);
+}
+
+.timeline-more-action .more-btn {
+  color: var(--color-primary) !important;
+  font-weight: var(--weight-bold);
+}
+
+.timeline-more-action .more-btn:hover {
+  color: var(--color-primary-dark) !important;
+}
+
+/* Single column layout container */
+.report-flow-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  width: 100%;
+}
+
+.report-section {
+  width: 100%;
+}
+
+/* Charts top layout - 2 columns on desktop, stacked on mobile */
+.charts-section-layout {
   display: grid;
-  grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
-  gap: var(--space-6);
-  align-items: start;
-}
-
-.dashboard-main {
-  display: flex;
-  flex-direction: column;
+  grid-template-columns: repeat(2, 1fr);
   gap: var(--space-6);
 }
 
-.dashboard-sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  position: sticky;
-  top: var(--space-6);
+@media (max-width: 900px) {
+  .charts-section-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Action plan list wide styling */
+.action-section-wide {
+  background: var(--color-surface);
+}
+
+.action-list-wide {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+  width: 100%;
 }
 
 @media (max-width: 1024px) {
-  .dashboard-grid {
+  .action-list-wide {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .action-list-wide {
     grid-template-columns: 1fr;
   }
+}
+
+.action-item-wide {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  background: var(--color-bg);
+  transition: all var(--transition-fast);
+}
+
+.action-item-wide:hover {
+  border-color: var(--color-primary-border);
+  background: var(--color-surface-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-index-badge {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-extrabold);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.action-content-wide {
+  min-width: 0;
+  flex: 1;
+}
+
+.action-desc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
 }
 
 h1, h2, h3, h4, p {
@@ -1073,15 +1299,9 @@ h1, h2, h3, h4, p {
 
 /* Charts Section */
 .charts-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-5);
-}
-
-@media (max-width: 768px) {
-  .charts-section {
-    grid-template-columns: 1fr;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
 }
 
 .chart-panel-outer {
@@ -1112,7 +1332,7 @@ h1, h2, h3, h4, p {
 .chart-box {
   position: relative;
   width: 100%;
-  height: 14rem;
+  height: 18rem;
 }
 
 .mini-chart-box {
@@ -1432,10 +1652,6 @@ h1, h2, h3, h4, p {
 
 /* Responsive */
 @media (max-width: 900px) {
-  .charts-section {
-    grid-template-columns: 1fr;
-  }
-
   .strategy-highlights {
     grid-template-columns: repeat(2, 1fr);
   }

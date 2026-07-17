@@ -22,11 +22,21 @@ function getContextFromRoute(route: Router['currentRoute']['value']): TrackingCo
     }
   }
 
+  // 资源生成页面也属于学习行为
+  if (name === 'ResourceGenerator') {
+    return { sourcePage: 'resource' }
+  }
+
   if (name === 'LearningPathNode') {
     return {
       sourcePage: 'path',
       pathNodeId: toNumber(route.params.nodeId),
     }
+  }
+
+  // 路径规划相关页面
+  if (name === 'LearningPathEntry' || name === 'LearningPathOverview' || name === 'LearningPathHistory') {
+    return { sourcePage: 'path' }
   }
 
   if (name === 'Tutor') {
@@ -39,6 +49,11 @@ function getContextFromRoute(route: Router['currentRoute']['value']): TrackingCo
 
   if (name === 'AlgorithmVisualizer') {
     return { sourcePage: 'visualizer' }
+  }
+
+  // 学习评估页面
+  if (name === 'LearningAssessment') {
+    return { sourcePage: 'assessment' }
   }
 
   return null

@@ -1742,6 +1742,7 @@ const scenarioBreakdown = computed(() => {
     chat: "#2dd4bf",
     path: "#fbbf24",
     resource: "#34d399",
+    assessment: "#f472b6",
   };
   const items = (dashboardData.value?.feature_usage || []).map(
       (item) => ({
@@ -2020,9 +2021,21 @@ let schoolSearchTimer:
     | ReturnType<typeof setTimeout>
     | null = null;
 
+// 看板数据自动刷新定时器（每 60 秒刷新一次学习时长）
+let dashboardRefreshTimer:
+    | ReturnType<typeof setInterval>
+    | null = null;
+
+const DASHBOARD_REFRESH_INTERVAL_MS = 60_000;
+
 onMounted(async () => {
   await loadAllProfileData();
   openProfileEditorFromRoute();
+
+  // 启动看板数据自动刷新
+  dashboardRefreshTimer = setInterval(() => {
+    loadDashboardData();
+  }, DASHBOARD_REFRESH_INTERVAL_MS);
 
   requestAnimationFrame(() => {
     if (
@@ -2050,6 +2063,11 @@ onBeforeUnmount(() => {
 
   if (schoolSearchTimer) {
     clearTimeout(schoolSearchTimer);
+  }
+
+  if (dashboardRefreshTimer) {
+    clearInterval(dashboardRefreshTimer);
+    dashboardRefreshTimer = null;
   }
 });
 

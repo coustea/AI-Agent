@@ -23,7 +23,7 @@ export interface DashboardLoginActivity {
 }
 
 export interface DashboardFeatureUsage {
-  key: 'quiz' | 'chat' | 'path' | 'resource'
+  key: 'quiz' | 'chat' | 'path' | 'resource' | 'assessment'
   name: string
   count: number
 }

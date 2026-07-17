@@ -9,7 +9,7 @@
               aria-label="返回资源生成"
               @click="router.push('/resource-generator')"
           >
-            <ArrowLeft class="back-icon" />
+            <span class="direction-icon direction-left direction-icon-large" aria-hidden="true"></span>
           </button>
 
           <div class="header-copy">
@@ -35,7 +35,7 @@
             class="create-resource-button"
             @click="router.push('/resource-generator')"
         >
-          <Plus class="button-icon" />
+          <Plus :size="16" weight="bold" />
           生成新资源
         </button>
       </header>
@@ -112,7 +112,7 @@
           class="history-state error-state"
       >
         <div class="state-icon error-icon">
-          <WarningCircle />
+          <WarningCircle :size="25" weight="duotone" />
         </div>
 
         <h2>历史记录加载失败</h2>
@@ -123,7 +123,7 @@
             class="state-primary-button"
             @click="fetchHistory"
         >
-          <ArrowClockwise class="button-icon" />
+          <ArrowClockwise :size="16" weight="bold" />
           重新加载
         </button>
       </section>
@@ -134,7 +134,7 @@
           class="history-state empty-state"
       >
         <div class="state-icon">
-          <Files />
+          <Files :size="25" weight="duotone" />
         </div>
 
         <h2>还没有资源生成记录</h2>
@@ -148,7 +148,7 @@
             class="state-primary-button"
             @click="router.push('/resource-generator')"
         >
-          <Plus class="button-icon" />
+          <Plus :size="16" weight="bold" />
           开始生成资源
         </button>
       </section>
@@ -165,7 +165,7 @@
         >
           <header class="group-header">
             <div class="group-title">
-              <CalendarBlank class="group-calendar-icon" />
+              <CalendarBlank :size="18" weight="fill" class="group-calendar-icon" />
 
               <div>
                 <h2>{{ group.label }}</h2>
@@ -273,13 +273,14 @@
 
                 <footer class="item-meta">
                   <span>
-                    <Clock class="meta-icon" />
+                    <Clock :size="13" weight="fill" class="meta-icon" />
                     {{ formatClock(item.created_at) }}
                   </span>
 
                   <i></i>
 
                   <span>
+                    <Stack :size="13" weight="fill" class="meta-icon" />
                     {{ item.resource_types?.length || 0 }}
                     类资源
                   </span>
@@ -301,7 +302,7 @@
                     @click.stop="goToDetail(item.id)"
                 >
                   {{ getActionText(item.status) }}
-                  <ArrowRight class="action-arrow" />
+                  <span class="direction-icon direction-right action-arrow" aria-hidden="true"></span>
                 </button>
               </div>
             </article>
@@ -326,7 +327,7 @@
               :disabled="currentPage <= 1"
               @click="handleCurrentChange(currentPage - 1)"
           >
-            <ArrowLeft class="pagination-icon" />
+            <span class="direction-icon direction-left pagination-icon" aria-hidden="true"></span>
             上一页
           </button>
 
@@ -343,7 +344,7 @@
               @click="handleCurrentChange(currentPage + 1)"
           >
             下一页
-            <ArrowRight class="pagination-icon" />
+            <span class="direction-icon direction-right pagination-icon" aria-hidden="true"></span>
           </button>
         </div>
       </footer>
@@ -360,12 +361,11 @@ import {
 import { useRouter } from "vue-router";
 import {
   PhArrowClockwise as ArrowClockwise,
-  PhArrowLeft as ArrowLeft,
-  PhArrowRight as ArrowRight,
   PhCalendarBlank as CalendarBlank,
   PhClock as Clock,
   PhFiles as Files,
   PhPlus as Plus,
+  PhStack as Stack,
   PhWarningCircle as WarningCircle,
 } from "@phosphor-icons/vue";
 
@@ -755,6 +755,7 @@ onMounted(() => {
   flex: 0 0 36px;
   place-items: center;
   margin-top: 1px;
+  padding: 0;
   border: 1px solid #d7e0ea;
   border-radius: 8px;
   color: #65748a;
@@ -772,9 +773,67 @@ onMounted(() => {
   background: #f6f9fc;
 }
 
-.back-icon {
+/*
+ * 方向图标使用纯 CSS 绘制，避免项目中的全局 svg/path 样式
+ * 覆盖 Phosphor 箭头图标，导致按钮中只剩一个小点。
+ */
+.direction-icon {
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  color: inherit;
+}
+
+.direction-icon::before {
+  position: absolute;
+  top: 50%;
+  left: 2px;
+  width: 10px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+  content: "";
+  transform: translateY(-50%);
+}
+
+.direction-icon::after {
+  position: absolute;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  content: "";
+}
+
+.direction-left::after {
+  left: 2px;
+  border-top: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  transform: translateY(-50%) rotate(-45deg);
+}
+
+.direction-right::after {
+  right: 2px;
+  border-top: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.direction-icon-large {
   width: 17px;
   height: 17px;
+  flex-basis: 17px;
+}
+
+.direction-icon-large::before {
+  left: 2px;
+  width: 13px;
+}
+
+.direction-icon-large::after {
+  width: 8px;
+  height: 8px;
 }
 
 .header-copy {
@@ -847,11 +906,6 @@ onMounted(() => {
   background: #176f6a;
   box-shadow: 0 7px 18px rgba(35, 125, 120, 0.17);
   transform: translateY(-1px);
-}
-
-.button-icon {
-  width: 16px;
-  height: 16px;
 }
 
 /* 工具栏 */
@@ -1304,11 +1358,6 @@ onMounted(() => {
   background: #c0c8d2;
 }
 
-.meta-icon {
-  width: 13px;
-  height: 13px;
-}
-
 /* 操作入口 */
 
 .item-action-column {
@@ -1380,11 +1429,6 @@ onMounted(() => {
   background: #f7f9fc;
 }
 
-.action-arrow {
-  width: 14px;
-  height: 14px;
-}
-
 /* 状态页面 */
 
 .history-state {
@@ -1410,11 +1454,6 @@ onMounted(() => {
   border-radius: 14px;
   color: #237d78;
   background: #eff9f7;
-}
-
-.state-icon svg {
-  width: 25px;
-  height: 25px;
 }
 
 .error-icon {
@@ -1596,11 +1635,6 @@ onMounted(() => {
   background: #f7f8fa;
   cursor: not-allowed;
   opacity: 0.7;
-}
-
-.pagination-icon {
-  width: 14px;
-  height: 14px;
 }
 
 .page-indicator {

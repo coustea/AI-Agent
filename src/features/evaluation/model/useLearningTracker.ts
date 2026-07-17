@@ -1,5 +1,6 @@
 import { recordLearningSession } from '@/features/evaluation/api/evaluation'
 import type { LearningSessionCreate } from '@/features/evaluation/model/evaluation'
+import { getAuthToken } from '@/shared/auth/token'
 
 // 追踪上下文：当前页面/资源/路径信息
 export interface TrackingContext {
@@ -83,8 +84,58 @@ function onVisibilityChange() {
   }
 }
 
+// 使用 fetch + keepalive 保证页面卸载时请求仍能发出
+function sendBeaconSession(payload: LearningSessionCreate) {
+  const token = getAuthToken()
+  if (!token) return
+  fetch('/api/v1/ai/evaluation/sessions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+    keepalive: true,
+  }).catch(() => {})
+}
+
 function onBeforeUnload() {
-  stopTracking()
+  if (!activeContext) return
+
+  pauseTracking()
+
+  const durationSeconds = Math.floor(accumulatedMs / 1000)
+  const now = new Date()
+  const startedAt = new Date(sessionStartedAt ?? now.getTime())
+  const context = activeContext
+
+  // 立即清除状态，避免重复上报
+  activeStartTime = null
+  sessionStartedAt = null
+  activeContext = null
+  accumulatedMs = 0
+  isPaused = false
+  clearIdleTimer()
+
+  if (durationSeconds < MIN_DURATION_SECONDS) return
+
+  const payload: LearningSessionCreate = {
+    source_page: context.sourcePage,
+    started_at: startedAt.toISOString(),
+    ended_at: now.toISOString(),
+    duration_seconds: durationSeconds,
+    course: context.course,
+    topic: context.topic,
+    client_session_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'sess-' + Math.random().toString(36).slice(2, 11) + '-' + Date.now(),
+    event_metadata: {
+      resource_id: context.resourceId,
+      path_id: context.pathId,
+      path_node_id: context.pathNodeId,
+      node_id: context.nodeId,
+    },
+  }
+
+  sendBeaconSession(payload)
 }
 
 // 绑定全局事件：可见性变化、页面关闭、用户交互（仅一次）
