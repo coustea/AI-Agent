@@ -105,7 +105,9 @@
           </Button>
           <div class="guide-preview-charts">
             <div class="preview-chart-title">您近期的学习活动趋势</div>
-            <v-chart class="chart mini-chart" :option="lineOption" autoresize />
+            <div class="chart-box mini-chart-box">
+              <v-chart class="chart" :option="lineOption" autoresize />
+            </div>
           </div>
         </div>
       </div>
@@ -166,7 +168,9 @@
                   <div class="panel-header">
                     <h3>每日学习趋势</h3>
                   </div>
-                  <v-chart class="chart" :option="lineOption" autoresize />
+                  <div class="chart-box">
+                    <v-chart class="chart" :option="lineOption" autoresize />
+                  </div>
                 </article>
               </div>
               <div class="chart-panel-outer ui-card">
@@ -174,7 +178,9 @@
                   <div class="panel-header">
                     <h3>模块学习时长分布</h3>
                   </div>
-                  <v-chart class="chart" :option="pieOption" autoresize />
+                  <div class="chart-box">
+                    <v-chart class="chart" :option="pieOption" autoresize />
+                  </div>
                 </article>
               </div>
             </section>
@@ -224,8 +230,11 @@
                     class="history-item"
                     @click="selectAssessment(item)"
                   >
-                    <strong>{{ item.range_days }} 天评估</strong>
-                    <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
+                    <div class="history-item-header">
+                      <strong>{{ item.range_days }} 天评估</strong>
+                      <span class="history-time">{{ formatDateTime(item.created_at) }}</span>
+                    </div>
+                    <span class="history-range">{{ formatDateRange(item.window_start, item.window_end) }}</span>
                   </button>
                 </div>
                 <div v-if="totalAssessments > 4" class="history-more">
@@ -262,8 +271,11 @@
                 class="history-full-item"
                 @click="selectAssessment(item); showHistoryDrawer = false"
               >
-                <strong>{{ item.range_days }} 天评估</strong>
-                <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
+                <div class="history-item-header">
+                  <strong>{{ item.range_days }} 天评估</strong>
+                  <span class="history-time">{{ formatDateTime(item.created_at) }}</span>
+                </div>
+                <span class="history-range">{{ formatDateRange(item.window_start, item.window_end) }}</span>
                 <em>{{ statusLabel(item.status) }}</em>
               </button>
             </div>
@@ -599,6 +611,16 @@ function formatDateRange(start: string, end: string): string {
   const startDate = new Date(start)
   const endDate = new Date(end)
   return `${startDate.getMonth() + 1}月${startDate.getDate()}日 - ${endDate.getMonth() + 1}月${endDate.getDate()}日`
+}
+
+function formatDateTime(value: string): string {
+  if (!value) return ''
+  const date = new Date(value)
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  const hours = String(date.getHours()).padStart(2, '0')
+  const minutes = String(date.getMinutes()).padStart(2, '0')
+  return `${month}月${day}日 ${hours}:${minutes}`
 }
 
 onMounted(async () => {
@@ -1087,10 +1109,19 @@ h1, h2, h3, h4, p {
   color: var(--color-text-strong);
 }
 
-.chart {
+.chart-box {
+  position: relative;
   width: 100%;
   height: 14rem;
-  flex: 1;
+}
+
+.mini-chart-box {
+  height: 150px;
+}
+
+.chart {
+  width: 100%;
+  height: 100%;
 }
 
 .chart-empty {
@@ -1236,6 +1267,24 @@ h1, h2, h3, h4, p {
 }
 
 .history-item span {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.history-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+
+.history-time {
+  font-size: 11px !important;
+  color: var(--color-text-muted) !important;
+  font-weight: 500;
+}
+
+.history-range {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
 }
