@@ -70,9 +70,24 @@ class CartoonPipeline:
                 }
             )
         except Exception:
-            if workspace.exists():
-                shutil.rmtree(workspace, ignore_errors=True)
+            self._preserve_failure_workspace(workspace)
             raise
+
+    @staticmethod
+    def _preserve_failure_workspace(workspace: Path) -> None:
+        """Keep private diagnostics for a failed quality gate instead of deleting evidence."""
+
+        if not workspace.exists():
+            return
+        diagnostics_root = Path(__file__).resolve().parents[3] / "storage" / "cartoon-failures"
+        diagnostics_root.mkdir(parents=True, exist_ok=True)
+        destination = diagnostics_root / f"{workspace.name.lstrip('.')}-{uuid4().hex}"
+        try:
+            shutil.move(str(workspace), str(destination))
+            logger.error("Cartoon failure workspace preserved at %s", destination)
+        except Exception:
+            logger.exception("Unable to preserve failed Cartoon workspace %s", workspace)
+            shutil.rmtree(workspace, ignore_errors=True)
 
     async def _generate_workspace(self, brief: CartoonBrief, output_dir: Path) -> CartoonArtifact:
 

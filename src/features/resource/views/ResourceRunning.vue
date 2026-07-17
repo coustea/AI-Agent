@@ -4123,6 +4123,28 @@ function getNodeFullTimeline(
   overflow-y: auto;
 }
 
+/* 自定义滚轮样式方便长日志查看 */
+.detail-overview::-webkit-scrollbar,
+.detail-history::-webkit-scrollbar {
+  width: 6px;
+}
+
+.detail-overview::-webkit-scrollbar-track,
+.detail-history::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.detail-overview::-webkit-scrollbar-thumb,
+.detail-history::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 4px;
+}
+
+.detail-overview::-webkit-scrollbar-thumb:hover,
+.detail-history::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+}
+
 .detail-overview {
   display: flex;
   flex-direction: column;

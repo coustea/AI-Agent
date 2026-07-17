@@ -5,6 +5,7 @@ import type {
   AssessmentsHistoryResponse,
   GuidanceStrategyResponse,
 } from '@/features/learning-assessment/model/assessment'
+import type { DashboardData } from '@/features/evaluation/api/evaluation'
 
 export type {
   LearningAssessment,
@@ -32,4 +33,8 @@ export function getAssessmentDetail(assessmentId: number) {
 
 export function getGuidanceStrategy() {
   return http.get<ApiResponse<GuidanceStrategyResponse>>('/ai/evaluation/guidance-strategy')
+}
+
+export function getAssessmentDashboard(assessmentId: number) {
+  return http.get<ApiResponse<DashboardData>>(`/ai/evaluation/assessments/${assessmentId}/dashboard`)
 }

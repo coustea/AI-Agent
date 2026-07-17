@@ -11,7 +11,7 @@
 }
 ```
 
-- `title`：1～72 字符
+- `title`：简洁的课程标题，建议不超过 72 字符
 - `scenes`：{{scene_count}} 个场景，深度为 {{lesson_depth}}，信息密度为 {{density}}
 
 ## scenes 字段规范
@@ -26,8 +26,8 @@
 }
 ```
 
-- `title`：1～28 字符，面向学习者，不得出现 orient、model、trace、教学目标、学生能够等内部标签
-- `teaching_goal`：1～100 字符，描述本场景的教学目标
+- `title`：简洁的学习者可见标题；不得出现 orient、model、trace、教学目标、学生能够等内部标签
+- `teaching_goal`：用一句话描述本场景的教学目标
 - `grammar`：只能选择以下四种之一：
   - `"concept"`：用类比、关键词和层次关系建立直觉，不做卡片列表
   - `"model"`：展示容器、槽位、端口、指针和真实关系

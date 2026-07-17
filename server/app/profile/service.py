@@ -78,14 +78,6 @@ def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
     }
 
 
-def get_effective_guidance_strategy(profile: UserProfile | None) -> dict[str, Any]:
-    """获取用户有效的自适应辅导策略，若没有则返回默认值。"""
-    if not profile or not profile.guidance_strategy:
-        from app.evaluation.guidance import DEFAULT_GUIDANCE_STRATEGY
-        return DEFAULT_GUIDANCE_STRATEGY
-    return profile.guidance_strategy
-
-
 class ProfileService:
     """学习者画像服务 — CRUD、LLM 推理与评分。"""
 
@@ -269,7 +261,10 @@ class ProfileService:
             lines.append(f"\n### {dim_name}")
             lines.append(value if value else "暂无明确画像")
 
-        strategy = get_effective_guidance_strategy(profile)
+        strategy = profile.guidance_strategy if profile and profile.guidance_strategy else None
+        if not strategy:
+            from app.evaluation.guidance import DEFAULT_GUIDANCE_STRATEGY
+            strategy = DEFAULT_GUIDANCE_STRATEGY
         lines.append("\n## 当前自适应辅导策略")
         lines.append(f"- 本期结论：{strategy.get('conclusion')}")
         lines.append(f"- 建议单次学习时长：{strategy.get('recommended_session_minutes')} 分钟")
@@ -428,6 +423,88 @@ class ProfileService:
             logger.exception("[ProfileService] onboarding 推理+评分失败: user_id=%s", user_id)
             return {"inference_ok": False, "reason": "llm_error"}
 
+    async def infer_profile_from_events(self, *, user_id: int, range_days: int = 7) -> dict[str, Any]:
+        """从近期学习事件推理 7 维度文字画像并持久化。
+
+        流程：读取近期学习事件 → to_markdown() → LLM 推理 → save_dimensions()
+        """
+        try:
+            logger.info("[ProfileService] 事件推理开始: user_id=%s range_days=%d", user_id, range_days)
+
+            async with session_scope() as db:
+                # 1. 读取近期学习事件并转为 Markdown
+                from app.evaluation.recent_events import get_recent_learning_context
+                context = await get_recent_learning_context(
+                    db,
+                    user_id=user_id,
+                    range_days=range_days,
+                    event_limit=None,
+                )
+                events_md = context.to_markdown()
+                logger.info(
+                    "[ProfileService] 事件MD生成完成: user_id=%s events=%d sessions=%d md_len=%d",
+                    user_id, len(context.events), len(context.sessions), len(events_md),
+                )
+
+                # 2. 构建现有画像 JSON 作为 LLM 输入（同时记录更新前的值用于对比）
+                user = (await db.exec(select(User).where(User.id == user_id))).first()
+                dimensions = await self.get_dimensions(user_id=user_id, db=db)
+                before_values = {k: v.get("value", "")[:60] for k, v in dimensions.items()}
+                base_info = _user_base_info_dict(user) if user else {}
+                profile_text = json.dumps(
+                    {"base_info": base_info, "dimensions": dimensions},
+                    ensure_ascii=False,
+                )
+
+                # 3. 调用 LLM 推理
+                logger.info("[ProfileService] 事件推理调用LLM: user_id=%s", user_id)
+                prompt = prompts.get("profile").render(
+                    "events_inference",
+                    events_md=events_md,
+                    profile_text=profile_text,
+                )
+                resp = await self.llm.ainvoke_json(
+                    ProfileDimensionsPatch,
+                    [HumanMessage(content=prompt)],
+                )
+
+                # 记录每个维度的更新前后对比
+                for dim_key, dim_value in resp.dimensions_patch.items():
+                    old_val = before_values.get(dim_key, "")
+                    new_val = dim_value.value[:60]
+                    changed = old_val != new_val
+                    logger.info(
+                        "[ProfileService] 文字画像维度更新: user_id=%s dim=%s changed=%s "
+                        "before='%s' after='%s' evidence_count=%d",
+                        user_id, dim_key, changed, old_val, new_val, len(dim_value.evidence),
+                    )
+
+                # 4. 持久化维度更新
+                await self.save_dimensions(
+                    user_id=user_id,
+                    dimensions_patch=resp.dimensions_patch,
+                    db=db,
+                )
+
+                # 汇总：哪些维度实际发生了变化
+                changed_dims = [
+                    k for k, v in resp.dimensions_patch.items()
+                    if before_values.get(k, "") != v.value[:60]
+                ]
+                unchanged_dims = [
+                    k for k, v in resp.dimensions_patch.items()
+                    if before_values.get(k, "") == v.value[:60]
+                ]
+                logger.info(
+                    "[ProfileService] 文字画像推理完成: user_id=%s changed_dims=%s unchanged_dims=%s",
+                    user_id, changed_dims, unchanged_dims,
+                )
+
+            return {"inference_ok": True, "updated_dimensions": list(resp.dimensions_patch.keys())}
+        except Exception:
+            logger.exception("[ProfileService] 事件推理失败: user_id=%s", user_id)
+            return {"inference_ok": False, "reason": "llm_error"}
+
     async def score_profile(self, *, user_id: int) -> dict[str, Any]:
         """依据文字画像对 7 维度重新评分。"""
         logger.info("[ProfileService] 全局评分刷新开始: user_id=%s", user_id)
@@ -437,10 +514,9 @@ class ProfileService:
             user = (await db.exec(select(User).where(User.id == user_id))).first()
             base_info = _user_base_info_dict(user) if user else {}
 
-            logger.info(
-                "[ProfileService] 全局评分: dimensions数=%s",
-                len(dimensions),
-            )
+            # 记录评分前的分数用于对比
+            before_overall = profile.overall_score
+            before_scores = {k: v.get("score", 0) for k, v in dimensions.items()}
 
             profile_text = json.dumps(
                 {"base_info": base_info, "dimensions": dimensions},
@@ -456,16 +532,12 @@ class ProfileService:
                 [HumanMessage(content=prompt)],
             )
 
-            logger.info(
-                "[ProfileService] 全局评分 LLM原始结果: dimension_scores=%s",
-                resp.dimension_scores,
-            )
-
             scores = sanitize_score_output(resp)
             profile.overall_score = scores["overall_score"]
             profile.scored_at = datetime.now(timezone.utc)
             profile.updated_at = datetime.now(timezone.utc)
 
+            now = datetime.now(timezone.utc)
             for dim_key, dim_score in scores.get("dimension_scores", {}).items():
                 dim_row = (
                     await db.exec(
@@ -477,15 +549,36 @@ class ProfileService:
                 ).first()
                 if dim_row:
                     dim_row.score = dim_score
-                    dim_row.updated_at = datetime.now(timezone.utc)
+                    dim_row.updated_at = now
                     db.add(dim_row)
+                else:
+                    # 维度行不存在时自动创建
+                    new_dim = UserProfileDimension(
+                        user_id=user_id,
+                        dimension_key=dim_key,
+                        value="",
+                        evidence=[],
+                        score=dim_score,
+                        created_at=now,
+                        updated_at=now,
+                    )
+                    db.add(new_dim)
 
             db.add(profile)
             await db.flush()
 
+            # 记录每个维度的评分变化
+            for dim_key, new_score in scores.get("dimension_scores", {}).items():
+                old_score = before_scores.get(dim_key, 0)
+                diff = new_score - old_score
+                logger.info(
+                    "[ProfileService] 分数画像维度更新: user_id=%s dim=%s before=%d after=%d diff=%+d",
+                    user_id, dim_key, old_score, new_score, diff,
+                )
+            overall_diff = scores["overall_score"] - before_overall
             logger.info(
-                "[ProfileService] 全局评分刷新完成: user_id=%s overall_score=%s dimension_scores=%s",
-                user_id, scores.get("overall_score"), scores.get("dimension_scores"),
+                "[ProfileService] 分数画像更新完成: user_id=%s overall_before=%d overall_after=%d diff=%+d",
+                user_id, before_overall, scores["overall_score"], overall_diff,
             )
 
             return scores

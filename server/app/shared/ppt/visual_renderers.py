@@ -374,7 +374,7 @@ def _render_state_machine(visual: VisualModel, slide_id: str) -> str:
             # Double border for final state
             tone = "accent"
             extra_attr = (
-                f'<rect x="{-92 + 6:.1f}" y="{-46 + 6:.1f}" '
+                f'<rect class="state-final-ring" x="{-92 + 6:.1f}" y="{-46 + 6:.1f}" '
                 f'width="{184 - 12:.1f}" height="{92 - 12:.1f}" rx="14" '
                 f'fill="none" stroke="var(--accent)" stroke-width="2"/>'
             )

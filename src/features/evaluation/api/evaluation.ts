@@ -62,11 +62,17 @@ export interface DashboardWindow {
   end: string
 }
 
+export interface DashboardModuleTime {
+  module: string
+  seconds: number
+}
+
 export interface DashboardData {
   time_stats: DashboardTimeStats
   evaluation_summary: DashboardEvaluationSummary
   practice_chart: DashboardPracticeChart
   learning_path: DashboardLearningPath
+  module_time_breakdown: DashboardModuleTime[]
   latest_assessment: DashboardLatestAssessment | null
   guidance_strategy: Record<string, any>
   window: DashboardWindow

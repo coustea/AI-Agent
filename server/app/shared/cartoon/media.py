@@ -142,7 +142,10 @@ class QualityPolicy:
         ]
         if unknown:
             problems.append(f"unknown findings: {self._summarize(unknown)}")
-        if not report.ok and not problems:
+        # HyperFrames reports ok=false for informational Studio advisories too
+        # (for example a font substitution). Those are not publication defects;
+        # all error and warning findings above still block publication.
+        if not report.ok and not problems and not report.findings:
             problems.append("HyperFrames check reported ok=false without a categorized finding")
         if problems:
             raise QualityGateError(problems)

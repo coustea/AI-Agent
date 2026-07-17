@@ -1,12 +1,17 @@
-"""学习评估服务 — 学习事件采集、评估生成与辅导策略更新。
+"""学习评估服务 — 学习事件采集、画像推理、评估生成与辅导策略更新。
 
 事件来源由各业务模块的 ``events.py`` 调用 ``EvaluationService.record_event`` 埋点。
 本模块负责幂等持久化、评估状态机和辅导策略定向写入。
 
 触发机制：
-- 非 chat 模块累计 5 条新学习事件时，触发画像评分 + 学习评估
-- chat 模块累计 10 条对话事件时，触发画像评分 + 学习评估
+- 非 chat 模块累计 5 条新学习事件时，触发完整链路
+- chat 模块累计 10 条对话事件时，触发完整链路
 - 用户手动请求生成评估
+
+完整链路（事件达到阈值后）：
+1. 近期学习事件 → to_markdown() → LLM 推理文字画像（7 维度 value 更新）
+2. 文字画像 → LLM 评分（7 维度 score + overall_score 更新）
+3. 近期学习事件 → 学习评估生成（assessment + guidance_strategy）
 
 LLM 输出两部分：
 - assessment：学习评估文案（一段话）
@@ -17,13 +22,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage
 from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from typing import Literal
 
 from app.evaluation.request import LearningEventCreate, LearningSessionCreate
 from app.infra.logging import get_logger
@@ -151,6 +155,15 @@ class EvaluationService:
         )
         await session.commit()
         await session.refresh(assessment)
+
+        logger.info(
+            "[Evaluation] 学习评估生成完成: user_id=%s assessment_id=%s range_days=%d "
+            "assessment_text='%s' guidance_conclusion='%s' focus_topics=%s",
+            user_id, assessment.id, range_days,
+            assessment_text[:80],
+            guidance_strategy.get("conclusion", "")[:60],
+            guidance_strategy.get("focus_topics", []),
+        )
 
         return assessment
 
@@ -350,29 +363,36 @@ class EvaluationService:
     async def _check_and_trigger_assessment(
         self, session: AsyncSession, user_id: int
     ) -> None:
-        """检测学习事件阈值，触发画像评分和学习评估。
+        """检测学习事件阈值，触发画像推理 → 评分 → 学习评估。
+
+        链路：
+        1. 近期学习事件 → to_markdown() → LLM 推理文字画像
+        2. 文字画像 → LLM 评分
+        3. 近期学习事件 → 学习评估生成
 
         条件：
         - 非 chat 模块累计 >= EVENT_THRESHOLD_DEFAULT 条新事件
         - chat 模块累计 >= EVENT_THRESHOLD_CHAT 条新事件
         - 且当前没有生成中的评估
+
+        阈值重置：基于 UserProfile.profile_updated_at（Step1+2 完成后写入），
+        而非 LearningAssessment.created_at，确保即使 Step3 失败也不会重复触发。
         """
         from app.infra.database import session_scope
+        from app.infra.models import UserProfile
         from app.profile.service import get_profile_service
 
-        # 获取最近一份评估
-        latest_assessment = await session.scalar(
-            select(LearningAssessment)
-            .where(LearningAssessment.user_id == user_id)
-            .order_by(LearningAssessment.created_at.desc())
-            .limit(1)
+        # 获取上次画像更新时间，作为阈值计数的起点
+        profile = await session.scalar(
+            select(UserProfile).where(UserProfile.user_id == user_id)
         )
+        last_profile_update = profile.profile_updated_at if profile else None
 
-        # 统计上次评估后新增的事件数（按模块分开计数）
-        if latest_assessment:
+        # 统计上次画像更新后新增的事件数（按模块分开计数）
+        if last_profile_update:
             new_events_stmt = select(LearningEvent).where(
                 LearningEvent.user_id == user_id,
-                LearningEvent.created_at > latest_assessment.created_at,
+                LearningEvent.created_at > last_profile_update,
             )
         else:
             new_events_stmt = select(LearningEvent).where(
@@ -387,9 +407,10 @@ class EvaluationService:
         triggered = (other_count >= EVENT_THRESHOLD_DEFAULT) or \
                     (chat_count >= EVENT_THRESHOLD_CHAT)
         if not triggered:
-            logger.debug(
-                "[Evaluation] 自动评估跳过: user=%s chat=%d/%d other=%d/%d",
+            logger.info(
+                "[Evaluation] 自动评估跳过（未达阈值）: user=%s chat=%d/%d other=%d/%d last_profile_update=%s",
                 user_id, chat_count, EVENT_THRESHOLD_CHAT, other_count, EVENT_THRESHOLD_DEFAULT,
+                last_profile_update.isoformat() if last_profile_update else "never",
             )
             return
 
@@ -401,35 +422,67 @@ class EvaluationService:
             )
         )
         if generating:
-            logger.debug("[Evaluation] 自动评估跳过: user=%s 已有生成中评估", user_id)
+            logger.info("[Evaluation] 自动评估跳过（已有生成中评估）: user=%s", user_id)
             return
 
-        # 满足条件，在新的 session 中执行：画像评分 → 学习评估生成
+        # 满足条件，在新的 session 中执行完整链路
         logger.info(
-            "[Evaluation] 触发自动评估链路: user=%s trigger=profile_update range_days=%d",
+            "[Evaluation] 触发自动评估链路: user=%s trigger=profile_update range_days=%d "
+            "chat=%d other=%d last_profile_update=%s",
             user_id, DEFAULT_RANGE_DAYS,
+            chat_count, other_count,
+            last_profile_update.isoformat() if last_profile_update else "never",
         )
 
         async with session_scope() as new_session:
             try:
-                # Step 1: 更新画像评分
                 profile_service = get_profile_service()
-                score_result = await profile_service.score_profile(user_id=user_id)
+
+                # Step 1: 近期学习事件 → MD → LLM 推理文字画像
+                logger.info("[Evaluation] 链路Step1开始 — 文字画像推理: user=%s", user_id)
+                infer_result = await profile_service.infer_profile_from_events(
+                    user_id=user_id,
+                    range_days=DEFAULT_RANGE_DAYS,
+                )
                 logger.info(
-                    "[Evaluation] 画像评分更新完成: user=%s overall_score=%s",
-                    user_id, score_result.get("overall_score"),
+                    "[Evaluation] 链路Step1完成 — 文字画像推理: user=%s inference_ok=%s updated_dims=%s",
+                    user_id, infer_result.get("inference_ok"), infer_result.get("updated_dimensions"),
                 )
 
-                # Step 2: 生成学习评估
+                # Step 2: 文字画像 → 分数画像
+                logger.info("[Evaluation] 链路Step2开始 — 分数画像更新: user=%s", user_id)
+                score_result = await profile_service.score_profile(user_id=user_id)
+                logger.info(
+                    "[Evaluation] 链路Step2完成 — 分数画像更新: user=%s overall_score=%s dimension_scores=%s",
+                    user_id, score_result.get("overall_score"), score_result.get("dimension_scores"),
+                )
+
+                # Step 1+2 完成，写入 profile_updated_at 重置阈值
+                now_utc = datetime.now(timezone.utc)
+                profile_row = await new_session.scalar(
+                    select(UserProfile).where(UserProfile.user_id == user_id)
+                )
+                if profile_row:
+                    profile_row.profile_updated_at = now_utc
+                    profile_row.updated_at = now_utc
+                    new_session.add(profile_row)
+                    await new_session.flush()
+                    logger.info(
+                        "[Evaluation] 阈值重置: user=%s profile_updated_at=%s",
+                        user_id, now_utc.isoformat(),
+                    )
+
+                # Step 3: 近期学习事件 → 学习评估
+                logger.info("[Evaluation] 链路Step3开始 — 学习评估生成: user=%s", user_id)
                 await self.generate_assessment(
                     new_session,
                     user_id=user_id,
                     trigger_source="profile_update",
                     range_days=DEFAULT_RANGE_DAYS,
                 )
-                logger.info("[Evaluation] 自动评估生成成功: user=%s", user_id)
+                logger.info("[Evaluation] 链路Step3完成 — 学习评估生成成功: user=%s", user_id)
             except ConcurrencyError:
-                logger.debug("[Evaluation] 自动评估并发冲突: user=%s", user_id)
+                logger.info("[Evaluation] 自动评估并发冲突: user=%s", user_id)
             except Exception as e:
                 logger.error("[Evaluation] 自动评估链路失败: user=%s error=%s", user_id, e)
 

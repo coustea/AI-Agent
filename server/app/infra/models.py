@@ -383,6 +383,12 @@ class UserProfile(SQLModel, table=True):
         foreign_key="learning_assessments.id"
     )
 
+    # 上次画像推理完成时间（Step1文字画像 + Step2分数画像），阈值计数基于此重置
+    profile_updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+    )
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))

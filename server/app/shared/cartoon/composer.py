@@ -218,9 +218,8 @@ class CartoonComposer:
         relations = "\n".join(
             f"""<g id="relation-{scene_id}-{relation_index}" class="relation" data-relation-index="{relation_index}">
               <line></line><circle class="relation-head" r="0.55"></circle>
-              <text>{html.escape(label)}</text>
             </g>"""
-            for relation_index, (_source, _target, label) in enumerate(sorted(relation_keys))
+            for relation_index, _relation in enumerate(sorted(relation_keys))
         )
         grammar_label = {
             "concept": "概念",

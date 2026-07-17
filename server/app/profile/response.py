@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from typing import Any
-from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -55,14 +54,3 @@ class OnboardingResponse(BaseModel):
     base_info: BaseInfoData = Field(default_factory=BaseInfoData)
     student_profile: StudentProfileData = Field(default_factory=StudentProfileData)
     profile_initialized: bool = False
-
-
-class GlobalProfileResponse(BaseModel):
-    """全局画像详情响应。"""
-
-    user_id: int
-    module: str
-    base_info: BaseInfoData = Field(default_factory=BaseInfoData)
-    dimensions: dict[str, Any] = Field(default_factory=dict)
-    profile_score_json: dict[str, Any] = Field(default_factory=dict)
-    updated_at: datetime | str | None = None

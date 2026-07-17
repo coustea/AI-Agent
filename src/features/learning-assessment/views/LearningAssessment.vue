@@ -41,13 +41,6 @@
       <p>正在加载学习评估数据...</p>
     </section>
 
-    <!-- 无报告状态 -->
-    <section v-else-if="!activeAssessment && !dashboardData" class="empty-state">
-      <FileCheck :size="32" class="empty-icon" />
-      <h2>暂无评估数据</h2>
-      <p>点击「重新评估」开始生成第一份学习效果评估</p>
-    </section>
-
     <!-- 失败状态 -->
     <section v-else-if="activeAssessment?.status === 'failed'" class="error-state">
       <AlertCircle :size="24" />
@@ -63,10 +56,74 @@
     </section>
 
     <!-- 主内容 -->
-    <template v-else-if="dashboardData">
+    <template v-else>
+      <!-- CASE 1: 用户从未生成过评估，且没有任何学习数据 -->
+      <div v-if="!activeAssessment && (!dashboardData || dashboardData.evaluation_summary.event_count === 0)" class="empty-guide-card bezel-card-outer">
+        <div class="empty-guide-inner bezel-card-inner">
+          <div class="guide-icon-wrapper">
+            <Compass :size="36" class="guide-icon" />
+          </div>
+          <h2>暂无评估事实，开启您的学习之旅</h2>
+          <p class="guide-subtitle">为了提供精准的自适应辅导策略，系统需要积累一些您的学习足迹（如对话、浏览、练习等）。</p>
+          <div class="guide-actions">
+            <div class="action-card-mini" @click="navigateTo('/tutor')">
+              <span class="mini-icon tutor-icon">💬</span>
+              <div class="action-card-text">
+                <strong>智能辅导</strong>
+                <span>与 AI 导师进行学术对话</span>
+              </div>
+            </div>
+            <div class="action-card-mini" @click="navigateTo('/resource-generator')">
+              <span class="mini-icon resource-icon">💡</span>
+              <div class="action-card-text">
+                <strong>资源引擎</strong>
+                <span>检索或生成多模态资源</span>
+              </div>
+            </div>
+            <div class="action-card-mini" @click="navigateTo('/question-bank')">
+              <span class="mini-icon question-icon">📚</span>
+              <div class="action-card-text">
+                <strong>学习题库</strong>
+                <span>完成推荐题目和巩固练习</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CASE 2: 用户有学习数据，但从未生成过评估报告 -->
+      <div v-else-if="!activeAssessment && dashboardData" class="welcome-guide-card bezel-card-outer">
+        <div class="welcome-guide-inner bezel-card-inner">
+          <div class="guide-icon-wrapper">
+            <Sparkles :size="36" class="guide-icon sparkles" />
+          </div>
+          <h2>生成您的首份学习效果评估</h2>
+          <p class="guide-subtitle">系统已检测到您近期的学习足迹！点击下方按钮，系统将使用大语言模型为您深度定制自适应辅导策略与下一步学习计划。</p>
+          <Button class="generate-btn large-btn" :disabled="generating" @click="triggerAssessmentGeneration">
+            <Sparkles :size="18" />
+            一键生成评估报告
+          </Button>
+          <div class="guide-preview-charts">
+            <div class="preview-chart-title">您近期的学习活动趋势</div>
+            <v-chart class="chart mini-chart" :option="lineOption" autoresize />
+          </div>
+        </div>
+      </div>
+
+      <!-- CASE 3: 正常显示已生成的评估报告 -->
+      <template v-else-if="dashboardData">
+        <!-- 查看历史评估提示 -->
+        <div v-if="viewingHistorical" class="historical-banner">
+          <History :size="14" />
+          <span>正在查看历史评估（{{ formatDateRange(historicalWindow.start, historicalWindow.end) }}）</span>
+          <Button variant="ghost" size="sm" @click="returnToLatest">
+            返回最新
+          </Button>
+        </div>
+
       <!-- 本期结论与策略 -->
-      <section class="conclusion-section">
-        <div class="conclusion-card">
+      <section class="conclusion-section bezel-card-outer">
+        <div class="conclusion-card bezel-card-inner">
           <div class="conclusion-header">
             <ShieldCheck :size="18" />
             <h2>本期结论与策略调整</h2>
@@ -100,235 +157,90 @@
         </div>
       </section>
 
-      <!-- 核心指标 -->
-      <section class="metrics-section" aria-label="核心学习指标">
-        <div class="metric-card">
-          <Clock :size="18" class="metric-icon" />
-          <div class="metric-body">
-            <span class="metric-label">学习时长</span>
-            <strong class="metric-value">{{ Math.round(dashboardData.time_stats.total_seconds / 60) }}</strong>
-            <span class="metric-unit">分钟</span>
-          </div>
-          <span class="metric-sub">活跃 {{ dashboardData.time_stats.streak_days }} 天</span>
-        </div>
-        <div class="metric-card">
-          <ListChecks :size="18" class="metric-icon" />
-          <div class="metric-body">
-            <span class="metric-label">练习正确率</span>
-            <strong class="metric-value">{{ dashboardData.practice_chart.overall_accuracy }}%</strong>
-          </div>
-          <span class="metric-sub">完成 {{ dashboardData.practice_chart.total_correct }}/{{ dashboardData.practice_chart.total_submitted }} 题</span>
-        </div>
-        <div class="metric-card">
-          <Route :size="18" class="metric-icon" />
-          <div class="metric-body">
-            <span class="metric-label">路径完成率</span>
-            <strong class="metric-value">{{ dashboardData.learning_path.completion_rate }}%</strong>
-          </div>
-          <span class="metric-sub">完成 {{ dashboardData.learning_path.nodes_completed }} 节点</span>
-        </div>
-        <div class="metric-card">
-          <Target :size="18" class="metric-icon" />
-          <div class="metric-body">
-            <span class="metric-label">涉及主题</span>
-            <strong class="metric-value">{{ dashboardData.evaluation_summary.weak_topics.length + dashboardData.evaluation_summary.focus_topics.length }}</strong>
-            <span class="metric-unit">个</span>
-          </div>
-          <span class="metric-sub">{{ topicsSummary }}</span>
-        </div>
-      </section>
-
-      <!-- 学习趋势 + 主题掌握 -->
-      <section class="analysis-section">
-        <article class="chart-panel">
-          <div class="panel-header">
-            <Clock :size="16" />
-            <h3>每日学习趋势</h3>
-          </div>
-          <v-chart v-if="hasDailyData" class="chart" :option="lineOption" autoresize />
-          <div v-else class="chart-empty">本窗口暂无学习时长记录</div>
-        </article>
-        <article class="topics-panel">
-          <div class="panel-header">
-            <Target :size="16" />
-            <h3>主题掌握情况</h3>
-          </div>
-          <div v-if="topicRows.length" class="topic-bars">
-            <div
-              v-for="topic in topicRows.slice(0, 5)"
-              :key="topic.topic"
-              class="topic-bar"
-            >
-              <div class="topic-info">
-                <span class="topic-name">{{ topic.topic }}</span>
-                <span class="topic-stats">{{ topic.correct }}/{{ topic.submitted }} 题</span>
-              </div>
-              <div class="bar-track">
-                <div
-                  class="bar-fill"
-                  :style="{ width: `${topic.accuracy}%` }"
-                  :class="{ weak: topic.accuracy < 60, moderate: topic.accuracy >= 60 && topic.accuracy < 80 }"
-                />
-              </div>
-              <strong class="topic-accuracy" :class="{ weak: topic.accuracy < 60 }">
-                {{ topic.submitted >= 5 ? `${topic.accuracy}%` : '数据不足' }}
-              </strong>
-            </div>
-          </div>
-          <div v-else class="chart-empty">本窗口暂无练习记录</div>
-        </article>
-      </section>
-
       <!-- 行动计划 -->
-      <section v-if="actionPlan.length" class="action-section">
-        <div class="section-header">
-          <Compass :size="16" />
-          <h3>下一阶段学习计划</h3>
-        </div>
-        <div class="action-list">
-          <div
-            v-for="(action, index) in actionPlan"
-            :key="index"
-            class="action-item"
-          >
-            <span class="action-index">{{ index + 1 }}</span>
-            <div class="action-content">
-              <p class="action-description">{{ action.description }}</p>
-              <span class="action-topic">{{ action.topic }}</span>
+      <section v-if="actionPlan.length" class="action-section bezel-card-outer">
+        <div class="action-card bezel-card-inner">
+          <div class="section-header">
+            <Compass :size="16" />
+            <h3>下一阶段学习计划</h3>
+          </div>
+          <div class="action-list">
+            <div
+              v-for="(action, index) in actionPlan"
+              :key="index"
+              class="action-item"
+            >
+              <span class="action-index">{{ index + 1 }}</span>
+              <div class="action-content">
+                <p class="action-description">{{ action.description }}</p>
+                <span class="action-topic">{{ action.topic }}</span>
+              </div>
+              <RouterLink :to="action.link" class="action-link">
+                <span>{{ actionTypeLabel(action.action_type) }}</span>
+                <ArrowRight :size="14" />
+              </RouterLink>
             </div>
-            <RouterLink :to="action.link" class="action-link">
-              <span>{{ actionTypeLabel(action.action_type) }}</span>
-              <ArrowRight :size="14" />
-            </RouterLink>
           </div>
         </div>
       </section>
 
-      <!-- 详细数据入口 -->
-      <section class="detail-entry">
-        <Button variant="outline" @click="showDetailDrawer = true">
-          <Layers :size="16" />
-          查看完整评估数据
-        </Button>
+      <!-- 学习趋势 + 模块时长分布 -->
+      <section class="charts-section">
+        <div class="chart-panel-outer bezel-card-outer">
+          <article class="chart-panel bezel-card-inner">
+            <div class="panel-header">
+              <Clock :size="16" />
+              <h3>每日学习趋势</h3>
+            </div>
+            <v-chart v-if="hasDailyData" class="chart" :option="lineOption" autoresize />
+            <div v-else class="chart-empty">本窗口暂无学习时长记录</div>
+          </article>
+        </div>
+        <div class="chart-panel-outer bezel-card-outer">
+          <article class="chart-panel bezel-card-inner">
+            <div class="panel-header">
+              <PieChartIcon :size="16" />
+              <h3>模块学习时长分布</h3>
+            </div>
+            <v-chart v-if="hasModuleTimeData" class="chart" :option="pieOption" autoresize />
+            <div v-else class="chart-empty">本窗口暂无模块学习时长记录</div>
+          </article>
+        </div>
       </section>
 
       <!-- 历史评估 -->
-      <section class="history-section">
-        <div class="section-header">
-          <History :size="16" />
-          <h3>历史评估</h3>
-          <span class="history-count">{{ totalAssessments }} 份</span>
-        </div>
-        <div v-if="historyLoading" class="history-loading">加载中...</div>
-        <div v-else-if="assessmentsHistory.length === 0" class="history-empty">暂无历史评估</div>
-        <div v-else class="history-grid">
-          <button
-            v-for="item in assessmentsHistory.slice(0, 4)"
-            :key="item.id"
-            type="button"
-            :class="{ active: activeAssessment?.id === item.id }"
-            class="history-item"
-            @click="selectAssessment(item.id)"
-          >
-            <strong>{{ item.range_days }} 天评估</strong>
-            <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
-          </button>
-        </div>
-        <div v-if="totalAssessments > 4" class="history-more">
-          <Button variant="ghost" size="sm" @click="showHistoryDrawer = true">
-            查看全部 {{ totalAssessments }} 份评估
-            <ChevronRight :size="14" />
-          </Button>
+      <section class="history-section bezel-card-outer">
+        <div class="history-card bezel-card-inner">
+          <div class="section-header">
+            <History :size="16" />
+            <h3>历史评估</h3>
+            <span class="history-count">{{ totalAssessments }} 份</span>
+          </div>
+          <div v-if="historyLoading" class="history-loading">加载中...</div>
+          <div v-else-if="assessmentsHistory.length === 0" class="history-empty">暂无历史评估</div>
+          <div v-else class="history-grid">
+            <button
+              v-for="item in assessmentsHistory.slice(0, 4)"
+              :key="item.id"
+              type="button"
+              :class="{ active: activeAssessment?.id === item.id }"
+              class="history-item"
+              @click="selectAssessment(item)"
+            >
+              <strong>{{ item.range_days }} 天评估</strong>
+              <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
+            </button>
+          </div>
+          <div v-if="totalAssessments > 4" class="history-more">
+            <Button variant="ghost" size="sm" @click="showHistoryDrawer = true">
+              查看全部 {{ totalAssessments }} 份评估
+              <ChevronRight :size="14" />
+            </Button>
+          </div>
         </div>
       </section>
     </template>
-
-    <!-- 详细数据抽屉 -->
-    <Teleport to="body">
-      <div v-if="showDetailDrawer" class="drawer-overlay" @click.self="showDetailDrawer = false">
-        <div class="drawer-panel">
-          <header class="drawer-header">
-            <h2>完整评估数据</h2>
-            <button type="button" class="drawer-close" @click="showDetailDrawer = false">
-              <X :size="20" />
-            </button>
-          </header>
-          <div class="drawer-body">
-            <template v-if="dashboardData">
-              <!-- 资源与路径详情 -->
-              <article class="detail-block">
-                <h4>资源使用统计</h4>
-                <div class="detail-grid">
-                  <div class="detail-item">
-                    <span>生成资源</span>
-                    <strong>{{ dashboardData.evaluation_summary.generated_resources }}</strong>
-                  </div>
-                  <div class="detail-item">
-                    <span>浏览资源</span>
-                    <strong>{{ dashboardData.evaluation_summary.viewed_resources }}</strong>
-                  </div>
-                  <div class="detail-item">
-                    <span>完成资源</span>
-                    <strong>{{ dashboardData.evaluation_summary.completed_resources }}</strong>
-                  </div>
-                  <div class="detail-item">
-                    <span>学习事件</span>
-                    <strong>{{ dashboardData.evaluation_summary.event_count }}</strong>
-                  </div>
-                </div>
-              </article>
-
-              <!-- 学习路径详情 -->
-              <article class="detail-block">
-                <h4>学习路径进度</h4>
-                <div class="detail-grid">
-                  <div class="detail-item">
-                    <span>开始节点</span>
-                    <strong>{{ dashboardData.learning_path.nodes_started }}</strong>
-                  </div>
-                  <div class="detail-item">
-                    <span>完成节点</span>
-                    <strong>{{ dashboardData.learning_path.nodes_completed }}</strong>
-                  </div>
-                  <div class="detail-item">
-                    <span>完成率</span>
-                    <strong>{{ dashboardData.learning_path.completion_rate }}%</strong>
-                  </div>
-                </div>
-              </article>
-
-              <!-- 薄弱主题 -->
-              <article class="detail-block">
-                <h4>薄弱与重点主题</h4>
-                <div class="detail-grid">
-                  <div class="detail-item">
-                    <span>薄弱主题</span>
-                    <strong>{{ dashboardData.evaluation_summary.weak_topics.length }} 个</strong>
-                  </div>
-                  <div class="detail-item">
-                    <span>重点主题</span>
-                    <strong>{{ dashboardData.evaluation_summary.focus_topics.length }} 个</strong>
-                  </div>
-                </div>
-                <p v-if="dashboardData.evaluation_summary.weak_topics.length" class="detail-note">
-                  薄弱：{{ dashboardData.evaluation_summary.weak_topics.join('、') }}
-                </p>
-              </article>
-
-              <!-- 涉及主题标签 -->
-              <article v-if="dashboardData.evaluation_summary.focus_topics.length" class="detail-block">
-                <h4>重点主题</h4>
-                <div class="topic-tags">
-                  <span v-for="topic in dashboardData.evaluation_summary.focus_topics" :key="topic" class="topic-tag">
-                    {{ topic }}
-                  </span>
-                </div>
-              </article>
-            </template>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    </template>
 
     <!-- 历史报告抽屉 -->
     <Teleport to="body">
@@ -349,7 +261,7 @@
                 type="button"
                 :class="{ active: activeAssessment?.id === item.id }"
                 class="history-full-item"
-                @click="selectAssessment(item.id); showHistoryDrawer = false"
+                @click="selectAssessment(item); showHistoryDrawer = false"
               >
                 <strong>{{ item.range_days }} 天评估</strong>
                 <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
@@ -377,7 +289,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { RouterLink } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import {
   AlertCircle,
@@ -387,26 +299,23 @@ import {
   ChevronRight,
   Clock,
   Compass,
-  FileCheck,
   History,
-  Layers,
-  ListChecks,
-  Route,
   ShieldCheck,
   Sparkles,
-  Target,
   X,
+  PieChart as PieChartIcon,
 } from 'lucide-vue-next'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent } from 'echarts/components'
+import { LineChart, PieChart } from 'echarts/charts'
+import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
 import {
   generateAssessment,
   getLatestAssessment,
   getAssessmentDetail,
   getAssessmentsHistory,
+  getAssessmentDashboard,
 } from '@/features/learning-assessment/api/assessment'
 import {
   getDashboard,
@@ -418,11 +327,10 @@ import type {
 } from '@/features/learning-assessment/model/assessment'
 import type {
   DashboardData,
-  DashboardPracticeTopic,
 } from '@/features/evaluation/api/evaluation'
 import { normalizeGuidanceStrategy } from '@/features/learning-assessment/model/assessment'
 
-use([CanvasRenderer, LineChart, GridComponent, TooltipComponent])
+use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
 
 const rangeOptions = [3, 7, 14] as const
 const selectedRange = ref<3 | 7 | 14>(7)
@@ -438,16 +346,23 @@ const totalAssessments = ref(0)
 const totalPages = ref(1)
 const currentStepIdx = ref(0)
 const pageSize = 10
-const showDetailDrawer = ref(false)
 const showHistoryDrawer = ref(false)
 const generationSteps = ['聚合学习事实', '校验证据质量', '生成评估报告', '更新辅导策略']
+
+// 历史评估联动状态
+const viewingHistorical = ref(false)
+const historicalWindow = ref<{ start: string; end: string }>({ start: '', end: '' })
+
+// === 路由导航 ===
+const router = useRouter()
+function navigateTo(path: string) {
+  void router.push(path)
+}
 
 const actionPlan = computed<ActionPlanItem[]>(() => guidanceStrategy.value?.action_plan ?? [])
 
 const defaultConclusion = computed(() => {
-  if (!dashboardData.value) return '暂无学习数据，开始学习后将生成个性化评估。'
-  const summary = dashboardData.value.evaluation_summary
-  if (summary.event_count === 0) {
+  if (dashboardData.value?.evaluation_summary?.event_count === 0) {
     return '当前窗口暂无学习活动记录，建议先完成一次资源学习或练习。'
   }
   return '学习证据已形成，系统已记录到学习时长、模块使用和练习表现。'
@@ -457,17 +372,12 @@ const hasDailyData = computed(() => (
   (dashboardData.value?.time_stats.daily_breakdown ?? []).some(item => item.seconds > 0)
 ))
 
-const topicRows = computed<DashboardPracticeTopic[]>(() => (
-  [...(dashboardData.value?.practice_chart.by_topic ?? [])]
-    .sort((a, b) => b.submitted - a.submitted)
+const hasModuleTimeData = computed(() => (
+  (dashboardData.value?.module_time_breakdown ?? []).some(item => item.seconds > 0)
 ))
 
-const topicsSummary = computed(() => {
-  const topics = dashboardData.value?.evaluation_summary.weak_topics ?? []
-  if (topics.length === 0) return '暂无主题'
-  if (topics.length <= 3) return topics.join('、')
-  return `${topics.slice(0, 3).join('、')} 等`
-})
+// 饼图颜色 (以石英紫为主的学术感冷色系搭配)
+const PIE_COLORS = ['#8B5CF6', '#6366f1', '#10B981', '#F59E0B', '#3B82F6', '#EC4899']
 
 const lineOption = computed(() => {
   const daily = dashboardData.value?.time_stats.daily_breakdown ?? []
@@ -498,16 +408,58 @@ const lineOption = computed(() => {
       type: 'line',
       smooth: true,
       symbolSize: 6,
-      lineStyle: { color: '#0d9488', width: 2.5 },
-      itemStyle: { color: '#0d9488' },
-      areaStyle: { color: 'rgba(13, 148, 136, 0.1)' },
+      lineStyle: { color: '#46B8B4', width: 2.5 },
+      itemStyle: { color: '#46B8B4' },
+      areaStyle: { color: 'rgba(70, 184, 180, 0.1)' },
+    }],
+  }
+})
+
+const pieOption = computed(() => {
+  const breakdown = dashboardData.value?.module_time_breakdown ?? []
+  const data = breakdown
+    .filter(item => item.seconds > 0)
+    .map(item => ({
+      name: item.module,
+      value: Number((item.seconds / 60).toFixed(1)),
+    }))
+  return {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(255, 255, 255, 0.96)',
+      borderColor: '#e5e7eb',
+      borderWidth: 1,
+      textStyle: { color: '#1f2937', fontSize: 13 },
+      formatter: '{b}<br/>学习时长: {c} 分钟 ({d}%)',
+    },
+    legend: {
+      orient: 'vertical',
+      right: 10,
+      top: 'center',
+      textStyle: { color: '#6b7280', fontSize: 12 },
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 8,
+    },
+    color: PIE_COLORS,
+    series: [{
+      type: 'pie',
+      radius: ['40%', '70%'],
+      center: ['35%', '50%'],
+      avoidLabelOverlap: false,
+      label: { show: false },
+      emphasis: {
+        label: { show: true, fontSize: 14, fontWeight: 'bold' },
+      },
+      labelLine: { show: false },
+      data,
     }],
   }
 })
 
 // 切换时间范围时重新加载看板数据
 watch(selectedRange, () => {
-  if (!initialLoading.value) {
+  if (!initialLoading.value && !viewingHistorical.value) {
     void loadDashboard()
   }
 })
@@ -516,7 +468,6 @@ async function loadDashboard(): Promise<void> {
   try {
     const response = await getDashboard(selectedRange.value)
     dashboardData.value = response.data.data
-    // 从 dashboard 响应中提取 guidance_strategy，避免额外请求
     if (dashboardData.value?.guidance_strategy) {
       guidanceStrategy.value = normalizeGuidanceStrategy(dashboardData.value.guidance_strategy as Partial<GuidanceStrategy>)
     }
@@ -541,13 +492,41 @@ async function loadAssessmentsHistory(page = 1): Promise<void> {
   }
 }
 
-async function selectAssessment(assessmentId: number): Promise<void> {
+async function selectAssessment(item: Omit<LearningAssessment, 'assessment'>): Promise<void> {
   try {
-    const response = await getAssessmentDetail(assessmentId)
-    activeAssessment.value = response.data.data
+    // 加载评估详情
+    const detailResponse = await getAssessmentDetail(item.id)
+    activeAssessment.value = detailResponse.data.data
+
+    // 加载该评估时间窗口的看板数据
+    const dashboardResponse = await getAssessmentDashboard(item.id)
+    dashboardData.value = dashboardResponse.data.data
+    if (dashboardData.value?.guidance_strategy) {
+      guidanceStrategy.value = normalizeGuidanceStrategy(dashboardData.value.guidance_strategy as Partial<GuidanceStrategy>)
+    }
+
+    // 标记正在查看历史评估
+    viewingHistorical.value = true
+    historicalWindow.value = { start: item.window_start, end: item.window_end }
   } catch (error) {
     console.error('加载评估详情失败', error)
     toast.error('评估详情加载失败')
+  }
+}
+
+async function returnToLatest(): Promise<void> {
+  viewingHistorical.value = false
+  activeAssessment.value = null
+  await loadDashboard()
+
+  // 重新获取最新评估
+  try {
+    const response = await getLatestAssessment()
+    if (response.data.data) {
+      activeAssessment.value = response.data.data
+    }
+  } catch (error) {
+    console.error('获取最新评估失败', error)
   }
 }
 
@@ -561,10 +540,11 @@ async function triggerAssessmentGeneration(): Promise<void> {
   try {
     const response = await generateAssessment(selectedRange.value)
     activeAssessment.value = response.data.data
+    viewingHistorical.value = false
     toast.success('学习效果评估已生成')
     await Promise.all([
       loadAssessmentsHistory(1),
-      loadDashboard(), // 同时刷新看板数据 + guidance_strategy
+      loadDashboard(),
     ])
   } catch (error: any) {
     if (error?.response?.status === 409) {
@@ -615,7 +595,7 @@ onMounted(async () => {
   initialLoading.value = true
   await Promise.all([
     loadAssessmentsHistory(1),
-    loadDashboard(), // 同时获取看板数据 + guidance_strategy
+    loadDashboard(),
   ])
 
   try {
@@ -623,7 +603,8 @@ onMounted(async () => {
     if (response.data.data) {
       activeAssessment.value = response.data.data
     } else if (assessmentsHistory.value[0]?.id !== undefined) {
-      await selectAssessment(assessmentsHistory.value[0].id)
+      const item = assessmentsHistory.value[0]
+      await selectAssessment(item)
     }
   } catch (error) {
     console.error('获取最新评估失败', error)
@@ -635,16 +616,34 @@ onMounted(async () => {
 
 <style scoped>
 .assessment-page {
-  max-width: 1000px;
+  max-width: var(--content-max-width);
   margin: 0 auto;
-  padding: var(--space-6);
+  padding: var(--space-8) var(--space-6);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-6);
 }
 
 h1, h2, h3, h4, p {
   margin: 0;
+}
+
+/* Bezel Card (双层物理质感卡片结构) */
+.bezel-card-outer {
+  background: rgba(70, 184, 180, 0.015);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-xl);
+  padding: var(--space-2);
+  transition: var(--transition-base);
+}
+
+.bezel-card-inner {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius-xl) - 6px);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-6);
+  transition: var(--transition-base);
 }
 
 /* Header */
@@ -654,13 +653,14 @@ h1, h2, h3, h4, p {
   align-items: flex-start;
   gap: var(--space-4);
   padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .header-left h1 {
   font-size: 1.5rem;
   font-weight: var(--weight-extrabold);
   color: var(--color-text-strong);
+  letter-spacing: -0.02em;
 }
 
 .header-subtitle {
@@ -694,7 +694,7 @@ h1, h2, h3, h4, p {
   font-size: var(--text-sm);
   font-weight: var(--weight-bold);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: var(--transition-fast);
 }
 
 .range-tabs button:hover {
@@ -703,52 +703,96 @@ h1, h2, h3, h4, p {
 }
 
 .range-tabs button.active {
-  color: var(--color-primary-text);
+  color: var(--color-primary);
   background: var(--color-primary-soft);
+  box-shadow: var(--shadow-xs);
 }
 
 .generate-btn {
   min-height: 2.25rem;
   gap: var(--space-2);
+  background: var(--color-primary) !important;
+  color: white !important;
+  border: none !important;
+  transition: var(--btn-transition) !important;
+  font-weight: var(--weight-bold) !important;
+  border-radius: var(--radius-sm) !important;
+  cursor: pointer;
 }
 
-/* Generation Progress */
+.generate-btn:hover {
+  background: var(--color-text-strong) !important;
+  transform: translateY(-1px);
+}
+
+.generate-btn:active {
+  transform: translateY(0.5px);
+}
+
+.generate-btn:disabled {
+  background: var(--color-border) !important;
+  color: var(--color-text-muted) !important;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* Generation Progress with Micro-animation */
 .generation-progress {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .generation-progress span {
-  min-height: 2.25rem;
+  min-height: 2.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text-muted);
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
+  transition: var(--transition-base);
+  position: relative;
+  overflow: hidden;
 }
 
 .generation-progress span.done {
-  background: var(--color-success-soft);
-  color: var(--color-success);
-  border-color: transparent;
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: var(--color-primary-soft);
 }
 
 .generation-progress span.current {
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
-  border-color: transparent;
+  background: var(--color-surface);
+  color: var(--color-primary);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 8px rgba(70, 184, 180, 0.015);
+}
+
+.generation-progress span.current::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 100%;
+  background: var(--color-primary);
+  animation: progress-slide 1.5s infinite linear;
+}
+
+@keyframes progress-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 /* Loading & Empty States */
 .loading-state,
 .empty-state,
 .error-state {
-  min-height: 14rem;
+  min-height: 16rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -758,11 +802,12 @@ h1, h2, h3, h4, p {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
 }
 
 .loading-spinner {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border: 2px solid var(--color-border);
   border-top-color: var(--color-primary);
   border-radius: 50%;
@@ -774,12 +819,13 @@ h1, h2, h3, h4, p {
 }
 
 .empty-state .empty-icon {
-  color: var(--color-text-muted);
+  color: var(--color-text-faint);
 }
 
 .empty-state h2,
 .error-state h2 {
   font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
   color: var(--color-text-strong);
 }
 
@@ -791,10 +837,26 @@ h1, h2, h3, h4, p {
 
 .error-state {
   color: var(--color-danger);
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
 }
 
 .error-state h2 {
   color: var(--color-danger);
+}
+
+/* Historical Banner */
+.historical-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  border: 1px solid var(--color-border);
+  font-size: var(--text-sm);
+  color: var(--color-primary);
+  box-shadow: var(--shadow-xs);
 }
 
 /* Conclusion Section */
@@ -803,10 +865,7 @@ h1, h2, h3, h4, p {
 }
 
 .conclusion-card {
-  padding: var(--space-5);
-  background: linear-gradient(135deg, var(--color-primary-soft) 0%, var(--color-surface) 40%);
-  border: 1px solid var(--color-primary-border);
-  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--color-primary-soft) 0%, var(--color-surface) 50%);
 }
 
 .conclusion-header {
@@ -814,7 +873,7 @@ h1, h2, h3, h4, p {
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
-  color: var(--color-primary-text);
+  color: var(--color-primary);
 }
 
 .conclusion-header h2 {
@@ -828,7 +887,7 @@ h1, h2, h3, h4, p {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--space-1) var(--space-2.5);
   border-radius: var(--radius-pill);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
@@ -841,23 +900,29 @@ h1, h2, h3, h4, p {
   font-size: var(--text-base);
   color: var(--color-text-strong);
   line-height: var(--leading-relaxed);
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-5);
 }
 
 .strategy-highlights {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-3);
+  gap: var(--space-4);
 }
 
 .highlight-item {
-  padding: var(--space-3);
+  padding: var(--space-4);
   background: var(--color-surface);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  transition: var(--transition-fast);
+}
+
+.highlight-item:hover {
+  border-color: var(--color-primary-border);
+  transform: translateY(-1px);
 }
 
 .highlight-label {
@@ -869,12 +934,13 @@ h1, h2, h3, h4, p {
 .highlight-value {
   font-size: var(--text-sm);
   color: var(--color-text-strong);
-  line-height: 1.3;
+  line-height: 1.35;
+  font-weight: var(--weight-semibold);
 }
 
 .strategy-reason {
-  margin-top: var(--space-3);
-  padding-top: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
   border-top: 1px solid var(--color-border-light);
   font-size: var(--text-sm);
   color: var(--color-text-secondary);
@@ -883,10 +949,10 @@ h1, h2, h3, h4, p {
 
 .reason-label {
   display: inline-block;
-  margin-right: var(--space-1);
-  padding: 1px var(--space-1);
+  margin-right: var(--space-1.5);
+  padding: 1px var(--space-1.5);
   border-radius: var(--radius-sm);
-  background: var(--color-surface);
+  background: var(--color-bg);
   border: 1px solid var(--color-border-light);
   font-size: var(--text-xs);
   color: var(--color-text-muted);
@@ -894,70 +960,22 @@ h1, h2, h3, h4, p {
   vertical-align: middle;
 }
 
-/* Metrics Section */
-.metrics-section {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
-}
-
-.metric-card {
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-
-.metric-icon {
-  color: var(--color-primary-text);
-}
-
-.metric-body {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-1);
-  flex-wrap: wrap;
-}
-
-.metric-label {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: var(--weight-bold);
-}
-
-.metric-value {
-  font-size: 1.5rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
-  line-height: 1;
-}
-
-.metric-unit {
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-}
-
-.metric-sub {
-  font-size: var(--text-xs);
-  color: var(--color-text-faint);
-}
-
-/* Analysis Section */
-.analysis-section {
+/* Charts Section */
+.charts-section {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
-  gap: var(--space-4);
+  gap: var(--space-5);
 }
 
-.chart-panel,
-.topics-panel {
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
+.chart-panel-outer {
+  display: flex;
+  flex-direction: column;
+}
+
+.chart-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .panel-header {
@@ -965,7 +983,7 @@ h1, h2, h3, h4, p {
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-3);
-  color: var(--color-primary-text);
+  color: var(--color-primary);
 }
 
 .panel-header h3 {
@@ -976,94 +994,23 @@ h1, h2, h3, h4, p {
 
 .chart {
   width: 100%;
-  height: 12rem;
+  height: 14rem;
+  flex: 1;
 }
 
 .chart-empty {
-  min-height: 10rem;
+  min-height: 12rem;
   display: flex;
   align-items: center;
   justify-content: center;
   color: var(--color-text-faint);
   font-size: var(--text-sm);
-}
-
-/* Topic Bars */
-.topic-bars {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.topic-bar {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 80px;
-  grid-template-rows: auto auto;
-  gap: var(--space-1) var(--space-2);
-  align-items: center;
-}
-
-.topic-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.topic-name {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-  font-weight: var(--weight-bold);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.topic-stats {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.bar-track {
-  height: 6px;
-  background: var(--color-border-light);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.bar-fill {
-  height: 100%;
-  background: var(--color-primary);
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
-.bar-fill.weak {
-  background: var(--color-danger);
-}
-
-.bar-fill.moderate {
-  background: var(--color-warning);
-}
-
-.topic-accuracy {
-  grid-column: 2;
-  grid-row: 1 / 3;
-  align-self: center;
-  font-size: var(--text-base);
-  color: var(--color-primary-text);
-  text-align: right;
-}
-
-.topic-accuracy.weak {
-  color: var(--color-danger);
+  flex: 1;
 }
 
 /* Action Section */
-.action-section {
-  padding: var(--space-4);
+.action-card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
 }
 
 .section-header {
@@ -1071,7 +1018,7 @@ h1, h2, h3, h4, p {
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-4);
-  color: var(--color-primary-text);
+  color: var(--color-primary);
 }
 
 .section-header h3 {
@@ -1096,11 +1043,17 @@ h1, h2, h3, h4, p {
 .action-item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3);
+  gap: var(--space-4);
+  padding: var(--space-4);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   background: var(--color-bg);
+  transition: var(--transition-fast);
+}
+
+.action-item:hover {
+  border-color: var(--color-primary-border);
+  background: var(--color-surface-hover);
 }
 
 .action-index {
@@ -1111,7 +1064,7 @@ h1, h2, h3, h4, p {
   justify-content: center;
   border-radius: 50%;
   background: var(--color-primary-soft);
-  color: var(--color-primary-text);
+  color: var(--color-primary);
   font-size: var(--text-xs);
   font-weight: var(--weight-extrabold);
   flex-shrink: 0;
@@ -1125,7 +1078,8 @@ h1, h2, h3, h4, p {
 .action-description {
   font-size: var(--text-sm);
   color: var(--color-text-strong);
-  line-height: 1.4;
+  line-height: 1.45;
+  font-weight: var(--weight-medium);
 }
 
 .action-topic {
@@ -1136,38 +1090,34 @@ h1, h2, h3, h4, p {
 .action-link {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
+  gap: var(--space-1.5);
+  padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-sm);
   background: var(--color-primary);
   color: white;
   font-size: var(--text-xs);
   font-weight: var(--weight-bold);
   text-decoration: none;
-  transition: background 0.15s ease;
+  transition: var(--btn-transition);
 }
 
 .action-link:hover {
-  background: var(--color-primary-hover);
+  background: var(--color-text-strong);
+  transform: translateY(-1px);
 }
 
-/* Detail Entry */
-.detail-entry {
-  display: flex;
-  justify-content: center;
+.action-link:active {
+  transform: translateY(0.5px);
 }
 
 /* History Section */
-.history-section {
-  padding: var(--space-4);
+.history-card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
 }
 
 .history-loading,
 .history-empty {
-  min-height: 4rem;
+  min-height: 5rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1178,12 +1128,12 @@ h1, h2, h3, h4, p {
 .history-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-2);
+  gap: var(--space-3);
 }
 
 .history-item {
-  min-height: 4.5rem;
-  padding: var(--space-3);
+  min-height: 5rem;
+  padding: var(--space-4);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   background: var(--color-bg);
@@ -1191,14 +1141,21 @@ h1, h2, h3, h4, p {
   cursor: pointer;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: var(--space-1);
-  transition: all 0.15s ease;
+  transition: var(--transition-fast);
 }
 
-.history-item:hover,
+.history-item:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  transform: translateY(-1px);
+}
+
 .history-item.active {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
+  box-shadow: var(--shadow-sm);
 }
 
 .history-item strong {
@@ -1212,9 +1169,17 @@ h1, h2, h3, h4, p {
 }
 
 .history-more {
-  margin-top: var(--space-3);
+  margin-top: var(--space-4);
   display: flex;
   justify-content: center;
+}
+
+.history-more button {
+  color: var(--color-primary) !important;
+}
+
+.history-more button:hover {
+  color: var(--color-text-strong) !important;
 }
 
 /* Drawers */
@@ -1222,6 +1187,7 @@ h1, h2, h3, h4, p {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
   z-index: 100;
   display: flex;
   justify-content: flex-end;
@@ -1245,8 +1211,8 @@ h1, h2, h3, h4, p {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--color-border);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--color-border-light);
 }
 
 .drawer-header h2 {
@@ -1266,7 +1232,7 @@ h1, h2, h3, h4, p {
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: var(--transition-fast);
 }
 
 .drawer-close:hover {
@@ -1277,76 +1243,21 @@ h1, h2, h3, h4, p {
 .drawer-body {
   flex: 1;
   overflow: auto;
-  padding: var(--space-4);
+  padding: var(--space-5);
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
 }
 
-.detail-block h4 {
-  font-size: var(--text-sm);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
-  margin-bottom: var(--space-3);
-}
-
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-2);
-}
-
-.detail-item {
-  padding: var(--space-3);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-
-.detail-item span {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.detail-item strong {
-  font-size: var(--text-base);
-  color: var(--color-text-strong);
-}
-
-.detail-note {
-  margin-top: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--leading-relaxed);
-}
-
-.topic-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
-.topic-tag {
-  padding: var(--space-1) var(--space-2);
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  border-radius: var(--radius-pill);
-}
-
 .history-full-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--space-2.5);
 }
 
 .history-full-item {
-  min-height: 4rem;
-  padding: var(--space-3);
+  min-height: 4.5rem;
+  padding: var(--space-4);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   background: var(--color-bg);
@@ -1354,11 +1265,16 @@ h1, h2, h3, h4, p {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  transition: all 0.15s ease;
+  gap: 4px;
+  transition: var(--transition-fast);
 }
 
-.history-full-item:hover,
+.history-full-item:hover {
+  border-color: var(--color-primary);
+  background: var(--color-surface);
+  transform: translateY(-1px);
+}
+
 .history-full-item.active {
   border-color: var(--color-primary);
   background: var(--color-primary-soft);
@@ -1376,8 +1292,9 @@ h1, h2, h3, h4, p {
 
 .history-full-item em {
   font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  color: var(--color-primary);
   font-style: normal;
+  font-weight: var(--weight-bold);
 }
 
 .pagination {
@@ -1387,19 +1304,15 @@ h1, h2, h3, h4, p {
   gap: var(--space-3);
   margin-top: var(--space-4);
   padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
+  border-top: 1px solid var(--color-border-light);
   font-size: var(--text-sm);
   color: var(--color-text-muted);
 }
 
 /* Responsive */
 @media (max-width: 900px) {
-  .analysis-section {
+  .charts-section {
     grid-template-columns: 1fr;
-  }
-
-  .metrics-section {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .strategy-highlights {
@@ -1443,10 +1356,6 @@ h1, h2, h3, h4, p {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .metrics-section {
-    grid-template-columns: 1fr;
-  }
-
   .strategy-highlights {
     grid-template-columns: 1fr;
   }
@@ -1454,15 +1363,137 @@ h1, h2, h3, h4, p {
   .history-grid {
     grid-template-columns: 1fr;
   }
-
-  .topic-bar {
-    grid-template-columns: 1fr;
-    gap: var(--space-1);
-  }
-
-  .topic-accuracy {
-    grid-column: 1;
-    text-align: left;
-  }
 }
+/* === Empty Guide States === */
+.empty-guide-card, .welcome-guide-card {
+  margin-top: var(--space-4);
+}
+
+.empty-guide-inner, .welcome-guide-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: var(--space-10) var(--space-6);
+  min-height: 20rem;
+}
+
+.guide-icon-wrapper {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+  box-shadow: 0 4px 12px rgba(70, 184, 180, 0.15);
+}
+
+.guide-icon.sparkles {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.empty-guide-inner h2, .welcome-guide-inner h2 {
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-strong);
+  margin-bottom: var(--space-2);
+}
+
+.guide-subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+  max-width: 500px;
+  line-height: var(--leading-relaxed);
+  margin-bottom: var(--space-6);
+}
+
+.guide-actions {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  justify-content: center;
+  width: 100%;
+}
+
+.action-card-mini {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-base);
+  min-width: 200px;
+  text-align: left;
+}
+
+.action-card-mini:hover {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.mini-icon {
+  font-size: 1.5rem;
+}
+
+.action-card-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.action-card-text strong {
+  font-size: var(--text-sm);
+  color: var(--color-text-strong);
+}
+
+.action-card-text span {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+
+.large-btn {
+  padding: var(--space-3) var(--space-8);
+  font-size: var(--text-base);
+  min-height: 3rem;
+  margin-bottom: var(--space-8);
+}
+
+.guide-preview-charts {
+  width: 100%;
+  max-width: 600px;
+  background: var(--color-bg);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  position: relative;
+  opacity: 0.8;
+  filter: grayscale(0.2);
+}
+
+.preview-chart-title {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  margin-bottom: var(--space-3);
+}
+
+.mini-chart {
+  height: 150px !important;
+}
+
 </style>

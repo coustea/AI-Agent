@@ -267,6 +267,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     guidance_strategy       JSONB           NOT NULL DEFAULT '{}',
     guidance_updated_at     TIMESTAMPTZ,
     last_assessment_id INTEGER,
+    profile_updated_at     TIMESTAMPTZ,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
     CONSTRAINT uq_user_profiles_user UNIQUE (user_id)

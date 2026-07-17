@@ -1,29 +1,24 @@
 from __future__ import annotations
 
-import asyncio
-import json
 import re
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from app.infra.llm import get_llm
-from app.infra.prompts import prompts
 from app.shared.ppt.contract import (
+    CourseDomain,
     LogicNodeRole,
     LogicRelation,
     SlideKind,
     VisualFamily,
-    course_domain_values,
-    logic_node_role_values,
     select_layout,
     select_provisional_layout,
 )
 from app.shared.ppt.html import PPTHTMLPublisher, PPTHTMLRenderer, PPTPublication
 from app.shared.ppt.models import (
-    DeckLogicDraft,
     DeckLogicModel,
     LogicChapter,
     LogicEdge,
@@ -31,41 +26,90 @@ from app.shared.ppt.models import (
     PPTArtifact,
     PPTDeck,
     PPTGenerationContext,
-    PPTPreferences,
     PPTSlide,
     PPTStoryboard,
-    PRESENTATION_TITLE_MAX_LENGTH,
     PathPPT,
     ResourcePPT,
     SlideBrief,
-    section_draft_contract,
+    SlidePoint,
 )
 from app.shared.ppt.visual_ir import VisualModel
 from app.shared.ppt.visual_planner import VisualPlanner
 
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
-_LOGIC_MODEL_MAX_TOKENS = 3_600
-_SECTION_MAX_TOKENS = 4_000
 _PRESENTATION_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_SECTION_COUNT = 2
+PPT_PIPELINE_VERSION = "deterministic-html-v6"
+PPT_PIPELINE_STAGES = (
+    "assembling_context",
+    "designing_logic",
+    "designing_story",
+    "compiling_visuals",
+    "composing_slides",
+    "rendering_html",
+)
 _MAX_SOURCE_MATERIALS = 10
-_MAX_SOURCE_MATERIAL_CHARS = 2_400
-_MAX_SOURCE_CONTEXT_CHARS = 12_000
-_PROMPT_VARIABLE = re.compile(r"(?<!\{)\{(?P<name>[a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
-_PROMPT_VARIABLES: dict[str, frozenset[str]] = {
-    "logic_model": frozenset(
-        {"context", "preferences", "logic_node_roles", "course_domains"}
-    ),
-    "section_compose": frozenset(
-        {
-            "lesson_context",
-            "preferences",
-            "neighbor_context",
-            "section",
-        }
-    ),
+_MARKDOWN_HEADING = re.compile(r"^\s{0,3}(?P<level>#{1,6})\s+(?P<title>.+?)\s*$")
+_MARKDOWN_LIST_ITEM = re.compile(r"^\s{0,3}(?:[-*+]\s+|\d+[.)、]\s+)(?P<item>.+?)\s*$")
+_SENTENCE_BOUNDARY = re.compile(r"[。！？!?；;]+|\n+")
+_MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
+_MARKDOWN_EMPHASIS = re.compile(r"[`*_~]")
+_LEADING_LABEL = re.compile(r"^(?P<label>[^：:]{1,12})[：:]\s*(?P<body>.+)$")
+_GENERIC_HEADINGS = frozenset(
+    {
+        "概述",
+        "核心概念",
+        "概念精解",
+        "应用场景",
+        "总结",
+        "复习建议",
+        "高频考点",
+        "复习策略",
+        "关键解释",
+        "案例目标",
+    }
+)
+_NON_FACT_MARKERS = (
+    "需要解决什么问题",
+    "学习目标",
+    "学习路线",
+    "能够说明",
+    "下一步",
+    "形成清晰的学习路径",
+)
+_DOMAIN_KEYWORDS: dict[CourseDomain, tuple[str, ...]] = {
+    CourseDomain.ALGORITHMS: ("算法", "排序", "树", "图", "复杂度", "递归", "动态规划"),
+    CourseDomain.OPERATING_SYSTEMS: ("进程", "线程", "死锁", "内存", "调度", "操作系统"),
+    CourseDomain.NETWORKS: ("tcp", "udp", "网络", "报文", "握手", "路由", "http"),
+    CourseDomain.COMPUTER_ARCHITECTURE: ("cpu", "缓存", "指令", "流水线", "体系结构"),
+    CourseDomain.DATABASES: ("数据库", "sql", "事务", "索引", "关系模型"),
+    CourseDomain.COMPILERS: ("编译", "词法", "语法", "中间代码", "优化"),
+    CourseDomain.DISCRETE_THEORY: ("离散", "集合", "逻辑", "图论", "组合"),
+    CourseDomain.SOFTWARE_DISTRIBUTED: ("分布式", "一致性", "微服务", "并发", "系统设计"),
 }
+
+
+@dataclass
+class _KnowledgeUnit:
+    """One source-grounded teaching unit before it enters the lesson DAG."""
+
+    title: str
+    claim: str
+    evidence: list[str] = field(default_factory=list)
+
+    def add_evidence(self, fact: str) -> None:
+        if fact != self.claim and fact not in self.evidence and len(self.evidence) < 3:
+            self.evidence.append(fact)
+
+
+def ppt_pipeline_metadata() -> dict[str, object]:
+    """Expose the actual pipeline contract used by resource and path callers."""
+
+    return {
+        "version": PPT_PIPELINE_VERSION,
+        "stages": list(PPT_PIPELINE_STAGES),
+        "copy_compiler": "deterministic",
+    }
 
 
 class PPTGenerationError(RuntimeError):
@@ -80,42 +124,37 @@ class PPTContextAdapter:
     @classmethod
     def from_request(cls, request: ResourcePPT | PathPPT) -> PPTGenerationContext:
         if isinstance(request, ResourcePPT):
-            materials = [
-                json.dumps(
-                    request.resource_plan,
-                    ensure_ascii=False,
-                    sort_keys=True,
-                    separators=(",", ":"),
-                )
-            ]
-            materials.extend(
-                f"{source.title}: {source.summary}\n" + "\n".join(source.materials[:4])
-                for source in request.artifacts[:6]
-            )
+            # A resource plan is orchestration metadata.  It answers *why* a
+            # deck is requested, not *what is true* in the lesson.  Treating
+            # it as source material was the direct cause of slides that
+            # repeated the learner goal instead of teaching the handoff.
+            materials = cls._artifact_materials(request.artifacts)
             return PPTGenerationContext(
                 source="resource",
                 topic=cls._resource_topic(request),
                 learner_profile=cls._profile_text(request.profile),
-                learning_goal=cls._clip(request.learning_need, 1_200),
+                learning_goal=cls._text(request.learning_need),
                 prerequisites=[],
                 source_materials=cls._clean_materials(materials),
-                constraints=[f"学习场景：{cls._clip(request.learning_scenario, 80)}"],
+                constraints=[f"学习场景：{cls._text(request.learning_scenario)}"],
                 preferences=request.preferences,
             )
 
-        materials = [request.tutorial_summary, request.tutorial_core_content]
-        materials.extend(request.tutorial_knowledge_points[:12])
+        # Path metadata is useful for the goal and prerequisite rails, but a
+        # lesson's factual source is its authored tutorial body.  Mixing in a
+        # summary and bare knowledge-point labels creates title-only slides.
+        materials = [request.tutorial_core_content]
         return PPTGenerationContext(
             source="path",
-            topic=cls._clip(request.node_title, PRESENTATION_TITLE_MAX_LENGTH),
+            topic=cls._text(request.node_title),
             learner_profile=cls._profile_text(request.profile),
-            learning_goal=cls._clip(request.path_goal, 1_200),
-            prerequisites=[cls._clip(item, 100) for item in request.knowledge_points[:12]],
+            learning_goal=cls._text(request.path_goal),
+            prerequisites=[cls._text(item) for item in request.knowledge_points[:12]],
             source_materials=cls._clean_materials(materials),
             constraints=[
-                f"路径：{cls._clip(request.path_title, 120)}",
-                f"难度：{cls._clip(request.difficulty, 40)}",
-                "薄弱点：" + "、".join(cls._clip(item, 60) for item in request.weak_knowledge_points[:8]),
+                f"路径：{cls._text(request.path_title)}",
+                f"难度：{cls._text(request.difficulty)}",
+                "薄弱点：" + "、".join(cls._text(item) for item in request.weak_knowledge_points[:8]),
             ],
             preferences=request.preferences,
         )
@@ -153,60 +192,101 @@ class PPTContextAdapter:
         for candidate in candidates:
             if not isinstance(candidate, str):
                 continue
-            title = cls._clip(candidate, PRESENTATION_TITLE_MAX_LENGTH)
+            title = cls._text(candidate)
             if title:
                 return title
         raise ValueError("资源教学计划没有可用的课件主题")
 
     @staticmethod
     def _profile_text(profile: dict[str, Any] | str) -> str:
-        value = profile if isinstance(profile, str) else json.dumps(profile, ensure_ascii=False)
-        return PPTContextAdapter._clip(value, 1_600)
+        value = profile if isinstance(profile, str) else " ".join(PPTContextAdapter._string_leaves(profile))
+        return PPTContextAdapter._text(value)
+
+    @classmethod
+    def _artifact_materials(cls, artifacts: list[PPTSource]) -> list[str]:
+        """Collect factual handoffs in an order suitable for a lesson compiler.
+
+        The content handoff is prose-first and therefore the strongest source
+        for claims.  Code and mind-map handoffs follow as supporting material.
+        Titles and one-sentence summaries are deliberately excluded: they are
+        labels for another artifact, not evidence for a teaching slide.
+        """
+
+        priority = {"content": 0, "code": 1, "mindmap": 2, "quiz": 3, "reading": 4}
+        ordered = sorted(
+            artifacts,
+            key=lambda source: (priority.get(source.agent_id, 9), source.agent_id),
+        )
+        materials = [
+            material
+            for source in ordered
+            for material in source.materials[:12]
+            if material.strip()
+        ]
+        if not materials:
+            raise ValueError("PPT 聚合生成缺少基础 Agent 提供的教学正文")
+        return cls._clean_materials(materials)
+
+    @staticmethod
+    def _string_leaves(value: object) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, dict):
+            return [item for child in value.values() for item in PPTContextAdapter._string_leaves(child)]
+        if isinstance(value, list):
+            return [item for child in value for item in PPTContextAdapter._string_leaves(child)]
+        return []
 
     @staticmethod
     def _clean_materials(values: list[str]) -> list[str]:
-        """Build one bounded source packet reused by every planning call.
+        """Normalize source material without discarding its factual content.
 
-        The storyboard and all section composers receive the same context.  A
-        per-item limit alone lets a resource request multiply into a very large
-        prompt four times, which is both slow and prone to provider timeouts.
-        Keep complete, ordered source units until the shared packet budget is
-        exhausted instead of silently building a different context per worker.
+        The logic compiler and storyboard receive the same source context.
+        Every downstream projection receives the same complete facts. Layout
+        must adapt at render time rather than silently clipping source truth.
         """
         materials: list[str] = []
-        used = 0
         for value in values:
-            text = " ".join(value.split())
+            # Markdown headings and list items encode the author-provided
+            # concept boundaries.  Preserve line breaks here; flattening them
+            # made the fact compiler lose every heading before it began.
+            text = "\n".join(
+                " ".join(line.split())
+                for line in value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+                if line.strip()
+            )
             if not text or len(materials) >= _MAX_SOURCE_MATERIALS:
                 continue
-            remaining = _MAX_SOURCE_CONTEXT_CHARS - used
-            if remaining <= 0:
-                break
-            clipped = text[: min(_MAX_SOURCE_MATERIAL_CHARS, remaining)]
-            if not clipped:
-                break
-            materials.append(clipped)
-            used += len(clipped)
-        return materials or ["请基于课程主题组织完整、准确的教学讲解。"]
+            materials.append(text)
+        return materials
 
     @staticmethod
-    def _clip(value: str, limit: int) -> str:
-        return " ".join(value.split())[:limit]
+    def _text(value: str) -> str:
+        return " ".join(value.split())
 
 
 class PPTGenerator:
-    """逻辑建模 + 确定性教学编排 + 视觉规划 + 文案编排 + 确定性渲染。"""
+    """Compile source material directly into a self-contained HTML lesson deck.
+
+    The generator intentionally has no language-model dependency. Resource
+    planning may use models upstream, but this delivery boundary only accepts
+    normalized learning material and deterministically produces a valid deck.
+    """
 
     def __init__(
         self,
         *,
-        llm: Any | None = None,
         renderer: PPTHTMLRenderer | None = None,
         planner: VisualPlanner | None = None,
     ) -> None:
-        self._llm = llm or get_llm()
         self._renderer = renderer or PPTHTMLRenderer()
         self._planner = planner or VisualPlanner()
+
+    @staticmethod
+    def _text(value: str) -> str:
+        """Normalize whitespace without applying a presentation text budget."""
+
+        return " ".join(value.split())
 
     async def generate(
         self,
@@ -222,7 +302,7 @@ class PPTGenerator:
 
             stage = "designing_logic"
             await self._progress(progress, "教学逻辑架构师正在建立知识依赖模型…", 20)
-            logic_model = await self._generate_logic_model(context)
+            logic_model = self._generate_logic_model(context)
 
             stage = "designing_story"
             await self._progress(progress, "正在将知识链编译为教学故事板…", 34)
@@ -231,16 +311,15 @@ class PPTGenerator:
 
             stage = "compiling_visuals"
             await self._progress(progress, "正在编译每页的教学图解…", 40)
-            visuals = self._planner.plan(storyboard)
+            visuals = self._planner.plan(storyboard, logic_model)
 
-            stage = "composing_sections"
-            await self._progress(progress, "三个视觉编排智能体正在按全局逻辑完成页面…", 48)
-            deck = await self._compose_deck(
+            stage = "composing_slides"
+            await self._progress(progress, "正在按全局逻辑确定性编排页面文案…", 48)
+            deck = self._compose_deck(
                 context,
                 logic_model,
                 storyboard,
                 visuals,
-                progress,
             )
 
             stage = "rendering_html"
@@ -263,96 +342,251 @@ class PPTGenerator:
             slide_count=len(deck.slides),
         )
 
-    async def _generate_logic_model(self, context: PPTGenerationContext) -> DeckLogicModel:
-        prompt = self._render_prompt(
-            "logic_model",
-            context=json.dumps(context.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")),
-            preferences=self._render_preferences(context.preferences),
-            logic_node_roles=logic_node_role_values(),
-            course_domains=course_domain_values(),
-        )
-        draft = await self._llm.ainvoke_json(
-            DeckLogicDraft, prompt, temperature=0.08, max_tokens=_LOGIC_MODEL_MAX_TOKENS
-        )
-        return self._materialize_logic_model(draft)
+    @classmethod
+    def _generate_logic_model(cls, context: PPTGenerationContext) -> DeckLogicModel:
+        """Build a bounded teaching graph from human-readable source material."""
 
-    @staticmethod
-    def _materialize_logic_model(draft: DeckLogicDraft) -> DeckLogicModel:
-        """Assign graph identity once, after the LLM has finished teaching design.
-
-        Chapter/node IDs and cross-reference bookkeeping are backend transport
-        details used by the storyboard and renderer. Generating them in the
-        LLM response coupled content quality to a fragile formatting convention
-        (for example ``ch1`` versus ``c01``).  The draft instead expresses a
-        readable ordered lesson; this boundary creates the canonical graph.
-        """
+        units = cls._knowledge_units(context)
+        chapter_break = max(2, min(3, len(units) // 2))
+        nodes: list[LogicNode] = []
+        for index, unit in enumerate(units, start=1):
+            role = cls._role_for_unit(unit)
+            chapter_id = "c01" if index <= chapter_break else "c02"
+            nodes.append(
+                LogicNode(
+                    id=f"l{index:02d}",
+                    chapter_id=chapter_id,
+                    title=cls._text(unit.title),
+                    role=role,
+                    question=cls._question_for(unit.title, role),
+                    claim=cls._text(unit.claim),
+                    # The graph contract requires evidence for every node.  A
+                    # standalone source fact is its own evidence; downstream
+                    # copy/visual projections de-duplicate it before display.
+                    evidence=[
+                        cls._text(item)
+                        for item in (unit.evidence or [unit.claim])
+                    ],
+                    output=cls._output_for(unit),
+                )
+            )
 
         chapters: list[LogicChapter] = []
-        nodes: list[LogicNode] = []
-        node_order = 1
-
-        for chapter_order, chapter in enumerate(draft.chapters, start=1):
-            chapter_id = f"c{chapter_order:02d}"
-            chapter_node_ids: list[str] = []
-            for node in chapter.nodes:
-                node_id = f"l{node_order:02d}"
-                chapter_node_ids.append(node_id)
-                nodes.append(
-                    LogicNode(
-                        id=node_id,
-                        chapter_id=chapter_id,
-                        title=node.title,
-                        role=node.role,
-                        question=node.question,
-                        claim=node.claim,
-                        evidence=node.evidence,
-                        output=node.output,
-                    )
-                )
-                node_order += 1
+        for chapter_id, title, chapter_nodes in (
+            ("c01", "概念与结构", [node for node in nodes if node.chapter_id == "c01"]),
+            ("c02", "方法与应用", [node for node in nodes if node.chapter_id == "c02"]),
+        ):
+            if not chapter_nodes:
+                continue
             chapters.append(
                 LogicChapter(
                     id=chapter_id,
-                    title=chapter.title,
-                    question=chapter.nodes[0].question,
-                    outcome=chapter.nodes[-1].output,
-                    node_ids=chapter_node_ids,
+                    title=title,
+                    question=chapter_nodes[0].question,
+                    outcome=chapter_nodes[-1].output,
+                    node_ids=[node.id for node in chapter_nodes],
                 )
             )
 
         return DeckLogicModel(
-            course_domain=draft.course_domain,
-            central_question=nodes[0].question,
-            thesis=nodes[-1].output,
+            course_domain=cls._infer_course_domain(context),
+            central_question=cls._text(f"如何理解并应用{context.topic}？"),
+            thesis=cls._text("；".join(node.claim for node in nodes[-2:])),
             chapters=chapters,
             nodes=nodes,
             edges=[
                 LogicEdge(
                     source_id=source.id,
                     target_id=target.id,
-                    relation=PPTGenerator._relation_for(target),
-                    bridge=PPTGenerator._bridge_for(source, target),
+                    relation=cls._relation_for(target),
+                    bridge=cls._bridge_for(source, target),
                 )
                 for source, target in zip(nodes, nodes[1:])
             ],
         )
 
+    @classmethod
+    def _knowledge_units(cls, context: PPTGenerationContext) -> list[_KnowledgeUnit]:
+        """Compile headings and facts from handoffs, never from task metadata.
+
+        A source heading owns the facts beneath it.  This preserves the
+        author's concept boundaries (for example ``前序遍历``) instead of
+        turning every sentence or user request into a slide title.
+        """
+
+        by_title: dict[str, _KnowledgeUnit] = {}
+        seen_facts: set[str] = set()
+        for material in context.source_materials:
+            active_title = ""
+            in_code_fence = False
+            for raw_line in material.splitlines():
+                line = raw_line.strip()
+                if line.startswith("```"):
+                    in_code_fence = not in_code_fence
+                    continue
+                if not line or in_code_fence:
+                    continue
+
+                heading = _MARKDOWN_HEADING.match(line)
+                if heading:
+                    candidate = cls._clean_source_text(heading.group("title"))
+                    active_title = "" if candidate in _GENERIC_HEADINGS else candidate
+                    continue
+
+                item = _MARKDOWN_LIST_ITEM.match(line)
+                if item:
+                    line = item.group("item")
+                line = cls._clean_source_text(line)
+                if not line:
+                    continue
+
+                title_from_line, fact_line = cls._line_semantics(line)
+                for fact in cls._sentences(fact_line):
+                    if not cls._is_teaching_fact(fact):
+                        continue
+                    title = title_from_line or active_title or cls._unit_title(fact, context.topic)
+                    title = cls._text(title)
+                    normalized = cls._normalize_fact(fact)
+                    if not title or not normalized or normalized in seen_facts:
+                        continue
+                    seen_facts.add(normalized)
+                    unit = by_title.get(title)
+                    if unit is None:
+                        by_title[title] = _KnowledgeUnit(
+                            title=title,
+                            claim=fact,
+                            evidence=cls._sequence_steps(fact),
+                        )
+                    else:
+                        unit.add_evidence(fact)
+
+        units = list(by_title.values())
+        if len(units) < 4:
+            raise PPTGenerationError(
+                "designing_logic",
+                "基础资源缺少足够的知识事实，无法生成教学课件；请确保至少提供 4 个含定义、步骤或案例的内容单元",
+            )
+        return units[:8]
+
     @staticmethod
-    def _relation_for(target: LogicNode) -> LogicRelation:
-        return {
-            LogicNodeRole.QUESTION: LogicRelation.PREREQUISITE,
-            LogicNodeRole.PREMISE: LogicRelation.PREREQUISITE,
-            LogicNodeRole.CONCEPT: LogicRelation.DECOMPOSES,
-            LogicNodeRole.MECHANISM: LogicRelation.DERIVES,
-            LogicNodeRole.METHOD: LogicRelation.APPLIES,
-            LogicNodeRole.EVIDENCE: LogicRelation.SUPPORTS,
-            LogicNodeRole.CASE: LogicRelation.VERIFIES,
-            LogicNodeRole.CONCLUSION: LogicRelation.SUMMARIZES,
-        }[target.role]
+    def _clean_source_text(value: str) -> str:
+        plain = _MARKDOWN_LINK.sub(r"\1", value)
+        plain = _MARKDOWN_EMPHASIS.sub("", plain)
+        return " ".join(plain.split()).strip("：:，,。；;！!？? ")
+
+    @classmethod
+    def _line_semantics(cls, line: str) -> tuple[str, str]:
+        """Split a labelled source line into a concept title and its fact."""
+
+        match = _LEADING_LABEL.match(line)
+        if not match:
+            return "", line
+        label = cls._clean_source_text(match.group("label"))
+        body = cls._clean_source_text(match.group("body"))
+        if label in {"定义", "作用", "特点", "说明", "步骤", "结论", "注意", "类比", "访问顺序"}:
+            return "", body
+        return label, body
+
+    @classmethod
+    def _sentences(cls, value: str) -> list[str]:
+        return [
+            cls._clean_source_text(part)
+            for part in _SENTENCE_BOUNDARY.split(value)
+            if len(cls._clean_source_text(part)) >= 2
+        ]
+
+    @staticmethod
+    def _normalize_fact(value: str) -> str:
+        return re.sub(r"[\s，,。；;：:！!？?]", "", value).lower()
+
+    @classmethod
+    def _is_teaching_fact(cls, value: str) -> bool:
+        if len(value) < 2 or value.endswith(("？", "?")):
+            return False
+        return not any(marker in value for marker in _NON_FACT_MARKERS)
+
+    @staticmethod
+    def _sequence_steps(value: str) -> list[str]:
+        """Extract explicit ordered steps without inventing a process."""
+
+        matches = re.findall(r"(先|再|然后|最后)([^，,。；;]+)", value)
+        steps = [f"{prefix}{body.strip()}" for prefix, body in matches if body.strip()]
+        return list(dict.fromkeys(steps))[:3] if len(steps) >= 2 else []
+
+    @classmethod
+    def _unit_title(cls, value: str, fallback: str) -> str:
+        text = " ".join(value.split()).strip("：:，,。；;！!？? ")
+        if "：" in text:
+            text = text.split("：", 1)[0]
+        for token in ("是", "指", "通过", "包括", "用于"):
+            if token in text:
+                candidate = text.split(token, 1)[0].strip("的 ，。；：、 -—")
+                if len(candidate) >= 2:
+                    text = candidate
+                    break
+        return text if len(text) >= 2 else cls._text(fallback)
+
+    @classmethod
+    def _infer_course_domain(cls, context: PPTGenerationContext) -> CourseDomain:
+        corpus = " ".join((context.topic, context.learning_goal, *context.source_materials)).lower()
+        for domain, keywords in _DOMAIN_KEYWORDS.items():
+            if any(keyword in corpus for keyword in keywords):
+                return domain
+        return CourseDomain.GENERAL_CS
+
+    @classmethod
+    def _role_for_unit(cls, unit: _KnowledgeUnit) -> LogicNodeRole:
+        corpus = f"{unit.title} {' '.join([unit.claim, *unit.evidence])}"
+        if any(token in corpus for token in ("对比", "区别", "差异", "联系")):
+            return LogicNodeRole.CASE
+        if any(token in corpus for token in ("步骤", "顺序", "遍历", "流程", "算法")):
+            return LogicNodeRole.METHOD
+        if any(token in corpus for token in ("机制", "原理", "结构", "线索", "指针")):
+            return LogicNodeRole.MECHANISM
+        if any(token in corpus for token in ("误区", "注意", "结论", "总结")):
+            return LogicNodeRole.CONCLUSION
+        return LogicNodeRole.CONCEPT
+
+    @classmethod
+    def _question_for(cls, title: str, role: LogicNodeRole) -> str:
+        if role is LogicNodeRole.METHOD:
+            return cls._text(f"如何正确执行{title}？")
+        if role is LogicNodeRole.CASE:
+            return cls._text(f"{title}之间有什么差异或联系？")
+        if role is LogicNodeRole.MECHANISM:
+            return cls._text(f"{title}为什么能发挥作用？")
+        return cls._text(f"{title}的关键特征是什么？")
+
+    @classmethod
+    def _output_for(cls, unit: _KnowledgeUnit) -> str:
+        evidence = "；".join(unit.evidence[:2])
+        if evidence:
+            return cls._text(f"结合{evidence}理解{unit.title}。")
+        return cls._text(f"依据“{unit.claim}”理解{unit.title}。")
+
+    @classmethod
+    def _relation_for(cls, target: LogicNode) -> LogicRelation:
+        """Choose a visual relation from available source structure.
+
+        A node with one factual statement is evidence, not a fabricated flow.
+        More specialised diagrams are reserved for source text that explicitly
+        carries a sequence or comparison relation.
+        """
+
+        corpus = " ".join((target.title, target.claim, *target.evidence))
+        if target.role is LogicNodeRole.CASE and any(
+            token in corpus for token in ("对比", "区别", "差异", "联系")
+        ):
+            return LogicRelation.CONTRASTS
+        if target.role is LogicNodeRole.METHOD and any(
+            token in corpus for token in ("先", "再", "然后", "最后", "步骤", "顺序")
+        ):
+            return LogicRelation.DERIVES
+        return LogicRelation.SUPPORTS
 
     @staticmethod
     def _bridge_for(source: LogicNode, target: LogicNode) -> str:
-        return f"{source.output}，进一步回答：{target.question}"[:96]
+        return f"从{source.title}出发，继续理解{target.title}。"[:96]
 
     @staticmethod
     def _compile_storyboard(
@@ -385,10 +619,15 @@ class PPTGenerator:
             for edge in logic_model.edges:
                 if edge.target_id == primary_id:
                     return edge
-            for edge in logic_model.edges:
-                if edge.source_id in node_ids:
-                    return edge
-            raise PPTGenerationError("designing_story", f"知识节点 {node_ids} 缺少教学衔接")
+            # The first knowledge node has no incoming edge.  It is presented
+            # as a source-backed fact, not as a fabricated prerequisite flow.
+            primary = nodes_by_id[primary_id]
+            return LogicEdge(
+                source_id=primary.id,
+                target_id=logic_model.nodes[1].id,
+                relation=LogicRelation.SUPPORTS,
+                bridge="从第一个知识事实开始建立课程框架。",
+            )
 
         def content_brief(
             *,
@@ -466,8 +705,7 @@ class PPTGenerator:
         for _chapter_id, node_ids in groups:
             primary = nodes_by_id[node_ids[0]]
             kind = PPTGenerator._slide_kind_for_role(primary.role)
-            supporting = "；".join(primary.evidence[:1])
-            focus = "；".join(part for part in (primary.claim, supporting) if part)
+            focus = primary.claim
             if len(node_ids) > 1:
                 focus = "；".join(nodes_by_id[node_id].claim for node_id in node_ids)
             briefs.append(
@@ -517,103 +755,47 @@ class PPTGenerator:
             LogicNodeRole.CONCLUSION: SlideKind.CORRECTION,
         }[role]
 
-    async def _compose_deck(
+    def _compose_deck(
         self,
         context: PPTGenerationContext,
         logic_model: DeckLogicModel,
         storyboard: PPTStoryboard,
         visuals: dict[str, VisualModel],
-        progress: ProgressCallback | None,
     ) -> PPTDeck:
-        chunks = self._split_briefs(storyboard.slides)
-
-        index_by_id = {brief.id: index for index, brief in enumerate(storyboard.slides)}
-
-        async def compose(index: int, briefs: list[SlideBrief]) -> list[PPTSlide]:
-            await self._progress(progress, f"第 {index + 1}/{len(chunks)} 组页面正在视觉编排…", 52 + index * 8)
-            first_index = index_by_id[briefs[0].id]
-            last_index = index_by_id[briefs[-1].id]
-            neighbors = self._neighbor_context(
-                storyboard,
-                first_index=first_index,
-                last_index=last_index,
-            )
-            prompt = self._render_prompt(
-                "section_compose",
-                lesson_context=json.dumps(
-                    {
-                        "topic": context.topic,
-                        "learning_goal": context.learning_goal,
-                        "constraints": context.constraints,
-                    },
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ),
-                neighbor_context=json.dumps(neighbors, ensure_ascii=False, separators=(",", ":")),
-                section=json.dumps(
-                    [self._section_brief_payload(brief) for brief in briefs],
-                    ensure_ascii=False,
-                    separators=(",", ":"),
-                ),
-                preferences=self._render_preferences(context.preferences),
-            )
-            section_schema = section_draft_contract(briefs)
-            draft = await self._llm.ainvoke_json(
-                section_schema, prompt, temperature=0.12, max_tokens=_SECTION_MAX_TOKENS
-            )
-            if len(draft.slides) != len(briefs):
-                raise PPTGenerationError(
-                    "composing_sections",
-                    f"第 {index + 1} 组视觉内容数量错误: expected={len(briefs)} actual={len(draft.slides)}",
-                )
-            slides: list[PPTSlide] = []
-            for brief, content in zip(briefs, draft.slides, strict=True):
-                visual = visuals.get(brief.id)
-                layout = brief.layout
-                if visual is not None:
-                    if brief.logic_relation is None:
-                        raise PPTGenerationError(
-                            "composing_sections",
-                            f"内容页 {brief.id} 缺少教学关系",
-                        )
-                    layout = select_layout(
-                        brief.kind,
-                        VisualFamily(visual.kind),
-                        brief.logic_relation,
+        def compose(brief: SlideBrief) -> PPTSlide:
+            visual = visuals.get(brief.id)
+            layout = brief.layout
+            if visual is not None:
+                if brief.logic_relation is None:
+                    raise PPTGenerationError(
+                        "composing_slides",
+                        f"内容页 {brief.id} 缺少教学关系",
                     )
-                slides.append(
-                    PPTSlide(
-                        id=brief.id,
-                        kind=brief.kind,
-                        title=brief.title,
-                        chapter_id=brief.chapter_id,
-                        logic_node_ids=brief.logic_node_ids,
-                        question=brief.question,
-                        claim=brief.claim,
-                        bridge=brief.bridge,
-                        logic_relation=brief.logic_relation,
-                        layout=layout,
-                        density=brief.density,
-                        visual=visual,
-                        **content.model_dump(mode="python"),
-                    )
+                layout = select_layout(
+                    brief.kind,
+                    VisualFamily(visual.kind),
+                    brief.logic_relation,
                 )
-            return slides
-
-        sections = await asyncio.gather(*(compose(index, chunk) for index, chunk in enumerate(chunks)))
-        expected_ids = [brief.id for brief in storyboard.slides]
-        actual_ids = [slide.id for section in sections for slide in section]
-        duplicate_ids = sorted({slide_id for slide_id in actual_ids if actual_ids.count(slide_id) > 1})
-        missing_ids = sorted(set(expected_ids) - set(actual_ids))
-        unexpected_ids = sorted(set(actual_ids) - set(expected_ids))
-        if duplicate_ids or missing_ids or unexpected_ids:
-            raise PPTGenerationError(
-                "composing_sections",
-                "分段编排结果与故事板不一致: "
-                f"missing={missing_ids} unexpected={unexpected_ids} duplicate={duplicate_ids}",
+            lead, points, notes = self._compose_copy(brief, logic_model, context)
+            return PPTSlide(
+                id=brief.id,
+                kind=brief.kind,
+                title=brief.title,
+                chapter_id=brief.chapter_id,
+                logic_node_ids=brief.logic_node_ids,
+                question=brief.question,
+                claim=brief.claim,
+                bridge=brief.bridge,
+                logic_relation=brief.logic_relation,
+                layout=layout,
+                density=brief.density,
+                visual=visual,
+                lead=lead,
+                points=points,
+                speaker_notes=notes,
             )
-        slides_by_id = {slide.id: slide for section in sections for slide in section}
-        ordered_slides = [slides_by_id[brief_id] for brief_id in expected_ids]
+
+        ordered_slides = [compose(brief) for brief in storyboard.slides]
 
         return PPTDeck(
             title=storyboard.title,
@@ -622,6 +804,77 @@ class PPTGenerator:
             logic_model=logic_model,
             slides=ordered_slides,
         )
+
+    @classmethod
+    def _compose_copy(
+        cls,
+        brief: SlideBrief,
+        logic_model: DeckLogicModel,
+        context: PPTGenerationContext,
+    ) -> tuple[str, list[SlidePoint], str]:
+        """Compile renderer-safe copy from the same semantic brief as the visual.
+
+        Copy is not a second model-generation problem. Keeping this projection
+        local makes the text, diagram, speaker notes, and page identity agree
+        by construction, while the model constraints remain the final layout
+        guardrail.
+        """
+
+        if brief.kind is SlideKind.COVER:
+            return (
+                cls._text(logic_model.thesis),
+                [cls._point("学习目标", context.learning_goal)],
+                f"本课围绕{context.topic}展开，先建立问题框架，再进入机制与应用。",
+            )
+        if brief.kind is SlideKind.ROADMAP:
+            points = [
+                cls._point(chapter.title, chapter.question)
+                for chapter in logic_model.chapters
+            ]
+            return (
+                "从核心问题出发，依次完成基础认知、机制理解与应用迁移。",
+                points,
+                "先展示完整路线，帮助学习者建立每一部分之间的前后关系。",
+            )
+        if brief.kind is SlideKind.SUMMARY:
+            points = [
+                cls._point(chapter.title, chapter.outcome)
+                for chapter in logic_model.chapters
+            ]
+            return (
+                cls._text(logic_model.thesis),
+                points,
+                "回到开场问题，要求学习者用自己的话串起结论与应用条件。",
+            )
+        nodes_by_id = {node.id: node for node in logic_model.nodes}
+        source_nodes = [nodes_by_id[node_id] for node_id in brief.logic_node_ids]
+        supporting_facts = list(
+            dict.fromkeys(
+                evidence
+                for node in source_nodes
+                for evidence in node.evidence
+                if evidence != brief.claim
+            )
+        )
+        return (
+            cls._text(brief.claim),
+            [
+                cls._point(cls._point_label(index), fact)
+                for index, fact in enumerate(supporting_facts[:3], start=1)
+            ],
+            cls._text("；".join((brief.claim, *supporting_facts[:2]))),
+        )
+
+    @classmethod
+    def _point(cls, label: str, detail: str) -> SlidePoint:
+        return SlidePoint(
+            label=cls._text(label),
+            detail=cls._text(detail),
+        )
+
+    @staticmethod
+    def _point_label(index: int) -> str:
+        return ("补充事实", "应用提示", "关联线索")[min(index - 1, 2)]
 
     @staticmethod
     def _validate_storyboard_logic(
@@ -660,86 +913,6 @@ class PPTGenerator:
             raise PPTGenerationError(
                 "designing_story", f"故事板未覆盖逻辑节点 {sorted(missing_nodes)}"
             )
-
-    @staticmethod
-    def _split_briefs(briefs: list[SlideBrief]) -> list[list[SlideBrief]]:
-        size = max(1, -(-len(briefs) // _SECTION_COUNT))
-        return [briefs[start : start + size] for start in range(0, len(briefs), size)]
-
-    @staticmethod
-    def _section_brief_payload(brief: SlideBrief) -> dict[str, object]:
-        """Expose only the semantic facts a section composer can actually use."""
-
-        payload: dict[str, object] = {
-            "title": brief.title,
-            "teaching_goal": brief.teaching_goal,
-            "content_focus": brief.content_focus,
-            "question": brief.question,
-            "claim": brief.claim,
-            "bridge": brief.bridge,
-            "output_fields": ["lead", "points", "speaker_notes"],
-        }
-        return payload
-
-    @staticmethod
-    def _neighbor_context(
-        storyboard: PPTStoryboard,
-        *,
-        first_index: int,
-        last_index: int,
-    ) -> dict[str, dict[str, str] | None]:
-        def compact(brief: SlideBrief | None) -> dict[str, str] | None:
-            if brief is None:
-                return None
-            return {"title": brief.title, "claim": brief.claim, "bridge": brief.bridge}
-
-        return {
-            "previous": compact(storyboard.slides[first_index - 1] if first_index else None),
-            "next": compact(
-                storyboard.slides[last_index + 1]
-                if last_index + 1 < len(storyboard.slides)
-                else None
-            ),
-        }
-
-    @staticmethod
-    def _render_preferences(preferences: PPTPreferences) -> str:
-        narrative = {
-            "concept": "从概念、边界到机制与应用递进。",
-            "case_driven": "从场景或案例切入，抽象出概念与判断方法。",
-            "problem_led": "从核心问题出发，逐步建立解决问题的知识结构。",
-            "review": "围绕复习、薄弱点和易错判断组织讲解。",
-        }[preferences.narrative_style]
-        density = {
-            "concise": "每页 2～3 个信息单元，留出视觉呼吸。",
-            "standard": "每页 3～4 个信息单元，内容与图解均衡。",
-            "detailed": "每页最多 5 个信息单元，不能缩小字号或堆砌。",
-        }[preferences.density]
-        emphasis = "、".join(preferences.emphasis)
-        return f"叙事：{narrative}\n密度：{density}\n强调：{emphasis}"
-
-    @staticmethod
-    def _render_prompt(name: str, **values: object) -> str:
-        """Render a checked prompt rather than silently preserving a typo.
-
-        Presentation prompt files are executable contracts with the compiler.
-        The generic registry deliberately supports permissive legacy modules;
-        this generator does not.  Its prompt assets must declare exactly
-        the values supplied by their producing stage, otherwise generation
-        stops before an invalid request reaches the LLM.
-        """
-
-        expected = _PROMPT_VARIABLES[name]
-        document = prompts.get("ppt").get(name)
-        declared = frozenset(match.group("name") for match in _PROMPT_VARIABLE.finditer(document))
-        provided = frozenset(values)
-        if declared != expected or provided != expected:
-            raise PPTGenerationError(
-                "loading_prompts",
-                f"提示词 {name}.md 变量契约不一致: "
-                f"declared={sorted(declared)} expected={sorted(expected)} provided={sorted(provided)}",
-            )
-        return prompts.get("ppt").render(name, **values)
 
     @staticmethod
     async def _progress(callback: ProgressCallback | None, message: str, percent: int) -> None:

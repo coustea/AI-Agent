@@ -204,41 +204,80 @@ async def get_guidance_strategy(
 # 6. GET /api/v1/ai/evaluation/dashboard -> 个人中心看板数据
 @router.get("/evaluation/dashboard")
 async def get_dashboard_data(
-    range_days: Literal[3, 7, 14, 30] = Query(default=7, description="统计天数窗口"),
+    range_days: Literal[3, 7, 14, 30, 60] = Query(default=7, description="统计天数窗口"),
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
-    """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。
-
-    该端点按需计算，不依赖 facts_snapshot 持久化。
-    返回结构覆盖 Profile.vue 所需的全部图表字段，前端单次请求即可渲染完整看板。
-    """
-    from app.evaluation.facts import build_assessment_facts
-    from app.evaluation.guidance import get_effective_guidance_strategy
+    """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。"""
+    from datetime import timedelta
 
     now_utc = datetime.now(timezone.utc)
-    from datetime import timedelta
     window_start = now_utc - timedelta(days=range_days)
     window_end = now_utc
 
+    dashboard_data = await _build_dashboard_data(
+        session, user_id=current_user.id, window_start=window_start, window_end=window_end, now_utc=now_utc
+    )
+    return HttpResponse.success(data=dashboard_data)
+
+
+# 7. GET /api/v1/ai/evaluation/assessments/{assessment_id}/dashboard -> 历史评估看板数据
+@router.get("/evaluation/assessments/{assessment_id}/dashboard")
+async def get_assessment_dashboard(
+    assessment_id: int,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """根据历史评估的时间窗口重新计算看板数据，用于历史评估联动看板。"""
+    assessment = await session.get(LearningAssessment, assessment_id)
+    if assessment is None or assessment.user_id != current_user.id:
+        return HttpResponse.error(code=404, message="assessment_not_found")
+
+    dashboard_data = await _build_dashboard_data(
+        session,
+        user_id=current_user.id,
+        window_start=assessment.window_start,
+        window_end=assessment.window_end,
+        now_utc=assessment.window_end,
+        assessment_id=assessment_id,
+    )
+    return HttpResponse.success(data=dashboard_data)
+
+
+async def _build_dashboard_data(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    window_start: datetime,
+    window_end: datetime,
+    now_utc: datetime,
+    assessment_id: int | None = None,
+) -> dict[str, Any]:
+    """组装看板响应的共享逻辑，供 dashboard 和 assessment-dashboard 复用。"""
+    from app.evaluation.facts import build_assessment_facts, to_shanghai_date
+    from app.evaluation.guidance import get_effective_guidance_strategy
+
     # 1. 聚合事实数据
     facts = await build_assessment_facts(
-        session, user_id=current_user.id, window_start=window_start, window_end=window_end
+        session, user_id=user_id, window_start=window_start, window_end=window_end
     )
 
     # 2. 获取当前辅导策略
-    strategy = await get_effective_guidance_strategy(session, current_user.id)
+    strategy = await get_effective_guidance_strategy(session, user_id)
 
-    # 3. 获取最新评估文案
-    latest_assessment = (await session.exec(
-        select(LearningAssessment)
-        .where(
-            LearningAssessment.user_id == current_user.id,
-            LearningAssessment.status == "ready"
-        )
-        .order_by(col(LearningAssessment.generated_at).desc())
-        .limit(1)
-    )).first()
+    # 3. 获取评估文案
+    if assessment_id is not None:
+        latest_assessment = await session.get(LearningAssessment, assessment_id)
+    else:
+        latest_assessment = (await session.exec(
+            select(LearningAssessment)
+            .where(
+                LearningAssessment.user_id == user_id,
+                LearningAssessment.status == "ready"
+            )
+            .order_by(col(LearningAssessment.generated_at).desc())
+            .limit(1)
+        )).first()
 
     # 4. 组装看板响应
     activity = facts.get("activity", {})
@@ -267,7 +306,6 @@ async def get_dashboard_data(
     ]
 
     # 今日学习时长
-    from app.evaluation.facts import to_shanghai_date
     today_key = to_shanghai_date(now_utc)
     today_seconds = 0
     for item in daily_breakdown:
@@ -275,7 +313,7 @@ async def get_dashboard_data(
             today_seconds = item["seconds"]
             break
 
-    # 练习正确率按主题 — 额外返回 chart 友好格式
+    # 练习正确率按主题
     practice_by_topic_chart = []
     for t in practice.get("by_topic", []):
         practice_by_topic_chart.append({
@@ -284,6 +322,9 @@ async def get_dashboard_data(
             "submitted": t["submitted"],
             "correct": t["correct"],
         })
+
+    # 模块学习时长分布（饼图数据）
+    module_time_breakdown = activity.get("module_time_breakdown", [])
 
     dashboard_data: dict[str, Any] = {
         # 学习时长走势（折线图）
@@ -294,7 +335,7 @@ async def get_dashboard_data(
             "daily_breakdown": daily_breakdown,
             "context_breakdown": context_breakdown,
         },
-        # 评估摘要（薄弱点、建议）
+        # 评估摘要
         "evaluation_summary": {
             "completed_resources": resource_usage.get("completed", 0),
             "viewed_resources": resource_usage.get("viewed", 0),
@@ -307,7 +348,7 @@ async def get_dashboard_data(
                 strategy.get("reason"),
             ],
         },
-        # 练习正确率（柱状图 / 雷达图）
+        # 练习正确率
         "practice_chart": {
             "overall_accuracy": round(practice.get("accuracy", 0) * 100, 1),
             "total_submitted": practice.get("submitted", 0),
@@ -320,6 +361,8 @@ async def get_dashboard_data(
             "nodes_completed": learning_path.get("nodes_completed", 0),
             "completion_rate": round(learning_path.get("completion_rate", 0) * 100, 1),
         },
+        # 模块学习时长分布（饼图）
+        "module_time_breakdown": module_time_breakdown,
         # 最新评估文案
         "latest_assessment": {
             "id": latest_assessment.id if latest_assessment else None,
@@ -337,4 +380,4 @@ async def get_dashboard_data(
         r for r in dashboard_data["evaluation_summary"]["recommendations"] if r
     ]
 
-    return HttpResponse.success(data=dashboard_data)
+    return dashboard_data

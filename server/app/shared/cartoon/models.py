@@ -83,7 +83,7 @@ class CartoonBrief(_Model):
 
 class VisualEntity(_Model):
     id: str = Field(min_length=1, max_length=48, pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_-]*$")
-    label: str = Field(min_length=1, max_length=28)
+    label: str = Field(min_length=1)
     kind: EntityKind
 
 
@@ -93,7 +93,7 @@ class EntityPlacement(_Model):
     slot: int | None = Field(default=None, ge=0, le=15)
     region: SemanticRegion = SemanticRegion.MAIN
     visible: bool = True
-    value: str = Field(default="", max_length=200)
+    value: str = ""
     status: Literal["idle", "active", "success", "warning", "error"] = "idle"
 
     @model_validator(mode="after")
@@ -106,7 +106,7 @@ class EntityPlacement(_Model):
 class Relation(_Model):
     source_id: str = Field(min_length=1, max_length=48)
     target_id: str = Field(min_length=1, max_length=48)
-    label: str = Field(default="", max_length=30)
+    label: str = ""
 
     @model_validator(mode="after")
     def reject_self_relation(self) -> "Relation":
@@ -148,20 +148,12 @@ class Transition(_Model):
 
 class TeachingBeat(_Model):
     id: str = Field(min_length=1, max_length=48)
-    narration: str = Field(min_length=16, max_length=48)
-    caption: str = Field(min_length=1, max_length=48)
+    narration: str = Field(min_length=1)
+    caption: str = Field(min_length=1)
     before_state_id: str = Field(min_length=1, max_length=48)
     after_state_id: str = Field(min_length=1, max_length=48)
     transition: Transition
     focus_entity_ids: list[str] = Field(min_length=1, max_length=8)
-
-    @field_validator("caption")
-    @classmethod
-    def caption_has_at_most_two_lines(cls, value: str) -> str:
-        lines = [line.strip() for line in value.splitlines() if line.strip()]
-        if len(lines) > 2:
-            raise ValueError("caption must use at most two lines")
-        return "\n".join(lines)
 
     @field_validator("focus_entity_ids")
     @classmethod
@@ -192,7 +184,7 @@ class StateChanges:
 
 class TeachingScene(_Model):
     id: str = Field(min_length=1, max_length=48)
-    title: str = Field(min_length=1, max_length=28)
+    title: str = Field(min_length=1)
     grammar: VisualGrammar
     entities: list[VisualEntity] = Field(min_length=2, max_length=16)
     states: list[VisualState] = Field(min_length=2, max_length=8)
@@ -204,22 +196,6 @@ class TeachingScene(_Model):
         if len(entity_ids) != len(set(entity_ids)):
             raise ValueError("scene contains duplicate entity ids")
         known_entities = set(entity_ids)
-        kinds = [entity.kind for entity in self.entities]
-        if self.grammar == VisualGrammar.CONCEPT and kinds.count(EntityKind.TERM) < 2:
-            raise ValueError("concept grammar requires at least two term entities")
-        if self.grammar == VisualGrammar.MODEL and (
-            EntityKind.CONTAINER not in kinds
-            or not {EntityKind.SLOT, EntityKind.POINTER, EntityKind.PORT} & set(kinds)
-        ):
-            raise ValueError("model grammar requires a container and a slot, pointer, or port")
-        if self.grammar == VisualGrammar.TRACE and (
-            EntityKind.CONTAINER not in kinds or EntityKind.TOKEN not in kinds
-        ):
-            raise ValueError("trace grammar requires container and token entities")
-        if self.grammar == VisualGrammar.EVIDENCE and not (
-            EntityKind.CODE in kinds or kinds.count(EntityKind.METRIC) >= 2
-        ):
-            raise ValueError("evidence grammar requires code or at least two metric entities")
         container_ids = {
             entity.id for entity in self.entities if entity.kind == EntityKind.CONTAINER
         }
@@ -260,18 +236,6 @@ class TeachingScene(_Model):
                 raise ValueError(
                     "every teaching beat requires a semantic state change; focus-only animation is invalid"
                 )
-        if self.grammar == VisualGrammar.TRACE and not any(
-            beat.transition.kind
-            in {
-                TransitionKind.MOVE,
-                TransitionKind.INSERT,
-                TransitionKind.REMOVE,
-                TransitionKind.UPDATE,
-                TransitionKind.EXECUTE,
-            }
-            for beat in self.beats
-        ):
-            raise ValueError("trace grammar requires an operational transition")
         return self
 
     def state(self, state_id: str) -> VisualState:
@@ -324,7 +288,7 @@ class TeachingScene(_Model):
 
 
 class Lesson(_Model):
-    title: str = Field(min_length=1, max_length=72)
+    title: str = Field(min_length=1)
     scenes: list[TeachingScene] = Field(min_length=5, max_length=6)
 
     @model_validator(mode="after")
@@ -351,17 +315,13 @@ class SpeechClip(_Model):
 class CaptionCue(_Model):
     start_ms: int = Field(ge=0)
     end_ms: int = Field(gt=0)
-    text: str = Field(min_length=1, max_length=48)
+    text: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def validate_cue(self) -> "CaptionCue":
         duration = self.end_ms - self.start_ms
         if duration <= 0:
             raise ValueError("caption cue must end after it starts")
-        if duration > 10_000:
-            raise ValueError("caption cue cannot exceed ten seconds")
-        if len([line for line in self.text.splitlines() if line.strip()]) > 2:
-            raise ValueError("caption cue must use at most two lines")
         return self
 
 
@@ -390,11 +350,6 @@ class Timeline(_Model):
             raise ValueError("timeline beats must be ordered")
         if ordered_beats[-1].end_ms > self.duration_ms:
             raise ValueError("timeline beat exceeds total duration")
-        if any(
-            right.start_ms - left.start_ms > 9_000
-            for left, right in zip(ordered_beats, ordered_beats[1:])
-        ):
-            raise ValueError("timeline cannot go more than roughly nine seconds without a semantic change")
         ordered_captions = sorted(self.captions, key=lambda item: item.start_ms)
         if ordered_captions != self.captions:
             raise ValueError("caption cues must be ordered")
