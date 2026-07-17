@@ -123,7 +123,8 @@ export interface ObjectiveSubmitResponse {
 
 // 提交客观题结果（用于保存答题记录和错题）
 export async function submitObjectiveResults(request: ObjectiveSubmitRequest): Promise<ObjectiveSubmitResponse> {
-  const response = await http.post('/ai/quiz/submit', request)
+  // 整卷提交可能包含较多题目及后端学习事件记录，最多等待 3 分钟。
+  const response = await http.post('/ai/quiz/submit', request, { timeout: 180000 })
   return response.data.data as ObjectiveSubmitResponse
 }
 
