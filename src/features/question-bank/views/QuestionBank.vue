@@ -1663,11 +1663,9 @@ async function submitExam() {
 
     await Promise.all(subjectiveTasks)
 
-    if (batchResults.length > 0) {
-      await submitObjectiveResults({ results: batchResults as any[] })
-      await Promise.all([loadAnswerHistory(), loadWrongBook()])
-    }
+    if (batchResults.length > 0) await submitObjectiveResults({ results: batchResults as any[] })
 
+    // 提交接口成功即视为交卷完成；历史和错题本刷新失败不应回滚考试页面状态。
     examCorrectCount.value = correctCount
     examSubmitted.value = true
     saveAttempt(examPaper.value.length, correctCount)
@@ -1691,6 +1689,13 @@ async function submitExam() {
         mockExamsCount.value = newCount
       }
     }
+
+    // 后置刷新与交卷结果解耦，避免网络抖动造成“后端已保存、前端仍显示提交失败”。
+    void Promise.allSettled([loadAnswerHistory(), loadWrongBook()]).then((refreshResults) => {
+      if (refreshResults.some((result) => result.status === 'rejected')) {
+        toast.warning('试卷已提交，答题记录将在下次进入时刷新')
+      }
+    })
   } catch (error) {
     toast.error(getErrorMessage(error) || '交卷失败，请稍后重试')
     startExamTimer()
@@ -1775,6 +1780,19 @@ function updateExamAnswer(id: string, value: string) {
 // 仅填空题和分析题调用 AI，其余题型在前端精确判定。
 async function gradeQuestion(question: Question, answer: AnswerValue) {
   if (!requiresAiReview(question.type)) return { correct: evaluateAnswer(question, answer), review: null }
+
+  // 未作答的主观题直接记 0 分，避免空答案仍发起耗时的 AI 评阅请求。
+  if (!hasAnswerData(answer)) {
+    return {
+      correct: false,
+      review: {
+        score: 0,
+        is_correct: false,
+        feedback: '本题未作答',
+        improvement_hints: ['请完成作答后再提交'],
+      },
+    }
+  }
 
   try {
     const review = await fetchQuizReview({

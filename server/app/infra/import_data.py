@@ -11,12 +11,12 @@ import json
 from pathlib import Path
 
 from openpyxl import load_workbook
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlmodel import select
 
 from app.infra.database import session_scope
 from app.infra.logging import get_logger
-from app.infra.models import QuizQuestion, School
+from app.infra.models import QuizAnswerHistory, QuizQuestion, School, WrongQuestion
 
 logger = get_logger(__name__)
 
@@ -31,7 +31,34 @@ QUIZ_DIR = _DATA_DIR / "quiz"
 TYPE_MAP = {
     "选择题": "single_choice", "单选题": "single_choice",
     "判断题": "judge", "填空题": "fill_blank", "分析题": "analysis",
+    # 编程题没有客观选项，沿用分析题的文本作答与 AI 评阅流程。
+    "编程题": "analysis",
 }
+
+_LEGACY_PROGRAMMING_ID_PATTERN = "408_ds_programming_%"
+
+
+async def _repair_legacy_quiz_types(session) -> int:
+    """修复旧导入器误标为单选题的编程题及其答题快照。"""
+    repaired = 0
+    targets = (
+        (QuizQuestion, ("single_choice",)),
+        (WrongQuestion, ("single_choice", "选择题", "单选题")),
+        (QuizAnswerHistory, ("single_choice", "选择题", "单选题")),
+    )
+
+    for model, legacy_types in targets:
+        result = await session.exec(
+            update(model)
+            .where(model.question_id.like(_LEGACY_PROGRAMMING_ID_PATTERN))
+            .where(model.question_type.in_(legacy_types))
+            .values(question_type="analysis")
+        )
+        repaired += max(0, int(result.rowcount or 0))
+
+    if repaired:
+        logger.info("[Quiz] 已修复 %d 条误标为单选题的编程题记录", repaired)
+    return repaired
 
 
 # 导入 408 题库：已有数据则跳过，否则读取 JSON 文件导入
@@ -47,6 +74,10 @@ async def import_408_quiz() -> int:
         return 0
 
     async with session_scope() as session:
+        # 旧版本把未识别的“编程题”默认写成了 single_choice。
+        # 每次启动幂等修复，确保题库筛选、智能组卷和交卷判题使用正确题型。
+        await _repair_legacy_quiz_types(session)
+
         cnt = (await session.exec(
             select(func.count()).select_from(QuizQuestion)
         )).one() or 0
@@ -92,7 +123,11 @@ def _load_quiz_file(session, f: Path, subj: str) -> int:
         qid = item.get("id")
         if not qid:
             continue
-        t = TYPE_MAP.get(item.get("type"), "single_choice")
+        raw_type = str(item.get("type") or "").strip()
+        t = TYPE_MAP.get(raw_type)
+        if not t:
+            logger.warning("[Quiz] 跳过未知题型: file=%s id=%s type=%r", f.name, qid, raw_type)
+            continue
         qs.append(QuizQuestion(
             question_id=qid, source="408", subject=item.get("subject", subj),
             question_type=t, difficulty=item.get("difficulty"),
