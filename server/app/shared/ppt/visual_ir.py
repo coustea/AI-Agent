@@ -1,7 +1,7 @@
 """Renderer-neutral visual intermediate representation for PPT slides.
 
-The LLM describes semantic content and zero-based relationships only. Stable
-identity, geometry, CSS, and color remain renderer-owned concerns.
+The compiler describes semantic content and zero-based relationships only.
+Stable identity, geometry, CSS, and color remain renderer-owned concerns.
 """
 
 from __future__ import annotations
@@ -11,14 +11,12 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-ShortLabel = Annotated[str, Field(min_length=1, max_length=64)]
-CompactLabel = Annotated[str, Field(min_length=1, max_length=32)]
-PortName = Annotated[str, Field(min_length=1, max_length=32)]
+TextContent = Annotated[str, Field(min_length=1)]
+ShortLabel = TextContent
+CompactLabel = TextContent
+PortName = TextContent
 NonNegativeIndex = Annotated[int, Field(ge=0)]
-CellValue = Annotated[str, Field(max_length=48)]
-MAX_COMPOSITE_SEMANTIC_MARKS = 24
-MAX_TABLE_TEXT_CHARACTERS = 768
-MAX_ALGORITHM_TEXT_CHARACTERS = 768
+CellValue = str
 
 
 def _require_index(index: int, size: int, reference: str) -> None:
@@ -36,7 +34,7 @@ def _require_highlight_indexes(
 
 
 class VisualIRModel(BaseModel):
-    """Base class for strict LLM-authored visual IR payloads."""
+    """Base class for strict visual IR payloads."""
 
     model_config = ConfigDict(
         extra="forbid",
@@ -102,7 +100,7 @@ class GraphEdge(VisualIRModel):
 
     source_index: NonNegativeIndex
     target_index: NonNegativeIndex
-    label: str = Field(default="", max_length=48)
+    label: str = ""
 
 
 class GraphVisual(VisualIRModel):
@@ -143,7 +141,7 @@ class StateTransition(VisualIRModel):
 
 
 class StateMachineVisual(VisualIRModel):
-    """A finite state machine with explicit entry and terminal states."""
+    """A state diagram with one entry state and optional terminal states."""
 
     kind: Literal["state_machine"]
     states: list[StateNode] = Field(min_length=2, max_length=12)
@@ -155,9 +153,6 @@ class StateMachineVisual(VisualIRModel):
 
         if sum(state.initial for state in self.states) != 1:
             raise ValueError("state machine must contain exactly one initial state")
-        if not any(state.final for state in self.states):
-            raise ValueError("state machine must contain at least one final state")
-
         state_count = len(self.states)
         for transition in self.transitions:
             _require_index(transition.source_index, state_count, "transition source")
@@ -234,7 +229,7 @@ class MemoryReference(VisualIRModel):
     source_segment_index: NonNegativeIndex
     target_segment_index: NonNegativeIndex
     relation: Literal["pointer", "reference"]
-    label: str = Field(default="", max_length=48)
+    label: str = ""
 
 
 class MemoryLayoutVisual(VisualIRModel):
@@ -292,7 +287,7 @@ class DataFlowEdge(VisualIRModel):
     target_block_index: NonNegativeIndex
     target_port_index: NonNegativeIndex
     target_port_name: PortName
-    label: str = Field(default="", max_length=48)
+    label: str = ""
 
 
 class DataFlowVisual(VisualIRModel):
@@ -391,14 +386,6 @@ class TableMatrixVisual(VisualIRModel):
         for row in self.rows:
             if len(row.cells) != column_count:
                 raise ValueError("every table row must match the header column count")
-        text_characters = sum(len(header) for header in self.headers) + sum(
-            len(cell) for row in self.rows for cell in row.cells
-        )
-        if text_characters > MAX_TABLE_TEXT_CHARACTERS:
-            raise ValueError(
-                "table text exceeds the "
-                f"{MAX_TABLE_TEXT_CHARACTERS}-character display budget"
-            )
         _require_highlight_indexes(
             self.highlighted_row_indices,
             len(self.rows),
@@ -440,22 +427,6 @@ class AlgorithmFramesVisual(VisualIRModel):
     kind: Literal["algorithm_frames"]
     frames: list[AlgorithmFrame] = Field(min_length=2, max_length=8)
 
-    @model_validator(mode="after")
-    def validate_text_budget(self) -> "AlgorithmFramesVisual":
-        """Keep all frame titles and cells within one-slide text budget."""
-
-        text_characters = sum(
-            len(frame.title) + sum(len(cell) for cell in frame.cells)
-            for frame in self.frames
-        )
-        if text_characters > MAX_ALGORITHM_TEXT_CHARACTERS:
-            raise ValueError(
-                "algorithm frames text exceeds the "
-                f"{MAX_ALGORITHM_TEXT_CHARACTERS}-character display budget"
-            )
-        return self
-
-
 class CircuitTerminal(VisualIRModel):
     """One labelled circuit input or output terminal."""
 
@@ -466,7 +437,7 @@ class CircuitGate(VisualIRModel):
     """One bounded logic gate in a circuit network."""
 
     label: CompactLabel
-    gate_type: Annotated[str, Field(min_length=1, max_length=16)]
+    gate_type: TextContent
 
 
 class CircuitWire(VisualIRModel):
@@ -513,10 +484,17 @@ class CircuitVisual(VisualIRModel):
 
 
 class QuantitativeAxis(VisualIRModel):
-    """One labelled quantitative axis with an explicit unit."""
+    """One labelled quantitative axis with an optional display unit."""
 
     label: CompactLabel
-    unit: CompactLabel
+    unit: str = ""
+
+    @field_validator("unit", mode="before")
+    @classmethod
+    def normalize_unit(cls, value: object) -> object:
+        """Treat a missing or JSON-null unit as the unitless default."""
+
+        return "" if value is None else value
 
 
 class QuantitativePoint(VisualIRModel):
@@ -552,8 +530,8 @@ class CodeVisual(VisualIRModel):
     )
 
     kind: Literal["code"]
-    language: str = Field(min_length=1, max_length=24)
-    lines: list[Annotated[str, Field(max_length=120)]] = Field(
+    language: TextContent
+    lines: list[str] = Field(
         min_length=4,
         max_length=18,
     )
@@ -573,11 +551,8 @@ class CodeVisual(VisualIRModel):
         return normalized
 
     @model_validator(mode="after")
-    def validate_code_budget(self) -> "CodeVisual":
-        """Validate line references and the total excerpt character budget."""
-
-        if sum(len(line) for line in self.lines) > 1_200:
-            raise ValueError("code excerpt exceeds the 1200-character display budget")
+    def validate_line_references(self) -> "CodeVisual":
+        """Validate highlighted-line references required by the renderer."""
         _require_highlight_indexes(
             self.highlighted_line_indices,
             len(self.lines),
@@ -589,22 +564,22 @@ class CodeVisual(VisualIRModel):
 class FormulaStep(VisualIRModel):
     """One compact symbolic derivation step."""
 
-    expression: str = Field(min_length=1, max_length=240)
-    explanation: str = Field(min_length=1, max_length=120)
+    expression: TextContent
+    explanation: TextContent
 
 
 class FormulaVariable(VisualIRModel):
     """One bounded explanation of a formula symbol."""
 
-    symbol: str = Field(min_length=1, max_length=32)
-    meaning: str = Field(min_length=1, max_length=96)
+    symbol: TextContent
+    meaning: TextContent
 
 
 class FormulaVisual(VisualIRModel):
     """A formula with an optional short derivation and variable glossary."""
 
     kind: Literal["formula"]
-    expression: str = Field(min_length=1, max_length=320)
+    expression: TextContent
     steps: list[FormulaStep] = Field(default_factory=list, max_length=4)
     variables: list[FormulaVariable] = Field(default_factory=list, max_length=12)
 
@@ -628,21 +603,13 @@ LeafVisualModel = Annotated[
 
 
 def count_semantic_marks(visual: LeafVisualModel) -> int:
-    """Count visible semantic entities and relationships in one leaf visual.
+    """Return the visible semantic-entity count for renderer diagnostics.
 
-    The count intentionally ignores renderer-owned geometry and styling. It is
-    used only when multiple independently valid leaves share one slide.
-
-    Args:
-        visual: A validated, non-composite visual model.
-
-    Returns:
-        The number of semantic marks the renderer must present.
+    This is reporting only. It is deliberately not used to reject a visual.
     """
 
     if isinstance(visual, HierarchyVisual):
-        relationships = sum(node.parent_index is not None for node in visual.nodes)
-        return len(visual.nodes) + relationships
+        return len(visual.nodes) + sum(node.parent_index is not None for node in visual.nodes)
     if isinstance(visual, GraphVisual):
         return len(visual.nodes) + len(visual.edges)
     if isinstance(visual, StateMachineVisual):
@@ -652,28 +619,18 @@ def count_semantic_marks(visual: LeafVisualModel) -> int:
     if isinstance(visual, MemoryLayoutVisual):
         return len(visual.segments) + len(visual.references)
     if isinstance(visual, DataFlowVisual):
-        ports = sum(
-            len(block.input_ports) + len(block.output_ports)
-            for block in visual.blocks
-        )
+        ports = sum(len(block.input_ports) + len(block.output_ports) for block in visual.blocks)
         return len(visual.blocks) + ports + len(visual.flows)
     if isinstance(visual, MappingVisual):
-        elements = len(visual.left_elements) + len(visual.right_elements)
-        return 2 + elements + len(visual.pairs)
+        return 2 + len(visual.left_elements) + len(visual.right_elements) + len(visual.pairs)
     if isinstance(visual, TableMatrixVisual):
         return len(visual.headers) + sum(len(row.cells) for row in visual.rows)
     if isinstance(visual, AlgorithmFramesVisual):
-        frame_marks = len(visual.frames) + sum(
-            len(frame.cells) for frame in visual.frames
-        )
-        sequence_transitions = len(visual.frames) - 1
-        return frame_marks + sequence_transitions
+        return len(visual.frames) + sum(len(frame.cells) for frame in visual.frames) + len(visual.frames) - 1
     if isinstance(visual, CircuitVisual):
-        components = len(visual.inputs) + len(visual.gates) + len(visual.outputs)
-        return components + len(visual.wires)
+        return len(visual.inputs) + len(visual.gates) + len(visual.outputs) + len(visual.wires)
     if isinstance(visual, QuantitativeVisual):
-        points = sum(len(series.points) for series in visual.series)
-        return 2 + len(visual.series) + points
+        return 2 + len(visual.series) + sum(len(series.points) for series in visual.series)
     if isinstance(visual, CodeVisual):
         return len(visual.lines)
     if isinstance(visual, FormulaVisual):
@@ -684,7 +641,7 @@ def count_semantic_marks(visual: LeafVisualModel) -> int:
 class CompositePanel(VisualIRModel):
     """One titled, positively weighted leaf visual panel."""
 
-    title: str = Field(min_length=1, max_length=32)
+    title: TextContent
     width_weight: float = Field(gt=0)
     visual: LeafVisualModel
 
@@ -693,22 +650,8 @@ class CompositeVisual(VisualIRModel):
     """A non-recursive composition of two or three leaf visuals."""
 
     kind: Literal["composite"]
-    purpose: str = Field(min_length=1, max_length=160)
+    purpose: TextContent
     panels: list[CompositePanel] = Field(min_length=2, max_length=3)
-
-    @model_validator(mode="after")
-    def validate_semantic_density(self) -> "CompositeVisual":
-        """Keep the combined leaf content within one-slide density budget."""
-
-        semantic_marks = sum(
-            count_semantic_marks(panel.visual) for panel in self.panels
-        )
-        if semantic_marks > MAX_COMPOSITE_SEMANTIC_MARKS:
-            raise ValueError(
-                "composite visual exceeds the "
-                f"{MAX_COMPOSITE_SEMANTIC_MARKS}-mark semantic budget"
-            )
-        return self
 
 
 VisualModel = Annotated[
@@ -741,9 +684,6 @@ __all__ = [
     "GraphVisual",
     "HierarchyVisual",
     "LeafVisualModel",
-    "MAX_COMPOSITE_SEMANTIC_MARKS",
-    "MAX_ALGORITHM_TEXT_CHARACTERS",
-    "MAX_TABLE_TEXT_CHARACTERS",
     "MappingVisual",
     "MemoryLayoutVisual",
     "QuantitativeVisual",

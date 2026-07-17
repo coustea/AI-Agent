@@ -15,7 +15,7 @@
 """
 from __future__ import annotations
 
-from typing import Any, Final
+from typing import Final
 
 from pydantic import BaseModel, Field
 
@@ -64,23 +64,6 @@ COGNITIVE_DIMENSIONS: Final[tuple[str, ...]] = (
     ProfileDimension.DIFFICULTY_TOLERANCE,
     ProfileDimension.SELF_CORRECTION_ABILITY,
 )
-
-
-default_profile_json: dict[str, Any] = {
-    "dimensions": {
-        dim: {
-            "value": "",
-            "evidence": [],
-        }
-        for dim in ALL_DIMENSIONS
-    },
-}
-
-default_score_json: dict[str, Any] = {
-    "overall_score": 0,
-    "dimension_scores": {key: 0 for key in ALL_DIMENSIONS},
-    "scored_at": "",
-}
 
 
 class DimensionValue(BaseModel):

@@ -22,9 +22,14 @@ _VOICES = {
     "teacher": "zh-CN-XiaoxiaoNeural",
     "coach": "zh-CN-YunxiNeural",
 }
+_PACE_RATES = {
+    "fast": "+25%",
+    "balanced": "+12%",
+    "calm": "+0%",
+}
 _MIN_BEAT_MS = 3_200
-_MAX_BEAT_MS = 6_000
 _AUDIO_TAIL_MS = 120
+_CAPTION_DISPLAY_TARGET = 34
 
 
 class _EdgeTts:
@@ -32,16 +37,17 @@ class _EdgeTts:
         self.retries = max(1, retries)
         self.timeout_seconds = max(10, timeout_seconds)
 
-    async def synthesize(self, text: str, output_path: Path, voice: str) -> SpeechClip:
+    async def synthesize(self, text: str, output_path: Path, voice: str, pace: str) -> SpeechClip:
         import edge_tts
 
         selected_voice = _VOICES.get(voice, _VOICES["teacher"])
+        rate = _PACE_RATES.get(pace, _PACE_RATES["balanced"])
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.unlink(missing_ok=True)
         last_error: Exception | None = None
         for attempt in range(1, self.retries + 1):
             try:
-                communicate = edge_tts.Communicate(text, selected_voice, rate="+12%")
+                communicate = edge_tts.Communicate(text, selected_voice, rate=rate)
                 await asyncio.wait_for(
                     communicate.save(str(output_path)),
                     timeout=self.timeout_seconds,
@@ -75,6 +81,7 @@ class CartoonSpeech:
         output_dir: Path,
         *,
         voice: str,
+        pace: str = "balanced",
     ) -> Timeline:
         audio_dir = output_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
@@ -87,6 +94,7 @@ class CartoonSpeech:
                     beat.narration,
                     audio_dir / f"{beat.id}.mp3",
                     voice,
+                    pace,
                 )
 
         try:
@@ -116,14 +124,6 @@ class CartoonSpeech:
             for beat in scene.beats:
                 clip = clips[len(timed_beats)]
                 duration_ms = max(_MIN_BEAT_MS, clip.duration_ms + _AUDIO_TAIL_MS)
-                if duration_ms > _MAX_BEAT_MS:
-                    raise CartoonGenerationError(
-                        f"教学节拍 {beat.id} 的旁白过长，无法保持语义动画节奏",
-                        stage="speech",
-                        problems=[
-                            f"{beat.id}: audio={clip.duration_ms}ms, max={_MAX_BEAT_MS - _AUDIO_TAIL_MS}ms"
-                        ],
-                    )
                 timed = TimedBeat(
                     scene_id=scene.id,
                     beat_id=beat.id,
@@ -133,11 +133,11 @@ class CartoonSpeech:
                     audio_src=clip.path.relative_to(output_dir).as_posix(),
                 )
                 timed_beats.append(timed)
-                captions.append(
-                    CaptionCue(
+                captions.extend(
+                    _caption_cues(
+                        beat.narration,
                         start_ms=cursor + 100,
                         end_ms=cursor + duration_ms - 100,
-                        text=beat.caption,
                     )
                 )
                 cursor += duration_ms
@@ -162,3 +162,37 @@ def _audio_duration_ms(path: Path) -> int:
     if duration <= 0:
         raise RuntimeError(f"Invalid audio duration: {path}")
     return max(1, round(duration * 1_000))
+
+
+def _caption_cues(text: str, *, start_ms: int, end_ms: int) -> list[CaptionCue]:
+    """Show every narration character without making one caption cover the stage."""
+
+    normalized = " ".join(text.split())
+    if not normalized:
+        raise ValueError("narration cannot produce an empty caption")
+    pieces: list[str] = []
+    buffer = ""
+    for character in normalized:
+        buffer += character
+        if character in "。！？；：.!?;:" and len(buffer) >= 8:
+            pieces.append(buffer)
+            buffer = ""
+        elif len(buffer) >= _CAPTION_DISPLAY_TARGET:
+            pieces.append(buffer)
+            buffer = ""
+    if buffer:
+        pieces.append(buffer)
+
+    duration = max(1, end_ms - start_ms)
+    total_weight = sum(max(1, len(piece)) for piece in pieces)
+    cursor = start_ms
+    cues: list[CaptionCue] = []
+    for index, piece in enumerate(pieces):
+        if index == len(pieces) - 1:
+            next_cursor = end_ms
+        else:
+            allocated = max(1, round(duration * len(piece) / total_weight))
+            next_cursor = min(end_ms - (len(pieces) - index - 1), cursor + allocated)
+        cues.append(CaptionCue(start_ms=cursor, end_ms=next_cursor, text=piece))
+        cursor = next_cursor
+    return cues

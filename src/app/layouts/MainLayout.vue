@@ -51,7 +51,7 @@
               <ChevronDownIcon class="dropdown-icon" data-icon="inline-end" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent class="w-44" align="end">
+          <DropdownMenuContent class="navbar-dropdown w-44" align="end">
             <DropdownMenuGroup>
               <DropdownMenuItem @select="navigateToProfile">
                 <UserIcon data-icon="inline-start" />
@@ -168,7 +168,7 @@ const activePath = computed(() => {
   if (current.startsWith('/tutor')) {
     return '/tutor'
   }
-  if (current.startsWith('/question-bank')) {
+  if (current.startsWith('/question-bank') || current.startsWith('/assessment')) {
     return '/question-bank'
   }
   if (current.startsWith('/algorithm-visualizer')) {
@@ -241,26 +241,29 @@ const handleOnboardingSuccess = async () => {
 
 // 退出登录：弹出 PrimeVue 确认框 → 调用登出 API → 清除 Token 和用户状态 → 跳转登录页
 const handleLogout = () => {
-  confirm.require({
-    message: '退出后，系统将安全清除您当前的登录凭据与学习会话。您确定要退出吗？',
-    header: '确定要退出登录吗？',
-    acceptLabel: '确认退出',
-    rejectLabel: '取消',
-    acceptProps: {
-      severity: 'danger'
-    },
-    accept: async () => {
-      try {
-        await logout()
-      } catch (e) {
-        console.error('Logout error API request', e)
-      } finally {
-        clearAuthToken()
-        clearCurrentUser()
-        router.push('/login')
+  // 使用 setTimeout 延迟触发，确保下拉菜单在弹窗出现前已经完全关闭，避免重叠问题
+  setTimeout(() => {
+    confirm.require({
+      message: '退出后，系统将安全清除您当前的登录凭据与学习会话。您确定要退出吗？',
+      header: '确定要退出登录吗？',
+      acceptLabel: '确认退出',
+      rejectLabel: '取消',
+      acceptProps: {
+        severity: 'danger'
+      },
+      accept: async () => {
+        try {
+          await logout()
+        } catch (e) {
+          console.error('Logout error API request', e)
+        } finally {
+          clearAuthToken()
+          clearCurrentUser()
+          router.push('/login')
+        }
       }
-    }
-  })
+    })
+  }, 100)
 }
 </script>
 
@@ -483,6 +486,16 @@ const handleLogout = () => {
 .dropdown-icon {
   font-size: 0.8rem;
   color: var(--color-text-faint);
+  transition: transform 0.2s ease;
+}
+
+.user-profile[data-state="open"] .dropdown-icon {
+  transform: rotate(180deg);
+}
+
+/* 导航栏内下拉菜单必须高于导航栏自身 z-index，否则被遮挡 */
+.navbar-dropdown {
+  z-index: 200 !important;
 }
 
 /* ================== 页面内容区 ================== */
@@ -498,6 +511,8 @@ const handleLogout = () => {
   isolation: isolate;
   display: flex;
   flex-direction: column;
+  /* 暴露内容区实际可用高度，子页面用此变量代替 100vh 计算高度，避免被导航栏遮挡 */
+  --content-height: calc(100vh - var(--navbar-height));
 }
 
 /* ================== 响应式媒体查询 ================== */

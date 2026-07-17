@@ -825,11 +825,11 @@ async def react_node(
             strategy = await get_effective_guidance_strategy(db, user_id)
 
         strategy_str = (
-            f"当前周期目标: {strategy.get('weekly_goal')}\n"
+            f"本期结论: {strategy.get('conclusion')}\n"
             f"推荐单次时长: {strategy.get('recommended_session_minutes')} 分钟\n"
             f"辅导风格: {strategy.get('tutoring_style')}\n"
             f"重点关注主题: {'、'.join(strategy.get('focus_topics', [])) or '无'}\n"
-            f"偏好资源类型: {'、'.join(strategy.get('preferred_resource_types', [])) or '无'}"
+            f"策略依据: {strategy.get('reason')}"
         )
 
         system_prompt = prompts.get("chat").render(

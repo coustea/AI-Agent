@@ -34,6 +34,7 @@ from app.profile import (
     BaseInfoData,
     OnboardingResponse,
     OnboardingUpdate,
+    ProfileUpdate,
     StudentProfileData,
 )
 from app.profile.service import (
@@ -79,6 +80,21 @@ async def get_profile(
         },
         "updated_at": profile.updated_at,
     })
+
+
+@router.patch("/profile")
+async def update_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """更新个人中心展示的基础资料，不改变 onboarding 完成状态或偏好字段。"""
+    result = await get_profile_service().save_profile_info(
+        user_id=int(current_user.id),
+        payload=payload.model_dump(),
+        db=session,
+    )
+    return HttpResponse.success(data=result)
 
 
 # 获取 onboarding 基本信息（直接从 User 表读取）
@@ -144,16 +160,10 @@ def _text(value: Any, fallback: str = "") -> str:
     return str(value)
 
 
-# 将评分数据统一转换为字典（非字典则返回空字典）
-def _score_json(profile_json_or_score: dict[str, Any]) -> dict[str, Any]:
-    """将评分数据转换为字典格式，非字典类型返回空字典。"""
-    return profile_json_or_score if isinstance(profile_json_or_score, dict) else {}
-
-
 # 取低分维度（<60 分）列表，按分数升序返回前 limit 个
 def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list[str]:
     """获取低分维度列表（得分低于60分）。"""
-    scores = _score_json(score_json).get("dimension_scores") or {}
+    scores = score_json.get("dimension_scores") or {}
     items: list[tuple[str, float]] = []
     for key, value in scores.items():
         if isinstance(value, (int, float)) and value > 0 and value < 60:
@@ -472,14 +482,14 @@ async def get_quick_actions(
 
     weak_topics = _weak_topics_from_events(recent_events)
 
-    # Check if user has a ready assessment report
-    from app.infra.models import LearningAssessmentReport
-    report_count = (await session.exec(
+    # Check if user has a ready assessment
+    from app.infra.models import LearningAssessment
+    assessment_count = (await session.exec(
         select(func.count())
-        .select_from(LearningAssessmentReport)
-        .where(LearningAssessmentReport.user_id == current_user.id, LearningAssessmentReport.status == 'ready')
+        .select_from(LearningAssessment)
+        .where(LearningAssessment.user_id == current_user.id, LearningAssessment.status == 'ready')
     )).one()
-    has_ready_report = report_count > 0
+    has_ready_report = assessment_count > 0
 
     action_defs = [
         {

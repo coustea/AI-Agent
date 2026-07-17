@@ -1,74 +1,111 @@
-"""学习评估服务 — 学习事件采集与报告生成。
+"""学习评估服务 — 学习事件采集、画像推理、评估生成与辅导策略更新。
 
 事件来源由各业务模块的 ``events.py`` 调用 ``EvaluationService.record_event`` 埋点。
-本模块负责幂等持久化、报告状态机和当前辅导策略定向写入。
+本模块负责幂等持久化、评估状态机和辅导策略定向写入。
 
-自动触发机制：
-- 当用户累计 15 条新学习事件时，自动触发报告生成
-- 距离上次报告至少 5 天
+触发机制：
+- 非 chat 模块累计 5 条新学习事件时，触发完整链路
+- chat 模块累计 10 条对话事件时，触发完整链路
+- 用户手动请求生成评估
+
+完整链路（事件达到阈值后）：
+1. 近期学习事件 → to_markdown() → LLM 推理文字画像（7 维度 value 更新）
+2. 文字画像 → LLM 评分（7 维度 score + overall_score 更新）
+3. 近期学习事件 → 学习评估生成（assessment + guidance_strategy）
+
+LLM 输出两部分：
+- assessment：学习评估文案（一段话）
+- guidance_strategy：辅导策略（结构化），同步写入 UserProfile
 """
 
-# 评估服务：学习事件采集、会话记录、报告状态机与策略定向写入。
 from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.messages import HumanMessage
+from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.evaluation.request import LearningEventCreate, LearningSessionCreate
 from app.infra.logging import get_logger
-from app.infra.models import LearningEvent, LearningSession, LearningAssessmentReport
+from app.infra.models import LearningEvent, LearningSession, LearningAssessment
 from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
 
-# 自动触发阈值配置
-AUTO_REPORT_MIN_EVENTS = 15  # 最少新事件数
-AUTO_REPORT_MIN_DAYS = 5     # 距上次报告最少天数
-AUTO_REPORT_DEFAULT_RANGE = 7  # 自动触发时默认 7 天范围
+# 触发阈值配置
+EVENT_THRESHOLD_DEFAULT = 5   # 非 chat 模块
+EVENT_THRESHOLD_CHAT = 10     # chat 模块
+DEFAULT_RANGE_DAYS = 7        # 自动触发时默认 7 天范围
 
 
 class ConcurrencyError(Exception):
-    """当用户已有正在生成的报告时抛出该异常。"""
+    """当用户已有正在生成的评估时抛出该异常。"""
     pass
 
 
-# 评估服务类：学习事件记录、会话记录与学习评估报告生成
-class EvaluationService:
-    """评估服务 — 学习事件记录、会话记录与报告生成。"""
+# ── LLM 输出结构定义 ──────────────────────────────────────────────────────────
 
-    # 生成学习效果评估报告并只更新当前辅导策略
-    async def generate_report(
+class ActionPlanItem(BaseModel):
+    topic: str
+    action_type: Literal["review", "practice", "quiz"]
+    description: str
+    link: str
+
+
+class GuidanceStrategyOutput(BaseModel):
+    version: int = 1
+    conclusion: str = Field(description="本期结论文案，一句话概括当前学习状态和方向")
+    focus_topics: list[str]
+    recommended_session_minutes: int
+    tutoring_style: str
+    action_plan: list[ActionPlanItem]
+    reason: str = Field(description="策略推导依据，简述为何选择此策略")
+
+
+class AssessmentOutput(BaseModel):
+    assessment: str = Field(description="学习评估文案，一段话描述近期学习情况")
+    guidance_strategy: GuidanceStrategyOutput
+
+
+class EvaluationService:
+    """评估服务 — 学习事件记录、会话记录与学习评估生成。"""
+
+    # 生成学习评估并更新辅导策略
+    async def generate_assessment(
         self,
         session: AsyncSession,
         *,
         user_id: int,
+        trigger_source: str,
         range_days: int,
-    ) -> LearningAssessmentReport:
+    ) -> LearningAssessment:
         if range_days not in (3, 7, 14):
             raise ValueError("range_days must be 3, 7, or 14")
+        if trigger_source not in ("profile_update", "manual"):
+            raise ValueError("trigger_source must be profile_update or manual")
 
-        # 1. 原子创建 generating 报告并检测并发
+        # 1. 原子创建 generating 评估并检测并发
         now_utc = datetime.now(timezone.utc)
         window_start = now_utc - timedelta(days=range_days)
         window_end = now_utc
 
-        # 查询是否已有生成中报告
+        # 查询是否已有生成中评估
         existing_generating = await session.scalar(
-            select(LearningAssessmentReport).where(
-                LearningAssessmentReport.user_id == user_id,
-                LearningAssessmentReport.status == "generating",
+            select(LearningAssessment).where(
+                LearningAssessment.user_id == user_id,
+                LearningAssessment.status == "generating",
             )
         )
         if existing_generating is not None:
             raise ConcurrencyError("assessment_generation_in_progress")
 
-        report = LearningAssessmentReport(
+        assessment = LearningAssessment(
             user_id=user_id,
+            trigger_source=trigger_source,
             range_days=range_days,
             window_start=window_start,
             window_end=window_end,
@@ -76,65 +113,68 @@ class EvaluationService:
             created_at=now_utc,
             updated_at=now_utc,
         )
-        session.add(report)
-        
+        session.add(assessment)
+
         from sqlalchemy.exc import IntegrityError
         try:
             await session.commit()
-            await session.refresh(report)
+            await session.refresh(assessment)
         except IntegrityError:
             await session.rollback()
             raise ConcurrencyError("assessment_generation_in_progress")
 
-        # 2. 聚合事实快照并保存
+        # 2. 聚合事实快照（不持久化，仅用于 LLM 推理）
         try:
             from app.evaluation.facts import build_assessment_facts
             facts_snapshot = await build_assessment_facts(
                 session, user_id=user_id, window_start=window_start, window_end=window_end
             )
-            report.facts_snapshot = facts_snapshot
-            report.updated_at = datetime.now(timezone.utc)
+            assessment.updated_at = datetime.now(timezone.utc)
             await session.commit()
         except Exception as e:
-            # 聚合失败，修改报告状态
-            report.status = "failed"
-            report.failure_code = "facts_aggregation_failed"
-            report.updated_at = datetime.now(timezone.utc)
+            assessment.status = "failed"
+            assessment.failure_code = "facts_aggregation_failed"
+            assessment.updated_at = datetime.now(timezone.utc)
             await session.commit()
             raise e
 
-        # 3. 使用 LLM 生成结论和辅导策略
-        guidance_strategy = await self._derive_strategy_with_llm(facts_snapshot)
+        # 3. 使用 LLM 生成评估文案和辅导策略
+        assessment_text, guidance_strategy = await self._derive_assessment_with_llm(facts_snapshot)
 
-        # 4. 更新报告状态并写入策略
-        report.status = "ready"
-        report.generated_at = datetime.now(timezone.utc)
-        report.updated_at = datetime.now(timezone.utc)
+        # 4. 更新评估状态并写入策略到 UserProfile
+        assessment.status = "ready"
+        assessment.assessment = assessment_text
+        assessment.generated_at = datetime.now(timezone.utc)
+        assessment.updated_at = datetime.now(timezone.utc)
 
-        await self._update_guidance_strategy_only(
+        await self._update_guidance_strategy(
             session,
             user_id=user_id,
             strategy=guidance_strategy,
-            report_id=report.id,
+            assessment_id=assessment.id,
         )
         await session.commit()
-        await session.refresh(report)
+        await session.refresh(assessment)
 
-        return report
+        logger.info(
+            "[Evaluation] 学习评估生成完成: user_id=%s assessment_id=%s range_days=%d "
+            "assessment_text='%s' guidance_conclusion='%s' focus_topics=%s",
+            user_id, assessment.id, range_days,
+            assessment_text[:80],
+            guidance_strategy.get("conclusion", "")[:60],
+            guidance_strategy.get("focus_topics", []),
+        )
 
-    async def _derive_strategy_with_llm(self, facts: dict[str, Any]) -> dict[str, Any]:
-        """使用 LLM 从 facts_snapshot 生成结论和辅导策略。
+        return assessment
 
-        Args:
-            facts: AssessmentFacts 快照字典
+    async def _derive_assessment_with_llm(
+        self, facts: dict[str, Any]
+    ) -> tuple[str, dict[str, Any]]:
+        """使用 LLM 从 facts 生成评估文案和辅导策略。
 
         Returns:
-            GuidanceStrategy 字典，包含 conclusion 和 action_plan
+            (assessment_text, guidance_strategy_dict)
         """
-        from app.infra.llm import get_llm
-        from pydantic import BaseModel
-        from typing import Literal
-
         # 提取薄弱主题作为备用（LLM 失败时使用）
         practice = facts.get("practice", {}).get("by_topic", [])
         weak_topics = [
@@ -143,70 +183,67 @@ class EvaluationService:
             if t.get("submitted", 0) >= 3 and t.get("accuracy", 1) < 0.6
         ][:4]
 
-        # 定义输出结构
-        class ActionPlanItem(BaseModel):
-            topic: str
-            action_type: Literal["review", "practice", "quiz"]
-            description: str
-            link: str
-
-        class GuidanceStrategyOutput(BaseModel):
-            conclusion: str  # 本期结论文案
-            focus_topics: list[str]
-            recommended_session_minutes: int
-            tutoring_style: str
-            action_plan: list[ActionPlanItem]
-
         try:
+            from app.infra.llm import get_llm
             llm = get_llm()
             prompt = prompts.get("evaluation").render(
-                "strategy",
+                "assessment",
                 facts_json=json.dumps(facts, ensure_ascii=False, indent=2),
             )
             result = await llm.ainvoke_json(
-                GuidanceStrategyOutput,
+                AssessmentOutput,
                 [HumanMessage(content=prompt)],
             )
 
-            return {
-                "version": 1,
-                "conclusion": result.conclusion,
-                "focus_topics": result.focus_topics,
-                "recommended_session_minutes": result.recommended_session_minutes,
-                "tutoring_style": result.tutoring_style,
-                "action_plan": [item.model_dump() for item in result.action_plan],
-                "reason": "基于学习数据 LLM 生成",
+            guidance_dict = {
+                "version": result.guidance_strategy.version,
+                "conclusion": result.guidance_strategy.conclusion,
+                "focus_topics": result.guidance_strategy.focus_topics,
+                "recommended_session_minutes": result.guidance_strategy.recommended_session_minutes,
+                "tutoring_style": result.guidance_strategy.tutoring_style,
+                "action_plan": [item.model_dump() for item in result.guidance_strategy.action_plan],
+                "reason": result.guidance_strategy.reason,
             }
+
+            return result.assessment, guidance_dict
         except Exception as e:
-            logger.warning("[Evaluation] LLM 策略生成失败，使用规则推导: %s", e)
-            # 降级：规则推导
-            return self._derive_strategy_from_facts_simple(facts, weak_topics)
+            logger.warning("[Evaluation] LLM 评估生成失败，使用规则推导: %s", e)
+            return self._derive_assessment_from_facts_simple(facts, weak_topics)
 
-    def _derive_strategy_from_facts_simple(
+    def _derive_assessment_from_facts_simple(
         self, facts: dict[str, Any], weak_topics: list[str]
-    ) -> dict[str, Any]:
-        """规则推导辅导策略（LLM 失败时的降级方案）。
-
-        Args:
-            facts: AssessmentFacts 快照字典
-            weak_topics: 薄弱主题列表
-
-        Returns:
-            GuidanceStrategy 字典
-        """
+    ) -> tuple[str, dict[str, Any]]:
+        """规则推导评估文案和辅导策略（LLM 失败时的降级方案）。"""
         practice = facts.get("practice", {})
         accuracy = practice.get("accuracy", 0)
         submitted = practice.get("submitted", 0)
+        activity = facts.get("activity", {})
+        active_days = activity.get("active_days", 0)
+        total_minutes = activity.get("total_minutes", 0)
 
-        # 生成结论文案
+        # 生成评估文案
         if submitted < 5:
-            conclusion = "练习数据较少，建议继续学习积累更多学习事实后再进行评估。"
+            assessment_text = (
+                f"近7天活跃{active_days}天，累计学习{total_minutes}分钟，"
+                "练习数据较少，建议继续学习积累更多学习事实后再进行评估。"
+            )
         elif accuracy < 0.6:
-            conclusion = f"练习正确率偏低（{int(accuracy * 100)}%），{'、'.join(weak_topics[:3])} 需要优先巩固。"
+            weak_str = "、".join(weak_topics[:3]) if weak_topics else "部分知识点"
+            assessment_text = (
+                f"近7天活跃{active_days}天，累计学习{total_minutes}分钟，"
+                f"练习正确率偏低（{int(accuracy * 100)}%），{weak_str}需要优先巩固。"
+            )
         elif accuracy < 0.8:
-            conclusion = f"练习正确率中等（{int(accuracy * 100)}%），{'、'.join(weak_topics[:2])} 有提升空间。"
+            weak_str = "、".join(weak_topics[:2]) if weak_topics else "部分知识点"
+            assessment_text = (
+                f"近7天活跃{active_days}天，累计学习{total_minutes}分钟，"
+                f"练习正确率中等（{int(accuracy * 100)}%），{weak_str}有提升空间。"
+            )
         else:
-            conclusion = f"练习正确率良好（{int(accuracy * 100)}%），继续保持并拓展新知识。"
+            assessment_text = (
+                f"近7天活跃{active_days}天，累计学习{total_minutes}分钟，"
+                f"练习正确率良好（{int(accuracy * 100)}%），继续保持并拓展新知识。"
+            )
 
         # 生成行动计划
         action_plan = []
@@ -214,13 +251,13 @@ class EvaluationService:
             action_plan.append({
                 "topic": topic,
                 "action_type": "practice",
-                "description": f"完成 {topic} 相关练习",
+                "description": f"完成{topic}相关练习",
                 "link": f"/quiz?topic={topic}",
             })
 
-        return {
+        guidance_strategy = {
             "version": 1,
-            "conclusion": conclusion,
+            "conclusion": assessment_text,
             "focus_topics": weak_topics,
             "recommended_session_minutes": 25,
             "tutoring_style": "分步骤讲解 + 错题练习",
@@ -228,9 +265,17 @@ class EvaluationService:
             "reason": "基于练习正确率规则推导",
         }
 
-    async def _update_guidance_strategy_only(
-        self, session: AsyncSession, *, user_id: int, strategy: dict[str, Any], report_id: int
+        return assessment_text, guidance_strategy
+
+    async def _update_guidance_strategy(
+        self,
+        session: AsyncSession,
+        *,
+        user_id: int,
+        strategy: dict[str, Any],
+        assessment_id: int,
     ) -> None:
+        """将辅导策略写入 UserProfile。"""
         from app.infra.models import UserProfile
         profile = await session.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
         now = datetime.now(timezone.utc)
@@ -241,7 +286,7 @@ class EvaluationService:
                 scored_at=None,
                 guidance_strategy=strategy,
                 guidance_updated_at=now,
-                last_assessment_report_id=report_id,
+                last_assessment_id=assessment_id,
                 created_at=now,
                 updated_at=now,
             )
@@ -249,7 +294,7 @@ class EvaluationService:
         else:
             profile.guidance_strategy = strategy
             profile.guidance_updated_at = now
-            profile.last_assessment_report_id = report_id
+            profile.last_assessment_id = assessment_id
             profile.updated_at = now
 
     # 记录单条学习事件并落库（带幂等去重）
@@ -307,106 +352,137 @@ class EvaluationService:
             event.id,
         )
 
-        # 检测是否达到阈值，触发自动报告生成（异步执行，不阻塞当前请求）
+        # 检测是否达到阈值，触发画像评分 + 学习评估
         try:
-            await self._check_and_trigger_auto_report(session, user_id)
+            await self._check_and_trigger_assessment(session, user_id)
         except Exception as e:
-            # 自动触发失败不影响事件记录本身
-            logger.warning("[Evaluation] 自动报告检测失败: user=%s error=%s", user_id, e)
+            logger.warning("[Evaluation] 自动评估检测失败: user=%s error=%s", user_id, e)
 
         return event, False
 
-    async def _check_and_trigger_auto_report(
+    async def _check_and_trigger_assessment(
         self, session: AsyncSession, user_id: int
     ) -> None:
-        """检测学习事件阈值，触发画像更新和报告生成。
+        """检测学习事件阈值，触发画像推理 → 评分 → 学习评估。
+
+        链路：
+        1. 近期学习事件 → to_markdown() → LLM 推理文字画像
+        2. 文字画像 → LLM 评分
+        3. 近期学习事件 → 学习评估生成
 
         条件：
-        1. 距离上次报告 >= AUTO_REPORT_MIN_DAYS 天
-        2. 或累计新事件数 >= AUTO_REPORT_MIN_EVENTS 条
-        3. 且当前没有生成中的报告
+        - 非 chat 模块累计 >= EVENT_THRESHOLD_DEFAULT 条新事件
+        - chat 模块累计 >= EVENT_THRESHOLD_CHAT 条新事件
+        - 且当前没有生成中的评估
 
-        触发链路：
-        学习事件达到阈值 → 更新画像分数 → 生成学习评估报告
+        阈值重置：基于 UserProfile.profile_updated_at（Step1+2 完成后写入），
+        而非 LearningAssessment.created_at，确保即使 Step3 失败也不会重复触发。
         """
         from app.infra.database import session_scope
+        from app.infra.models import UserProfile
         from app.profile.service import get_profile_service
 
-        # 获取最近一份报告
-        latest_report = await session.scalar(
-            select(LearningAssessmentReport)
-            .where(LearningAssessmentReport.user_id == user_id)
-            .order_by(LearningAssessmentReport.created_at.desc())
-            .limit(1)
+        # 获取上次画像更新时间，作为阈值计数的起点
+        profile = await session.scalar(
+            select(UserProfile).where(UserProfile.user_id == user_id)
         )
+        last_profile_update = profile.profile_updated_at if profile else None
 
-        now = datetime.now(timezone.utc)
-
-        # 检查时间间隔
-        if latest_report:
-            days_since_last = (now - latest_report.created_at).days
-            if days_since_last < AUTO_REPORT_MIN_DAYS:
-                logger.debug(
-                    "[Evaluation] 自动报告跳过: user=%s 距上次 %d 天 < %d 天",
-                    user_id, days_since_last, AUTO_REPORT_MIN_DAYS
-                )
-                return
-
-            # 统计上次报告后新增的事件数
-            new_events_result = await session.exec(
-                select(LearningEvent.id)
-                .where(
-                    LearningEvent.user_id == user_id,
-                    LearningEvent.created_at > latest_report.created_at,
-                )
+        # 统计上次画像更新后新增的事件数（按模块分开计数）
+        if last_profile_update:
+            new_events_stmt = select(LearningEvent).where(
+                LearningEvent.user_id == user_id,
+                LearningEvent.created_at > last_profile_update,
             )
-            new_events_list = list(new_events_result.all())
-            new_events_count = len(new_events_list)
-
-            if new_events_count < AUTO_REPORT_MIN_EVENTS:
-                logger.debug(
-                    "[Evaluation] 自动报告跳过: user=%s 新事件 %d < %d",
-                    user_id, new_events_count, AUTO_REPORT_MIN_EVENTS
-                )
-                return
-
-        # 检查是否有正在生成的报告
-        generating_report = await session.scalar(
-            select(LearningAssessmentReport).where(
-                LearningAssessmentReport.user_id == user_id,
-                LearningAssessmentReport.status == "generating",
+        else:
+            new_events_stmt = select(LearningEvent).where(
+                LearningEvent.user_id == user_id,
             )
-        )
-        if generating_report:
-            logger.debug("[Evaluation] 自动报告跳过: user=%s 已有生成中报告", user_id)
+
+        new_events = list((await session.exec(new_events_stmt)).all())
+        chat_count = sum(1 for e in new_events if e.module == "chat")
+        other_count = sum(1 for e in new_events if e.module != "chat")
+
+        # 判断是否达到阈值
+        triggered = (other_count >= EVENT_THRESHOLD_DEFAULT) or \
+                    (chat_count >= EVENT_THRESHOLD_CHAT)
+        if not triggered:
+            logger.info(
+                "[Evaluation] 自动评估跳过（未达阈值）: user=%s chat=%d/%d other=%d/%d last_profile_update=%s",
+                user_id, chat_count, EVENT_THRESHOLD_CHAT, other_count, EVENT_THRESHOLD_DEFAULT,
+                last_profile_update.isoformat() if last_profile_update else "never",
+            )
             return
 
-        # 满足条件，在新的 session 中执行：画像更新 → 报告生成
+        # 检查是否有正在生成的评估
+        generating = await session.scalar(
+            select(LearningAssessment).where(
+                LearningAssessment.user_id == user_id,
+                LearningAssessment.status == "generating",
+            )
+        )
+        if generating:
+            logger.info("[Evaluation] 自动评估跳过（已有生成中评估）: user=%s", user_id)
+            return
+
+        # 满足条件，在新的 session 中执行完整链路
         logger.info(
-            "[Evaluation] 触发自动评估链路: user=%s range_days=%d",
-            user_id, AUTO_REPORT_DEFAULT_RANGE
+            "[Evaluation] 触发自动评估链路: user=%s trigger=profile_update range_days=%d "
+            "chat=%d other=%d last_profile_update=%s",
+            user_id, DEFAULT_RANGE_DAYS,
+            chat_count, other_count,
+            last_profile_update.isoformat() if last_profile_update else "never",
         )
 
-        # 使用新的 session scope 避免当前事务冲突
         async with session_scope() as new_session:
             try:
-                # Step 1: 更新画像分数
                 profile_service = get_profile_service()
-                score_result = await profile_service.score_profile(user_id=user_id)
+
+                # Step 1: 近期学习事件 → MD → LLM 推理文字画像
+                logger.info("[Evaluation] 链路Step1开始 — 文字画像推理: user=%s", user_id)
+                infer_result = await profile_service.infer_profile_from_events(
+                    user_id=user_id,
+                    range_days=DEFAULT_RANGE_DAYS,
+                )
                 logger.info(
-                    "[Evaluation] 画像评分更新完成: user=%s overall_score=%s",
-                    user_id, score_result.get("overall_score")
+                    "[Evaluation] 链路Step1完成 — 文字画像推理: user=%s inference_ok=%s updated_dims=%s",
+                    user_id, infer_result.get("inference_ok"), infer_result.get("updated_dimensions"),
                 )
 
-                # Step 2: 生成学习评估报告
-                await self.generate_report(
+                # Step 2: 文字画像 → 分数画像
+                logger.info("[Evaluation] 链路Step2开始 — 分数画像更新: user=%s", user_id)
+                score_result = await profile_service.score_profile(user_id=user_id)
+                logger.info(
+                    "[Evaluation] 链路Step2完成 — 分数画像更新: user=%s overall_score=%s dimension_scores=%s",
+                    user_id, score_result.get("overall_score"), score_result.get("dimension_scores"),
+                )
+
+                # Step 1+2 完成，写入 profile_updated_at 重置阈值
+                now_utc = datetime.now(timezone.utc)
+                profile_row = await new_session.scalar(
+                    select(UserProfile).where(UserProfile.user_id == user_id)
+                )
+                if profile_row:
+                    profile_row.profile_updated_at = now_utc
+                    profile_row.updated_at = now_utc
+                    new_session.add(profile_row)
+                    await new_session.flush()
+                    logger.info(
+                        "[Evaluation] 阈值重置: user=%s profile_updated_at=%s",
+                        user_id, now_utc.isoformat(),
+                    )
+
+                # Step 3: 近期学习事件 → 学习评估
+                logger.info("[Evaluation] 链路Step3开始 — 学习评估生成: user=%s", user_id)
+                await self.generate_assessment(
                     new_session,
                     user_id=user_id,
-                    range_days=AUTO_REPORT_DEFAULT_RANGE,
+                    trigger_source="profile_update",
+                    range_days=DEFAULT_RANGE_DAYS,
                 )
-                logger.info("[Evaluation] 自动报告生成成功: user=%s", user_id)
+                logger.info("[Evaluation] 链路Step3完成 — 学习评估生成成功: user=%s", user_id)
             except ConcurrencyError:
-                logger.debug("[Evaluation] 自动报告并发冲突: user=%s", user_id)
+                logger.info("[Evaluation] 自动评估并发冲突: user=%s", user_id)
             except Exception as e:
                 logger.error("[Evaluation] 自动评估链路失败: user=%s error=%s", user_id, e)
 
@@ -503,6 +579,7 @@ class EvaluationService:
             learning_session.id,
         )
         return learning_session, False
+
 
 # 模块级单例评估服务
 evaluation_service = EvaluationService()

@@ -54,7 +54,7 @@ export interface ContinueLearningData {
     title: string
     overall_progress: number
     current_node_title: string | null
-    current_node_id: string | null
+    current_node_id: number | null
     updated_at: string | null
     last_learned_at: string | null
   }[]
@@ -101,47 +101,4 @@ export interface RecentResourceItem {
 // 获取最近生成的资源列表
 export function getRecentResources() {
   return http.get<ApiResponse<RecentResourceItem[]>>('/ai/dashboard/recent-resources')
-}
-
-// ---------------------------------------------------------------------------
-// 6. Profile Study Snapshot Compatibility
-// ---------------------------------------------------------------------------
-
-export interface StudyStatsData {
-  weekly_days: number
-}
-
-// 个人中心旧看板仍需要本周活跃天数。后端旧 study-stats 路由已移除，
-// 这里优先从 7 天学习评估事实快照中读取活跃天数，避免重新引入旧接口。
-export async function getStudyStats() {
-  const history = await http.get<ApiResponse<{
-    items: {
-      id: number
-      range_days: number
-      status: string
-    }[]
-  }>>(
-    '/ai/evaluation/reports',
-    { params: { page: 1, page_size: 50 } },
-  )
-  const weeklyReport = history.data.data.items.find(
-    item => item.status === 'ready' && item.range_days === 7,
-  )
-  const response = weeklyReport
-    ? await http.get<ApiResponse<{ facts_snapshot?: { activity?: { active_days?: number } } }>>(
-      `/ai/evaluation/reports/${weeklyReport.id}`,
-    )
-    : await http.get<ApiResponse<{ facts_snapshot?: { activity?: { active_days?: number } } } | null>>(
-      '/ai/evaluation/reports/latest',
-    )
-
-  return {
-    ...response,
-    data: {
-      ...response.data,
-      data: {
-        weekly_days: response.data.data?.facts_snapshot?.activity?.active_days ?? 0,
-      },
-    },
-  }
 }

@@ -7,13 +7,14 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.shared.cartoon.execution import ExecutionCompiler, ExecutionSceneDraft
 from app.shared.cartoon.models import (
     CartoonBrief,
     EntityKind,
@@ -50,15 +51,10 @@ class _Profile:
 
 
 def _profile(brief: CartoonBrief) -> _Profile:
-    density_limit = {
-        "moderate": 5,
-        "rich": 7,
-        "intensive": 9,
-    }[brief.configuration.visual_density]
     return {
-        LessonDepth.FOCUSED: _Profile(5, 3, density_limit, "聚焦讲解"),
-        LessonDepth.STANDARD: _Profile(5, 3, density_limit, "标准讲解"),
-        LessonDepth.DEEP: _Profile(6, 4, density_limit, "深入讲解"),
+        LessonDepth.FOCUSED: _Profile(5, 3, 6, "聚焦讲解"),
+        LessonDepth.STANDARD: _Profile(5, 3, 6, "标准讲解"),
+        LessonDepth.DEEP: _Profile(6, 4, 6, "深入讲解"),
     }[brief.configuration.lesson_depth]
 
 
@@ -93,15 +89,30 @@ class _Draft(BaseModel):
 
 
 class _StoryboardSceneDraft(_Draft):
-    title: str = Field(min_length=1, max_length=54)
-    teaching_goal: str = Field(min_length=1, max_length=100)
+    title: str = Field(min_length=1)
+    teaching_goal: str = Field(min_length=1)
     grammar: VisualGrammar
+
+    @field_validator("title", "teaching_goal")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("storyboard text cannot be blank")
+        return normalized
 
 
 class _StoryboardDraft(_Draft):
-    title: str = Field(min_length=1, max_length=72)
-    course: str = Field(default="计算机类本科课程", min_length=1, max_length=40)
+    title: str = Field(min_length=1)
     scenes: list[_StoryboardSceneDraft] = Field(min_length=5, max_length=6)
+
+    @field_validator("title")
+    @classmethod
+    def normalize_title(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("storyboard title cannot be blank")
+        return normalized
 
     @model_validator(mode="after")
     def validate_arc(self) -> "_StoryboardDraft":
@@ -116,98 +127,67 @@ class _StoryboardDraft(_Draft):
         return self
 
 
-class _EntityDraft(_Draft):
-    label: str = Field(min_length=1, max_length=28)
-    kind: EntityKind
-    detail: str = Field(default="", max_length=72)
-    initial_value: str = Field(default="", max_length=200)
-    orientation: str = Field(default="vertical", pattern=r"^(vertical|horizontal|radial)$")
-    tone: str = Field(default="primary", pattern=r"^(primary|secondary|accent|warning)$")
-
-
-class _PlacementDraft(_Draft):
-    entity_index: int = Field(ge=0, le=8)
-    container_index: int | None = Field(default=None, ge=0, le=8)
-    slot: int | None = Field(default=None, ge=0, le=15)
-    region: SemanticRegion = SemanticRegion.MAIN
-    visible: bool = True
-    value: str = Field(default="", max_length=200)
-    status: str = Field(default="idle", pattern=r"^(idle|active|success|warning|error)$")
-
-    @model_validator(mode="after")
-    def validate_slot(self) -> "_PlacementDraft":
-        if self.slot is not None and self.container_index is None:
-            raise ValueError("slot requires container_index")
-        if self.container_index == self.entity_index:
-            raise ValueError("entity cannot be placed inside itself")
-        return self
-
-
-class _RelationDraft(_Draft):
-    source_index: int = Field(ge=0, le=8)
-    target_index: int = Field(ge=0, le=8)
-    label: str = Field(default="", max_length=30)
-    directed: bool = True
-    tone: str = Field(default="primary", pattern=r"^(primary|secondary|accent|warning)$")
-
-
-class _StateDraft(_Draft):
-    label: str = Field(min_length=1, max_length=42)
-    annotation: str = Field(default="", max_length=72)
-    placements: list[_PlacementDraft] = Field(min_length=2, max_length=9)
-    relations: list[_RelationDraft] = Field(default_factory=list, max_length=18)
-
-
-class _TransitionDraft(_Draft):
-    kind: TransitionKind
-    entity_indexes: list[int] = Field(min_length=1, max_length=6)
-    relation_label: str = Field(default="", max_length=30)
-
-
 class _BeatDraft(_Draft):
-    claim: str = Field(min_length=1, max_length=72)
-    narration: str = Field(min_length=16, max_length=60)
-    caption: str = Field(min_length=1, max_length=30)
-    before_state_index: int = Field(ge=0, le=4)
-    after_state_index: int = Field(ge=1, le=5)
-    transition: _TransitionDraft
-    focus_entity_indexes: list[int] = Field(min_length=1, max_length=6)
+    narration: str = Field(min_length=1)
+    visual: str = Field(min_length=1)
+    action: TransitionKind
+    targets: list[str] = Field(min_length=1, max_length=6)
+
+    @field_validator("narration", "visual")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("beat text cannot be blank")
+        return normalized
+
+    @field_validator("targets")
+    @classmethod
+    def normalize_unique_targets(cls, values: list[str]) -> list[str]:
+        normalized = [value.strip() for value in values]
+        if any(not value for value in normalized):
+            raise ValueError("beat targets cannot contain blank labels")
+        if len(normalized) != len(set(normalized)):
+            raise ValueError("beat contains duplicate targets")
+        return normalized
+
+
+class _EntityDraft(_Draft):
+    """One stable visual object, expressed without renderer implementation details."""
+
+    label: str = Field(min_length=1)
+    detail: str = Field(min_length=1)
+
+    @field_validator("label", "detail")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("entity text cannot be blank")
+        return normalized
 
 
 class _SceneDraft(_Draft):
-    entities: list[_EntityDraft] = Field(min_length=2, max_length=9)
-    states: list[_StateDraft] = Field(min_length=4, max_length=5)
+    entities: list[_EntityDraft] = Field(min_length=2, max_length=6)
     beats: list[_BeatDraft] = Field(min_length=3, max_length=4)
+
+    @field_validator("entities")
+    @classmethod
+    def unique_entity_labels(cls, values: list[_EntityDraft]) -> list[_EntityDraft]:
+        labels = [value.label for value in values]
+        if len(labels) != len(set(labels)):
+            raise ValueError("scene contains duplicate entity labels")
+        return values
 
     @model_validator(mode="after")
     def validate_references(self) -> "_SceneDraft":
-        entity_count = len(self.entities)
-        expected_indexes = set(range(entity_count))
-        container_indexes = {
-            index for index, entity in enumerate(self.entities)
-            if entity.kind == EntityKind.CONTAINER
-        }
-        for state in self.states:
-            placement_indexes = [item.entity_index for item in state.placements]
-            if set(placement_indexes) != expected_indexes or len(placement_indexes) != entity_count:
-                raise ValueError("every state must place every entity exactly once")
-            for placement in state.placements:
-                if placement.container_index is not None and placement.container_index not in container_indexes:
-                    raise ValueError("container_index must reference a container entity")
-            for relation in state.relations:
-                if relation.source_index >= entity_count or relation.target_index >= entity_count:
-                    raise ValueError("relation references an entity outside entities")
-                if relation.source_index == relation.target_index:
-                    raise ValueError("relation cannot point to the same entity")
-
-        if len(self.states) != len(self.beats) + 1:
-            raise ValueError("scene requires one initial state plus one result state per beat")
-        for index, beat in enumerate(self.beats):
-            if (beat.before_state_index, beat.after_state_index) != (index, index + 1):
-                raise ValueError("beats must form a sequential before/after state chain")
-            references = set(beat.transition.entity_indexes) | set(beat.focus_entity_indexes)
-            if any(value < 0 or value >= entity_count for value in references):
-                raise ValueError("beat references an entity outside entities")
+        labels = [value.label for value in self.entities]
+        if len(labels) != len(set(labels)):
+            raise ValueError("scene contains duplicate entity labels")
+        known = set(labels)
+        for beat in self.beats:
+            if set(beat.targets) - known:
+                raise ValueError("beat target must exactly match an entity label")
         return self
 
 
@@ -244,8 +224,7 @@ class CartoonPlanner:
                     for scene_index, scene in enumerate(storyboard.scenes, start=1)
                 ]
             return Lesson(
-                title=storyboard.title,
-                course=storyboard.course,
+                title=storyboard.title.strip(),
                 scenes=[task.result() for task in tasks],
             )
         except Exception as exc:
@@ -274,7 +253,6 @@ class CartoonPlanner:
                 ),
             ],
             temperature=0.1,
-            max_tokens=2_200,
         )
         storyboard = response if isinstance(response, _StoryboardDraft) else _StoryboardDraft.model_validate(response)
         if len(storyboard.scenes) != profile.scene_count:
@@ -294,21 +272,22 @@ class CartoonPlanner:
             {
                 "grammar": outline.grammar.value,
                 "beat_count": profile.beats_per_scene,
-                "state_count": profile.beats_per_scene + 1,
-                "entity_limit": profile.entity_limit,
                 "density": brief.configuration.visual_density,
+                "scene_contract": self._scene_contract(outline.grammar),
             }
         )
         context = {
             "lesson_title": storyboard.title,
-            "course": storyboard.course,
             "scene_title": outline.title,
             "teaching_goal": outline.teaching_goal,
             "grammar": outline.grammar.value,
         }
         async with semaphore:
+            schema: type[BaseModel] = (
+                ExecutionSceneDraft if outline.grammar is VisualGrammar.TRACE else _SceneDraft
+            )
             response = await self._invoke(
-                _SceneDraft,
+                schema,
                 [
                     SystemMessage(content=prompt),
                     self._material_message(
@@ -319,115 +298,92 @@ class CartoonPlanner:
                     ),
                 ],
                 temperature=0.12,
-                max_tokens=8_192,
+                validator=lambda value: self._validate_scene_draft(
+                    value, grammar=outline.grammar, profile=profile
+                ),
             )
+        if outline.grammar is VisualGrammar.TRACE:
+            draft = response if isinstance(response, ExecutionSceneDraft) else ExecutionSceneDraft.model_validate(response)
+            self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
+            return self._materialize_execution_scene(outline, draft, scene_index)
         draft = response if isinstance(response, _SceneDraft) else _SceneDraft.model_validate(response)
-        if len(draft.entities) > profile.entity_limit:
-            raise CartoonPlanningError(f"scene exceeds entity limit {profile.entity_limit}")
-        if len(draft.beats) != profile.beats_per_scene:
-            raise CartoonPlanningError(f"scene requires exactly {profile.beats_per_scene} beats")
-        draft = self._repair_grammar_entities(outline.grammar, draft)
-        draft = self._repair_container_references(draft)
+        self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
         return self._materialize_scene(outline, draft, scene_index)
 
-    @staticmethod
-    def _repair_grammar_entities(grammar: VisualGrammar, draft: _SceneDraft) -> _SceneDraft:
-        """Auto-fix entity kinds so the draft satisfies grammar constraints.
-
-        When the LLM omits required entity kinds for a grammar, promote the
-        least-structural entities (those not referenced as containers by any
-        placement) to the required kind.  This is a best-effort repair; if
-        the draft is fundamentally incompatible the downstream
-        ``TeachingScene`` validator will still reject it.
-        """
-        kinds = [entity.kind for entity in draft.entities]
-        container_indexes = {
-            index for index, entity in enumerate(draft.entities)
-            if entity.kind == EntityKind.CONTAINER
-        }
-        # Collect indexes of entities that are not structural (not containers
-        # and not referenced as containers by placements).
-        structural = container_indexes.copy()
-        for state in draft.states:
-            for placement in state.placements:
-                if placement.container_index is not None:
-                    structural.add(placement.container_index)
-        non_structural = [
-            i for i in range(len(draft.entities)) if i not in structural
-        ]
-
-        def _promote(target_kind: EntityKind, count: int) -> None:
-            """Promote up to *count* non-structural entities to *target_kind*."""
-            promoted = 0
-            for idx in non_structural:
-                if promoted >= count:
-                    break
-                if draft.entities[idx].kind != target_kind:
-                    draft.entities[idx] = draft.entities[idx].model_copy(
-                        update={"kind": target_kind}
-                    )
-                    promoted += 1
-
-        if grammar == VisualGrammar.CONCEPT and kinds.count(EntityKind.TERM) < 2:
-            _promote(EntityKind.TERM, 2 - kinds.count(EntityKind.TERM))
-
-        elif grammar == VisualGrammar.MODEL:
-            if EntityKind.CONTAINER not in kinds:
-                _promote(EntityKind.CONTAINER, 1)
-            # Re-read kinds after possible container promotion
-            kinds = [entity.kind for entity in draft.entities]
-            if not {EntityKind.SLOT, EntityKind.POINTER, EntityKind.PORT} & set(kinds):
-                _promote(EntityKind.SLOT, 1)
-
-        elif grammar == VisualGrammar.TRACE:
-            if EntityKind.CONTAINER not in kinds:
-                _promote(EntityKind.CONTAINER, 1)
-            kinds = [entity.kind for entity in draft.entities]
-            if EntityKind.TOKEN not in kinds:
-                _promote(EntityKind.TOKEN, 1)
-
-        elif grammar == VisualGrammar.EVIDENCE:
-            if EntityKind.CODE not in kinds and kinds.count(EntityKind.METRIC) < 2:
-                _promote(EntityKind.CODE, 1)
-
-        return draft
+    @classmethod
+    def _validate_scene_draft(
+        cls,
+        value: BaseModel,
+        *,
+        grammar: VisualGrammar,
+        profile: _Profile,
+    ) -> None:
+        if grammar is VisualGrammar.TRACE:
+            if not isinstance(value, ExecutionSceneDraft):
+                raise ValueError("trace payload must validate as ExecutionSceneDraft")
+            if len(value.beats) != profile.beats_per_scene:
+                raise ValueError(f"trace scene requires exactly {profile.beats_per_scene} beats")
+            if len(value.objects) > profile.entity_limit:
+                raise ValueError(f"trace scene exceeds object capacity {profile.entity_limit}")
+            ExecutionCompiler.compile(value, scene_id="validation-scene")
+            return
+        if not isinstance(value, _SceneDraft):
+            raise ValueError("scene payload must validate as _SceneDraft")
+        if len(value.entities) > profile.entity_limit:
+            raise ValueError(f"scene exceeds entity capacity {profile.entity_limit}")
+        if len(value.beats) != profile.beats_per_scene:
+            raise ValueError(f"scene requires exactly {profile.beats_per_scene} beats")
 
     @staticmethod
-    def _repair_container_references(draft: _SceneDraft) -> _SceneDraft:
-        """Auto-fix container_index values that reference non-container entities.
+    def _scene_contract(grammar: VisualGrammar) -> str:
+        if grammar is VisualGrammar.TRACE:
+            return """你正在生成算法或计算机过程的可执行场景。只输出以下 JSON，不得输出 entities、targets、visual、action、states、placements、ID、坐标或样式：
+```json
+{
+  "objects":[
+    {"name":"buffer","label":"缓冲区","role":"container","capacity":3},
+    {"name":"packetA","label":"数据包 A","role":"token","value":"A"},
+    {"name":"cursor","label":"读指针","role":"pointer"}
+  ],
+  "beats":[
+    {"narration":"数据包进入缓冲区的第一个位置。","operation":{"verb":"place","subject":"packetA","target":"buffer","slot":0}},
+    {"narration":"读指针指向即将处理的数据包。","operation":{"verb":"point","subject":"cursor","target":"packetA"}},
+    {"narration":"处理完成后，数据包进入输出区。","operation":{"verb":"remove","subject":"packetA"}}
+  ]
+}
+```
+对象 `role` 只能是 `container`、`token`、`pointer`、`node`、`port`、`marker`；只有 `container` 声明 `capacity`。操作 `verb` 只能是 `reveal`、`place`、`move`、`remove`、`point`、`update`、`connect`、`disconnect`、`compare`、`highlight`。`place` 必须有 container `target` 和 `slot`；`point/connect/disconnect/compare` 必须有 `target`；`update` 必须有 `value`；`move` 使用 container 的 `target`+`slot`，或使用 `region`（input/output/result/left/right/top/bottom/main/code）。每个 beat 只描述一个真实操作，不要用文字代替状态变化。"""
+        return """只输出以下 JSON：
+```json
+{
+  "entities":[{"label":"稳定对象名称","detail":"对象的实际公式、值或条件"}],
+  "beats":[{"narration":"解释当前变化","visual":"画面上可见的知识表达","action":"reveal","targets":["稳定对象名称"]}]
+}
+```
+不得输出 states、placements、relations、实体 ID、位置、容器、区域、颜色、样式或焦点字段。`targets` 必须精确引用已有实体。旁白不设字符上限；`visual` 必须是可静音理解的真实知识，不能只是“更新”或“执行”。"""
 
-        When the LLM sets container_index to an entity whose kind is not
-        CONTAINER, redirect it to the first actual container (or clear it if
-        no container exists).
-        """
-        container_indexes = [
-            i for i, entity in enumerate(draft.entities)
-            if entity.kind == EntityKind.CONTAINER
-        ]
-        if not container_indexes:
-            # No containers at all — strip all container_index and slot values
-            for state in draft.states:
-                for pi, placement in enumerate(state.placements):
-                    if placement.container_index is not None:
-                        state.placements[pi] = placement.model_copy(
-                            update={"container_index": None, "slot": None}
-                        )
-            return draft
+    @classmethod
+    def _materialize_execution_scene(
+        cls,
+        outline: _StoryboardSceneDraft,
+        draft: ExecutionSceneDraft,
+        scene_index: int,
+    ) -> TeachingScene:
+        scene_id = f"scene-{scene_index:02d}"
+        compiled = ExecutionCompiler.compile(draft, scene_id=scene_id)
+        return TeachingScene(
+            id=scene_id,
+            title=outline.title,
+            grammar=VisualGrammar.TRACE,
+            execution_program=compiled.program,
+            entities=compiled.entities,
+            states=compiled.states,
+            beats=compiled.beats,
+        )
 
-        first_container = container_indexes[0]
-        for state in draft.states:
-            for pi, placement in enumerate(state.placements):
-                if (
-                    placement.container_index is not None
-                    and placement.container_index not in container_indexes
-                ):
-                    state.placements[pi] = placement.model_copy(
-                        update={"container_index": first_container}
-                    )
-        return draft
-
-    @staticmethod
+    @classmethod
     def _materialize_scene(
+        cls,
         outline: _StoryboardSceneDraft,
         draft: _SceneDraft,
         scene_index: int,
@@ -437,64 +393,43 @@ class CartoonPlanner:
             f"{scene_id}-entity-{index:02d}"
             for index in range(1, len(draft.entities) + 1)
         ]
-        state_ids = [
-            f"{scene_id}-state-{index:02d}"
-            for index in range(1, len(draft.states) + 1)
-        ]
         entities = [
-            VisualEntity(id=entity_id, **entity.model_dump(mode="python"))
-            for entity_id, entity in zip(entity_ids, draft.entities, strict=True)
-        ]
-        states = [
-            VisualState(
-                id=state_id,
-                label=state.label,
-                annotation=state.annotation,
-                placements=[
-                    EntityPlacement(
-                        entity_id=entity_ids[item.entity_index],
-                        container_id=(
-                            entity_ids[item.container_index]
-                            if item.container_index is not None
-                            else ""
-                        ),
-                        slot=item.slot,
-                        region=item.region,
-                        visible=item.visible,
-                        value=item.value,
-                        status=item.status,
-                    )
-                    for item in state.placements
-                ],
-                relations=[
-                    Relation(
-                        source_id=entity_ids[item.source_index],
-                        target_id=entity_ids[item.target_index],
-                        label=item.label,
-                        directed=item.directed,
-                        tone=item.tone,
-                    )
-                    for item in state.relations
-                ],
+            VisualEntity(
+                id=entity_id,
+                label=entity.label,
+                kind=cls._entity_kind(outline.grammar, index),
             )
-            for state_id, state in zip(state_ids, draft.states, strict=True)
+            for index, (entity_id, entity) in enumerate(
+                zip(entity_ids, draft.entities, strict=True)
+            )
         ]
+        entity_ids_by_label = {
+            entity.label: entity.id
+            for entity in entities
+        }
+        compiled_beats = [
+            (beat, [entity_ids_by_label[label] for label in beat.targets])
+            for beat in draft.beats
+        ]
+        initial_values = {
+            entity_id: entity.detail
+            for entity_id, entity in zip(entity_ids, draft.entities, strict=True)
+        }
+        states = cls._compile_states(scene_id, entities, compiled_beats, initial_values)
         beats = [
             TeachingBeat(
                 id=f"{scene_id}-beat-{index:02d}",
-                claim=beat.claim,
                 narration=beat.narration,
-                caption=beat.caption,
-                before_state_id=state_ids[beat.before_state_index],
-                after_state_id=state_ids[beat.after_state_index],
+                caption=cls._action_caption(beat.action, beat.targets),
+                before_state_id=states[index - 1].id,
+                after_state_id=states[index].id,
                 transition=Transition(
-                    kind=beat.transition.kind,
-                    entity_ids=[entity_ids[value] for value in beat.transition.entity_indexes],
-                    relation_label=beat.transition.relation_label,
+                    kind=beat.action,
+                    entity_ids=target_ids,
                 ),
-                focus_entity_ids=[entity_ids[value] for value in beat.focus_entity_indexes],
+                focus_entity_ids=target_ids,
             )
-            for index, beat in enumerate(draft.beats, start=1)
+            for index, (beat, target_ids) in enumerate(compiled_beats, start=1)
         ]
         return TeachingScene(
             id=scene_id,
@@ -505,19 +440,200 @@ class CartoonPlanner:
             beats=beats,
         )
 
+    @staticmethod
+    def _entity_kind(grammar: VisualGrammar, index: int) -> EntityKind:
+        if grammar in {VisualGrammar.MODEL, VisualGrammar.TRACE} and index == 0:
+            return EntityKind.CONTAINER
+        if grammar is VisualGrammar.TRACE:
+            return EntityKind.TOKEN
+        if grammar is VisualGrammar.EVIDENCE:
+            return EntityKind.CODE if index == 0 else EntityKind.METRIC
+        return EntityKind.TERM
+
+    @staticmethod
+    def _action_caption(action: TransitionKind, targets: list[str]) -> str:
+        labels = "、".join(targets)
+        verbs = {
+            TransitionKind.REVEAL: "显示",
+            TransitionKind.MOVE: "推进",
+            TransitionKind.INSERT: "加入",
+            TransitionKind.REMOVE: "移除",
+            TransitionKind.UPDATE: "更新",
+            TransitionKind.CONNECT: "建立关联",
+            TransitionKind.DISCONNECT: "解除关联",
+            TransitionKind.EXECUTE: "执行",
+            TransitionKind.COMPARE: "比较",
+        }
+        return f"{verbs[action]}：{labels}"
+
+    @classmethod
+    def _compile_states(
+        cls,
+        scene_id: str,
+        entities: list[VisualEntity],
+        beats: list[tuple[_BeatDraft, list[str]]],
+        initial_values: dict[str, str],
+    ) -> list[VisualState]:
+        regions = (
+            SemanticRegion.LEFT,
+            SemanticRegion.RIGHT,
+            SemanticRegion.TOP,
+            SemanticRegion.BOTTOM,
+            SemanticRegion.INPUT,
+            SemanticRegion.OUTPUT,
+            SemanticRegion.RESULT,
+            SemanticRegion.CODE,
+        )
+        placements = [
+            EntityPlacement(
+                entity_id=entity.id,
+                region=regions[index % len(regions)],
+                visible=(index == 0),
+                value=initial_values[entity.id],
+                status=("active" if index == 0 else "idle"),
+            )
+            for index, entity in enumerate(entities)
+        ]
+        states = [
+            VisualState(
+                id=f"{scene_id}-state-01",
+                placements=placements,
+                relations=[],
+            )
+        ]
+        for index, (beat, target_ids) in enumerate(beats, start=1):
+            states.append(
+                cls._advance_state(
+                    state=states[-1],
+                    state_id=f"{scene_id}-state-{index + 1:02d}",
+                    entity_ids=[entity.id for entity in entities],
+                    beat=beat,
+                    target_ids=target_ids,
+                    step=index,
+                )
+            )
+        return states
+
+    @staticmethod
+    def _advance_state(
+        *,
+        state: VisualState,
+        state_id: str,
+        entity_ids: list[str],
+        beat: _BeatDraft,
+        target_ids: list[str],
+        step: int,
+    ) -> VisualState:
+        placements = [item.model_copy(deep=True) for item in state.placements]
+        relations = [item.model_copy(deep=True) for item in state.relations]
+        by_id = {item.entity_id: item for item in placements}
+        targets = target_ids
+        changed = False
+
+        def mark_value(entity_id: str, status: str = "active") -> None:
+            nonlocal changed
+            placement = by_id[entity_id]
+            # A beat may focus several stable objects, but its visual statement
+            # belongs to one focal object.  Repeating it in every card turns a
+            # diagram into a caption wall and loses the object-level meaning.
+            value = beat.visual if entity_id == targets[0] else placement.value
+            if (
+                placement.value != value
+                or placement.status != status
+                or not placement.visible
+            ):
+                placement.value = value
+                placement.status = status
+                placement.visible = True
+                changed = True
+
+        if beat.action is TransitionKind.REVEAL:
+            for entity_id in targets:
+                placement = by_id[entity_id]
+                if not placement.visible or placement.status != "active":
+                    placement.visible = True
+                    placement.status = "active"
+                    changed = True
+        elif beat.action is TransitionKind.MOVE:
+            regions = list(SemanticRegion)
+            for entity_id in targets:
+                placement = by_id[entity_id]
+                placement.region = regions[(regions.index(placement.region) + 1) % len(regions)]
+                placement.visible = True
+                placement.status = "active"
+                changed = True
+        elif beat.action is TransitionKind.INSERT:
+            for entity_id in targets:
+                placement = by_id[entity_id]
+                if not placement.visible or placement.status != "active":
+                    placement.visible = True
+                    placement.status = "active"
+                    changed = True
+                mark_value(entity_id)
+        elif beat.action is TransitionKind.REMOVE:
+            for entity_id in targets:
+                placement = by_id[entity_id]
+                if placement.visible or placement.status != "warning":
+                    placement.visible = False
+                    placement.status = "warning"
+                    changed = True
+        elif beat.action is TransitionKind.CONNECT:
+            source_id = targets[0]
+            target_id = next((value for value in targets[1:] if value != source_id), None)
+            if target_id is None:
+                target_id = next(value for value in entity_ids if value != source_id)
+            for entity_id in {source_id, target_id}:
+                placement = by_id[entity_id]
+                if not placement.visible or placement.status != "active":
+                    placement.visible = True
+                    placement.status = "active"
+                    changed = True
+            relation = Relation(source_id=source_id, target_id=target_id)
+            if relation not in relations:
+                relations.append(relation)
+                changed = True
+        elif beat.action is TransitionKind.DISCONNECT:
+            target_set = set(targets)
+            for index, relation in enumerate(relations):
+                if relation.source_id in target_set or relation.target_id in target_set:
+                    relations.pop(index)
+                    changed = True
+                    break
+        else:
+            for entity_id in targets:
+                mark_value(
+                    entity_id,
+                    status="success" if beat.action is TransitionKind.EXECUTE else "active",
+                )
+
+        # Every beat carries one learner-visible statement.  Actions such as
+        # reveal, connect and move used to mutate only presentation state, so
+        # the renderer had no domain content to show for most of the narration.
+        # Keep it on the first focus object; the remaining targets retain their
+        # own stable details instead of becoming duplicate caption cards.
+        if beat.action is not TransitionKind.REMOVE:
+            focal = by_id[targets[0]]
+            if focal.value != beat.visual:
+                focal.value = beat.visual
+                changed = True
+
+        if not changed:
+            mark_value(targets[0], status="success")
+        return VisualState(id=state_id, placements=placements, relations=relations)
+
     async def _invoke(
         self,
         schema: type[BaseModel],
         messages: list[SystemMessage | HumanMessage],
         *,
         temperature: float,
-        max_tokens: int,
+        validator: Callable[[BaseModel], None] | None = None,
     ) -> Any:
         return await get_llm().ainvoke_json(
             schema,
             messages,
             temperature=temperature,
-            max_tokens=max_tokens,
+            validator=validator,
         )
 
     @classmethod

@@ -11,7 +11,7 @@
   - Resource   生成资源记录
   - Event      学习行为事件
 
-新表应添加到 REGISTERED_MODELS 元组中，以便 init_db() 自动创建。
+新表应添加到 REGISTERED_MODELS 元组，并同步更新 init_schema.sql。
 
 重构说明（v3）：
 - Chat 会话压缩使用 ChatSessionSummaryBlock
@@ -19,9 +19,9 @@
 - Profile 独立为共享模块
 """
 
-# 本文件集中定义所有 SQLModel 数据库表，新表需加入底部 REGISTERED_MODELS 元组以便自动建表
+# 本文件集中定义所有 SQLModel 数据库表；新表需加入底部 REGISTERED_MODELS 元组并同步更新 init_schema.sql。
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import ForeignKey, Integer, Text, Column, Index, UniqueConstraint, CheckConstraint, func, text
@@ -98,6 +98,25 @@ class ActiveToken(SQLModel, table=True):
     token: str = Field(unique=True, index=True)
     # token 过期时间，用于清理过期记录
     expires_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
+
+
+class UserDailyActivity(SQLModel, table=True):
+    """用户每日登录活跃事实，一人一天只保留一条。"""
+    __tablename__ = "user_daily_activities"
+    __table_args__ = (
+        UniqueConstraint("user_id", "activity_date", name="uq_user_daily_activity"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(index=True)
+    activity_date: date = Field(index=True)
+    first_login_at: datetime = Field(
+        sa_column=Column(TIMESTAMP(timezone=True))
+    )
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
@@ -378,9 +397,15 @@ class UserProfile(SQLModel, table=True):
         default=None,
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True)
     )
-    last_assessment_report_id: int | None = Field(
+    last_assessment_id: int | None = Field(
         default=None,
-        foreign_key="learning_assessment_reports.id"
+        foreign_key="learning_assessments.id"
+    )
+
+    # 上次画像推理完成时间（Step1文字画像 + Step2分数画像），阈值计数基于此重置
+    profile_updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
     )
 
     created_at: datetime = Field(
@@ -427,37 +452,35 @@ class UserProfileDimension(SQLModel, table=True):
     )
 
 
-class LearningAssessmentReport(SQLModel, table=True):
-    """学习效果评估报告表 — 记录用户单次评估报告。"""
-    __tablename__ = "learning_assessment_reports"
+class LearningAssessment(SQLModel, table=True):
+    """学习评估表 — 画像更新或手动触发时生成。
+
+    LLM 输出两部分：assessment（评估文案）和 guidance_strategy（辅导策略）。
+    guidance_strategy 同步写入 UserProfile 表，作为当前生效策略。
+    """
+    __tablename__ = "learning_assessments"
     __table_args__ = (
-        Index("ix_reports_user_created", "user_id", "created_at"),
-        Index("ix_reports_user_status", "user_id", "status"),
+        Index("ix_assessments_user_created", "user_id", "created_at"),
+        Index("ix_assessments_user_status", "user_id", "status"),
         Index(
-            "uq_reports_user_generating",
+            "uq_assessments_user_generating",
             "user_id",
             postgresql_where=text("status = 'generating'"),
             unique=True,
         ),
-        CheckConstraint("range_days IN (3, 7, 14)", name="chk_reports_range_days"),
-        CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_reports_status"),
-        CheckConstraint("window_end > window_start", name="chk_reports_window_order"),
-        CheckConstraint(
-            "(status = 'ready' AND facts_snapshot IS NOT NULL) OR "
-            "(status = 'failed' AND failure_code IS NOT NULL) OR "
-            "(status = 'generating')",
-            name="chk_reports_state_consistency"
-        )
+        CheckConstraint("range_days IN (3, 7, 14)", name="chk_assessments_range_days"),
+        CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_assessments_status"),
+        CheckConstraint("window_end > window_start", name="chk_assessments_window_order"),
     )
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True, foreign_key="users.id")
+    trigger_source: str = Field(max_length=20, description="触发来源: profile_update / manual")
     range_days: int = Field()
     window_start: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     window_end: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     status: str = Field(max_length=16, default="generating")
-    facts_snapshot: dict | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
-    report_markdown: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    assessment: str | None = Field(default=None, sa_column=Column(Text, nullable=True), description="LLM 生成的学习评估文案")
     generated_at: datetime | None = Field(
         default=None,
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True)
@@ -972,6 +995,7 @@ class WrongQuestion(SQLModel, table=True):
 # 所有需要建表的模型类注册表，init_db() 据此创建或更新表结构
 REGISTERED_MODELS = (
     ActiveToken,
+    UserDailyActivity,
     ChatSession,
     ChatMessage,
     ChatAttachmentAnalysis,
@@ -980,7 +1004,7 @@ REGISTERED_MODELS = (
     ChatLongTermMemory,
     UserProfile,
     UserProfileDimension,
-    LearningAssessmentReport,
+    LearningAssessment,
     GeneratedResource,
     GeneratedResourceItem,
     GeneratedResourceAgentRun,

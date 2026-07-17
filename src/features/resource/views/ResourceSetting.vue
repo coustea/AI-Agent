@@ -879,6 +879,26 @@ const agentSettingSchemas: Record<
 
   cartoon: [
     {
+      key: 'lesson_depth',
+      title: '课程深度',
+      description: '控制知识讲解的深度和广度',
+      type: 'segment',
+      options: [
+        {
+          label: '聚焦',
+          value: 'focused',
+        },
+        {
+          label: '标准',
+          value: 'standard',
+        },
+        {
+          label: '深入',
+          value: 'deep',
+        },
+      ],
+    },
+    {
       key: 'visual_density',
       title: '画面信息密度',
       description: '控制每幕知识模型、关系和状态变化的丰富程度',
@@ -900,34 +920,23 @@ const agentSettingSchemas: Record<
     },
     {
       key: 'pace',
-      title: '播放节奏',
-      description: '决定信息出现速度、镜头停顿与讲解节奏',
+      title: '讲解节奏',
+      description: '控制旁白语速和动画推进的紧凑程度',
       type: 'segment',
       options: [
         {
-          label: '舒缓',
-          value: 'calm',
+          label: '紧凑',
+          value: 'fast',
         },
         {
           label: '均衡',
           value: 'balanced',
         },
         {
-          label: '快速',
-          value: 'fast',
+          label: '从容',
+          value: 'calm',
         },
       ],
-    },
-    {
-      key: 'target_duration_seconds',
-      title: '目标成片时长',
-      description: '控制动画讲解的目标总时长',
-      type: 'range',
-      min: 90,
-      max: 600,
-      step: 30,
-      scales: [90, 180, 300, 450, 600],
-      unit: ' 秒',
     },
     {
       key: 'voice',

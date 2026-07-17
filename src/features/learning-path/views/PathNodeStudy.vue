@@ -895,11 +895,6 @@ import {
   getErrorMessage,
 } from '@/shared/api/http'
 
-import {
-  startTracking,
-  stopTracking,
-} from '@/features/evaluation/model/useLearningTracker'
-
 type TocItem = {
   id: string
   title: string
@@ -1660,7 +1655,7 @@ async function loadWorkspace() {
           workspace.value.current_tutorial.id
     }
 
-    await startLearningTracking()
+    await recordPathNodeStarted()
     await syncHeadingAnchors()
   } catch (error) {
     toast.error(
@@ -1712,7 +1707,7 @@ async function generatePrimaryTutorial() {
   }
 }
 
-async function startLearningTracking() {
+async function recordPathNodeStarted() {
   if (
       !workspace.value ||
       hasStartedTracking.value
@@ -1721,19 +1716,6 @@ async function startLearningTracking() {
   }
 
   hasStartedTracking.value = true
-
-  startTracking({
-    sourcePage: 'path_node',
-    pathId: workspace.value.path.id,
-    pathNodeId:
-    workspace.value.node.id,
-    nodeId:
-    workspace.value.node.node_id,
-    course:
-    workspace.value.path.title,
-    topic:
-    workspace.value.node.title,
-  })
 
   await recordPathLearningEvent(
       workspace.value.path.id,
@@ -1887,28 +1869,59 @@ async function submitQuiz() {
     return
   }
 
-  const payload = {
-    answers:
-        quizRound.value.questions.map(
-            question => ({
-              question_id: question.id,
-              response:
-                  answers.value[
-                      question.id
-                      ] || '',
-            }),
-        ),
-  }
-
-  if (
-      payload.answers.some(
-          item => !item.response,
-      )
-  ) {
+  // 校验是否所有题都已作答
+  const unanswered = quizRound.value.questions.some(
+      question => !answers.value[question.id],
+  )
+  if (unanswered) {
     toast.warning(
         '请先完成全部诊断题目',
     )
     return
+  }
+
+  // ── 本地即时评分（answer 已随题目一起返回，无需等后端） ──
+  const questions = quizRound.value.questions
+  let correctCount = 0
+  const weakPoints: string[] = []
+
+  for (const question of questions) {
+    const userAnswer = answers.value[question.id] || ''
+    const isCorrect = userAnswer === question.answer
+    if (isCorrect) {
+      correctCount++
+    } else {
+      for (const point of question.knowledge_points) {
+        if (!weakPoints.includes(point)) {
+          weakPoints.push(point)
+        }
+      }
+    }
+  }
+
+  const passed = correctCount >= 3
+  const outcome = passed ? 'completed' : 'completed_with_gaps'
+
+  // 立即展示结果
+  quizResult.value = {
+    node_id: workspace.value.node.id,
+    round_no: quizRound.value.round_no,
+    score: correctCount,
+    passed,
+    outcome,
+    weak_knowledge_points: weakPoints,
+    next_node_id: null,
+    current_tutorial_id: null,
+  }
+
+  isQuizSubmitted.value = true
+
+  // 后台异步提交给后端做持久化（不阻塞 UI）
+  const payload = {
+    answers: questions.map(question => ({
+      question_id: question.id,
+      response: answers.value[question.id] || '',
+    })),
   }
 
   submitLoading.value = true
@@ -1920,10 +1933,9 @@ async function submitQuiz() {
             payload,
         )
 
+    // 用后端返回的权威结果覆盖本地结果（含 next_node_id 等）
     quizResult.value =
         response.data.data
-
-    isQuizSubmitted.value = true
 
     await recordPathLearningEvent(
         workspace.value.path.id,
@@ -2452,7 +2464,6 @@ onBeforeUnmount(() => {
   disconnectHeadingObserver()
   stopResourcePolling()
   resourceStarting.value.clear()
-  stopTracking()
 })
 </script>
 
@@ -3769,6 +3780,10 @@ onBeforeUnmount(() => {
   background: #fafcfc;
 }
 
+.quiz-nav {
+  border-bottom: 1px solid var(--study-border-light, rgba(200, 228, 227, 0.35));
+}
+
 .nav-back-button {
   display: inline-flex;
   min-height: 33px;
@@ -4045,14 +4060,15 @@ onBeforeUnmount(() => {
   gap: 12px;
   padding: 12px 16px;
   border-radius: 8px;
+  border: 1px solid var(--study-border, rgba(200, 228, 227, 0.44));
   background: #ffffff;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .quiz-choice-row:hover {
-  background:
-      var(--study-accent-softer);
+  background: var(--study-accent-softer, rgba(70, 184, 180, 0.04));
+  border-color: var(--study-accent-border, rgba(70, 184, 180, 0.5));
 }
 
 .quiz-choice-row:active {
@@ -4060,16 +4076,19 @@ onBeforeUnmount(() => {
 }
 
 .quiz-choice-row.selected {
-  background:
-      var(--study-accent-soft);
+  background: var(--study-accent-soft, rgba(70, 184, 180, 0.1));
+  border-color: var(--study-accent, #46b8b4);
+  box-shadow: 0 2px 8px rgba(70, 184, 180, 0.05);
 }
 
 .quiz-choice-row.correct {
   background: #e0f5ec;
+  border-color: #a3e2c9;
 }
 
 .quiz-choice-row.incorrect {
   background: #fef2f2;
+  border-color: #fca5a5;
 }
 
 .quiz-choice-row input {
@@ -4080,47 +4099,56 @@ onBeforeUnmount(() => {
 }
 
 .quiz-choice-box {
-  display: inline-block;
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  color:
-      var(--study-text-muted);
-  font-family:
-      var(--font-mono, monospace);
-  font-size: 13px;
-  font-weight: 700;
+  border-radius: 50%;
+  border: 1px solid var(--study-border, rgba(200, 228, 227, 0.6));
+  background: #fafcfc;
+  color: var(--study-text-muted, #6c858a);
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+  font-weight: 800;
+  transition: all 0.2s ease;
 }
 
-.quiz-choice-row.selected
-.quiz-choice-box {
-  color:
-      var(--study-accent-text);
+.quiz-choice-row:hover .quiz-choice-box {
+  border-color: var(--study-accent-border, rgba(70, 184, 180, 0.5));
+  background: #ffffff;
 }
 
-.quiz-choice-row.selected
-.quiz-choice-content {
-  color:
-      var(--study-accent-text);
+.quiz-choice-row.selected .quiz-choice-box {
+  border-color: var(--study-accent, #46b8b4);
+  background: var(--study-accent, #46b8b4);
+  color: #ffffff;
+}
+
+.quiz-choice-row.selected .quiz-choice-content {
+  color: var(--study-accent-text);
   font-weight: 600;
 }
 
-.quiz-choice-row.correct
-.quiz-choice-box {
-  color: #2d7a5c;
+.quiz-choice-row.correct .quiz-choice-box {
+  background: #2d7a5c;
+  border-color: #2d7a5c;
+  color: #ffffff;
 }
 
-.quiz-choice-row.correct
-.quiz-choice-content {
+.quiz-choice-row.correct .quiz-choice-content {
   color: #2d7a5c;
   font-weight: 600;
 }
 
-.quiz-choice-row.incorrect
-.quiz-choice-box {
-  color: #a04040;
+.quiz-choice-row.incorrect .quiz-choice-box {
+  background: #a04040;
+  border-color: #a04040;
+  color: #ffffff;
 }
 
-.quiz-choice-row.incorrect
-.quiz-choice-content {
+.quiz-choice-row.incorrect .quiz-choice-content {
   color: #a04040;
   font-weight: 600;
 }
@@ -4135,6 +4163,7 @@ onBeforeUnmount(() => {
   margin: 16px 0 0 26px;
   padding: 14px 18px;
   border-radius: 8px;
+  border: 1px solid rgba(70, 184, 180, 0.15);
   background: #f4f8f7;
 }
 
@@ -4179,18 +4208,13 @@ onBeforeUnmount(() => {
 .quiz-result-report {
   display: flex;
   flex-direction: column;
-  gap: 15px;
-  margin-top: 22px;
-  padding: 18px;
-  border: 0px solid
-  var(--study-accent-border);
-  border-radius: 7px;
-  background:
-      linear-gradient(
-          135deg,
-          var(--study-accent-soft),
-          #ffffff
-      );
+  gap: 16px;
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--study-accent-border, rgba(70, 184, 180, 0.25));
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(70, 184, 180, 0.08), rgba(255, 255, 255, 0.95));
+  box-shadow: 0 4px 20px rgba(31, 76, 80, 0.04);
 }
 
 .report-top {
@@ -4266,26 +4290,26 @@ onBeforeUnmount(() => {
 .next-node-button {
   display: inline-flex;
   width: 100%;
-  min-height: 39px;
+  min-height: 40px;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  border: 0px solid
-  var(--study-accent-border);
-  border-radius: 6px;
-  background: #ffffff;
-  color:
-      var(--study-accent-text);
-  font-size: 12px;
+  gap: 8px;
+  border: 1px solid var(--study-accent, #46b8b4);
+  border-radius: 8px;
+  background: var(--study-accent, #46b8b4);
+  color: #ffffff;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
+  box-shadow: 0 2px 6px rgba(70, 184, 180, 0.2);
+  transition: all 0.2s ease;
 }
 
 .next-node-button:hover {
-  border-color:
-      var(--study-accent);
-  background:
-      var(--study-accent-soft);
+  background: #3fa8a4;
+  border-color: #3fa8a4;
+  box-shadow: 0 4px 12px rgba(70, 184, 180, 0.3);
+  transform: translateY(-1px);
 }
 
 .next-node-button svg {

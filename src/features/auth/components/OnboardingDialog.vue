@@ -247,7 +247,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { toast } from 'vue-sonner'
 import { PhPaperPlaneRight as Position, PhArrowRight as Right } from '@phosphor-icons/vue'
 
-import { updateMe, getMe } from '@/features/auth/api/auth'
+import { getMe } from '@/features/auth/api/auth'
 import { useCurrentUser } from '@/features/auth/model/currentUser'
 import { updateProfileOnboarding } from '@/features/profile/api/profile'
 import type { ProfileOnboardingUpdate } from '@/features/profile/api/profile'
@@ -1249,9 +1249,6 @@ const submitForm = async () => {
       weak_points: form.weak_points,
     })
 
-    // 标记首次登录完成（非关键，失败不影响流程）
-    updateMe({ onboarding_completed: true }).catch(() => {})
-
     clearDraft()
 
     toast.success('基础资料已完成')
@@ -1272,12 +1269,6 @@ const submitForm = async () => {
 
 // “稍后完善”：保留 onboarding 待完成状态并保存草稿，然后关闭弹窗
 const handleCompleteLater = async () => {
-  try {
-    await updateMe({ onboarding_completed: false }).catch(() => {})
-  } catch (error) {
-    console.error('Failed to keep onboarding pending', error)
-  }
-
   persistDraft()
   visible.value = false
 

@@ -6,6 +6,7 @@ import type {
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
+  ProfileUpdate,
   ProfileDimensionKey,
   DimensionValue,
 } from '@/features/profile/model/profile'
@@ -16,6 +17,7 @@ export type {
   StudentProfileData,
   ProfileOnboardingUpdate,
   ProfileOnboardingUpdateResult,
+  ProfileUpdate,
   ProfileDimensionKey,
   DimensionValue,
 }
@@ -23,6 +25,11 @@ export type {
 // 获取用户完整画像数据
 export function getProfile() {
   return http.get<ApiResponse<ProfileData>>('/ai/profile')
+}
+
+// 更新个人中心已展示的基础资料，不复用首次 onboarding 接口。
+export function updateProfile(payload: ProfileUpdate) {
+  return http.patch<ApiResponse<{ user_id: number; updated_at: string }>>('/ai/profile', payload)
 }
 
 // 获取用户 onboarding 阶段的初始画像数据
@@ -34,6 +41,5 @@ export function getProfileOnboarding() {
 export function updateProfileOnboarding(payload: ProfileOnboardingUpdate) {
   return http.patch<ApiResponse<ProfileOnboardingUpdateResult>>('/ai/profile/onboarding', payload)
 }
-
 
 

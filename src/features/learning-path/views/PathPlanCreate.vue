@@ -500,7 +500,7 @@
 
       <transition name="modal-fade">
         <div
-            v-if="isPlanning"
+            v-if="isPlanning && isPlanningModalVisible"
             class="student-planning-modal-backdrop"
         >
           <section
@@ -689,19 +689,27 @@
                   aria-live="polite"
                   aria-atomic="true"
               >
-                <transition-group name="log-item-fade">
-                  <div
-                      v-for="(message, index) in planningLogs"
-                      :key="`${message}-${index}`"
-                      class="friendly-log-row"
-                  >
-                    <span class="friendly-log-dot"></span>
+                <div
+                    v-for="log in visiblePlanningLogs"
+                    :key="log.sequence"
+                    class="friendly-log-row"
+                >
+                  <span class="friendly-log-dot"></span>
 
-                    <span class="friendly-log-text">
-                      {{ message }}
-                    </span>
-                  </div>
-                </transition-group>
+                  <span class="friendly-log-text">
+                    {{ log.message }}
+                  </span>
+                </div>
+              </div>
+
+              <div class="planning-result-actions">
+                <button
+                    type="button"
+                    class="modal-secondary-action"
+                    @click="minimizePlanningToBackground"
+                >
+                  后台运行（前往路径历史）
+                </button>
               </div>
             </template>
           </section>
@@ -730,10 +738,6 @@ import type {
 } from '@/features/learning-path/model/path'
 import type { PathEvent } from '@/features/learning-path/model/pathEvent'
 import { usePathEvents } from '@/features/learning-path/composables/usePathEvents'
-import {
-  runPathCompletionTransition,
-  waitForPathTerminalEvent,
-} from '@/features/learning-path/model/pathCompletion'
 
 type Scene =
     | 'exam'
@@ -791,6 +795,11 @@ interface PlanningStep {
   tone: PlanningStepTone
 }
 
+interface PlanningLog {
+  sequence: number
+  message: string
+}
+
 const router = useRouter()
 
 const goalRef = ref<HTMLTextAreaElement | null>(null)
@@ -798,18 +807,19 @@ const knowledgeInput = ref('')
 
 const isSubmitting = ref(false)
 const isPlanning = ref(false)
+const isPlanningModalVisible = ref(false)
 
 const planningProgress = ref(0)
-const planningLogs = ref<string[]>([])
+const planningLogs = ref<PlanningLog[]>([])
 const planningError = ref('')
 
-let progressTimer: number | null = null
-
-// SSE 事件管理
 const pathEvents = usePathEvents()
-let sseCompleted = false
 let isUnmounted = false
+let hasTerminalEvent = false
 let pathWaitController: AbortController | null = null
+let pendingPlanningEvents: PathEvent[] = []
+let planningEventFrame: number | null = null
+let planningAttempt = 0
 
 const form = reactive({
   topic: '',
@@ -1204,6 +1214,10 @@ const currentPlanningStepNumber = computed(() => {
   )
 })
 
+const visiblePlanningLogs = computed(() => {
+  return planningLogs.value.slice(-3)
+})
+
 function getPlanningStepStyle(
     step: PlanningStep,
     index: number,
@@ -1388,82 +1402,84 @@ function buildPayload(): PathRequest {
   }
 }
 
-function clearProgressTimer() {
-  if (progressTimer === null) {
+function clearPendingPlanningEvents() {
+  pendingPlanningEvents = []
+
+  if (planningEventFrame !== null) {
+    window.cancelAnimationFrame(planningEventFrame)
+    planningEventFrame = null
+  }
+}
+
+function flushPlanningEvents() {
+  if (!pendingPlanningEvents.length) {
     return
   }
 
-  window.clearInterval(progressTimer)
-  progressTimer = null
+  const events = pendingPlanningEvents
+  pendingPlanningEvents = []
+
+  const displayedSequences = new Set(
+      planningLogs.value.map(log => log.sequence),
+  )
+  const nextLogs = [...planningLogs.value]
+  let nextProgress = planningProgress.value
+
+  for (const event of events) {
+    if (typeof event.progress === 'number') {
+      nextProgress = Math.max(
+          nextProgress,
+          Math.min(event.progress, 100),
+      )
+    }
+
+    if (
+        event.message &&
+        !displayedSequences.has(event.sequence)
+    ) {
+      displayedSequences.add(event.sequence)
+      nextLogs.push({
+        sequence: event.sequence,
+        message: event.message,
+      })
+    }
+  }
+
+  planningProgress.value = nextProgress
+  planningLogs.value = nextLogs
 }
 
-function addPlanningLog(message: string) {
-  if (planningLogs.value.includes(message)) {
+function queuePlanningEvent(event: PathEvent) {
+  pendingPlanningEvents.push(event)
+
+  if (planningEventFrame !== null) {
     return
   }
 
-  planningLogs.value = [
-    ...planningLogs.value,
-    message,
-  ].slice(-3)
+  planningEventFrame = window.requestAnimationFrame(() => {
+    planningEventFrame = null
+    flushPlanningEvents()
+  })
 }
 
-function startProgressAnimation() {
-  clearProgressTimer()
-
-  planningProgress.value = 6
+function startPlanningProgress() {
+  clearPendingPlanningEvents()
+  planningProgress.value = 0
   planningLogs.value = [
-    '规划任务已提交，正在读取学习参数。',
+    {
+      sequence: 0,
+      message: '规划任务已提交，正在连接实时进度。',
+    },
   ]
-
-  progressTimer = window.setInterval(() => {
-    if (planningProgress.value < 28) {
-      planningProgress.value += 2.8
-    } else if (planningProgress.value < 56) {
-      planningProgress.value += 1.9
-    } else if (planningProgress.value < 78) {
-      planningProgress.value += 1.05
-    } else if (planningProgress.value < 94) {
-      planningProgress.value += 0.38
-    }
-
-    if (planningProgress.value >= 10) {
-      addPlanningLog(
-          '已读取学习目标、当前基础和学习偏好。',
-      )
-    }
-
-    if (planningProgress.value >= 30) {
-      addPlanningLog(
-          '正在拆解学习阶段并确定阶段目标。',
-      )
-    }
-
-    if (planningProgress.value >= 52) {
-      addPlanningLog(
-          '正在编排核心知识节点和学习顺序。',
-      )
-    }
-
-    if (planningProgress.value >= 74) {
-      addPlanningLog(
-          '正在检查节点覆盖度和前置依赖。',
-      )
-    }
-
-    if (planningProgress.value >= 90) {
-      addPlanningLog(
-          '路径结构已基本完成，正在保存结果。',
-      )
-    }
-  }, 700)
 }
 
 function resetPlanningState() {
-  clearProgressTimer()
+  planningAttempt += 1
   pathWaitController?.abort()
   pathWaitController = null
   pathEvents.reset()
+  clearPendingPlanningEvents()
+  hasTerminalEvent = false
 
   isPlanning.value = false
   isSubmitting.value = false
@@ -1472,18 +1488,13 @@ function resetPlanningState() {
   planningError.value = ''
 }
 
-async function retryPlanning() {
-  clearProgressTimer()
-  pathWaitController?.abort()
-  pathWaitController = null
-  pathEvents.reset()
-  sseCompleted = false
+function minimizePlanningToBackground() {
+  isPlanningModalVisible.value = false
+  router.push('/path-planner/history')
+}
 
-  isPlanning.value = false
-  isSubmitting.value = false
-  planningProgress.value = 0
-  planningLogs.value = []
-  planningError.value = ''
+async function retryPlanning() {
+  resetPlanningState()
 
   await nextTick()
   await handleSubmit()
@@ -1496,97 +1507,93 @@ function delay(ms: number) {
 }
 
 function handleSSEEvent(event: PathEvent) {
-  // 更新进度（取最大值，避免进度倒退）
-  if (typeof event.progress === 'number') {
-    planningProgress.value = Math.max(planningProgress.value, Math.min(event.progress, 100))
-  }
-
-  // 添加消息（去重）
-  if (event.message && !planningLogs.value.includes(event.message)) {
-    planningLogs.value = [...planningLogs.value, event.message].slice(-5)
-  }
+  queuePlanningEvent(event)
 }
 
 async function waitForPathReady(
     pathId: number,
     runId: string,
 ) {
-  sseCompleted = false
   pathWaitController?.abort()
-  const waitController = new AbortController()
-  pathWaitController = waitController
-
-  let completionPromise: Promise<void> | null = null
-
-  const completePlanning = () => {
-    if (completionPromise) {
-      return completionPromise
-    }
-
-    sseCompleted = true
-    pathEvents.close()
-    completionPromise = runPathCompletionTransition({
-      markComplete: () => {
-        clearProgressTimer()
-        planningProgress.value = 100
-        addPlanningLog(
-            '路径结构生成完成，正在打开路径总览。',
-        )
-      },
-      waitForRender: nextTick,
-      wait: delay,
-      navigate: () => {
-        if (isUnmounted) {
-          return Promise.resolve()
-        }
-
-        return router.push({
-          path: `/path-planner/overview/${pathId}`,
-          query: { run_id: runId },
-        })
-      },
-    })
-
-    return completionPromise
-  }
-
-  const failPlanning = (error: Error) => {
-    if (sseCompleted) {
-      return
-    }
-
-    sseCompleted = true
-    pathEvents.close()
-    clearProgressTimer()
-    planningProgress.value = Math.min(
-        planningProgress.value,
-        96,
-    )
-    planningError.value =
-        error.message ||
-        '路径规划失败，请调整参数后重试'
-    toast.error(planningError.value)
-  }
+  const controller = new AbortController()
+  pathWaitController = controller
+  hasTerminalEvent = false
 
   try {
-    await waitForPathTerminalEvent({
-      timeoutMs: 180_000,
-      signal: waitController.signal,
-      start: ({ onCompleted, onFailed }) => {
-        pathEvents.connect(pathId, runId, {
-          onEvent: handleSSEEvent,
-          onCompleted,
-          onFailed,
-        })
-      },
-      onCompleted: completePlanning,
-      onFailed: failPlanning,
-      onTimeout: () => {
+    await new Promise<void>((resolve, reject) => {
+      const cleanup = () => {
+        controller.signal.removeEventListener(
+            'abort',
+            handleAbort,
+        )
+      }
+
+      const handleAbort = () => {
+        cleanup()
+        resolve()
+      }
+
+      const completePlanning = async (event: PathEvent) => {
+        if (hasTerminalEvent) {
+          return
+        }
+
+        hasTerminalEvent = true
+        handleSSEEvent(event)
+        flushPlanningEvents()
+        planningProgress.value = 100
         pathEvents.close()
-      },
+
+        try {
+          await nextTick()
+          await delay(450)
+
+          if (!isUnmounted) {
+            await router.replace({
+              path: `/path-planner/overview/${pathId}`,
+              query: { run_id: runId },
+            })
+          }
+
+          resolve()
+        } catch (error) {
+          reject(error)
+        } finally {
+          cleanup()
+        }
+      }
+
+      const failPlanning = (error: Error, event: PathEvent) => {
+        if (hasTerminalEvent) {
+          return
+        }
+
+        hasTerminalEvent = true
+        handleSSEEvent(event)
+        flushPlanningEvents()
+        pathEvents.close()
+        planningError.value =
+            error.message ||
+            '路径规划未能完成，请调整参数后重试。'
+        toast.error(planningError.value)
+        cleanup()
+        resolve()
+      }
+
+      controller.signal.addEventListener(
+          'abort',
+          handleAbort,
+          { once: true },
+      )
+
+      pathEvents.connect(pathId, runId, {
+        onEvent: handleSSEEvent,
+        onCompleted: completePlanning,
+        onFailed: failPlanning,
+      })
     })
   } finally {
-    if (pathWaitController === waitController) {
+    if (pathWaitController === controller) {
       pathWaitController = null
     }
   }
@@ -1617,12 +1624,13 @@ async function handleSubmit() {
     return
   }
 
+  const attempt = ++planningAttempt
   isSubmitting.value = true
   isPlanning.value = true
+  isPlanningModalVisible.value = true
   planningError.value = ''
-  sseCompleted = false
 
-  startProgressAnimation()
+  startPlanningProgress()
 
   try {
     const response =
@@ -1640,13 +1648,14 @@ async function handleSubmit() {
       )
     }
 
-    await waitForPathReady(
-        pathId,
-        runId,
-    )
-  } catch (error) {
-    clearProgressTimer()
+    if (!runId) {
+      throw new Error(
+          '服务器未返回实时任务标识，请稍后重试。',
+      )
+    }
 
+    await waitForPathReady(pathId, runId)
+  } catch (error) {
     planningProgress.value =
         Math.min(
             planningProgress.value,
@@ -1659,18 +1668,25 @@ async function handleSubmit() {
             : '路径规划未能完成，请稍后重试。'
 
     toast.error(planningError.value)
+
+    if (!isPlanningModalVisible.value) {
+      resetPlanningState()
+    }
   } finally {
-    isSubmitting.value = false
+    if (attempt === planningAttempt) {
+      isSubmitting.value = false
+    }
   }
 }
 
 onBeforeUnmount(() => {
   isUnmounted = true
-  sseCompleted = true
+  planningAttempt += 1
+  hasTerminalEvent = true
   pathWaitController?.abort()
   pathWaitController = null
   pathEvents.close()
-  clearProgressTimer()
+  clearPendingPlanningEvents()
 })
 </script>
 
@@ -3063,15 +3079,17 @@ onBeforeUnmount(() => {
 
 .student-friendly-log-box {
   display: flex;
-  min-height: 78px;
+  height: 108px;
+  box-sizing: border-box;
   flex-direction: column;
-  justify-content: center;
   gap: 7px;
   margin-top: 17px;
   padding: 12px 15px;
   border-left: 2px solid
   var(--planner-accent-border);
   background: #fbfdfd;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .friendly-log-row {
@@ -3274,17 +3292,6 @@ onBeforeUnmount(() => {
 .modal-fade-enter-from,
 .modal-fade-leave-to {
   opacity: 0;
-}
-
-.log-item-fade-enter-active {
-  transition:
-      opacity 190ms ease,
-      transform 190ms ease;
-}
-
-.log-item-fade-enter-from {
-  opacity: 0;
-  transform: translateY(4px);
 }
 
 @keyframes template-mark-enter {

@@ -1,6 +1,5 @@
-from app.shared.ppt.generator import PPTGenerationError, PPTGenerator
+from app.shared.ppt.generator import PPTGenerationError, PPTGenerator, ppt_pipeline_metadata
 from app.shared.ppt.models import (
-    DeckLogicDraft,
     DeckLogicModel,
     LogicChapter,
     LogicEdge,
@@ -22,7 +21,6 @@ from app.shared.ppt.visual_ir import VisualModel
 from app.shared.ppt.visual_planner import VisualPlanner
 
 __all__ = [
-    "DeckLogicDraft",
     "DeckLogicModel",
     "LogicChapter",
     "LogicEdge",
@@ -32,6 +30,7 @@ __all__ = [
     "PPTGenerationError",
     "PPTGenerationContext",
     "PPTGenerator",
+    "ppt_pipeline_metadata",
     "PPTPreferences",
     "PPTService",
     "PPTSlide",

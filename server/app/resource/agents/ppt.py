@@ -24,6 +24,7 @@ from app.shared.ppt import (
     PPTService,
     PPTSource,
     ResourcePPT,
+    ppt_pipeline_metadata,
 )
 
 logger = get_logger(__name__)
@@ -138,8 +139,8 @@ class PPTAgent(BaseResourceAgent):
             artifact = await self.run_with_heartbeat(
                 self._ppt_service.generate(request, output_dir, progress=progress),
                 messages=[
-                    "教学总监正在设计整套课件叙事...",
-                    "三个视觉编排智能体正在并行完成页面...",
+                    "正在从基础资源提取可讲解的知识事实...",
+                    "正在将知识事实编译为课件结构与图解...",
                     "正在渲染 HTML 课件，请稍候...",
                 ],
                 interval_seconds=15.0,
@@ -195,17 +196,6 @@ class PPTAgent(BaseResourceAgent):
                 "html_url": artifact.html_url,
                 "slide_count": artifact.slide_count,
                 "file_size": path.stat().st_size,
-                "ppt_pipeline": {
-                    "version": "visual-ir-v2",
-                    "stages": [
-                        "assembling_context",
-                        "designing_logic",
-                        "designing_story",
-                        "visual_planning",
-                        "composing_sections",
-                        "rendering_html",
-                    ],
-                    "composition_workers": 3,
-                },
+                "ppt_pipeline": ppt_pipeline_metadata(),
             },
         )

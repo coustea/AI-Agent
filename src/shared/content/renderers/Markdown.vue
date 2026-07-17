@@ -170,6 +170,9 @@ const hasComplexity = computed(() => {
 .markdown-resource { min-width: 0; width: 100%; }
 .markdown-plain-shell { background: transparent; }
 .markdown-body { min-width: 0; }
+.markdown-body :deep(h1:first-of-type) {
+  display: none;
+}
 
 .compact .markdown-plain-shell {
   max-height: 300px;

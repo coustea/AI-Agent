@@ -11,7 +11,7 @@ from pathlib import Path
 
 from app.config import path_node_ppt_url, user_path_node_ppt_dir
 from app.infra.logging import get_logger
-from app.shared.ppt.generator import PPTGenerator, ProgressCallback
+from app.shared.ppt.generator import PPTGenerator, ProgressCallback, ppt_pipeline_metadata
 from app.shared.ppt.models import PPTArtifact, PathPPT, ResourcePPT, PPTPreferences
 
 if TYPE_CHECKING:
@@ -161,17 +161,6 @@ class PPTService:
                 "html_url": artifact.html_url,
                 "slide_count": artifact.slide_count,
                 "file_size": artifact.path.stat().st_size,
-                "ppt_pipeline": {
-                    "version": "visual-ir-v2",
-                    "stages": [
-                        "assembling_context",
-                        "designing_logic",
-                        "designing_story",
-                        "visual_planning",
-                        "composing_sections",
-                        "rendering_html",
-                    ],
-                    "composition_workers": 3,
-                },
+                "ppt_pipeline": ppt_pipeline_metadata(),
             },
         )

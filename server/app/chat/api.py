@@ -50,14 +50,11 @@ def resolve_diagram_mode(
 @router.post("/chat/videos")
 async def create_chat_video(
     background_tasks: BackgroundTasks,
-    topic: str = Form(...),
+    assistant_message_id: int = Form(...),
     session_id: str | None = Form(default=None),
     current_user: User = Depends(get_current_user_flexible),
 ):
-    """Create a cartoon task only after an explicit user action in chat."""
-    normalized_topic = topic.strip()
-    if not normalized_topic:
-        return HttpResponse.error(code=400, message="请输入视频主题")
+    """Create a video from one completed tutor answer after an explicit action."""
 
     effective_session = session_id or get_chat_usecases().default_session_id(current_user.id)
     service = get_chat_video_service()
@@ -65,7 +62,7 @@ async def create_chat_video(
         task = await service.create_task(
             user_id=current_user.id,
             session_id=effective_session,
-            topic=normalized_topic,
+            assistant_message_id=assistant_message_id,
         )
     except (ValueError, PermissionError) as exc:
         return HttpResponse.error(code=400, message=str(exc))
@@ -78,27 +75,26 @@ async def create_chat_video(
         user_id=current_user.id,
         username=current_user.username,
         session_id=effective_session,
-        user_message_id=task["user_message_id"],
-        topic=normalized_topic,
+        assistant_message_id=task["assistant_message_id"],
     )
     return HttpResponse.success(data=task, status_code=202)
 
 
-@router.get("/chat/sessions/{session_id}/videos/{user_message_id}")
+@router.get("/chat/sessions/{session_id}/videos/{assistant_message_id}")
 async def get_chat_video(
     session_id: str,
-    user_message_id: int,
+    assistant_message_id: int,
     current_user: User = Depends(get_current_user_flexible),
 ):
-    """Poll a persisted explicit video task; this is independent of chat SSE."""
+    """Poll a persisted answer-grounded video task independently of chat SSE."""
     video = await get_chat_video_service().get_task(
         user_id=current_user.id,
         session_id=session_id,
-        user_message_id=user_message_id,
+        assistant_message_id=assistant_message_id,
     )
     if video is None:
         return HttpResponse.error(code=404, message="视频任务不存在或无权限")
-    return HttpResponse.success(data={"user_message_id": user_message_id, "video": video})
+    return HttpResponse.success(data={"assistant_message_id": assistant_message_id, "video": video})
 
 
 async def _get_owned_assistant_message(

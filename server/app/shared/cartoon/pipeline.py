@@ -43,9 +43,17 @@ class CartoonPipeline:
         self.media = media or CartoonMedia()
 
     async def generate(self, brief: CartoonBrief, output_dir: Path) -> CartoonArtifact:
+        logger.info(
+            "[Cartoon] 开始生成: learning_need=%s depth=%s voice=%s output_dir=%s",
+            brief.learning_need,
+            brief.configuration.lesson_depth.value,
+            brief.configuration.voice,
+            output_dir,
+        )
         output_dir.parent.mkdir(parents=True, exist_ok=True)
         workspace = output_dir.parent / f".{output_dir.name}.work-{uuid4().hex}"
         workspace.mkdir(parents=False, exist_ok=False)
+        logger.info("[Cartoon] 工作目录已创建: workspace=%s", workspace)
         try:
             artifact = await self._generate_workspace(brief, workspace)
             relative_paths = {
@@ -60,6 +68,13 @@ class CartoonPipeline:
                 )
             }
             await self._publish(workspace, output_dir)
+            logger.info(
+                "[Cartoon] 生成完成: title=%s duration_ms=%s scene_count=%s video=%s",
+                artifact.title,
+                artifact.duration_ms,
+                artifact.scene_count,
+                artifact.video_path,
+            )
             return artifact.model_copy(
                 update={
                     "output_dir": output_dir,
@@ -70,9 +85,25 @@ class CartoonPipeline:
                 }
             )
         except Exception:
-            if workspace.exists():
-                shutil.rmtree(workspace, ignore_errors=True)
+            logger.exception("[Cartoon] 生成失败，保留诊断目录: workspace=%s", workspace)
+            self._preserve_failure_workspace(workspace)
             raise
+
+    @staticmethod
+    def _preserve_failure_workspace(workspace: Path) -> None:
+        """Keep private diagnostics for a failed quality gate instead of deleting evidence."""
+
+        if not workspace.exists():
+            return
+        diagnostics_root = Path(__file__).resolve().parents[3] / "storage" / "cartoon-failures"
+        diagnostics_root.mkdir(parents=True, exist_ok=True)
+        destination = diagnostics_root / f"{workspace.name.lstrip('.')}-{uuid4().hex}"
+        try:
+            shutil.move(str(workspace), str(destination))
+            logger.error("Cartoon failure workspace preserved at %s", destination)
+        except Exception:
+            logger.exception("Unable to preserve failed Cartoon workspace %s", workspace)
+            shutil.rmtree(workspace, ignore_errors=True)
 
     async def _generate_workspace(self, brief: CartoonBrief, output_dir: Path) -> CartoonArtifact:
 
@@ -85,6 +116,7 @@ class CartoonPipeline:
         }
         stage = "planning"
         try:
+            logger.info("[Cartoon] 阶段 planning: 开始生成分镜...")
             lesson = await self.planner.plan(brief)
             lesson_path = output_dir / "lesson.json"
             lesson_path.write_text(
@@ -97,12 +129,20 @@ class CartoonPipeline:
                 "beat_count": sum(len(scene.beats) for scene in lesson.scenes),
                 "grammars": sorted({scene.grammar.value for scene in lesson.scenes}),
             }
+            logger.info(
+                "[Cartoon] 阶段 planning: 完成 scenes=%s beats=%s grammars=%s",
+                len(lesson.scenes),
+                sum(len(s.beats) for s in lesson.scenes),
+                sorted({s.grammar.value for s in lesson.scenes}),
+            )
 
             stage = "speech"
+            logger.info("[Cartoon] 阶段 speech: 开始旁白合成...")
             timeline = await self.speech.synthesize(
                 lesson,
                 output_dir,
                 voice=brief.configuration.voice,
+                pace=brief.configuration.pace,
             )
             timeline_path = output_dir / "timeline.json"
             timeline_path.write_text(
@@ -115,14 +155,22 @@ class CartoonPipeline:
                 "caption_count": len(timeline.captions),
                 "duration_ms": timeline.duration_ms,
             }
+            logger.info(
+                "[Cartoon] 阶段 speech: 完成 beats=%s captions=%s duration_ms=%s",
+                len(timeline.beats),
+                len(timeline.captions),
+                timeline.duration_ms,
+            )
 
             stage = "compose"
+            logger.info("[Cartoon] 阶段 compose: 开始动画合成...")
             bundle = self.composer.write(lesson, timeline, output_dir)
             self.media.install_runtime(output_dir)
             required_files = [
                 bundle.html_path,
                 bundle.scene_data_path,
                 bundle.caption_path,
+                *bundle.scene_paths,
                 output_dir / "assets" / "runtime.js",
                 output_dir / "assets" / "theme.css",
                 output_dir / "assets" / "vendor" / "gsap.min.js",
@@ -140,8 +188,14 @@ class CartoonPipeline:
                 "caption_artifact": bundle.caption_path.name,
                 "caption_mode": "burned-in+vtt",
             }
+            logger.info(
+                "[Cartoon] 阶段 compose: 完成 html=%s scenes=%s",
+                bundle.html_path,
+                len(bundle.scene_paths),
+            )
 
             stage = "quality"
+            logger.info("[Cartoon] 阶段 quality: 开始质量检查...")
             report = await self.media.check(output_dir)
             audit["stages"]["quality"] = {
                 "passed": True,
@@ -149,12 +203,18 @@ class CartoonPipeline:
                 "exit_code": report.exit_code,
                 "finding_counts": {
                     category: report.count(category)
-                    for category in ("lint", "runtime", "layout", "motion", "contrast", "unknown")
+                    for category in ("lint", "runtime", "layout", "motion", "contrast", "semantic", "unknown")
                 },
                 "findings": [item.model_dump(mode="json") for item in report.findings],
             }
+            logger.info(
+                "[Cartoon] 阶段 quality: 完成 ok=%s findings=%s",
+                report.ok,
+                {cat: report.count(cat) for cat in ("lint", "runtime", "layout", "motion", "contrast", "semantic", "unknown")},
+            )
 
             stage = "render"
+            logger.info("[Cartoon] 阶段 render: 开始视频渲染...")
             video_path = await self.media.render(output_dir)
             probe = await self.media.probe(
                 video_path,
@@ -166,6 +226,14 @@ class CartoonPipeline:
             }
             audit["passed"] = True
             self._write_audit(audit_path, audit)
+            logger.info(
+                "[Cartoon] 阶段 render: 完成 video=%s duration=%.1fs resolution=%sx%s has_audio=%s",
+                video_path,
+                probe.duration_seconds,
+                probe.width,
+                probe.height,
+                probe.has_audio,
+            )
             return CartoonArtifact(
                 title=lesson.title,
                 duration_ms=timeline.duration_ms,
@@ -209,6 +277,7 @@ class CartoonPipeline:
 
     @staticmethod
     async def _publish(workspace: Path, output_dir: Path) -> None:
+        logger.info("[Cartoon] 发布: workspace=%s -> output_dir=%s", workspace, output_dir)
         key = str(output_dir.resolve())
         async with _PUBLISH_LOCKS_GUARD:
             lock = _PUBLISH_LOCKS.setdefault(key, asyncio.Lock())
@@ -229,6 +298,7 @@ class CartoonPipeline:
             else:
                 if backup.exists():
                     shutil.rmtree(backup, ignore_errors=True)
+        logger.info("[Cartoon] 发布完成: output_dir=%s", output_dir)
 
     @staticmethod
     def _record_failure(

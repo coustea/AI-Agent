@@ -93,8 +93,8 @@ class CodeAgent(BaseResourceAgent):
         full_prompt = f"{prompt}\n\n{input_text}"
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
         llm_started = time.perf_counter()
-        response = await self.run_with_heartbeat(
-            self.llm.ainvoke(full_prompt),
+        content = await self.run_with_heartbeat(
+            self.llm.ainvoke_text(full_prompt),
             messages=[
                 "正在生成教学示例代码...",
                 "正在补充代码注释与运行说明...",
@@ -102,7 +102,6 @@ class CodeAgent(BaseResourceAgent):
             interval_seconds=12.0,
             progress=70,
         )
-        content = response.content if hasattr(response, "content") else str(response)
         llm_elapsed = int((time.perf_counter() - llm_started) * 1000)
         logger.info(
             "Agent[%s] LLM 完成: output_len=%d elapsed_ms=%d",

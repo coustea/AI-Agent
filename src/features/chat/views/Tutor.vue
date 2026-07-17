@@ -336,6 +336,17 @@
                       </svg>
                       复制回答
                     </button>
+                    <button
+                      v-if="chatMode === 'standard' && !msg.video"
+                      type="button"
+                      @click.stop="startVideoGeneration(msg)"
+                    >
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <rect x="2.5" y="5" width="11" height="10" rx="1.5" />
+                        <path d="m13.5 8 4-2.5v9l-4-2.5z" />
+                      </svg>
+                      生成动画讲解
+                    </button>
                   </div>
 
                   <div v-if="msg.teachingDiagramGenerating" class="diagram-generation-panel">
@@ -482,20 +493,6 @@
                     <span>图解</span>
                   </button>
 
-                  <button
-                    v-if="chatMode === 'standard'"
-                    type="button"
-                    class="input-tool-btn"
-                    :disabled="!canGenerateVideo"
-                    :title="canGenerateVideo ? '根据当前输入生成动画讲解视频' : '请输入视频主题，视频不支持附件'"
-                    @click="startVideoGeneration"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
-                      <rect x="3" y="6" width="12" height="12" rx="2"></rect>
-                      <path d="m15 10 5-3v10l-5-3z"></path>
-                    </svg>
-                    <span>视频</span>
-                  </button>
                 </div>
 
                 <div class="action-right">
@@ -1155,15 +1152,6 @@ const isResponding = computed(() => (
 const canSendMessage = computed(() => (
   !isResponding.value
   && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
-))
-
-// Video creation is a separate, user-triggered workflow and must not inherit
-// the text-agent's long-running "responding" lock.
-const canGenerateVideo = computed(() => (
-  chatMode.value === 'standard'
-  && !uploadingFile.value
-  && pendingFiles.value.length === 0
-  && Boolean(userInput.value.trim())
 ))
 
 // 流式消息管理器（全局单例）
@@ -2133,6 +2121,39 @@ const loadHistoryFromAPI = async (sessionId: string) => {
       || Boolean(item.video)
     ))
 
+    // Move video artifacts from user-side messages to the adjacent AI-side message,
+    // matching the live UX where video generation appears under the AI avatar.
+    for (let i = 0; i < renderableHistory.length; i++) {
+      const item = renderableHistory[i]!
+      if (item.role === 'user' && item.video) {
+        // Look for the next AI message to attach the video to
+        let target = -1
+        for (let j = i + 1; j < renderableHistory.length; j++) {
+          if (renderableHistory[j]!.role === 'ai') {
+            target = j
+            break
+          }
+        }
+        if (target >= 0) {
+          renderableHistory[target]!.video = item.video
+        } else {
+          // No AI message follows — insert a synthetic AI message
+          renderableHistory.splice(i + 1, 0, {
+            id: Date.now() + i,
+            userMessageId: undefined,
+            role: 'ai' as const,
+            content: '',
+            time: item.time,
+            attachments: null,
+            agentActivities: [],
+            teachingDiagram: null,
+            video: item.video,
+          })
+        }
+        item.video = null
+      }
+    }
+
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = renderableHistory.filter((item, idx) => {
       if (idx === 0) return true
@@ -2148,7 +2169,12 @@ const loadHistoryFromAPI = async (sessionId: string) => {
     })
     for (const message of messages.value) {
       if (message.video?.status === 'queued' || message.video?.status === 'running') {
-        watchChatVideo(sessionId, message.id)
+        // The video is now on an AI message; find its preceding user message
+        // to get the user_message_id for polling.
+        const idx = messages.value.indexOf(message)
+        const userMsg = idx > 0 ? messages.value[idx - 1] : null
+        const pollId = userMsg?.id || message.id
+        watchChatVideo(sessionId, pollId)
       }
     }
   } catch (err) {
@@ -2469,50 +2495,36 @@ const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
 }
 
-const watchChatVideo = (sessionId: string, userMessageId: number) => {
-  videoTasks.watch(sessionId, userMessageId, (video) => {
-    const message = messages.value.find(item => item.id === userMessageId)
+const watchChatVideo = (sessionId: string, assistantMessageId: number) => {
+  videoTasks.watch(sessionId, assistantMessageId, (video) => {
+    const message = messages.value.find(item => item.id === assistantMessageId)
     if (message) message.video = video
     if (video.status === 'completed') scrollToBottom()
   })
 }
 
-const startVideoGeneration = async () => {
-  const topic = userInput.value.trim()
-  if (!canGenerateVideo.value || !topic) return
+const startVideoGeneration = async (message: ChatMsg) => {
   if (!await ensureCurrentSession('standard')) return
   const sessionId = currentSessionId.value
   if (!sessionId) return
-
-  const localMessageId = Date.now()
-  const localVideo: ChatVideoArtifactData = {
-    task_id: `pending-${localMessageId}`,
-    status: 'queued',
-    topic,
+  if (!Number.isSafeInteger(message.id) || message.id <= 0) {
+    toast.warning({ message: '回答尚未保存，请稍后再试', plain: true })
+    return
   }
-  messages.value.push({
-    id: localMessageId,
-    role: 'user',
-    content: topic,
-    time: now(),
-    video: localVideo,
-  })
-  userInput.value = ''
-  isExpandedInput.value = false
-  if (textareaRef.value) textareaRef.value.style.height = '24px'
-  scrollToBottom()
+
+  message.video = {
+    task_id: `pending-${message.id}`,
+    status: 'queued',
+    topic: '正在整理本轮讲解内容',
+  }
 
   try {
-    const response = await createChatVideo(topic, sessionId)
+    const response = await createChatVideo(message.id, sessionId)
     const task = response.data.data
-    const message = messages.value.find(item => item.id === localMessageId)
-    if (!message) return
-    message.id = task.user_message_id
     message.video = task.video
-    watchChatVideo(task.session_id, task.user_message_id)
+    watchChatVideo(task.session_id, task.assistant_message_id)
   } catch (error) {
-    const message = messages.value.find(item => item.id === localMessageId)
-    if (message?.video) {
+    if (message.video) {
       message.video = {
         ...message.video,
         status: 'failed',
@@ -5539,7 +5551,7 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100vw;
   max-width: 100vw;
-  height: 100vh;
+  height: var(--content-height, 100vh);
   overflow: hidden;
   background: transparent;
   border: 0;
@@ -5547,8 +5559,8 @@ onBeforeUnmount(() => {
 }
 
 .diagram-image-dialog .diagram-preview-body {
-  height: 100vh;
-  max-height: 100vh;
+  height: var(--content-height, 100vh);
+  max-height: var(--content-height, 100vh);
   padding: 0;
   overflow: auto;
   background: transparent;

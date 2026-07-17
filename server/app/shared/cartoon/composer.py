@@ -7,7 +7,7 @@ import json
 import shutil
 from pathlib import Path
 
-from app.shared.cartoon.models import CartoonBundle, Lesson, Timeline
+from app.shared.cartoon.models import CartoonBundle, Lesson, TeachingScene, Timeline
 
 
 COMPOSITION_ID = "cartoon-teaching-video"
@@ -38,19 +38,32 @@ class CartoonComposer:
         scene_data_path = output_dir / "scene-data.json"
         caption_path = output_dir / "captions.vtt"
         html_path = output_dir / "index.html"
+        compositions_dir = output_dir / "compositions"
+        compositions_dir.mkdir(exist_ok=True)
 
         payload = self._payload(lesson, timeline)
+        scene_windows = self._scene_windows(lesson, timeline)
+        scene_paths = [
+            compositions_dir / f"{scene.id}.html"
+            for scene in lesson.scenes
+        ]
+        for index, (scene, path) in enumerate(zip(lesson.scenes, scene_paths, strict=True), start=1):
+            path.write_text(self._scene_document(index, scene), encoding="utf-8")
         scene_data_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
         caption_path.write_text(self._captions_vtt(timeline), encoding="utf-8")
-        html_path.write_text(self._html(lesson, timeline, payload), encoding="utf-8")
+        html_path.write_text(
+            self._html(lesson, timeline, payload, scene_windows),
+            encoding="utf-8",
+        )
         return CartoonBundle(
             output_dir=output_dir,
             html_path=html_path,
             scene_data_path=scene_data_path,
             caption_path=caption_path,
+            scene_paths=scene_paths,
         )
 
     @staticmethod
@@ -81,15 +94,36 @@ class CartoonComposer:
             )
         return "\n".join(lines)
 
+    @staticmethod
+    def _scene_windows(lesson: Lesson, timeline: Timeline) -> dict[str, tuple[int, int]]:
+        windows: dict[str, tuple[int, int]] = {}
+        known_scene_ids = {scene.id for scene in lesson.scenes}
+        for beat in timeline.beats:
+            if beat.scene_id not in known_scene_ids:
+                continue
+            start_ms, end_ms = windows.get(
+                beat.scene_id,
+                (beat.start_ms, beat.start_ms),
+            )
+            windows[beat.scene_id] = (
+                min(start_ms, beat.start_ms),
+                max(end_ms, beat.start_ms + beat.duration_ms),
+            )
+        missing = known_scene_ids - set(windows)
+        if missing:
+            raise ValueError(f"timeline is missing scene windows: {sorted(missing)}")
+        return windows
+
     def _html(
         self,
         lesson: Lesson,
         timeline: Timeline,
         payload: dict[str, object],
+        scene_windows: dict[str, tuple[int, int]],
     ) -> str:
         scenes = "\n".join(
-            self._scene_html(index, scene)
-            for index, scene in enumerate(lesson.scenes, start=1)
+            self._scene_mount(scene, scene_windows[scene.id])
+            for scene in lesson.scenes
         )
         captions = "\n".join(
             (
@@ -137,29 +171,56 @@ class CartoonComposer:
 """
 
     @staticmethod
-    def _scene_html(index: int, scene: object) -> str:
+    def _scene_mount(scene: TeachingScene, window: tuple[int, int]) -> str:
+        start_ms, end_ms = window
         scene_id = html.escape(scene.id)
+        return (
+            f'<div id="scene-mount-{scene_id}" data-composition-id="{scene_id}" '
+            f'data-composition-src="compositions/{scene_id}.html" '
+            f'data-start="{_seconds(start_ms)}" '
+            f'data-duration="{_seconds(end_ms - start_ms)}" '
+            'data-track-index="1"></div>'
+        )
+
+    @staticmethod
+    def _scene_document(index: int, scene: TeachingScene) -> str:
+        scene_id = html.escape(scene.id)
+        return f"""<!doctype html>
+<html lang="zh-CN">
+<body>
+  <template>
+    <div data-composition-id="{scene_id}" data-width="1920" data-height="1080"
+         data-layout-allow-overlap>
+      {CartoonComposer._scene_html(index, scene)}
+    </div>
+  </template>
+</body>
+</html>
+"""
+
+    @staticmethod
+    def _scene_html(index: int, scene: TeachingScene) -> str:
+        scene_id = html.escape(scene.id)
+        structure = CartoonComposer._structure_html(scene)
         entities = "\n".join(
             f"""<div id="entity-{scene_id}-{html.escape(entity.id)}"
-                 class="visual-entity kind-{entity.kind.value} tone-{entity.tone}"
+                 class="visual-entity kind-{entity.kind.value} tone-{('primary', 'secondary', 'accent', 'warning')[index % 4]}"
                  data-entity-id="{html.escape(entity.id)}" data-kind="{entity.kind.value}">
               <span class="entity-label">{html.escape(entity.label)}</span>
-              <span class="entity-detail">{html.escape(entity.detail)}</span>
-              <span class="entity-value">{html.escape(entity.initial_value)}</span>
+              <span class="entity-value"></span>
             </div>"""
-            for entity in scene.entities
+            for index, entity in enumerate(scene.entities)
         )
         relation_keys = {
-            (relation.source_id, relation.target_id, relation.label, relation.directed)
+            (relation.source_id, relation.target_id, relation.label)
             for state in scene.states
             for relation in state.relations
         }
         relations = "\n".join(
             f"""<g id="relation-{scene_id}-{relation_index}" class="relation" data-relation-index="{relation_index}">
               <line></line><circle class="relation-head" r="0.55"></circle>
-              <text>{html.escape(label)}</text>
             </g>"""
-            for relation_index, (_source, _target, label, _directed) in enumerate(sorted(relation_keys))
+            for relation_index, _relation in enumerate(sorted(relation_keys))
         )
         grammar_label = {
             "concept": "概念",
@@ -174,11 +235,38 @@ class CartoonComposer:
             <div><span class="grammar-label">{grammar_label}</span><h1>{html.escape(scene.title)}</h1></div>
           </header>
           <div class="visual-stage">
+            {structure}
             <svg class="relation-layer" viewBox="0 0 100 100" preserveAspectRatio="none"
                  data-layout-allow-overlap aria-hidden="true">
               {relations}
             </svg>
             <div class="entity-layer">{entities}</div>
-            <div id="state-note-{scene_id}" class="state-note"></div>
           </div>
         </section>"""
+
+    @staticmethod
+    def _structure_html(scene: TeachingScene) -> str:
+        if scene.execution_program is None:
+            return ""
+        containers = [
+            item for item in scene.execution_program.objects
+            if item.role.value == "container"
+        ]
+        racks = "".join(
+            f'''<div class="execution-container-shell" data-container-id="{html.escape(item.id)}"
+                     style="--execution-capacity:{item.capacity}">
+                  <span class="execution-container-label">{html.escape(item.label)}</span>
+                  <div class="execution-cells">{
+                      "".join(
+                          f'<div class="execution-cell" data-slot="{slot}"><span>{slot}</span></div>'
+                          for slot in range(item.capacity or 0)
+                      )
+                  }</div>
+                </div>'''
+            for item in containers
+        )
+        return f"""<div class="execution-stage" aria-hidden="true">
+              <div class="execution-dock execution-input-dock"><span>输入</span></div>
+              <div class="execution-rack">{racks}</div>
+              <div class="execution-dock execution-output-dock"><span>输出</span></div>
+            </div>"""

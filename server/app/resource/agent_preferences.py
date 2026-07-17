@@ -35,6 +35,7 @@ _VALUES: dict[str, dict[str, dict[Any, str]]] = {
     "cartoon": {
         "visual_density": {"moderate": "每幕保持适中的模型对象数量", "rich": "每幕使用丰富但清晰的对象、关系与状态", "intensive": "在不牺牲可读性的前提下使用高密度概念模型"},
         "pace": {"fast": "使用紧凑的讲解和路径动画节奏", "balanced": "使用均衡的讲解、停顿与状态变化节奏", "calm": "为模型推演和理解停顿留出充足时间"},
+        "voice": {"teacher": "使用教师风格语音", "coach": "使用教练风格语音"},
     },
 }
 

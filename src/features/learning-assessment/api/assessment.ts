@@ -1,35 +1,41 @@
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
 import type {
-  LearningAssessmentReport,
-  ReportsHistoryResponse,
+  LearningAssessment,
+  AssessmentsHistoryResponse,
   GuidanceStrategyResponse,
 } from '@/features/learning-assessment/model/assessment'
+import type { DashboardData } from '@/features/evaluation/api/evaluation'
 
 export type {
-  LearningAssessmentReport,
-  ReportsHistoryResponse,
+  LearningAssessment,
+  AssessmentsHistoryResponse,
   GuidanceStrategyResponse,
 }
 
-export function generateAssessmentReport(rangeDays: 3 | 7 | 14) {
-  return http.post<ApiResponse<LearningAssessmentReport>>('/ai/evaluation/reports', { range_days: rangeDays })
+export function generateAssessment(rangeDays: 3 | 7 | 14) {
+  // LLM 生成评估需要较长时间，设置 60 秒超时
+  return http.post<ApiResponse<LearningAssessment>>('/ai/evaluation/assessments', { range_days: rangeDays }, { timeout: 60000 })
 }
 
-export function getLatestReport() {
-  return http.get<ApiResponse<LearningAssessmentReport | null>>('/ai/evaluation/reports/latest')
+export function getLatestAssessment() {
+  return http.get<ApiResponse<LearningAssessment | null>>('/ai/evaluation/assessments/latest')
 }
 
-export function getReportsHistory(page = 1, pageSize = 10) {
-  return http.get<ApiResponse<ReportsHistoryResponse>>('/ai/evaluation/reports', {
+export function getAssessmentsHistory(page = 1, pageSize = 10) {
+  return http.get<ApiResponse<AssessmentsHistoryResponse>>('/ai/evaluation/assessments', {
     params: { page, page_size: pageSize },
   })
 }
 
-export function getReportDetail(reportId: number) {
-  return http.get<ApiResponse<LearningAssessmentReport>>(`/ai/evaluation/reports/${reportId}`)
+export function getAssessmentDetail(assessmentId: number) {
+  return http.get<ApiResponse<LearningAssessment>>(`/ai/evaluation/assessments/${assessmentId}`)
 }
 
 export function getGuidanceStrategy() {
   return http.get<ApiResponse<GuidanceStrategyResponse>>('/ai/evaluation/guidance-strategy')
+}
+
+export function getAssessmentDashboard(assessmentId: number) {
+  return http.get<ApiResponse<DashboardData>>(`/ai/evaluation/assessments/${assessmentId}/dashboard`)
 }

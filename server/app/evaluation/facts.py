@@ -23,11 +23,16 @@ class ModuleCount(BaseModel):
     module: str
     count: int
 
+class ModuleTimeBreakdown(BaseModel):
+    module: str
+    seconds: int
+
 class ActivityInfo(BaseModel):
     active_days: int
     total_minutes: int
     daily_minutes: list[DailyMinutes]
     module_distribution: list[ModuleCount]
+    module_time_breakdown: list[ModuleTimeBreakdown]
 
 class ResourceFeedbackInfo(BaseModel):
     helpful: int
@@ -122,12 +127,42 @@ async def build_assessment_facts(
     total_seconds = sum(sess.duration_seconds or 0 for sess in sessions)
     total_minutes = int(round(total_seconds / 60.0))
 
-    # Module distribution
+    # Module distribution (by event count)
     module_counts = {}
     for evt in events:
         m = evt.module
         module_counts[m] = module_counts.get(m, 0) + 1
     module_distribution = [ModuleCount(module=m, count=c) for m, c in module_counts.items()]
+
+    # Module time breakdown (by session source_page → module name)
+    SOURCE_PAGE_TO_MODULE = {
+        "Tutor": "AI 辅导",
+        "chat": "AI 辅导",
+        "QuestionBank": "题库练习",
+        "quiz": "题库练习",
+        "PathNodeStudy": "路径学习",
+        "PathPlan": "路径学习",
+        "path": "路径学习",
+        "ResourceGenerator": "资源生成",
+        "ResourceResult": "资源生成",
+        "resource": "资源生成",
+        "AlgorithmVisualizer": "算法可视化",
+        "visualizer": "算法可视化",
+    }
+    module_time_map: dict[str, int] = {}
+    for sess in sessions:
+        page = sess.source_page or ""
+        module_name = SOURCE_PAGE_TO_MODULE.get(page)
+        if module_name is None:
+            # 尝试前缀匹配（如 PathPlanDetail 等）
+            for prefix, name in SOURCE_PAGE_TO_MODULE.items():
+                if page.startswith(prefix):
+                    module_name = name
+                    break
+        if module_name is None:
+            module_name = page if page else "其他"
+        module_time_map[module_name] = module_time_map.get(module_name, 0) + (sess.duration_seconds or 0)
+    module_time_breakdown = [ModuleTimeBreakdown(module=m, seconds=s) for m, s in module_time_map.items()]
 
     # Resource usage
     generated = sum(1 for e in events if e.event_type == "resource_generated")
@@ -213,7 +248,8 @@ async def build_assessment_facts(
             active_days=len(active_dates),
             total_minutes=total_minutes,
             daily_minutes=daily_minutes,
-            module_distribution=module_distribution
+            module_distribution=module_distribution,
+            module_time_breakdown=module_time_breakdown
         ),
         resource_usage=ResourceUsageInfo(
             generated=generated,

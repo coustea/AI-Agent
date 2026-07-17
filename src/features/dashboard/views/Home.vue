@@ -94,7 +94,7 @@
               <Button
                   variant="ghost"
                   class="text-xs font-bold text-teal-655 hover:text-teal-700 p-0 cursor-pointer h-7 hover:bg-transparent"
-                  @click="goTo(profilePath)"
+                  @click="isGlobalProfileVisible = true"
               >
                 完整报告
               </Button>
@@ -481,6 +481,7 @@
         <p class="loading-label">正在同步学习控制台</p>
         <p class="loading-hint">读取画像、路径、资源与学习事件</p>
       </div>
+      <GlobalProfileDialog />
     </div>
   </main>
 </template>
@@ -494,7 +495,7 @@ import {
   ref,
   watch,
 } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 
 import {
@@ -510,6 +511,12 @@ import {
   type HomeActionItem,
   type RecentResourceItem,
 } from '@/features/dashboard/api/home'
+
+import {
+  isGlobalProfileVisible,
+} from '@/features/profile/model/useGlobalProfile'
+
+import GlobalProfileDialog from '@/features/profile/components/GlobalProfileDialog.vue'
 
 import { getRadarChartData } from '@/features/profile/model/profileViewModel'
 
@@ -543,6 +550,7 @@ use([
 ])
 
 const router = useRouter()
+const route = useRoute()
 
 const recommendationData = ref<RecommendationData | null>(null)
 const profileRadarData = ref<ProfileRadarData | null>(null)
@@ -750,13 +758,6 @@ const formatDateTime = (
 
   return `${formatDate(value)} ${time}`
 }
-
-const profilePath = computed(() => {
-  return (
-      profileRadarData.value?.radar?.path ||
-      '/profile'
-  )
-})
 
 const radarSource = computed<any>(() => {
   if (!profileRadarData.value) {
@@ -1151,6 +1152,17 @@ const loadAllData = async () => {
   dataLoaded.value = true
   loading.value = false
 }
+
+// 首次登录的 onboarding 覆盖在首页之上：提交后路由会移除 onboarding 参数，
+// 此时必须重新读取后端已落库的资料，不能继续展示进入弹窗前的冷启动数据。
+watch(
+    () => route.query.onboarding,
+    (current, previous) => {
+      if (previous === 'true' && current !== 'true') {
+        void loadAllData()
+      }
+    },
+)
 
 onMounted(() => {
   loadAllData()

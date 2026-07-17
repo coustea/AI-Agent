@@ -266,7 +266,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     scored_at               TIMESTAMPTZ,
     guidance_strategy       JSONB           NOT NULL DEFAULT '{}',
     guidance_updated_at     TIMESTAMPTZ,
-    last_assessment_report_id INTEGER,
+    last_assessment_id INTEGER,
+    profile_updated_at     TIMESTAMPTZ,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
     CONSTRAINT uq_user_profiles_user UNIQUE (user_id)
@@ -305,54 +306,49 @@ COMMENT ON COLUMN user_profile_dimensions.evidence IS '推断依据';
 COMMENT ON COLUMN user_profile_dimensions.score IS '维度得分';
 
 -- ============================================================
--- 9. learning_assessment_reports
+-- 9. learning_assessments
 -- ============================================================
-CREATE TABLE IF NOT EXISTS learning_assessment_reports (
+CREATE TABLE IF NOT EXISTS learning_assessments (
     id                 SERIAL PRIMARY KEY,
     user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    range_days         SMALLINT NOT NULL CHECK (range_days IN (7, 14, 30)),
+    trigger_source     VARCHAR(20) NOT NULL CHECK (trigger_source IN ('profile_update', 'manual')),
+    range_days         SMALLINT NOT NULL CHECK (range_days IN (3, 7, 14)),
     window_start       TIMESTAMPTZ NOT NULL,
     window_end         TIMESTAMPTZ NOT NULL,
     status             VARCHAR(16) NOT NULL CHECK (status IN ('generating', 'ready', 'failed')),
-    facts_snapshot     JSONB,
-    report_markdown    TEXT,
+    assessment         TEXT,
     generated_at       TIMESTAMPTZ,
     failure_code       VARCHAR(64),
     created_at         TIMESTAMPTZ DEFAULT NOW(),
     updated_at         TIMESTAMPTZ DEFAULT NOW(),
-    CHECK (window_end > window_start),
-    CHECK (
-        (status = 'ready' AND facts_snapshot IS NOT NULL) OR
-        (status = 'failed' AND failure_code IS NOT NULL) OR
-        (status = 'generating')
-    )
+    CHECK (window_end > window_start)
 );
 
-CREATE INDEX IF NOT EXISTS ix_reports_user_created ON learning_assessment_reports (user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS ix_reports_user_status ON learning_assessment_reports (user_id, status);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_reports_user_generating ON learning_assessment_reports (user_id) WHERE status = 'generating';
+CREATE INDEX IF NOT EXISTS ix_assessments_user_created ON learning_assessments (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ix_assessments_user_status ON learning_assessments (user_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_assessments_user_generating ON learning_assessments (user_id) WHERE status = 'generating';
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_profiles_last_report'
+        SELECT 1 FROM pg_constraint WHERE conname = 'fk_user_profiles_last_assessment'
     ) THEN
         ALTER TABLE user_profiles
-            ADD CONSTRAINT fk_user_profiles_last_report
-            FOREIGN KEY (last_assessment_report_id)
-            REFERENCES learning_assessment_reports(id)
+            ADD CONSTRAINT fk_user_profiles_last_assessment
+            FOREIGN KEY (last_assessment_id)
+            REFERENCES learning_assessments(id)
             ON DELETE SET NULL;
     END IF;
 END $$;
 
-COMMENT ON TABLE learning_assessment_reports IS '学习效果评估报告表，记录用户单次评估报告';
-COMMENT ON COLUMN learning_assessment_reports.user_id IS '用户ID';
-COMMENT ON COLUMN learning_assessment_reports.range_days IS '报告的时间范围天数 (7, 14, 30)';
-COMMENT ON COLUMN learning_assessment_reports.window_start IS '评估时间窗口起点';
-COMMENT ON COLUMN learning_assessment_reports.window_end IS '评估时间窗口终点';
-COMMENT ON COLUMN learning_assessment_reports.status IS '报告生成状态：generating, ready, failed';
-COMMENT ON COLUMN learning_assessment_reports.facts_snapshot IS '统计事实快照（JSONB）';
-COMMENT ON COLUMN learning_assessment_reports.report_markdown IS '大模型生成的分析报告 Markdown';
-COMMENT ON COLUMN learning_assessment_reports.failure_code IS '错误码，当 status = failed 时记录';
+COMMENT ON TABLE learning_assessments IS '学习评估表，画像更新或手动触发时生成';
+COMMENT ON COLUMN learning_assessments.user_id IS '用户ID';
+COMMENT ON COLUMN learning_assessments.trigger_source IS '触发来源: profile_update / manual';
+COMMENT ON COLUMN learning_assessments.range_days IS '评估时间范围天数 (3, 7, 14)';
+COMMENT ON COLUMN learning_assessments.window_start IS '评估时间窗口起点';
+COMMENT ON COLUMN learning_assessments.window_end IS '评估时间窗口终点';
+COMMENT ON COLUMN learning_assessments.status IS '评估生成状态：generating, ready, failed';
+COMMENT ON COLUMN learning_assessments.assessment IS 'LLM 生成的学习评估文案';
+COMMENT ON COLUMN learning_assessments.failure_code IS '错误码，当 status = failed 时记录';
 
 -- ============================================================
 -- 10. generated_resources
@@ -555,7 +551,26 @@ COMMENT ON COLUMN learning_events.client_event_id IS '前端 UUID 幂等键';
 COMMENT ON COLUMN learning_events.occurred_at IS '事件发生实际时间';
 
 -- ============================================================
--- 13b. learning_sessions
+-- 13b. user_daily_activities
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_daily_activities (
+    id              SERIAL          PRIMARY KEY,
+    user_id         INTEGER         NOT NULL,
+    activity_date   DATE            NOT NULL,
+    first_login_at  TIMESTAMPTZ     NOT NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_user_daily_activity UNIQUE (user_id, activity_date)
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_daily_activities_user_date
+    ON user_daily_activities (user_id, activity_date);
+
+COMMENT ON TABLE user_daily_activities IS '用户每日登录活跃事实，每位用户每天最多一条';
+COMMENT ON COLUMN user_daily_activities.activity_date IS '按 Asia/Shanghai 计算的登录日期';
+COMMENT ON COLUMN user_daily_activities.first_login_at IS '当日首次成功登录时间';
+
+-- ============================================================
+-- 13c. learning_sessions
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learning_sessions (
     id                  SERIAL          PRIMARY KEY,

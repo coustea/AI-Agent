@@ -155,28 +155,36 @@
             >
               <i
                   :style="{
-                    width: `${generatingProgressRounded}%`,
+                    transform: `scaleX(${generatingProgressRounded / 100})`,
                   }"
               ></i>
             </div>
           </div>
 
           <div class="generation-log-box">
-            <transition-group name="log">
-              <div
-                  v-for="(message, index) in visibleGeneratingMessages"
-                  :key="`${message}-${index}`"
-                  class="generation-log-row"
-              >
-                <span></span>
-                <p>{{ message }}</p>
-              </div>
-            </transition-group>
+            <div
+                v-for="message in visibleGeneratingMessages"
+                :key="message"
+                class="generation-log-row"
+            >
+              <span></span>
+              <p>{{ message }}</p>
+            </div>
           </div>
 
           <p class="generation-persistence-note">
             后台任务不会因切换页面或刷新而停止；再次进入本路径时会自动恢复进度并确认生成结果。
           </p>
+
+          <div class="generation-result-actions">
+            <button
+                class="generation-secondary-action"
+                type="button"
+                @click="router.push('/path-planner/history')"
+            >
+              后台运行（前往路径历史）
+            </button>
+          </div>
         </template>
       </section>
     </section>
@@ -189,6 +197,12 @@
               <span>LEARNING MAP</span>
               <h1>{{ path.title }}</h1>
               <p>{{ path.goal }}</p>
+              
+              <div class="map-tags">
+                <span>主题：{{ path.topic || path.title }}</span>
+                <span>{{ path.stages.length }} 阶段</span>
+                <span>{{ path.nodes.length }} 节点</span>
+              </div>
             </div>
 
             <div class="map-actions">
@@ -197,18 +211,16 @@
                 <span>总进度</span>
               </div>
 
-              <div class="map-tags">
-                <span>主题：{{ path.topic || path.title }}</span>
-                <span>{{ path.stages.length }} 阶段</span>
-                <span>{{ path.nodes.length }} 节点</span>
-                <span>当前：{{ currentNode?.title || '暂无可学习节点' }}</span>
-              </div>
-
-              <div class="action-line">
-                <button type="button" @click="router.push('/path-planner/history')">路径历史</button>
-                <button class="primary-action" type="button" @click="router.push('/path-planner')">
-                  重新规划
-                </button>
+              <div class="action-panel">
+                <div class="current-node-tag" v-if="currentNode">
+                  当前学习：<strong>{{ currentNode.title }}</strong>
+                </div>
+                <div class="action-line">
+                  <button type="button" @click="router.push('/path-planner/history')">路径历史</button>
+                  <button class="primary-action" type="button" @click="router.push('/path-planner')">
+                    重新规划
+                  </button>
+                </div>
               </div>
             </div>
           </header>
@@ -257,7 +269,7 @@
                   <strong>{{ stageProgress(stage) }}%</strong>
                   <span>阶段进度</span>
                   <div class="stage-progress-track">
-                    <i :style="{ width: `${stageProgress(stage)}%` }"></i>
+                    <i :style="{ transform: `scaleX(${stageProgress(stage) / 100})` }"></i>
                   </div>
                 </div>
               </header>
@@ -307,165 +319,189 @@
         </section>
 
         <aside class="mentor-panel">
-          <section class="mentor-section mentor-hero">
-            <span class="mentor-kicker">AI TUTOR</span>
-            <h2>AI 导师判断</h2>
-            <p>
-              {{ displayedNode ? nodeLearningHint(displayedNode) : '选择一个学习节点后，这里会显示当前节点判断和学习建议。' }}
-            </p>
-          </section>
+          <!-- Sidebar Tabs Header -->
+          <div class="sidebar-tabs">
+            <button
+                class="sidebar-tab-btn"
+                :class="{ active: activeSidebarTab === 'node' }"
+                type="button"
+                @click="activeSidebarTab = 'node'"
+            >
+              当前节点
+            </button>
+            <button
+                class="sidebar-tab-btn"
+                :class="{ active: activeSidebarTab === 'evaluation' }"
+                type="button"
+                @click="activeSidebarTab = 'evaluation'"
+            >
+              学习诊断
+            </button>
+          </div>
 
-          <template v-if="displayedNode">
-            <section class="mentor-section selected-node">
-              <span class="mentor-kicker">CURRENT NODE</span>
-              <h3>{{ displayedNode.title }}</h3>
-
-              <div class="mentor-table">
-                <div>
-                  <span>所属阶段</span>
-                  <strong>{{ displayedStageTitle }}</strong>
-                </div>
-                <div>
-                  <span>节点状态</span>
-                  <strong>{{ statusText(displayedNode.status) }}</strong>
-                </div>
-                <div>
-                  <span>学习难度</span>
-                  <strong>{{ difficultyText(displayedNode.difficulty) }}</strong>
-                </div>
-                <div>
-                  <span>优先级</span>
-                  <strong>P{{ displayedNode.priority }}</strong>
-                </div>
-                <div>
-                  <span>测验次数</span>
-                  <strong>{{ displayedNode.attempt_count || 0 }}</strong>
-                </div>
-              </div>
+          <!-- Tab 1: Node Details & AI Tutor -->
+          <div v-show="activeSidebarTab === 'node'" class="tab-content-wrapper">
+            <section class="mentor-section mentor-hero">
+              <span class="mentor-kicker">AI TUTOR</span>
+              <h2>AI 导师判断</h2>
+              <p>
+                {{ displayedNode ? nodeLearningHint(displayedNode) : '选择一个学习节点后，这里会显示当前节点判断和学习建议。' }}
+              </p>
             </section>
 
-            <section class="mentor-section">
-              <span class="mentor-kicker">PREREQUISITES</span>
+            <template v-if="displayedNode">
+              <section class="mentor-section selected-node">
+                <span class="mentor-kicker">CURRENT NODE</span>
+                <h3>{{ displayedNode.title }}</h3>
 
-              <div v-if="displayedPrerequisites.length" class="prerequisite-list">
-                <span v-for="item in displayedPrerequisites" :key="item">
-                  {{ item }}
-                </span>
-              </div>
-
-              <p v-else class="mentor-note">该节点没有前置依赖，点击左侧节点即可进入或生成教程。</p>
-            </section>
-
-            <section class="mentor-section">
-              <span class="mentor-kicker">LEARNING FLOW</span>
-
-              <div class="learn-flow">
-                <div>
-                  <span>01</span>
-                  <p>点击左侧可学习节点</p>
-                </div>
-                <div>
-                  <span>02</span>
-                  <p>已有教程则直接进入学习页</p>
-                </div>
-                <div>
-                  <span>03</span>
-                  <p>没有教程则当前页等待生成完成</p>
-                </div>
-              </div>
-            </section>
-          </template>
-
-          <section class="mentor-section evaluation-panel">
-            <span class="mentor-kicker">EVALUATION</span>
-            <h3>学习效果评估</h3>
-
-            <div v-if="evaluation" class="cockpit-card">
-              <div class="cockpit-header">
-                <div class="header-icon">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                  </svg>
-                </div>
-                <h3>AI 导师学习诊断</h3>
-              </div>
-
-              <div class="metrics-grid">
-                <div class="metric-item card-hover">
-                  <div class="metric-icon clock">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
+                <div class="mentor-table">
+                  <div>
+                    <span>所属阶段</span>
+                    <strong>{{ displayedStageTitle }}</strong>
                   </div>
-                  <div class="metric-info">
-                    <label>学习时长</label>
-                    <strong>{{ activeMinutes }} <small>分钟</small></strong>
+                  <div>
+                    <span>节点状态</span>
+                    <strong>{{ statusText(displayedNode.status) }}</strong>
+                  </div>
+                  <div>
+                    <span>学习难度</span>
+                    <strong>{{ difficultyText(displayedNode.difficulty) }}</strong>
+                  </div>
+                  <div>
+                    <span>优先级</span>
+                    <strong>P{{ displayedNode.priority }}</strong>
+                  </div>
+                  <div>
+                    <span>测验次数</span>
+                    <strong>{{ displayedNode.attempt_count || 0 }}</strong>
                   </div>
                 </div>
+              </section>
 
-                <div class="metric-item card-hover">
-                  <div class="metric-icon score">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                      <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
-                    </svg>
-                  </div>
-                  <div class="metric-info">
-                    <label>测验均分</label>
-                    <strong :class="{ good: averageScore >= 80, warning: averageScore > 0 && averageScore < 80 }">
-                      {{ averageScore > 0 ? `${averageScore} 分` : '暂无' }}
-                    </strong>
-                  </div>
-                </div>
-              </div>
+              <section class="mentor-section">
+                <span class="mentor-kicker">PREREQUISITES</span>
 
-              <div class="diagnostic-section">
-                <h4 class="section-title">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
-                    <line x1="12" y1="9" x2="12" y2="13" />
-                    <line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                  薄弱知识点
-                </h4>
-
-                <div v-if="weakTopics.length > 0" class="weak-tags">
-                  <span v-for="topic in weakTopics" :key="topic" class="weak-tag">
-                    {{ topic }}
+                <div v-if="displayedPrerequisites.length" class="prerequisite-list">
+                  <span v-for="item in displayedPrerequisites" :key="item">
+                    {{ item }}
                   </span>
                 </div>
 
-                <div v-else class="empty-weak">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  无明显薄弱知识点，继续保持！
+                <p v-else class="mentor-note">该节点没有前置依赖，点击左侧节点即可进入或生成教程。</p>
+              </section>
+
+              <section class="mentor-section">
+                <span class="mentor-kicker">LEARNING FLOW</span>
+
+                <div class="learn-flow">
+                  <div>
+                    <span>01</span>
+                    <p>点击左侧可学习节点</p>
+                  </div>
+                  <div>
+                    <span>02</span>
+                    <p>已有教程则直接进入学习页</p>
+                  </div>
+                  <div>
+                    <span>03</span>
+                    <p>没有教程则当前页等待生成完成</p>
+                  </div>
+                </div>
+              </section>
+            </template>
+          </div>
+
+          <!-- Tab 2: Overall Diagnostics & Evaluation -->
+          <div v-show="activeSidebarTab === 'evaluation'" class="tab-content-wrapper">
+            <section class="mentor-section evaluation-panel" style="border-bottom: 0; padding-bottom: 0; margin-bottom: 0;">
+
+              <div v-if="evaluation" class="cockpit-card">
+                <div class="cockpit-header">
+                  <div class="header-icon">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                    </svg>
+                  </div>
+                  <h3>AI 导师学习诊断</h3>
+                </div>
+
+                <div class="metrics-grid">
+                  <div class="metric-item card-hover">
+                    <div class="metric-icon clock">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
+                    </div>
+                    <div class="metric-info">
+                      <label>学习时长</label>
+                      <strong>{{ activeMinutes }} <small>分钟</small></strong>
+                    </div>
+                  </div>
+
+                  <div class="metric-item card-hover">
+                    <div class="metric-icon score">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                        <path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5" />
+                      </svg>
+                    </div>
+                    <div class="metric-info">
+                      <label>测验均分</label>
+                      <strong :class="{ good: averageScore >= 80, warning: averageScore > 0 && averageScore < 80 }">
+                        {{ averageScore > 0 ? `${averageScore} 分` : '暂无' }}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="diagnostic-section">
+                  <h4 class="section-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />
+                      <line x1="12" y1="9" x2="12" y2="13" />
+                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                    </svg>
+                    薄弱知识点
+                  </h4>
+
+                  <div v-if="weakTopics.length > 0" class="weak-tags">
+                    <span v-for="topic in weakTopics" :key="topic" class="weak-tag">
+                      {{ topic }}
+                    </span>
+                  </div>
+
+                  <div v-else class="empty-weak">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                    无明显薄弱知识点，继续保持！
+                  </div>
+                </div>
+
+                <div v-if="optimizationTips.length > 0" class="diagnostic-section advice-section">
+                  <h4 class="section-title">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 8V4H8" />
+                      <rect width="16" height="12" x="4" y="8" rx="2" />
+                      <path d="M2 14h2" />
+                      <path d="M20 14h2" />
+                      <path d="M15 13v2" />
+                      <path d="M9 13v2" />
+                    </svg>
+                    优化处方与建议
+                  </h4>
+
+                  <ul class="advice-list">
+                    <li v-for="(tip, idx) in optimizationTips" :key="idx" class="advice-item">
+                      <span class="bullet">{{ idx + 1 }}</span>
+                      <p>{{ tip }}</p>
+                    </li>
+                  </ul>
                 </div>
               </div>
-
-              <div v-if="optimizationTips.length > 0" class="diagnostic-section advice-section">
-                <h4 class="section-title">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 8V4H8" />
-                    <rect width="16" height="12" x="4" y="8" rx="2" />
-                    <path d="M2 14h2" />
-                    <path d="M20 14h2" />
-                    <path d="M15 13v2" />
-                    <path d="M9 13v2" />
-                  </svg>
-                  优化处方与建议
-                </h4>
-
-                <ul class="advice-list">
-                  <li v-for="(tip, idx) in optimizationTips" :key="idx" class="advice-item">
-                    <span class="bullet">{{ idx + 1 }}</span>
-                    <p>{{ tip }}</p>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </section>
+            </section>
+          </div>
         </aside>
       </section>
     </section>
@@ -473,7 +509,7 @@
     <Teleport to="body">
       <transition name="tutorial-overlay">
         <div
-            v-if="isGeneratingTutorial"
+            v-if="isGeneratingTutorial && isTutorialModalVisible"
             class="tutorial-generating-overlay"
         >
           <section
@@ -615,28 +651,36 @@
                 >
                   <i
                       :style="{
-                        width: `${tutorialProgressRounded}%`,
+                        transform: `scaleX(${tutorialProgressRounded / 100})`,
                       }"
                   ></i>
                 </div>
               </div>
 
               <div class="generation-log-box">
-                <transition-group name="log">
-                  <div
-                      v-for="(message, index) in visibleTutorialMessages"
-                      :key="`${message}-${index}`"
-                      class="generation-log-row"
-                  >
-                    <span></span>
-                    <p>{{ message }}</p>
-                  </div>
-                </transition-group>
+                <div
+                    v-for="message in visibleTutorialMessages"
+                    :key="message"
+                    class="generation-log-row"
+                >
+                  <span></span>
+                  <p>{{ message }}</p>
+                </div>
               </div>
 
               <p class="generation-persistence-note">
                 教程任务由后端持续执行。切换页面或刷新后，再次进入该节点会自动恢复等待状态。
               </p>
+
+              <div class="generation-result-actions">
+                <button
+                    class="generation-secondary-action"
+                    type="button"
+                    @click="isTutorialModalVisible = false"
+                >
+                  后台运行（关闭等待）
+                </button>
+              </div>
             </template>
           </section>
         </div>
@@ -763,6 +807,8 @@ const pathGenerationError = ref('')
 const activeRunId = ref<string | null>(null)
 
 const isGeneratingTutorial = ref(false)
+const isTutorialModalVisible = ref(false)
+const activeSidebarTab = ref<'node' | 'evaluation'>('node')
 const openingNodeId = ref<number | null>(null)
 const tutorialNodeId = ref<number | null>(null)
 const tutorialProgress = ref(0)
@@ -776,8 +822,10 @@ let tutorialMonitorToken = 0
 let pathFinishing = false
 let tutorialFinishing = false
 
-let pathProgressTimer: number | null = null
 let tutorialProgressTimer: number | null = null
+let pendingPathEvents: PathEvent[] = []
+let pathEventFrame: number | null = null
+let handledPathEventSequences = new Set<number>()
 
 const sharedStepTones = [
   {
@@ -1767,48 +1815,6 @@ function findPendingTutorialForPath(
   return latest
 }
 
-function estimatePlanningProgress(
-    task: CachedPlanningTask,
-) {
-  const elapsedSeconds =
-      Math.max(
-          0,
-          (
-              Date.now() -
-              task.startedAt
-          ) / 1000,
-      )
-
-  if (elapsedSeconds < 10) {
-    return Math.min(
-        30,
-        10 + elapsedSeconds * 2,
-    )
-  }
-
-  if (elapsedSeconds < 35) {
-    return Math.min(
-        64,
-        30 +
-        (elapsedSeconds - 10) * 1.36,
-    )
-  }
-
-  if (elapsedSeconds < 70) {
-    return Math.min(
-        86,
-        64 +
-        (elapsedSeconds - 35) * 0.63,
-    )
-  }
-
-  return Math.min(
-      94,
-      86 +
-      (elapsedSeconds - 70) * 0.12,
-  )
-}
-
 function estimateTutorialProgress(
     task: CachedTutorialGeneration,
 ) {
@@ -1853,6 +1859,7 @@ function estimateTutorialProgress(
 
 function addPlanningMessage(
     message: string,
+    shouldPersist = true,
 ) {
   if (
       !message ||
@@ -1868,13 +1875,80 @@ function addPlanningMessage(
     message,
   ].slice(-5)
 
-  if (isGenerating.value) {
+  if (shouldPersist && isGenerating.value) {
     persistPlanningTask({
       logs: [
         ...generatingMessages.value,
       ],
     })
   }
+}
+
+function clearPendingPathEvents() {
+  pendingPathEvents = []
+  handledPathEventSequences.clear()
+
+  if (pathEventFrame !== null) {
+    window.cancelAnimationFrame(pathEventFrame)
+    pathEventFrame = null
+  }
+}
+
+function flushPathEvents() {
+  if (!pendingPathEvents.length) {
+    return
+  }
+
+  const events = pendingPathEvents
+  pendingPathEvents = []
+
+  let nextProgress = generatingProgress.value
+  const messages: string[] = []
+
+  for (const event of events) {
+    if (typeof event.progress === 'number') {
+      nextProgress = Math.max(
+          nextProgress,
+          Math.min(event.progress, 96),
+      )
+    }
+
+    if (event.message) {
+      messages.push(event.message)
+    }
+  }
+
+  generatingProgress.value = nextProgress
+
+  for (const message of messages) {
+    addPlanningMessage(message, false)
+  }
+
+  if (isGenerating.value) {
+    persistPlanningTask({
+      status: 'running',
+      progress: generatingProgress.value,
+      logs: [...generatingMessages.value],
+    })
+  }
+}
+
+function queuePathEvent(event: PathEvent) {
+  if (handledPathEventSequences.has(event.sequence)) {
+    return
+  }
+
+  handledPathEventSequences.add(event.sequence)
+  pendingPathEvents.push(event)
+
+  if (pathEventFrame !== null) {
+    return
+  }
+
+  pathEventFrame = window.requestAnimationFrame(() => {
+    pathEventFrame = null
+    flushPathEvents()
+  })
 }
 
 function addTutorialMessage(
@@ -1909,38 +1983,6 @@ function addTutorialMessage(
   }
 }
 
-function syncPlanningMessagesByProgress() {
-  if (generatingProgress.value >= 10) {
-    addPlanningMessage(
-        '已读取学习目标、当前基础和学习偏好。',
-    )
-  }
-
-  if (generatingProgress.value >= 30) {
-    addPlanningMessage(
-        '正在拆解学习阶段并确定阶段目标。',
-    )
-  }
-
-  if (generatingProgress.value >= 52) {
-    addPlanningMessage(
-        '正在编排核心知识节点和学习顺序。',
-    )
-  }
-
-  if (generatingProgress.value >= 74) {
-    addPlanningMessage(
-        '正在检查节点覆盖度和前置依赖。',
-    )
-  }
-
-  if (generatingProgress.value >= 90) {
-    addPlanningMessage(
-        '路径结构已基本完成，正在保存结果。',
-    )
-  }
-}
-
 function syncTutorialMessagesByProgress() {
   if (tutorialProgress.value >= 8) {
     addTutorialMessage(
@@ -1971,72 +2013,6 @@ function syncTutorialMessagesByProgress() {
         '教程内容已基本完成，正在保存并校验。',
     )
   }
-}
-
-function stopPathProgressAnimation() {
-  if (pathProgressTimer === null) {
-    return
-  }
-
-  window.clearInterval(pathProgressTimer)
-  pathProgressTimer = null
-}
-
-function startPathProgressAnimation(
-    initialProgress =
-        generatingProgress.value,
-) {
-  stopPathProgressAnimation()
-
-  generatingProgress.value =
-      Math.max(
-          generatingProgress.value,
-          initialProgress,
-      )
-
-  pathProgressTimer =
-      window.setInterval(() => {
-        if (
-            !pageActive ||
-            !isGenerating.value ||
-            pathFinishing
-        ) {
-          return
-        }
-
-        if (generatingProgress.value < 28) {
-          generatingProgress.value += 2.6
-        } else if (
-            generatingProgress.value < 56
-        ) {
-          generatingProgress.value += 1.7
-        } else if (
-            generatingProgress.value < 78
-        ) {
-          generatingProgress.value += 0.95
-        } else if (
-            generatingProgress.value < 94
-        ) {
-          generatingProgress.value += 0.32
-        }
-
-        generatingProgress.value =
-            Math.min(
-                generatingProgress.value,
-                94,
-            )
-
-        syncPlanningMessagesByProgress()
-
-        persistPlanningTask({
-          status: 'running',
-          progress:
-              generatingProgress.value,
-          logs: [
-            ...generatingMessages.value,
-          ],
-        })
-      }, 700)
 }
 
 function stopTutorialProgressAnimation() {
@@ -2118,12 +2094,14 @@ function previewNode(
     node: LearningPathNode,
 ) {
   activeDetailNode.value = node
+  activeSidebarTab.value = 'node'
 }
 
 async function handleNodeClick(
     node: LearningPathNode,
 ) {
   activeDetailNode.value = node
+  activeSidebarTab.value = 'node'
 
   if (!canEnterNode(node)) {
     toast.warning(
@@ -2138,10 +2116,12 @@ async function handleNodeClick(
 async function openNodeLearning(
     node: LearningPathNode,
 ) {
-  if (
-      openingNodeId.value ||
-      isGeneratingTutorial.value
-  ) {
+  if (isGeneratingTutorial.value) {
+    if (tutorialNodeId.value === node.id && !isTutorialModalVisible.value) {
+      isTutorialModalVisible.value = true
+    } else {
+      toast.warning('有其他节点教程正在准备中，请等待完成')
+    }
     return
   }
 
@@ -2320,9 +2300,15 @@ async function finishTutorialGeneration(
   tutorialGenerationError.value = ''
   tutorialFinishing = false
 
-  await router.push(
-      `/path-planner/node/${targetNodeId}`,
-  )
+  if (!isTutorialModalVisible.value) {
+    const nodeTitle = path.value?.nodes.find(n => n.id === targetNodeId)?.title || ''
+    toast.success(`教程《${nodeTitle}》生成成功！`)
+    await refreshPathData()
+  } else {
+    await router.push(
+        `/path-planner/node/${targetNodeId}`,
+    )
+  }
 }
 
 function failTutorialGeneration(
@@ -2460,6 +2446,7 @@ async function beginTutorialGeneration(
   tutorialFinishing = false
 
   isGeneratingTutorial.value = true
+  isTutorialModalVisible.value = true
   openingNodeId.value = node.id
   tutorialNodeId.value = node.id
   tutorialGenerationError.value = ''
@@ -2510,6 +2497,7 @@ async function resumeTutorialGeneration(
   openingNodeId.value = cached.nodeId
   tutorialNodeId.value = cached.nodeId
   isGeneratingTutorial.value = true
+  isTutorialModalVisible.value = false
   tutorialGenerationError.value =
       cached.error || ''
   tutorialProgress.value =
@@ -2630,31 +2618,7 @@ function stopSSE() {
 function handlePathEvent(
     event: PathEvent,
 ) {
-  if (
-      typeof event.progress === 'number'
-  ) {
-    generatingProgress.value =
-        Math.max(
-            generatingProgress.value,
-            Math.min(
-                event.progress,
-                96,
-            ),
-        )
-  }
-
-  if (event.message) {
-    addPlanningMessage(event.message)
-  }
-
-  persistPlanningTask({
-    status: 'running',
-    progress:
-        generatingProgress.value,
-    logs: [
-      ...generatingMessages.value,
-    ],
-  })
+  queuePathEvent(event)
 }
 
 function startSSE(
@@ -2662,13 +2626,17 @@ function startSSE(
     runId: string,
 ) {
   stopSSE()
+  clearPendingPathEvents()
 
   pathEvents.connect(
       pathId,
       runId,
       {
         onEvent: handlePathEvent,
-        onCompleted: () => {
+        onCompleted: event => {
+          queuePathEvent(event)
+          flushPathEvents()
+
           generatingProgress.value =
               Math.max(
                   generatingProgress.value,
@@ -2814,17 +2782,13 @@ async function finishPathGeneration(
   pathFinishing = true
   pathMonitorToken += 1
   stopSSE()
-  stopPathProgressAnimation()
+  clearPendingPathEvents()
 
   addPlanningMessage(
       '路径结构生成完成，正在打开学习路径总览。',
   )
 
-  await animateProgressTo(
-      generatingProgress,
-      100,
-      760,
-  )
+  generatingProgress.value = 100
 
   persistPlanningTask({
     status: 'completed',
@@ -2867,8 +2831,10 @@ async function finishPathGeneration(
       latest.status === 'generating'
   ) {
     pathFinishing = false
-    generatingProgress.value = 94
-    startPathProgressAnimation(94)
+    generatingProgress.value = Math.min(
+        generatingProgress.value,
+        96,
+    )
 
     const pathId =
         path.value?.id ??
@@ -2899,7 +2865,7 @@ function failPathGeneration(
     message: string,
 ) {
   stopSSE()
-  stopPathProgressAnimation()
+  clearPendingPathEvents()
 
   pathGenerationError.value = message
 
@@ -2931,10 +2897,6 @@ async function retryPathStatus() {
 
   addPlanningMessage(
       '正在重新连接路径规划任务。',
-  )
-
-  startPathProgressAnimation(
-      generatingProgress.value,
   )
 
   if (activeRunId.value) {
@@ -3085,6 +3047,33 @@ async function loadNewPathRequest() {
   }
 }
 
+async function refreshPathData() {
+  const rawId = String(route.params.id || '')
+  try {
+    const paramId = Number(rawId || 0)
+    let loadedPath: PathOverview | null = null
+    if (rawId && rawId !== 'latest' && Number.isFinite(paramId) && paramId > 0) {
+      const response = await getLearningPathById(paramId)
+      loadedPath = unwrapResponseData<PathOverview>(response)
+    } else {
+      const response = await getCurrentLearningPath()
+      loadedPath = unwrapResponseData<PathOverview | null>(response)
+    }
+    if (loadedPath) {
+      path.value = loadedPath
+      if (selectedNodeId.value) {
+        const matchingNode = loadedPath.nodes.find(n => n.id === selectedNodeId.value)
+        if (matchingNode) {
+          activeDetailNode.value = matchingNode
+        }
+      }
+      await loadEvaluation(loadedPath.id)
+    }
+  } catch (err) {
+    console.error('Failed to refresh path data quietly', err)
+  }
+}
+
 async function loadPath() {
   pageActive = true
 
@@ -3179,9 +3168,6 @@ async function loadPath() {
             Math.max(
                 12,
                 cached.progress,
-                estimatePlanningProgress(
-                    cached,
-                ),
             )
 
         generatingMessages.value =
@@ -3197,7 +3183,6 @@ async function loadPath() {
           pathGenerationError.value =
               cached.error ||
               '路径生成失败'
-          stopPathProgressAnimation()
           return
         }
       } else {
@@ -3238,10 +3223,6 @@ async function loadPath() {
           startedAt: Date.now(),
         })
       }
-
-      startPathProgressAnimation(
-          generatingProgress.value,
-      )
 
       if (activeRunId.value) {
         startSSE(
@@ -3287,7 +3268,7 @@ async function loadPath() {
     generatingProgress.value = 100
     pathGenerationError.value = ''
     stopSSE()
-    stopPathProgressAnimation()
+    clearPendingPathEvents()
     clearPlanningCache(
         currentPathId,
     )
@@ -3317,7 +3298,7 @@ function deactivatePage() {
   tutorialMonitorToken += 1
 
   stopSSE()
-  stopPathProgressAnimation()
+  clearPendingPathEvents()
   stopTutorialProgressAnimation()
 }
 
@@ -3499,10 +3480,12 @@ onBeforeUnmount(() => {
 
 .generate-track i {
   height: 100%;
+  width: 100%;
   display: block;
   border-radius: inherit;
   background: linear-gradient(90deg, #46b8b4, #5b6ee1);
-  transition: width 0.35s ease;
+  transform-origin: left;
+  transition: transform 0.35s ease;
 }
 
 .generate-log {
@@ -3596,15 +3579,18 @@ onBeforeUnmount(() => {
 .map-toolbar {
   min-height: 86px;
   display: grid;
-  grid-template-columns: minmax(360px, 1fr) minmax(520px, 0.92fr);
-  gap: 24px;
+  grid-template-columns: minmax(360px, 1fr) auto;
+  gap: 32px;
   align-items: center;
-  padding-bottom: 16px;
+  padding-bottom: 20px;
   border-bottom: 1px solid rgba(200, 228, 227, 0.52);
 }
 
 .map-title {
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .map-title span,
@@ -3618,7 +3604,7 @@ onBeforeUnmount(() => {
 }
 
 .map-title h1 {
-  margin: 7px 0 5px;
+  margin: 6px 0 2px;
   color: var(--color-text-strong, #173b42);
   font-size: 22px;
   line-height: 1.25;
@@ -3630,44 +3616,13 @@ onBeforeUnmount(() => {
   color: var(--color-text-secondary, #58747a);
   font-size: 13px;
   line-height: 1.55;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-
-.map-actions {
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 78px minmax(0, 1fr);
-  gap: 14px;
-  align-items: center;
-}
-
-.compact-progress {
-  height: 58px;
-  display: grid;
-  align-content: center;
-  border-right: 1px solid rgba(200, 228, 227, 0.66);
-}
-
-.compact-progress strong {
-  color: var(--color-primary-text, #205f67);
-  font-size: 25px;
-  line-height: 1;
-}
-
-.compact-progress span {
-  margin-top: 5px;
-  color: var(--color-text-secondary, #58747a);
-  font-size: 12px;
-  font-weight: 800;
 }
 
 .map-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
+  margin-top: 4px;
 }
 
 .map-tags span {
@@ -3687,8 +3642,57 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
+.map-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.compact-progress {
+  height: 54px;
+  display: grid;
+  align-content: center;
+  padding-right: 20px;
+  border-right: 1px solid rgba(200, 228, 227, 0.66);
+}
+
+.compact-progress strong {
+  color: var(--color-primary-text, #205f67);
+  font-size: 25px;
+  line-height: 1;
+}
+
+.compact-progress span {
+  margin-top: 5px;
+  color: var(--color-text-secondary, #58747a);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.action-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.current-node-tag {
+  font-size: 12px;
+  color: var(--color-text-secondary, #58747a);
+}
+
+.current-node-tag strong {
+  color: var(--color-primary-text, #205f67);
+  font-weight: 800;
+  background: rgba(70, 184, 180, 0.12);
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-left: 4px;
+  display: inline-block;
+}
+
 .action-line {
-  grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
   gap: 9px;
@@ -3718,18 +3722,41 @@ onBeforeUnmount(() => {
   min-height: 56px;
   display: grid;
   grid-template-columns: repeat(4, minmax(86px, 1fr));
-  gap: 14px;
+  gap: 16px;
   align-items: center;
-  padding: 10px 0 14px;
+  padding: 14px 0 18px;
   border-bottom: 1px solid rgba(200, 228, 227, 0.52);
 }
 
 .summary-line div {
-  min-height: 42px;
-  padding-left: 12px;
+  min-height: 48px;
+  padding: 8px 16px 8px 36px;
+  position: relative;
   display: grid;
   align-content: center;
-  border-left: 3px solid currentColor;
+  border: 1px solid rgba(200, 228, 227, 0.44);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  box-shadow: 0 1px 2px rgba(31, 76, 80, 0.01);
+  transition: all 0.2s ease;
+}
+
+.summary-line div:hover {
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(31, 76, 80, 0.05);
+  border-color: var(--color-primary, #46b8b4);
+}
+
+.summary-line div::before {
+  content: "";
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .summary-line .available {
@@ -3844,9 +3871,12 @@ onBeforeUnmount(() => {
 
 .stage-progress-track i {
   height: 100%;
+  width: 100%;
   display: block;
   border-radius: inherit;
   background: linear-gradient(90deg, #46b8b4, #5b6ee1);
+  transform-origin: left;
+  transition: transform 0.3s ease;
 }
 
 .map-node-list {
@@ -4084,13 +4114,47 @@ onBeforeUnmount(() => {
 .map-node.locked .node-copy span,
 .map-node.locked .node-extra span,
 .map-node.locked .node-extra em {
-  color: #8aa0a4;
+  color: #5b7579;
 }
 
 .mentor-panel {
   min-width: 0;
   padding-left: 28px;
   border-left: 1px solid rgba(200, 228, 227, 0.54);
+}
+
+.sidebar-tabs {
+  display: flex;
+  gap: 8px;
+  background: rgba(200, 228, 227, 0.22);
+  padding: 4px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  border: 1px solid rgba(200, 228, 227, 0.44);
+}
+
+.sidebar-tab-btn {
+  flex: 1;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-secondary, #58747a);
+  font-size: 13px;
+  font-weight: 780;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sidebar-tab-btn:hover {
+  color: var(--color-primary-text, #205f67);
+  background: rgba(255, 255, 255, 0.4);
+}
+
+.sidebar-tab-btn.active {
+  color: var(--color-primary-text, #205f67);
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(31, 76, 80, 0.08);
 }
 
 .mentor-section {
@@ -4140,7 +4204,7 @@ onBeforeUnmount(() => {
 }
 
 .mentor-table span {
-  color: var(--color-text-faint, #8da4a8);
+  color: var(--color-text-muted, #58747a);
   font-size: 12px;
   font-weight: 800;
 }
@@ -4208,17 +4272,6 @@ onBeforeUnmount(() => {
 .evaluation-panel :deep(.dashboard-banner) {
   margin: 12px 0 0;
   box-shadow: none;
-}
-
-.log-enter-active,
-.log-leave-active {
-  transition: all 0.24s ease;
-}
-
-.log-enter-from,
-.log-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
 }
 
 .cockpit-card {
@@ -4464,10 +4517,16 @@ onBeforeUnmount(() => {
 
   .map-toolbar {
     grid-template-columns: 1fr;
+    gap: 20px;
   }
 
   .map-actions {
-    grid-template-columns: 78px minmax(0, 1fr);
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .action-panel {
+    align-items: flex-start;
   }
 
   .action-line {
@@ -4505,12 +4564,15 @@ onBeforeUnmount(() => {
   }
 
   .map-actions {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
   }
 
   .compact-progress {
     height: auto;
     padding-bottom: 12px;
+    padding-right: 0;
     border-right: 0;
     border-bottom: 1px solid rgba(200, 228, 227, 0.52);
   }
@@ -4708,7 +4770,7 @@ onBeforeUnmount(() => {
 
 .generation-node-label {
   max-width: 98px;
-  color: #9ca9ac;
+  color: #6c858a;
   font-size: 12px;
   font-weight: 550;
   line-height: 1.45;
@@ -4852,6 +4914,7 @@ onBeforeUnmount(() => {
 .generation-progress-track > i {
   display: block;
   height: 100%;
+  width: 100%;
   border-radius: inherit;
   background:
       linear-gradient(
@@ -4859,19 +4922,22 @@ onBeforeUnmount(() => {
           #159a94,
           #5abdb8
       );
-  transition: width 320ms ease;
+  transform-origin: left;
+  transition: transform 320ms ease;
 }
 
 .generation-log-box {
-  min-height: 82px;
+  height: 108px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 7px;
   margin-top: 17px;
   padding: 12px 15px;
   border-left: 2px solid #82cbc7;
   background: #fbfdfd;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .generation-log-row {

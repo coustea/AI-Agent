@@ -123,13 +123,12 @@ export interface ResourceGenerationRequest {
       narrative_style: 'concept' | 'case_driven' | 'problem_led' | 'review'
       density: 'concise' | 'standard' | 'detailed'
       emphasis: Array<'core_concepts' | 'cases' | 'pitfalls' | 'derivation'>
-      include_speaker_notes: boolean
     }
     // 动画讲解智能体的配置
     cartoon: {
+      lesson_depth: 'focused' | 'standard' | 'deep'
       visual_density: 'moderate' | 'rich' | 'intensive'
-      pace: 'calm' | 'balanced' | 'fast'
-      target_duration_seconds: number
+      pace: 'fast' | 'balanced' | 'calm'
       voice: 'teacher' | 'coach'
     }
   }
