@@ -258,31 +258,6 @@
             </div>
 
             <div class="dashboard-controls">
-              <Select
-                  v-if="
-                  studentProfile.courses &&
-                  studentProfile.courses.length > 1
-                "
-                  v-model="selectedTrendCourse"
-              >
-                <SelectTrigger class="course-trigger">
-                  <SelectValue placeholder="切换课程" />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectItem
-                        v-for="course in studentProfile.courses"
-                        :key="course"
-                        :value="course"
-                        class="cursor-pointer text-xs"
-                    >
-                      {{ course }}
-                    </SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-
               <ToggleGroup
                   type="single"
                   variant="outline"
@@ -335,11 +310,6 @@
                       :option="lineOption"
                       autoresize
                   />
-
-                  <div v-if="!hasLineChartData" class="chart-empty">
-                    <Clock3 class="h-5 w-5" />
-                    <span>暂无学习时长数据</span>
-                  </div>
                 </div>
               </section>
 
@@ -400,11 +370,6 @@
                           :option="pieOption"
                           autoresize
                       />
-
-                      <div v-if="!hasScenarioData" class="chart-empty">
-                        <Gauge class="h-5 w-5" />
-                        <span>暂无使用数据</span>
-                      </div>
                     </div>
 
                     <div class="scenario-list">
@@ -1148,14 +1113,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
@@ -1194,31 +1151,19 @@ import {
 } from "@/features/auth/model/currentUser";
 import {
   getProfile,
-  updateProfileOnboarding,
+  updateProfile,
 } from "@/features/profile/api/profile";
-import {
-  getRecentResources,
-  getStudyStats,
-} from "@/features/dashboard/api/home";
-import type {
-  RecentResourceItem,
-  StudyStatsData,
-} from "@/features/dashboard/api/home";
 import { getGeneratedResources } from "@/features/resource/api/resource";
 import type { GeneratedResourceHistoryItem } from "@/features/resource/model/resource";
-import {
-  getEvaluationSummary,
-  getLearningTimeStats,
-} from "@/features/evaluation/api/evaluation";
+import { getDashboard } from "@/features/evaluation/api/evaluation";
 import type {
-  EvaluationSummary,
-  LearningTimeStats,
+  DashboardData,
 } from "@/features/evaluation/api/evaluation";
 import { fetchWrongQuestions } from "@/features/question-bank/api/wrongQuestions";
 import { searchSchools } from "@/features/profile/api/school";
 import type { SchoolItem } from "@/features/profile/model/school";
 import type {
-  ProfileOnboardingUpdate,
+  ProfileUpdate,
   StudentProfileData,
 } from "@/features/profile/api/profile";
 
@@ -1251,20 +1196,13 @@ const avatarUploading = ref(false);
 const profileEditorVisible = ref(false);
 const profileSubmitting = ref(false);
 
-const learningStats = ref<LearningTimeStats | null>(null);
-const evaluationSummary = ref<EvaluationSummary | null>(null);
-const studyStats = ref<StudyStatsData | null>(null);
-const selectedTrendCourse = ref("");
+const dashboardData = ref<DashboardData | null>(null);
 const resourceHistoryLoading = ref(false);
 const dashboardStatsLoading = ref(false);
-const evaluationLoading = ref(false);
-const wrongLoading = ref(false);
 const wrongTotal = ref(0);
 
 const studentProfile = ref<
-    StudentProfileData & {
-  learning_duration_total?: number;
-}
+    StudentProfileData
 >({
   school: null,
   school_level: null,
@@ -1273,7 +1211,6 @@ const studentProfile = ref<
   courses: [],
   learning_goal: null,
   preferred_language: null,
-  learning_duration_total: 0,
 });
 
 const profileMeta = reactive({
@@ -1301,8 +1238,6 @@ const profileErrors = reactive({
 });
 
 const resourceHistory = ref<GeneratedResourceHistoryItem[]>([]);
-const recentDashboardResources = ref<RecentResourceItem[]>([]);
-const fullProfileData = ref<any>(null);
 
 const newCourseInput = ref("");
 const majorFocus = ref(false);
@@ -1589,78 +1524,33 @@ const resourceTypeCoverage = computed(() => {
   return resourceTypeSet.value.size;
 });
 
+const timeStats = computed(() => dashboardData.value?.time_stats);
+
+const dashboardSummary = computed(
+    () => dashboardData.value?.evaluation_summary,
+);
+
 const completedResourceCount = computed(() => {
   return (
-      evaluationSummary.value?.completed_resources ||
+      dashboardSummary.value?.completed_resources ||
       resourceHistory.value.length ||
       0
-  );
-});
-
-const eventCountForContexts = (...keys: string[]) => {
-  const context =
-      learningStats.value?.context_breakdown || {};
-
-  return keys.reduce(
-      (sum, key) => sum + (context[key] || 0),
-      0,
-  );
-};
-
-const questionBankEvents = computed(() => {
-  return eventCountForContexts(
-      "QuestionBank",
-      "question-bank",
-  );
-});
-
-const tutorEvents = computed(() => {
-  return eventCountForContexts("Tutor", "tutor");
-});
-
-const pathPlanningEvents = computed(() => {
-  return eventCountForContexts(
-      "PathPlanCreate",
-      "PathPlanOverview",
-      "PathPlanHistory",
-      "PathNodeStudy",
-      "path-planner",
-      "path-planner-overview",
-      "path-planner-history",
-      "path-planner-node",
-  );
-});
-
-const recommendationEvents = computed(() => {
-  return eventCountForContexts(
-      "ResourceGenerator",
-      "ResourceResult",
-      "ResourceHistory",
-      "resource-generator",
-      "resource-detail",
-      "ai/resources/history",
   );
 });
 
 const learningSummaryCards = computed(() => [
   {
     label: "本周活跃",
-    value: `${
-        studyStats.value?.weekly_days ??
-        learningStats.value?.streak_days ??
-        0
-    }天`,
-    hint: `今日 ${formatStudyDuration(
-        learningStats.value?.today_seconds || 0,
-    )}`,
+    value: `${dashboardData.value?.login_activity.active_days || 0}天`,
+    hint: "按每日首次登录统计",
     icon: CalendarDays,
     themeClass: "card-active",
   },
   {
     label: "学习产出",
     value: `${completedResourceCount.value}`,
-    hint: evaluationSummary.value?.viewed_resources
-        ? `已浏览 ${evaluationSummary.value.viewed_resources} 份`
+    hint: dashboardSummary.value?.viewed_resources
+        ? `已浏览 ${dashboardSummary.value.viewed_resources} 份`
         : `${resourceHistory.value.length} 份生成记录`,
     icon: FileCheck,
     themeClass: "card-output",
@@ -1668,10 +1558,10 @@ const learningSummaryCards = computed(() => [
   {
     label: "学习时间",
     value: formatStudyDuration(
-        learningStats.value?.total_seconds || 0,
+        timeStats.value?.total_seconds || 0,
     ),
     hint: `今日已学 ${formatStudyDuration(
-        learningStats.value?.today_seconds || 0,
+        timeStats.value?.today_seconds || 0,
     )}`,
     icon: Clock3,
     themeClass: "card-score",
@@ -1715,13 +1605,13 @@ const learningStatusCards = computed(() => [
   {
     label: "评估样本",
     value: `${
-        evaluationSummary.value?.event_count || 0
+        dashboardSummary.value?.event_count || 0
     }条`,
-    hint: evaluationLoading.value
+    hint: dashboardStatsLoading.value
         ? "数据同步中"
         : "行为与测验信号",
     percent: boundedPercent(
-        ((evaluationSummary.value?.event_count || 0) /
+        ((dashboardSummary.value?.event_count || 0) /
             12) *
         100,
     ),
@@ -1729,15 +1619,13 @@ const learningStatusCards = computed(() => [
     themeClass: "theme-indigo",
   },
   {
-    label: "连续学习",
-    value: `${
-        learningStats.value?.streak_days || 0
-    }天`,
+    label: "登录活跃",
+    value: `${dashboardData.value?.login_activity.active_days || 0}天`,
     hint: dashboardStatsLoading.value
         ? "数据同步中"
         : `${timeRange.value} 天统计窗口`,
     percent: boundedPercent(
-        ((learningStats.value?.streak_days || 0) / 7) *
+        ((dashboardData.value?.login_activity.active_days || 0) / Number(timeRange.value)) *
         100,
     ),
     icon: Gauge,
@@ -1747,19 +1635,19 @@ const learningStatusCards = computed(() => [
 
 const displayedWeakTopics = computed(() => {
   return (
-      evaluationSummary.value?.weak_topics || []
+      dashboardSummary.value?.weak_topics || []
   ).slice(0, 4);
 });
 
 const displayedFocusTopics = computed(() => {
   return (
-      evaluationSummary.value?.focus_topics || []
+      dashboardSummary.value?.focus_topics || []
   ).slice(0, 4);
 });
 
 const primaryLearningAdvice = computed(() => {
   return (
-      evaluationSummary.value?.recommendations?.[0] ||
+      dashboardSummary.value?.recommendations?.[0] ||
       "继续完成资源学习与阶段测验，系统会逐步积累学习效果信号。"
   );
 });
@@ -1849,28 +1737,18 @@ const resourceMixRows = computed(() => {
 });
 
 const scenarioBreakdown = computed(() => {
-  const items = [
-    {
-      name: "题库练习",
-      count: questionBankEvents.value,
-      color: "#818cf8",
-    },
-    {
-      name: "AI 辅导",
-      count: tutorEvents.value,
-      color: "#2dd4bf",
-    },
-    {
-      name: "路径规划",
-      count: pathPlanningEvents.value,
-      color: "#fbbf24",
-    },
-    {
-      name: "智能推荐",
-      count: recommendationEvents.value,
-      color: "#34d399",
-    },
-  ];
+  const colorByFeature = {
+    quiz: "#818cf8",
+    chat: "#2dd4bf",
+    path: "#fbbf24",
+    resource: "#34d399",
+  };
+  const items = (dashboardData.value?.feature_usage || []).map(
+      (item) => ({
+        ...item,
+        color: colorByFeature[item.key],
+      }),
+  );
 
   const total = items.reduce(
       (sum, item) => sum + item.count,
@@ -1886,12 +1764,6 @@ const scenarioBreakdown = computed(() => {
   }));
 });
 
-const hasLineChartData = computed(() => {
-  return (
-      learningStats.value?.daily_breakdown || []
-  ).some((item) => item.seconds > 0);
-});
-
 const hasScenarioData = computed(() => {
   return scenarioBreakdown.value.some(
       (item) => item.count > 0,
@@ -1900,7 +1772,7 @@ const hasScenarioData = computed(() => {
 
 const lineOption = computed(() => {
   const dailyBreakdown =
-      learningStats.value?.daily_breakdown || [];
+      timeStats.value?.daily_breakdown || [];
 
   const dates = dailyBreakdown.map((item) => {
     const date = new Date(item.date);
@@ -1932,9 +1804,7 @@ const lineOption = computed(() => {
         color: "#334155",
         fontSize: 11,
       },
-      formatter: `{b}<br/>课程：${
-          selectedTrendCourse.value || "全部课程"
-      }<br/>专注时长：{c}h`,
+      formatter: "{b}<br/>专注时长：{c}h",
     },
     xAxis: {
       type: "category",
@@ -1967,7 +1837,7 @@ const lineOption = computed(() => {
     },
     series: [
       {
-        name: selectedTrendCourse.value,
+        name: "学习时长",
         data: values,
         type: "line",
         smooth: true,
@@ -2007,10 +1877,29 @@ const lineOption = computed(() => {
 });
 
 const pieOption = computed(() => {
+  const empty = !hasScenarioData.value;
+
   return {
+    title: empty
+        ? {
+          text: "暂无使用记录",
+          subtext: "0 次",
+          left: "center",
+          top: "38%",
+          textStyle: {
+            color: "#94a3b8",
+            fontSize: 11,
+            fontWeight: 600,
+          },
+          subtextStyle: {
+            color: "#cbd5e1",
+            fontSize: 10,
+          },
+        }
+        : undefined,
     tooltip: {
       trigger: "item",
-      formatter: "{b}: {d}%",
+      formatter: empty ? "{b}: 0 次" : "{b}: {d}%",
       backgroundColor: "#ffffff",
       borderColor: "#d7e2ef",
       borderWidth: 1,
@@ -2036,7 +1925,7 @@ const pieOption = computed(() => {
         labelLine: {
           show: false,
         },
-        data: hasScenarioData.value
+        data: !empty
             ? scenarioBreakdown.value.map((item) => ({
               value: item.count,
               name: item.name,
@@ -2044,35 +1933,17 @@ const pieOption = computed(() => {
                 color: item.color,
               },
             }))
-            : [
-              {
+            : scenarioBreakdown.value.map((item) => ({
                 value: 1,
-                name: "暂无数据",
+                name: item.name,
                 itemStyle: {
                   color: "#e2e8f0",
                 },
-              },
-            ],
+              })),
       },
     ],
   };
 });
-
-watch(
-    () => studentProfile.value.courses,
-    (courses) => {
-      if (courses?.length) {
-        if (!courses.includes(selectedTrendCourse.value)) {
-          selectedTrendCourse.value = courses[0] || "";
-        }
-      } else {
-        selectedTrendCourse.value = "";
-      }
-    },
-    {
-      immediate: true,
-    },
-);
 
 watch(
     () => route.query.action,
@@ -2082,7 +1953,7 @@ watch(
 );
 
 watch(timeRange, () => {
-  loadLearningStats();
+  loadDashboardData();
 });
 
 watch(
@@ -2453,8 +2324,6 @@ const loadProfileInfo = async () => {
       const profileData =
           profileResult.value.data?.data;
 
-      fullProfileData.value = profileData;
-
       const baseInfo = profileData?.base_info;
 
       if (baseInfo) {
@@ -2496,23 +2365,23 @@ const loadProfileInfo = async () => {
   }
 };
 
-const loadLearningStats = async () => {
+const loadDashboardData = async () => {
+  dashboardStatsLoading.value = true;
+
   try {
     const days = Number.parseInt(timeRange.value) || 7;
-    const response =
-        await getLearningTimeStats(days);
+    const response = await getDashboard(days);
 
-    learningStats.value = response.data.data;
-    studentProfile.value.learning_duration_total =
-        response.data.data.total_seconds;
+    dashboardData.value = response.data.data;
   } catch (error) {
     console.warn(
-        "加载学习时长统计失败",
+        "加载学习看板失败",
         error,
     );
 
-    learningStats.value = null;
-    studentProfile.value.learning_duration_total = 0;
+    dashboardData.value = null;
+  } finally {
+    dashboardStatsLoading.value = false;
   }
 };
 
@@ -2537,62 +2406,7 @@ const loadResourceHistory = async () => {
   }
 };
 
-const loadDashboardStats = async () => {
-  dashboardStatsLoading.value = true;
-
-  try {
-    const [statsResult, resourcesResult] =
-        await Promise.allSettled([
-          getStudyStats(),
-          getRecentResources(),
-        ]);
-
-    studyStats.value =
-        statsResult.status === "fulfilled"
-            ? statsResult.value.data.data
-            : null;
-
-    recentDashboardResources.value =
-        resourcesResult.status === "fulfilled"
-            ? resourcesResult.value.data.data || []
-            : [];
-  } catch (error) {
-    console.warn(
-        "加载学习数据概览失败",
-        error,
-    );
-
-    studyStats.value = null;
-    recentDashboardResources.value = [];
-  } finally {
-    dashboardStatsLoading.value = false;
-  }
-};
-
-const loadEvaluationSummary = async () => {
-  evaluationLoading.value = true;
-
-  try {
-    const response =
-        await getEvaluationSummary(100);
-
-    evaluationSummary.value =
-        response.data.data;
-  } catch (error) {
-    console.warn(
-        "加载学习评估摘要失败",
-        error,
-    );
-
-    evaluationSummary.value = null;
-  } finally {
-    evaluationLoading.value = false;
-  }
-};
-
 const loadWrongOverview = async () => {
-  wrongLoading.value = true;
-
   try {
     const response = await fetchWrongQuestions({
       is_archived: false,
@@ -2608,8 +2422,6 @@ const loadWrongOverview = async () => {
     );
 
     wrongTotal.value = 0;
-  } finally {
-    wrongLoading.value = false;
   }
 };
 
@@ -2617,9 +2429,7 @@ const loadAllProfileData = async () => {
   await Promise.all([
     loadProfileInfo(),
     loadResourceHistory(),
-    loadDashboardStats(),
-    loadLearningStats(),
-    loadEvaluationSummary(),
+    loadDashboardData(),
     loadWrongOverview(),
   ]).catch(console.error);
 };
@@ -2662,7 +2472,7 @@ const submitProfile = async () => {
   profileSubmitting.value = true;
 
   try {
-    const payload: ProfileOnboardingUpdate = {
+    const payload: ProfileUpdate = {
       school: profileForm.school.trim(),
       major: profileForm.major.trim(),
       grade: profileForm.grade,
@@ -2676,13 +2486,9 @@ const submitProfile = async () => {
       programming_languages: [
         ...profileForm.programming_languages,
       ],
-      foundational_level: "",
-      learning_style: "",
-      content_depth: "",
-      weak_points: [],
     };
 
-    await updateProfileOnboarding(payload);
+    await updateProfile(payload);
 
     studentProfile.value = {
       ...studentProfile.value,
@@ -3247,16 +3053,6 @@ const submitProfile = async () => {
   display: flex;
   align-items: center;
   gap: 9px;
-}
-
-.course-trigger {
-  width: 150px;
-  height: 34px;
-  border-color: #dde4ec;
-  border-radius: 8px;
-  background: #ffffff;
-  color: #334155;
-  font-size: 11px;
 }
 
 .range-toggle {
@@ -4794,7 +4590,6 @@ const submitProfile = async () => {
     width: 100%;
   }
 
-  .course-trigger,
   .range-toggle {
     flex: 1;
   }
@@ -4892,7 +4687,6 @@ const submitProfile = async () => {
     flex-direction: column;
   }
 
-  .course-trigger,
   .range-toggle {
     width: 100%;
   }

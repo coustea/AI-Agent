@@ -108,3 +108,4 @@
 7. action_type 只能是 review/practice/quiz 三种
 8. link 必须是有效的相对路径，以 / 开头
 9. 数据不足时，assessment 应建议积累更多学习事实，guidance_strategy 可适当保守
+10. **所有输出必须使用中文**。practice.by_topic 中的 topic 可能是英文技术术语（如 binary_search、shortest_path、linked_list），你必须将其翻译为中文（如"二分查找"、"最短路径"、"链表"）。focus_topics、action_plan.topic、action_plan.description、conclusion、reason、assessment 中一律使用中文主题名称，不要出现英文技术术语。

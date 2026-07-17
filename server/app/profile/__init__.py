@@ -1,6 +1,6 @@
 """共享学习者画像模块。"""
 
-from app.profile.request import OnboardingUpdate
+from app.profile.request import OnboardingUpdate, ProfileUpdate
 from app.profile.response import (
     BaseInfoData,
     OnboardingResponse,
@@ -15,6 +15,7 @@ __all__ = [
     "DIMENSION_NAMES",
     "OnboardingResponse",
     "OnboardingUpdate",
+    "ProfileUpdate",
     "ProfileService",
     "StudentProfileData",
     "get_profile_service",

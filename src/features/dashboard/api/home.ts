@@ -102,29 +102,3 @@ export interface RecentResourceItem {
 export function getRecentResources() {
   return http.get<ApiResponse<RecentResourceItem[]>>('/ai/dashboard/recent-resources')
 }
-
-// ---------------------------------------------------------------------------
-// 6. Profile Study Snapshot Compatibility
-// ---------------------------------------------------------------------------
-
-export interface StudyStatsData {
-  weekly_days: number
-}
-
-// 个人中心旧看板仍需要本周活跃天数。
-// 通过 GET /evaluation/dashboard?range_days=7 获取 time_stats.streak_days。
-export async function getStudyStats() {
-  const response = await http.get<ApiResponse<{
-    time_stats: { streak_days: number }
-  }>>('/ai/evaluation/dashboard', { params: { range_days: 7 } })
-
-  return {
-    ...response,
-    data: {
-      ...response.data,
-      data: {
-        weekly_days: response.data.data?.time_stats?.streak_days ?? 0,
-      },
-    },
-  }
-}

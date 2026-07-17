@@ -919,6 +919,26 @@ const agentSettingSchemas: Record<
       ],
     },
     {
+      key: 'pace',
+      title: '讲解节奏',
+      description: '控制旁白语速和动画推进的紧凑程度',
+      type: 'segment',
+      options: [
+        {
+          label: '紧凑',
+          value: 'fast',
+        },
+        {
+          label: '均衡',
+          value: 'balanced',
+        },
+        {
+          label: '从容',
+          value: 'calm',
+        },
+      ],
+    },
+    {
       key: 'voice',
       title: '配音角色',
       description: '选择动画讲解使用的表达方式',

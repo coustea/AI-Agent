@@ -551,7 +551,26 @@ COMMENT ON COLUMN learning_events.client_event_id IS '前端 UUID 幂等键';
 COMMENT ON COLUMN learning_events.occurred_at IS '事件发生实际时间';
 
 -- ============================================================
--- 13b. learning_sessions
+-- 13b. user_daily_activities
+-- ============================================================
+CREATE TABLE IF NOT EXISTS user_daily_activities (
+    id              SERIAL          PRIMARY KEY,
+    user_id         INTEGER         NOT NULL,
+    activity_date   DATE            NOT NULL,
+    first_login_at  TIMESTAMPTZ     NOT NULL,
+    created_at      TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_user_daily_activity UNIQUE (user_id, activity_date)
+);
+
+CREATE INDEX IF NOT EXISTS ix_user_daily_activities_user_date
+    ON user_daily_activities (user_id, activity_date);
+
+COMMENT ON TABLE user_daily_activities IS '用户每日登录活跃事实，每位用户每天最多一条';
+COMMENT ON COLUMN user_daily_activities.activity_date IS '按 Asia/Shanghai 计算的登录日期';
+COMMENT ON COLUMN user_daily_activities.first_login_at IS '当日首次成功登录时间';
+
+-- ============================================================
+-- 13c. learning_sessions
 -- ============================================================
 CREATE TABLE IF NOT EXISTS learning_sessions (
     id                  SERIAL          PRIMARY KEY,

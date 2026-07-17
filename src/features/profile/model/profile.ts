@@ -77,6 +77,16 @@ export interface ProfileOnboardingUpdate {
   weak_points: string[]
 }
 
+export interface ProfileUpdate {
+  school: string
+  major: string
+  grade: string
+  daily_study_time: string
+  global_learning_goal: string
+  programming_languages: string[]
+  courses: string[]
+}
+
 export interface ProfileOnboardingUpdateResult {
   inference_ok: boolean
 }

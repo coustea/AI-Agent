@@ -101,12 +101,12 @@ export function retryDiagramImage(messageId: number) {
   )
 }
 
-export function createChatVideo(topic: string, sessionId?: string) {
+export function createChatVideo(assistantMessageId: number, sessionId?: string) {
   const formData = new FormData()
-  formData.append('topic', topic)
+  formData.append('assistant_message_id', String(assistantMessageId))
   if (sessionId) formData.append('session_id', sessionId)
   return http.post<ApiResponse<{
-    user_message_id: number
+    assistant_message_id: number
     session_id: string
     video: ChatVideoArtifact
   }>>('/ai/chat/videos', formData, {
@@ -114,8 +114,8 @@ export function createChatVideo(topic: string, sessionId?: string) {
   })
 }
 
-export function getChatVideo(sessionId: string, userMessageId: number) {
-  return http.get<ApiResponse<{ user_message_id: number, video: ChatVideoArtifact }>>(
-    `/ai/chat/sessions/${sessionId}/videos/${userMessageId}`,
+export function getChatVideo(sessionId: string, assistantMessageId: number) {
+  return http.get<ApiResponse<{ assistant_message_id: number, video: ChatVideoArtifact }>>(
+    `/ai/chat/sessions/${sessionId}/videos/${assistantMessageId}`,
   )
 }

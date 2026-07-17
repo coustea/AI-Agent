@@ -128,6 +128,7 @@ export interface ResourceGenerationRequest {
     cartoon: {
       lesson_depth: 'focused' | 'standard' | 'deep'
       visual_density: 'moderate' | 'rich' | 'intensive'
+      pace: 'fast' | 'balanced' | 'calm'
       voice: 'teacher' | 'coach'
     }
   }

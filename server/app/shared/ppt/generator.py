@@ -342,15 +342,38 @@ class PPTGenerator:
             slide_count=len(deck.slides),
         )
 
+    _NARRATIVE_CHAPTER_TITLES: dict[str, tuple[str, str]] = {
+        "concept": ("概念与结构", "方法与应用"),
+        "case_driven": ("案例引入", "实践与迁移"),
+        "problem_led": ("问题与线索", "推导与解决"),
+        "review": ("核心回顾", "查漏与巩固"),
+    }
+
+    _NARRATIVE_QUESTIONS: dict[str, str] = {
+        "concept": "如何理解并应用{topic}？",
+        "case_driven": "{topic}在真实场景中如何发挥作用？",
+        "problem_led": "关于{topic}的核心问题是什么？如何解决？",
+        "review": "{topic}有哪些必须掌握的要点和常见误区？",
+    }
+
+    _EMPHASIS_ROLE_BOOST: dict[str, list[LogicNodeRole]] = {
+        "core_concepts": [LogicNodeRole.CONCEPT, LogicNodeRole.MECHANISM],
+        "cases": [LogicNodeRole.CASE, LogicNodeRole.EVIDENCE],
+        "pitfalls": [LogicNodeRole.CONCLUSION],
+        "derivation": [LogicNodeRole.METHOD, LogicNodeRole.MECHANISM],
+    }
+
     @classmethod
     def _generate_logic_model(cls, context: PPTGenerationContext) -> DeckLogicModel:
         """Build a bounded teaching graph from human-readable source material."""
 
         units = cls._knowledge_units(context)
         chapter_break = max(2, min(3, len(units) // 2))
+        narrative = context.preferences.narrative_style
+        emphasis = set(context.preferences.emphasis)
         nodes: list[LogicNode] = []
         for index, unit in enumerate(units, start=1):
-            role = cls._role_for_unit(unit)
+            role = cls._role_for_unit(unit, emphasis_boost=emphasis)
             chapter_id = "c01" if index <= chapter_break else "c02"
             nodes.append(
                 LogicNode(
@@ -371,10 +394,11 @@ class PPTGenerator:
                 )
             )
 
+        c1_title, c2_title = cls._NARRATIVE_CHAPTER_TITLES.get(narrative, ("概念与结构", "方法与应用"))
         chapters: list[LogicChapter] = []
         for chapter_id, title, chapter_nodes in (
-            ("c01", "概念与结构", [node for node in nodes if node.chapter_id == "c01"]),
-            ("c02", "方法与应用", [node for node in nodes if node.chapter_id == "c02"]),
+            ("c01", c1_title, [node for node in nodes if node.chapter_id == "c01"]),
+            ("c02", c2_title, [node for node in nodes if node.chapter_id == "c02"]),
         ):
             if not chapter_nodes:
                 continue
@@ -390,7 +414,7 @@ class PPTGenerator:
 
         return DeckLogicModel(
             course_domain=cls._infer_course_domain(context),
-            central_question=cls._text(f"如何理解并应用{context.topic}？"),
+            central_question=cls._text(cls._NARRATIVE_QUESTIONS.get(narrative, "如何理解并应用{topic}？").format(topic=context.topic)),
             thesis=cls._text("；".join(node.claim for node in nodes[-2:])),
             chapters=chapters,
             nodes=nodes,
@@ -535,8 +559,13 @@ class PPTGenerator:
         return CourseDomain.GENERAL_CS
 
     @classmethod
-    def _role_for_unit(cls, unit: _KnowledgeUnit) -> LogicNodeRole:
+    def _role_for_unit(cls, unit: _KnowledgeUnit, *, emphasis_boost: set[str] | None = None) -> LogicNodeRole:
         corpus = f"{unit.title} {' '.join([unit.claim, *unit.evidence])}"
+        # When emphasis includes pitfalls, boost conclusion detection
+        boost_roles: set[LogicNodeRole] = set()
+        if emphasis_boost:
+            for emphasis_key in emphasis_boost:
+                boost_roles.update(cls._EMPHASIS_ROLE_BOOST.get(emphasis_key, []))
         if any(token in corpus for token in ("对比", "区别", "差异", "联系")):
             return LogicNodeRole.CASE
         if any(token in corpus for token in ("步骤", "顺序", "遍历", "流程", "算法")):
@@ -545,6 +574,9 @@ class PPTGenerator:
             return LogicNodeRole.MECHANISM
         if any(token in corpus for token in ("误区", "注意", "结论", "总结")):
             return LogicNodeRole.CONCLUSION
+        # No keyword match — prefer a role that aligns with emphasis
+        if boost_roles:
+            return next(iter(boost_roles))
         return LogicNodeRole.CONCEPT
 
     @classmethod

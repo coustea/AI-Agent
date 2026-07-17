@@ -12,28 +12,36 @@ function toNumber(value: unknown): number | undefined {
 }
 
 // 根据当前路由解析学习追踪上下文（来源页面、资源/路径节点 ID 等）
-function getContextFromRoute(route: Router['currentRoute']['value']): TrackingContext {
+function getContextFromRoute(route: Router['currentRoute']['value']): TrackingContext | null {
   const name = String(route.name || '')
 
-  // 资源详情页：记录 resourceId
-  if (name === 'ResourceResult') {
+  if (name === 'ResourceResult' || name === 'ResourceItemDetail') {
     return {
-      sourcePage: 'resource-detail',
+      sourcePage: 'resource',
       resourceId: toNumber(route.params.id),
     }
   }
 
-  // 学习路径节点页：记录 pathNodeId
-  if (name === 'PathNodeStudy') {
+  if (name === 'LearningPathNode') {
     return {
-      sourcePage: 'learning-path-node',
+      sourcePage: 'path',
       pathNodeId: toNumber(route.params.nodeId),
     }
   }
 
-  return {
-    sourcePage: route.path.replace(/^\/+/, '').replace(/\//g, '-') || 'dashboard',
+  if (name === 'Tutor') {
+    return { sourcePage: 'chat' }
   }
+
+  if (name === 'QuestionBank') {
+    return { sourcePage: 'quiz' }
+  }
+
+  if (name === 'AlgorithmVisualizer') {
+    return { sourcePage: 'visualizer' }
+  }
+
+  return null
 }
 
 // 同步学习追踪状态：有 Token 时启动追踪，否则停止
@@ -44,6 +52,10 @@ function syncTracking(route: Router['currentRoute']['value']) {
   }
 
   const context = getContextFromRoute(route)
+  if (!context) {
+    stopTracking()
+    return
+  }
   startTracking(context)
 }
 

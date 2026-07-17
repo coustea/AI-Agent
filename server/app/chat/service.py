@@ -654,7 +654,10 @@ class ChatUseCases:
                     attachment_analyses=analyses_by_message.get(root_message_id, []) if is_final_assistant else [],
                     activities=activities_by_message.get(root_message_id, []) if is_final_assistant else [],
                     usage_metadata=message.usage_metadata if isinstance(message.usage_metadata, dict) else None,
-                    video=message.usage_metadata.get("video") if (message.role == "user" and isinstance(message.usage_metadata, dict)) else None,
+                    video=message.usage_metadata.get("video") if (
+                        message.role in {"user", "assistant"}
+                        and isinstance(message.usage_metadata, dict)
+                    ) else None,
                     diagram=message.usage_metadata.get("diagram") if (is_final_assistant and isinstance(message.usage_metadata, dict)) else None,
                     created_at=message.created_at,
                 )

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -16,7 +16,7 @@ from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
 from app.evaluation.service import evaluation_service, ConcurrencyError
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import LearningSession, User, LearningAssessment
+from app.infra.models import LearningSession, User, LearningAssessment, UserDailyActivity
 from app.infra.response import HttpResponse
 
 router = APIRouter()
@@ -80,25 +80,102 @@ async def generate_assessment(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """手动触发生成学习评估；已有生成中评估返回 409。"""
+    """手动触发生成学习评估；已有生成中评估返回 409。
+
+    立即返回 generating 状态的评估记录，后台异步执行 LLM 生成。
+    前端通过 GET /latest 或 GET /{id} 轮询生成结果。
+    """
+    # 检查是否已有生成中的评估
+    existing = await session.scalar(
+        select(LearningAssessment).where(
+            LearningAssessment.user_id == current_user.id,
+            LearningAssessment.status == "generating",
+        )
+    )
+    if existing is not None:
+        return HttpResponse.error(code=409, message="assessment_generation_in_progress")
+
+    # 创建 generating 记录并立即返回
+    now_utc = datetime.now(timezone.utc)
+    window_start = now_utc - timedelta(days=payload.range_days)
+    assessment = LearningAssessment(
+        user_id=current_user.id,
+        trigger_source="manual",
+        range_days=payload.range_days,
+        window_start=window_start,
+        window_end=now_utc,
+        status="generating",
+        created_at=now_utc,
+        updated_at=now_utc,
+    )
+    session.add(assessment)
+    await session.commit()
+    await session.refresh(assessment)
+
+    assessment_id = assessment.id
+    user_id = current_user.id
+    range_days = payload.range_days
+
+    # 后台异步执行 LLM 生成
+    import asyncio
+    asyncio.create_task(_run_assessment_generation(user_id, assessment_id, range_days))
+
+    return HttpResponse.success(data=assessment.model_dump(mode="json"))
+
+
+async def _run_assessment_generation(user_id: int, assessment_id: int, range_days: int) -> None:
+    """后台执行评估生成：聚合事实 → LLM 推理 → 更新状态。"""
+    from app.infra.database import session_scope
+
     try:
-        assessment = await evaluation_service.generate_assessment(
-            session,
-            user_id=current_user.id,
-            trigger_source="manual",
-            range_days=payload.range_days,
-        )
-        return HttpResponse.success(data=assessment.model_dump(mode="json"))
-    except ConcurrencyError:
-        return HttpResponse.error(
-            code=409,
-            message="assessment_generation_in_progress"
-        )
-    except ValueError as e:
-        return HttpResponse.error(
-            code=400,
-            message=str(e)
-        )
+        async with session_scope() as bg_session:
+            # 重新加载评估记录
+            assessment = await bg_session.get(LearningAssessment, assessment_id)
+            if assessment is None or assessment.status != "generating":
+                return
+
+            # 聚合事实
+            from app.evaluation.facts import build_assessment_facts
+            facts_snapshot = await build_assessment_facts(
+                bg_session, user_id=user_id,
+                window_start=assessment.window_start,
+                window_end=assessment.window_end,
+            )
+
+            # LLM 生成评估文案和辅导策略
+            assessment_text, guidance_strategy = await evaluation_service._derive_assessment_with_llm(facts_snapshot)
+
+            # 更新评估状态
+            assessment.status = "ready"
+            assessment.assessment = assessment_text
+            assessment.generated_at = datetime.now(timezone.utc)
+            assessment.updated_at = datetime.now(timezone.utc)
+
+            # 写入辅导策略到 UserProfile
+            await evaluation_service._update_guidance_strategy(
+                bg_session,
+                user_id=user_id,
+                strategy=guidance_strategy,
+                assessment_id=assessment_id,
+            )
+            await bg_session.commit()
+
+            logger.info(
+                "[EvalAPI] 后台评估生成完成: user_id=%s assessment_id=%s range_days=%d",
+                user_id, assessment_id, range_days,
+            )
+    except Exception as e:
+        logger.error("[EvalAPI] 后台评估生成失败: user_id=%s assessment_id=%s error=%s", user_id, assessment_id, e)
+        try:
+            async with session_scope() as bg_session:
+                assessment = await bg_session.get(LearningAssessment, assessment_id)
+                if assessment and assessment.status == "generating":
+                    assessment.status = "failed"
+                    assessment.failure_code = "generation_failed"
+                    assessment.updated_at = datetime.now(timezone.utc)
+                    await bg_session.commit()
+        except Exception:
+            logger.error("[EvalAPI] 标记评估失败也失败: assessment_id=%s", assessment_id)
 
 
 # 2. GET /api/v1/ai/evaluation/assessments/latest -> 获取最新 ready 评估
@@ -204,19 +281,25 @@ async def get_guidance_strategy(
 # 6. GET /api/v1/ai/evaluation/dashboard -> 个人中心看板数据
 @router.get("/evaluation/dashboard")
 async def get_dashboard_data(
-    range_days: Literal[3, 7, 14, 30, 60] = Query(default=7, description="统计天数窗口"),
+    range_days: int = Query(default=7, description="统计天数窗口，仅支持 3/7/14/30"),
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
     """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。"""
-    from datetime import timedelta
+    if range_days not in (3, 7, 14, 30):
+        return HttpResponse.error(code=400, message="range_days must be 3, 7, 14, or 30")
 
     now_utc = datetime.now(timezone.utc)
     window_start = now_utc - timedelta(days=range_days)
     window_end = now_utc
 
     dashboard_data = await _build_dashboard_data(
-        session, user_id=current_user.id, window_start=window_start, window_end=window_end, now_utc=now_utc
+        session,
+        user_id=current_user.id,
+        window_start=window_start,
+        window_end=window_end,
+        now_utc=now_utc,
+        range_days=range_days,
     )
     return HttpResponse.success(data=dashboard_data)
 
@@ -240,6 +323,7 @@ async def get_assessment_dashboard(
         window_end=assessment.window_end,
         now_utc=assessment.window_end,
         assessment_id=assessment_id,
+        range_days=max(1, (assessment.window_end - assessment.window_start).days),
     )
     return HttpResponse.success(data=dashboard_data)
 
@@ -251,6 +335,7 @@ async def _build_dashboard_data(
     window_start: datetime,
     window_end: datetime,
     now_utc: datetime,
+    range_days: int,
     assessment_id: int | None = None,
 ) -> dict[str, Any]:
     """组装看板响应的共享逻辑，供 dashboard 和 assessment-dashboard 复用。"""
@@ -286,32 +371,47 @@ async def _build_dashboard_data(
     learning_path = facts.get("learning_path", {})
     data_quality = facts.get("data_quality", {})
 
-    # 模块分布映射为前端 context_breakdown 格式
-    module_to_context = {
-        "chat": "Tutor",
-        "quiz": "QuestionBank",
-        "path": "PathNodeStudy",
-        "resource": "ResourceGenerator",
-        "visualizer": "AlgorithmVisualizer",
-    }
-    context_breakdown: dict[str, int] = {}
-    for item in activity.get("module_distribution", []):
-        ctx_key = module_to_context.get(item["module"], item["module"])
-        context_breakdown[ctx_key] = context_breakdown.get(ctx_key, 0) + item["count"]
-
-    # 每日时长转为 seconds 格式
-    daily_breakdown = [
-        {"date": item["date"], "seconds": item["minutes"] * 60}
+    # 以完整统计窗口返回每日时长；没有会话的日期也显式返回 0，保证图表始终可绘制。
+    daily_seconds_by_date = {
+        item["date"]: item["minutes"] * 60
         for item in activity.get("daily_minutes", [])
+    }
+    login_end_date = date.fromisoformat(to_shanghai_date(now_utc))
+    login_start_date = login_end_date - timedelta(days=range_days - 1)
+    daily_breakdown = [
+        {
+            "date": (login_start_date + timedelta(days=offset)).isoformat(),
+            "seconds": daily_seconds_by_date.get(
+                (login_start_date + timedelta(days=offset)).isoformat(),
+                0,
+            ),
+        }
+        for offset in range(range_days)
     ]
+    today_seconds = daily_seconds_by_date.get(login_end_date.isoformat(), 0)
 
-    # 今日学习时长
-    today_key = to_shanghai_date(now_utc)
-    today_seconds = 0
-    for item in daily_breakdown:
-        if item["date"] == today_key:
-            today_seconds = item["seconds"]
-            break
+    # 每日首次登录活跃：与学习行为、学习时长分开统计。
+    active_login_days = (await session.exec(
+        select(func.count())
+        .select_from(UserDailyActivity)
+        .where(
+            UserDailyActivity.user_id == user_id,
+            UserDailyActivity.activity_date >= login_start_date,
+            UserDailyActivity.activity_date <= login_end_date,
+        )
+    )).one() or 0
+
+    # 功能使用以学习事件次数为准，不混入会话时长。
+    module_counts = {
+        item["module"]: item["count"]
+        for item in activity.get("module_distribution", [])
+    }
+    feature_usage = [
+        {"key": "quiz", "name": "题库练习", "count": module_counts.get("quiz", 0)},
+        {"key": "chat", "name": "AI 辅导", "count": module_counts.get("chat", 0)},
+        {"key": "path", "name": "路径规划", "count": module_counts.get("path", 0)},
+        {"key": "resource", "name": "智能推荐", "count": module_counts.get("resource", 0)},
+    ]
 
     # 练习正确率按主题
     practice_by_topic_chart = []
@@ -331,10 +431,12 @@ async def _build_dashboard_data(
         "time_stats": {
             "total_seconds": activity.get("total_minutes", 0) * 60,
             "today_seconds": today_seconds,
-            "streak_days": activity.get("active_days", 0),
             "daily_breakdown": daily_breakdown,
-            "context_breakdown": context_breakdown,
         },
+        "login_activity": {
+            "active_days": active_login_days,
+        },
+        "feature_usage": feature_usage,
         # 评估摘要
         "evaluation_summary": {
             "completed_resources": resource_usage.get("completed", 0),

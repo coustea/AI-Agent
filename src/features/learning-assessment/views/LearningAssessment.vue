@@ -58,8 +58,8 @@
     <!-- 主内容 -->
     <template v-else>
       <!-- CASE 1: 用户从未生成过评估，且没有任何学习数据 -->
-      <div v-if="!activeAssessment && (!dashboardData || dashboardData.evaluation_summary.event_count === 0)" class="empty-guide-card bezel-card-outer">
-        <div class="empty-guide-inner bezel-card-inner">
+      <div v-if="!activeAssessment && (!dashboardData || dashboardData.evaluation_summary.event_count === 0)" class="empty-guide-card ui-card">
+        <div class="empty-guide-inner">
           <div class="guide-icon-wrapper">
             <Compass :size="36" class="guide-icon" />
           </div>
@@ -92,8 +92,8 @@
       </div>
 
       <!-- CASE 2: 用户有学习数据，但从未生成过评估报告 -->
-      <div v-else-if="!activeAssessment && dashboardData" class="welcome-guide-card bezel-card-outer">
-        <div class="welcome-guide-inner bezel-card-inner">
+      <div v-else-if="!activeAssessment && dashboardData" class="welcome-guide-card ui-card">
+        <div class="welcome-guide-inner">
           <div class="guide-icon-wrapper">
             <Sparkles :size="36" class="guide-icon sparkles" />
           </div>
@@ -121,125 +121,124 @@
           </Button>
         </div>
 
-      <!-- 本期结论与策略 -->
-      <section class="conclusion-section bezel-card-outer">
-        <div class="conclusion-card bezel-card-inner">
-          <div class="conclusion-header">
-            <ShieldCheck :size="18" />
-            <h2>本期结论与策略调整</h2>
-            <span class="window-badge">
-              <Calendar :size="14" />
-              {{ dashboardData.window.days }} 天
-              {{ formatDateRange(dashboardData.window.start, dashboardData.window.end) }}
-            </span>
-          </div>
-          <p class="conclusion-text">{{ activeAssessment?.assessment || guidanceStrategy?.conclusion || defaultConclusion }}</p>
-          <div v-if="guidanceStrategy" class="strategy-highlights">
-            <div class="highlight-item">
-              <span class="highlight-label">重点主题</span>
-              <strong class="highlight-value">
-                {{ guidanceStrategy.focus_topics?.length ? guidanceStrategy.focus_topics.join('、') : '暂无' }}
-              </strong>
-            </div>
-            <div class="highlight-item">
-              <span class="highlight-label">建议时长</span>
-              <strong class="highlight-value">{{ guidanceStrategy.recommended_session_minutes }} 分钟/次</strong>
-            </div>
-            <div class="highlight-item">
-              <span class="highlight-label">辅导方式</span>
-              <strong class="highlight-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
-            </div>
-          </div>
-          <p v-if="guidanceStrategy?.reason" class="strategy-reason">
-            <span class="reason-label">策略依据</span>
-            {{ guidanceStrategy.reason }}
-          </p>
-        </div>
-      </section>
-
-      <!-- 行动计划 -->
-      <section v-if="actionPlan.length" class="action-section bezel-card-outer">
-        <div class="action-card bezel-card-inner">
-          <div class="section-header">
-            <Compass :size="16" />
-            <h3>下一阶段学习计划</h3>
-          </div>
-          <div class="action-list">
-            <div
-              v-for="(action, index) in actionPlan"
-              :key="index"
-              class="action-item"
-            >
-              <span class="action-index">{{ index + 1 }}</span>
-              <div class="action-content">
-                <p class="action-description">{{ action.description }}</p>
-                <span class="action-topic">{{ action.topic }}</span>
+        <div class="dashboard-grid">
+          <!-- 左侧：图表与文字洞察主视图 -->
+          <div class="dashboard-main">
+            <!-- 本期结论与策略 -->
+            <section class="conclusion-section ui-card conclusion-editorial">
+              <div class="conclusion-card">
+                <div class="conclusion-header">
+                  <h2>本期结论与策略调整</h2>
+                  <span class="window-badge">
+                    <Calendar :size="14" />
+                    {{ dashboardData.window.days }} 天
+                    {{ formatDateRange(dashboardData.window.start, dashboardData.window.end) }}
+                  </span>
+                </div>
+                <p class="conclusion-text">{{ activeAssessment?.assessment || guidanceStrategy?.conclusion || defaultConclusion }}</p>
+                <div v-if="guidanceStrategy" class="strategy-highlights">
+                  <div class="highlight-item">
+                    <span class="highlight-label">重点主题</span>
+                    <strong class="highlight-value">
+                      {{ guidanceStrategy.focus_topics?.length ? guidanceStrategy.focus_topics.join('、') : '暂无' }}
+                    </strong>
+                  </div>
+                  <div class="highlight-item">
+                    <span class="highlight-label">建议时长</span>
+                    <strong class="highlight-value">{{ guidanceStrategy.recommended_session_minutes }} 分钟/次</strong>
+                  </div>
+                  <div class="highlight-item">
+                    <span class="highlight-label">辅导方式</span>
+                    <strong class="highlight-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
+                  </div>
+                </div>
+                <p v-if="guidanceStrategy?.reason" class="strategy-reason">
+                  <span class="reason-label">策略依据</span>
+                  {{ guidanceStrategy.reason }}
+                </p>
               </div>
-              <RouterLink :to="action.link" class="action-link">
-                <span>{{ actionTypeLabel(action.action_type) }}</span>
-                <ArrowRight :size="14" />
-              </RouterLink>
-            </div>
-          </div>
-        </div>
-      </section>
+            </section>
 
-      <!-- 学习趋势 + 模块时长分布 -->
-      <section class="charts-section">
-        <div class="chart-panel-outer bezel-card-outer">
-          <article class="chart-panel bezel-card-inner">
-            <div class="panel-header">
-              <Clock :size="16" />
-              <h3>每日学习趋势</h3>
-            </div>
-            <v-chart v-if="hasDailyData" class="chart" :option="lineOption" autoresize />
-            <div v-else class="chart-empty">本窗口暂无学习时长记录</div>
-          </article>
-        </div>
-        <div class="chart-panel-outer bezel-card-outer">
-          <article class="chart-panel bezel-card-inner">
-            <div class="panel-header">
-              <PieChartIcon :size="16" />
-              <h3>模块学习时长分布</h3>
-            </div>
-            <v-chart v-if="hasModuleTimeData" class="chart" :option="pieOption" autoresize />
-            <div v-else class="chart-empty">本窗口暂无模块学习时长记录</div>
-          </article>
-        </div>
-      </section>
+            <!-- 学习趋势 + 模块时长分布 -->
+            <section class="charts-section">
+              <div class="chart-panel-outer ui-card">
+                <article class="chart-panel">
+                  <div class="panel-header">
+                    <h3>每日学习趋势</h3>
+                  </div>
+                  <v-chart class="chart" :option="lineOption" autoresize />
+                </article>
+              </div>
+              <div class="chart-panel-outer ui-card">
+                <article class="chart-panel">
+                  <div class="panel-header">
+                    <h3>模块学习时长分布</h3>
+                  </div>
+                  <v-chart class="chart" :option="pieOption" autoresize />
+                </article>
+              </div>
+            </section>
+          </div>
 
-      <!-- 历史评估 -->
-      <section class="history-section bezel-card-outer">
-        <div class="history-card bezel-card-inner">
-          <div class="section-header">
-            <History :size="16" />
-            <h3>历史评估</h3>
-            <span class="history-count">{{ totalAssessments }} 份</span>
-          </div>
-          <div v-if="historyLoading" class="history-loading">加载中...</div>
-          <div v-else-if="assessmentsHistory.length === 0" class="history-empty">暂无历史评估</div>
-          <div v-else class="history-grid">
-            <button
-              v-for="item in assessmentsHistory.slice(0, 4)"
-              :key="item.id"
-              type="button"
-              :class="{ active: activeAssessment?.id === item.id }"
-              class="history-item"
-              @click="selectAssessment(item)"
-            >
-              <strong>{{ item.range_days }} 天评估</strong>
-              <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
-            </button>
-          </div>
-          <div v-if="totalAssessments > 4" class="history-more">
-            <Button variant="ghost" size="sm" @click="showHistoryDrawer = true">
-              查看全部 {{ totalAssessments }} 份评估
-              <ChevronRight :size="14" />
-            </Button>
-          </div>
+          <!-- 右侧：行动与历史侧边栏 -->
+          <aside class="dashboard-sidebar">
+            <!-- 行动计划 -->
+            <section v-if="actionPlan.length" class="action-section ui-card sidebar-card">
+              <div class="action-card">
+                <div class="section-header">
+                  <Compass :size="16" />
+                  <h3>下一阶段学习计划</h3>
+                </div>
+                <div class="action-list">
+                  <div
+                    v-for="(action, index) in actionPlan"
+                    :key="index"
+                    class="action-item"
+                  >
+                    <span class="action-index">{{ index + 1 }}</span>
+                    <div class="action-content">
+                      <p class="action-description">{{ action.description }}</p>
+                      <span class="action-topic">{{ action.topic }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <!-- 历史评估 -->
+            <section class="history-section ui-card sidebar-card">
+              <div class="history-card">
+                <div class="section-header">
+                  <History :size="16" />
+                  <h3>历史评估</h3>
+                  <span class="history-count">{{ totalAssessments }} 份</span>
+                </div>
+                <div v-if="historyLoading" class="history-loading">加载中...</div>
+                <div v-else-if="assessmentsHistory.length === 0" class="history-empty">暂无历史评估</div>
+                <div v-else class="history-grid">
+                  <button
+                    v-for="item in assessmentsHistory.slice(0, 4)"
+                    :key="item.id"
+                    type="button"
+                    :class="{ active: activeAssessment?.id === item.id }"
+                    class="history-item"
+                    @click="selectAssessment(item)"
+                  >
+                    <strong>{{ item.range_days }} 天评估</strong>
+                    <span>{{ formatDateRange(item.window_start, item.window_end) }}</span>
+                  </button>
+                </div>
+                <div v-if="totalAssessments > 4" class="history-more">
+                  <Button variant="ghost" size="sm" @click="showHistoryDrawer = true">
+                    查看全部 {{ totalAssessments }} 份评估
+                    <ChevronRight :size="14" />
+                  </Button>
+                </div>
+              </div>
+            </section>
+          </aside>
         </div>
-      </section>
-    </template>
+      </template>
     </template>
 
     <!-- 历史报告抽屉 -->
@@ -289,21 +288,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { toast } from 'vue-sonner'
-import { RouterLink, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import {
   AlertCircle,
-  ArrowRight,
   Calendar,
   ChevronLeft,
   ChevronRight,
-  Clock,
   Compass,
   History,
-  ShieldCheck,
   Sparkles,
   X,
-  PieChart as PieChartIcon,
 } from 'lucide-vue-next'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
@@ -368,14 +363,6 @@ const defaultConclusion = computed(() => {
   return '学习证据已形成，系统已记录到学习时长、模块使用和练习表现。'
 })
 
-const hasDailyData = computed(() => (
-  (dashboardData.value?.time_stats.daily_breakdown ?? []).some(item => item.seconds > 0)
-))
-
-const hasModuleTimeData = computed(() => (
-  (dashboardData.value?.module_time_breakdown ?? []).some(item => item.seconds > 0)
-))
-
 // 饼图颜色 (以石英紫为主的学术感冷色系搭配)
 const PIE_COLORS = ['#8B5CF6', '#6366f1', '#10B981', '#F59E0B', '#3B82F6', '#EC4899']
 
@@ -417,12 +404,21 @@ const lineOption = computed(() => {
 
 const pieOption = computed(() => {
   const breakdown = dashboardData.value?.module_time_breakdown ?? []
-  const data = breakdown
+  let data: any[] = breakdown
     .filter(item => item.seconds > 0)
     .map(item => ({
       name: item.module,
       value: Number((item.seconds / 60).toFixed(1)),
     }))
+  
+  if (data.length === 0) {
+    data = [{
+      name: '暂无数据',
+      value: 1,
+      itemStyle: { color: '#f3f4f6' }
+    }]
+  }
+
   return {
     tooltip: {
       trigger: 'item',
@@ -538,14 +534,37 @@ async function triggerAssessmentGeneration(): Promise<void> {
   }, 1000)
 
   try {
+    // POST 立即返回 generating 状态，后台异步执行 LLM 生成
     const response = await generateAssessment(selectedRange.value)
     activeAssessment.value = response.data.data
     viewingHistorical.value = false
-    toast.success('学习效果评估已生成')
-    await Promise.all([
-      loadAssessmentsHistory(1),
-      loadDashboard(),
-    ])
+
+    // 轮询直到生成完成
+    const maxPolls = 60 // 最多轮询 60 次（约 60 秒）
+    for (let i = 0; i < maxPolls; i++) {
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      try {
+        const latestResp = await getLatestAssessment()
+        const latest = latestResp.data.data
+        if (latest && latest.status === 'ready') {
+          activeAssessment.value = latest
+          toast.success('学习效果评估已生成')
+          await Promise.all([
+            loadAssessmentsHistory(1),
+            loadDashboard(),
+          ])
+          return
+        }
+        if (latest && latest.status === 'failed') {
+          activeAssessment.value = latest
+          toast.error('评估生成失败')
+          return
+        }
+      } catch {
+        // 轮询失败继续
+      }
+    }
+    toast.warning('评估生成超时，请稍后刷新查看')
   } catch (error: any) {
     if (error?.response?.status === 409) {
       toast.warning('已有评估生成中')
@@ -568,15 +587,6 @@ function statusLabel(status: LearningAssessment['status']): string {
   if (status === 'ready') return '已就绪'
   if (status === 'generating') return '生成中'
   return '失败'
-}
-
-function actionTypeLabel(type: ActionPlanItem['action_type']): string {
-  const labels: Record<string, string> = {
-    review: '开始复习',
-    practice: '进入练习',
-    quiz: '开始测验',
-  }
-  return labels[type] || '开始学习'
 }
 
 function formatShortDate(value: string): string {
@@ -602,6 +612,12 @@ onMounted(async () => {
     const response = await getLatestAssessment()
     if (response.data.data) {
       activeAssessment.value = response.data.data
+      // 如果评估正在生成中，自动轮询
+      if (activeAssessment.value.status === 'generating') {
+        generating.value = true
+        currentStepIdx.value = 1
+        pollAssessmentStatus()
+      }
     } else if (assessmentsHistory.value[0]?.id !== undefined) {
       const item = assessmentsHistory.value[0]
       await selectAssessment(item)
@@ -612,6 +628,38 @@ onMounted(async () => {
     initialLoading.value = false
   }
 })
+
+/** 轮询评估生成状态，直到 ready/failed 或超时 */
+async function pollAssessmentStatus(): Promise<void> {
+  const maxPolls = 60
+  for (let i = 0; i < maxPolls; i++) {
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    try {
+      const resp = await getLatestAssessment()
+      const latest = resp.data.data
+      if (latest && latest.status === 'ready') {
+        activeAssessment.value = latest
+        generating.value = false
+        currentStepIdx.value = 0
+        toast.success('学习效果评估已生成')
+        await Promise.all([loadAssessmentsHistory(1), loadDashboard()])
+        return
+      }
+      if (latest && latest.status === 'failed') {
+        activeAssessment.value = latest
+        generating.value = false
+        currentStepIdx.value = 0
+        toast.error('评估生成失败')
+        return
+      }
+    } catch {
+      // 轮询失败继续
+    }
+  }
+  generating.value = false
+  currentStepIdx.value = 0
+  toast.warning('评估生成超时，请稍后刷新查看')
+}
 </script>
 
 <style scoped>
@@ -624,26 +672,50 @@ onMounted(async () => {
   gap: var(--space-6);
 }
 
+/* Dashboard Grid Layout (Bento Grid) */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(320px, 3fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.dashboard-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.dashboard-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  position: sticky;
+  top: var(--space-6);
+}
+
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 h1, h2, h3, h4, p {
   margin: 0;
 }
 
-/* Bezel Card (双层物理质感卡片结构) */
-.bezel-card-outer {
-  background: rgba(70, 184, 180, 0.015);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-xl);
-  padding: var(--space-2);
+/* UI Card (Clean, minimal card style) */
+.ui-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
   transition: var(--transition-base);
 }
 
-.bezel-card-inner {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: calc(var(--radius-xl) - 6px);
-  box-shadow: var(--shadow-sm);
-  padding: var(--space-6);
-  transition: var(--transition-base);
+.ui-card:hover {
+  border-color: var(--color-primary-border);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
 }
 
 /* Header */
@@ -861,11 +933,19 @@ h1, h2, h3, h4, p {
 
 /* Conclusion Section */
 .conclusion-section {
-  margin-top: var(--space-1);
+  margin-top: 0;
+}
+
+.conclusion-editorial {
+  padding: var(--space-8) var(--space-8);
+  border: none;
+  background: linear-gradient(135deg, rgba(70, 184, 180, 0.05) 0%, rgba(70, 184, 180, 0.01) 100%);
+  box-shadow: none;
 }
 
 .conclusion-card {
-  background: linear-gradient(135deg, var(--color-primary-soft) 0%, var(--color-surface) 50%);
+  display: flex;
+  flex-direction: column;
 }
 
 .conclusion-header {
@@ -876,10 +956,19 @@ h1, h2, h3, h4, p {
   color: var(--color-primary);
 }
 
-.conclusion-header h2 {
-  font-size: var(--text-base);
+.conclusion-editorial .conclusion-header h2 {
+  font-size: 1.5rem;
   font-weight: var(--weight-extrabold);
+  color: var(--color-primary-dark);
+  letter-spacing: -0.02em;
+}
+
+.conclusion-editorial .conclusion-text {
+  font-size: 1.125rem;
+  line-height: 1.6;
+  font-weight: 500;
   color: var(--color-text-strong);
+  margin-top: var(--space-2);
 }
 
 .window-badge {
@@ -963,8 +1052,14 @@ h1, h2, h3, h4, p {
 /* Charts Section */
 .charts-section {
   display: grid;
-  grid-template-columns: 1.4fr 1fr;
+  grid-template-columns: 1fr 1fr;
   gap: var(--space-5);
+}
+
+@media (max-width: 768px) {
+  .charts-section {
+    grid-template-columns: 1fr;
+  }
 }
 
 .chart-panel-outer {
@@ -1087,29 +1182,6 @@ h1, h2, h3, h4, p {
   color: var(--color-text-muted);
 }
 
-.action-link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1.5);
-  padding: var(--space-2) var(--space-4);
-  border-radius: var(--radius-sm);
-  background: var(--color-primary);
-  color: white;
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  text-decoration: none;
-  transition: var(--btn-transition);
-}
-
-.action-link:hover {
-  background: var(--color-text-strong);
-  transform: translateY(-1px);
-}
-
-.action-link:active {
-  transform: translateY(0.5px);
-}
-
 /* History Section */
 .history-card {
   background: var(--color-surface);
@@ -1127,13 +1199,13 @@ h1, h2, h3, h4, p {
 
 .history-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr;
   gap: var(--space-3);
 }
 
 .history-item {
-  min-height: 5rem;
-  padding: var(--space-4);
+  min-height: 4rem;
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-md);
   background: var(--color-bg);

@@ -495,7 +495,7 @@ import {
   ref,
   watch,
 } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 
 import {
@@ -550,6 +550,7 @@ use([
 ])
 
 const router = useRouter()
+const route = useRoute()
 
 const recommendationData = ref<RecommendationData | null>(null)
 const profileRadarData = ref<ProfileRadarData | null>(null)
@@ -1151,6 +1152,17 @@ const loadAllData = async () => {
   dataLoaded.value = true
   loading.value = false
 }
+
+// 首次登录的 onboarding 覆盖在首页之上：提交后路由会移除 onboarding 参数，
+// 此时必须重新读取后端已落库的资料，不能继续展示进入弹窗前的冷启动数据。
+watch(
+    () => route.query.onboarding,
+    (current, previous) => {
+      if (previous === 'true' && current !== 'true') {
+        void loadAllData()
+      }
+    },
+)
 
 onMounted(() => {
   loadAllData()

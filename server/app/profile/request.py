@@ -18,3 +18,15 @@ class OnboardingUpdate(BaseModel):
     learning_style: str = ""  # theory_first/practice_first/case_driven
     content_depth: str = ""  # quick_overview/systematic_deep
     weak_points: list[str] = Field(default_factory=list)
+
+
+class ProfileUpdate(BaseModel):
+    """个人中心可编辑的基础资料。"""
+
+    school: str
+    major: str
+    grade: str
+    daily_study_time: str
+    global_learning_goal: str
+    programming_languages: list[str] = Field(default_factory=list)
+    courses: list[str] = Field(default_factory=list)

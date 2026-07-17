@@ -34,6 +34,7 @@ from app.profile import (
     BaseInfoData,
     OnboardingResponse,
     OnboardingUpdate,
+    ProfileUpdate,
     StudentProfileData,
 )
 from app.profile.service import (
@@ -79,6 +80,21 @@ async def get_profile(
         },
         "updated_at": profile.updated_at,
     })
+
+
+@router.patch("/profile")
+async def update_profile(
+    payload: ProfileUpdate,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """更新个人中心展示的基础资料，不改变 onboarding 完成状态或偏好字段。"""
+    result = await get_profile_service().save_profile_info(
+        user_id=int(current_user.id),
+        payload=payload.model_dump(),
+        db=session,
+    )
+    return HttpResponse.success(data=result)
 
 
 # 获取 onboarding 基本信息（直接从 User 表读取）

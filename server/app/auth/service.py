@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
@@ -15,9 +17,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.auth.schemas import UserLogin, UserRead, UserRegister, UserUpdate
 from app.auth.security import create_token, hash_password, revoke_token, verify_password
 from app.infra.logging import get_logger
-from app.infra.models import User
+from app.infra.models import User, UserDailyActivity
 
 logger = get_logger(__name__)
+SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 
 # 将 User ORM 对象转换为对外响应的 UserRead 模型
@@ -25,6 +28,38 @@ def _read_user(user: User) -> UserRead:
     """将 User ORM 对象转换为 UserRead 响应模型。"""
     # 将 ORM 对象映射为对外响应的 UserRead 模型
     return UserRead.model_validate(user)
+
+
+async def record_daily_login_activity(
+    session: AsyncSession,
+    *,
+    user_id: int,
+    logged_in_at: datetime | None = None,
+) -> None:
+    """在成功认证后记录当天首次登录，重复登录不重复计数。"""
+    occurred_at = logged_in_at or datetime.now(timezone.utc)
+    activity_date = occurred_at.astimezone(SHANGHAI_TZ).date()
+    existing = await session.scalar(
+        select(UserDailyActivity).where(
+            UserDailyActivity.user_id == user_id,
+            UserDailyActivity.activity_date == activity_date,
+        )
+    )
+    if existing is not None:
+        return
+
+    session.add(
+        UserDailyActivity(
+            user_id=user_id,
+            activity_date=activity_date,
+            first_login_at=occurred_at,
+        )
+    )
+    try:
+        await session.commit()
+    except IntegrityError:
+        # 并发登录时由唯一约束保证当天仍只计一次。
+        await session.rollback()
 
 
 # 认证操作结果载体：统一封装成功/失败的返回数据
@@ -108,6 +143,7 @@ class UserAccountStore:
         user_read = _read_user(user)
         # 调用安全模块创建 Token（写入白名单）
         token = await create_token(user.id, session)
+        await record_daily_login_activity(session, user_id=user.id)
         # 返回 Token 与用户信息
         # 认证成功，返回 Token 与用户信息
         return AuthResult(success=True, data={"token": token, "user": user_read})

@@ -336,6 +336,17 @@
                       </svg>
                       复制回答
                     </button>
+                    <button
+                      v-if="chatMode === 'standard' && !msg.video"
+                      type="button"
+                      @click.stop="startVideoGeneration(msg)"
+                    >
+                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <rect x="2.5" y="5" width="11" height="10" rx="1.5" />
+                        <path d="m13.5 8 4-2.5v9l-4-2.5z" />
+                      </svg>
+                      生成动画讲解
+                    </button>
                   </div>
 
                   <div v-if="msg.teachingDiagramGenerating" class="diagram-generation-panel">
@@ -482,20 +493,6 @@
                     <span>图解</span>
                   </button>
 
-                  <button
-                    v-if="chatMode === 'standard'"
-                    type="button"
-                    class="input-tool-btn"
-                    :disabled="!canGenerateVideo"
-                    :title="canGenerateVideo ? '生成动画讲解视频' : '视频不支持附件模式'"
-                    @click="startVideoGeneration"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
-                      <rect x="3" y="6" width="12" height="12" rx="2"></rect>
-                      <path d="m15 10 5-3v10l-5-3z"></path>
-                    </svg>
-                    <span>视频</span>
-                  </button>
                 </div>
 
                 <div class="action-right">
@@ -1155,15 +1152,6 @@ const isResponding = computed(() => (
 const canSendMessage = computed(() => (
   !isResponding.value
   && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
-))
-
-// Video creation is a separate, user-triggered workflow and must not inherit
-// the text-agent's long-running "responding" lock.
-// The button is always clickable; if the input is empty a toast prompts the user.
-const canGenerateVideo = computed(() => (
-  chatMode.value === 'standard'
-  && !uploadingFile.value
-  && pendingFiles.value.length === 0
 ))
 
 // 流式消息管理器（全局单例）
@@ -2507,78 +2495,38 @@ const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
 }
 
-const watchChatVideo = (sessionId: string, userMessageId: number) => {
-  videoTasks.watch(sessionId, userMessageId, (video) => {
-    // The video artifact lives on the AI-side message.
-    // Find the AI message whose video.task_id matches, or fall back to
-    // the last AI message with a video still in an active state.
-    const message = messages.value.find(
-      item => item.role === 'ai' && item.video?.task_id === video.task_id,
-    ) ?? messages.value.find(
-      item => item.role === 'ai' && item.video
-        && (item.video.status === 'queued' || item.video.status === 'running'),
-    )
+const watchChatVideo = (sessionId: string, assistantMessageId: number) => {
+  videoTasks.watch(sessionId, assistantMessageId, (video) => {
+    const message = messages.value.find(item => item.id === assistantMessageId)
     if (message) message.video = video
     if (video.status === 'completed') scrollToBottom()
   })
 }
 
-const startVideoGeneration = async () => {
-  if (!canGenerateVideo.value) return
-
-  const topic = userInput.value.trim()
-  if (!topic) {
-    toast.warning({ message: '请输入视频主题后再点击', plain: true })
-    return
-  }
-
+const startVideoGeneration = async (message: ChatMsg) => {
   if (!await ensureCurrentSession('standard')) return
   const sessionId = currentSessionId.value
   if (!sessionId) return
-
-  // Push a user message showing the topic request
-  const localUserMessageId = Date.now()
-  messages.value.push({
-    id: localUserMessageId,
-    role: 'user',
-    content: topic,
-    time: now(),
-  })
-
-  // Push an AI-side message that will carry the video artifact
-  const localAiMessageId = Date.now() + 1
-  const localVideo: ChatVideoArtifactData = {
-    task_id: `pending-${localAiMessageId}`,
-    status: 'queued',
-    topic,
+  if (!Number.isSafeInteger(message.id) || message.id <= 0) {
+    toast.warning({ message: '回答尚未保存，请稍后再试', plain: true })
+    return
   }
-  messages.value.push({
-    id: localAiMessageId,
-    role: 'ai',
-    content: '',
-    time: now(),
-    video: localVideo,
-  })
 
-  userInput.value = ''
-  isExpandedInput.value = false
-  if (textareaRef.value) textareaRef.value.style.height = '24px'
-  scrollToBottom()
+  message.video = {
+    task_id: `pending-${message.id}`,
+    status: 'queued',
+    topic: '正在整理本轮讲解内容',
+  }
 
   try {
-    const response = await createChatVideo(topic, sessionId)
+    const response = await createChatVideo(message.id, sessionId)
     const task = response.data.data
-    const aiMessage = messages.value.find(item => item.id === localAiMessageId)
-    if (aiMessage) {
-      // Update task_id to the real server-assigned one so watchChatVideo can match it
-      aiMessage.video = { ...task.video, task_id: task.video.task_id }
-    }
-    watchChatVideo(task.session_id, task.user_message_id)
+    message.video = task.video
+    watchChatVideo(task.session_id, task.assistant_message_id)
   } catch (error) {
-    const aiMessage = messages.value.find(item => item.id === localAiMessageId)
-    if (aiMessage?.video) {
-      aiMessage.video = {
-        ...aiMessage.video,
+    if (message.video) {
+      message.video = {
+        ...message.video,
         status: 'failed',
         error: getErrorMessage(error, '视频任务创建失败，请重新发起请求。'),
       }

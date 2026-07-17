@@ -29,7 +29,7 @@ class PPTSource(PPTModel):
 
 
 class PPTPreferences(PPTModel):
-    """内容偏好，不再选择视觉模板。"""
+    """内容偏好 — 影响确定性编译的章节命名、页面分配和内容侧重。"""
 
     narrative_style: Literal["concept", "case_driven", "problem_led", "review"] = "concept"
     density: Literal["concise", "standard", "detailed"] = "standard"

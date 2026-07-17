@@ -500,7 +500,7 @@
 
       <transition name="modal-fade">
         <div
-            v-if="isPlanning"
+            v-if="isPlanning && isPlanningModalVisible"
             class="student-planning-modal-backdrop"
         >
           <section
@@ -701,6 +701,16 @@
                   </span>
                 </div>
               </div>
+
+              <div class="planning-result-actions">
+                <button
+                    type="button"
+                    class="modal-secondary-action"
+                    @click="minimizePlanningToBackground"
+                >
+                  后台运行（前往路径历史）
+                </button>
+              </div>
             </template>
           </section>
         </div>
@@ -797,6 +807,7 @@ const knowledgeInput = ref('')
 
 const isSubmitting = ref(false)
 const isPlanning = ref(false)
+const isPlanningModalVisible = ref(false)
 
 const planningProgress = ref(0)
 const planningLogs = ref<PlanningLog[]>([])
@@ -1477,6 +1488,11 @@ function resetPlanningState() {
   planningError.value = ''
 }
 
+function minimizePlanningToBackground() {
+  isPlanningModalVisible.value = false
+  router.push('/path-planner/history')
+}
+
 async function retryPlanning() {
   resetPlanningState()
 
@@ -1611,6 +1627,7 @@ async function handleSubmit() {
   const attempt = ++planningAttempt
   isSubmitting.value = true
   isPlanning.value = true
+  isPlanningModalVisible.value = true
   planningError.value = ''
 
   startPlanningProgress()
@@ -1651,6 +1668,10 @@ async function handleSubmit() {
             : '路径规划未能完成，请稍后重试。'
 
     toast.error(planningError.value)
+
+    if (!isPlanningModalVisible.value) {
+      resetPlanningState()
+    }
   } finally {
     if (attempt === planningAttempt) {
       isSubmitting.value = false

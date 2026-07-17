@@ -14,7 +14,8 @@ export type {
 }
 
 export function generateAssessment(rangeDays: 3 | 7 | 14) {
-  return http.post<ApiResponse<LearningAssessment>>('/ai/evaluation/assessments', { range_days: rangeDays })
+  // LLM 生成评估需要较长时间，设置 60 秒超时
+  return http.post<ApiResponse<LearningAssessment>>('/ai/evaluation/assessments', { range_days: rangeDays }, { timeout: 60000 })
 }
 
 export function getLatestAssessment() {

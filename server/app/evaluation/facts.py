@@ -142,6 +142,7 @@ async def build_assessment_facts(
         "quiz": "题库练习",
         "PathNodeStudy": "路径学习",
         "PathPlan": "路径学习",
+        "path": "路径学习",
         "ResourceGenerator": "资源生成",
         "ResourceResult": "资源生成",
         "resource": "资源生成",

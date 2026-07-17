@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit, urlunsplit
 
 from pydantic import BaseModel, Field, field_validator
@@ -28,12 +28,14 @@ class ReadingResource(BaseModel):
     """一个经过搜索结果 URL 校验的阅读资源。"""
 
     id: str = Field(description="资源编号，如 R1")
-    type: str = Field(description="资源类型，如 book/paper/article/documentation/practice_project")
+    type: Literal["book", "paper", "article", "documentation", "practice_project"] = Field(
+        description="资源类型"
+    )
     title: str = Field(description="资源标题")
     authors: list[str] = Field(default_factory=list)
     url: str = Field(description="必须来自本次网页检索结果的 http/https URL")
-    language: str = "中文"
-    difficulty: str = "medium"
+    language: Literal["中文", "英文"] = "中文"
+    difficulty: Literal["basic", "medium", "advanced"] = "medium"
     suitable_for: str = ""
     related_knowledge_points: list[str] = Field(default_factory=list)
     description: str = ""
@@ -103,7 +105,8 @@ class ReadingAgent(BaseResourceAgent):
         coverage = config.get("coverage") or "extended"
         max_items = max(1, int(config.get("max_items", 5)))
         language_preference = config.get("language_preference") or "chinese"
-        query = self._build_search_query(title_prefix, language_preference)
+        focus = config.get("focus") or "textbook"
+        query = self._build_search_query(title_prefix, language_preference, focus)
 
         logger.info("Agent[%s] 开始检索: query=%s", self.agent_id, query)
         await self.emitter.send(self.agent_id, "running", "正在检索真实阅读链接...", 25)
@@ -187,13 +190,18 @@ class ReadingAgent(BaseResourceAgent):
         )
 
     @staticmethod
-    def _build_search_query(title_prefix: str, language_preference: str) -> str:
+    def _build_search_query(title_prefix: str, language_preference: str, focus: str) -> str:
         language_hint = {
             "chinese": "中文",
             "english": "English",
             "both": "中文 English",
         }.get(language_preference, "")
-        return f"{title_prefix} {language_hint} 官方文档 教程 学习资源".strip()
+        focus_keywords = {
+            "textbook": "教材 系统课程 官方文档",
+            "engineering": "工程实践 实战指南 最佳实践",
+            "research": "论文 综述 学术研究",
+        }.get(focus, "官方文档 教程 学习资源")
+        return f"{title_prefix} {language_hint} {focus_keywords}".strip()
 
     @staticmethod
     def _usable_sources(sources: list["ResearchSourceItem"]) -> list["ResearchSourceItem"]:

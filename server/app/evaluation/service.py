@@ -251,7 +251,7 @@ class EvaluationService:
             action_plan.append({
                 "topic": topic,
                 "action_type": "practice",
-                "description": f"完成 {topic} 相关练习",
+                "description": f"完成{topic}相关练习",
                 "link": f"/quiz?topic={topic}",
             })
 

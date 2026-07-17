@@ -58,7 +58,7 @@ export function useGeneration() {
     code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
     reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
     ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'] },
-    cartoon: { lesson_depth: 'standard', visual_density: 'rich', voice: 'teacher' },
+    cartoon: { lesson_depth: 'standard', visual_density: 'rich', pace: 'balanced', voice: 'teacher' },
   })
 
   // DAG 选中的智能体 id 列表（直接使用 enabledAgentIds）

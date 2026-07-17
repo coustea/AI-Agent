@@ -285,9 +285,42 @@ class ProfileService:
         payload: dict[str, Any],
         db: AsyncSession,
     ) -> dict[str, Any]:
-        """保存 onboarding 基本信息 — 直接写入 User 表。"""
+        """保存首次 onboarding 的完整资料，并将该用户标记为已完成引导。"""
+        return await self._save_base_info(
+            user_id=user_id,
+            payload=payload,
+            db=db,
+            complete_onboarding=True,
+        )
+
+    async def save_profile_info(
+        self,
+        *,
+        user_id: int,
+        payload: dict[str, Any],
+        db: AsyncSession,
+    ) -> dict[str, Any]:
+        """保存个人中心展示的基础资料，不覆盖首次引导偏好。"""
+        return await self._save_base_info(
+            user_id=user_id,
+            payload=payload,
+            db=db,
+            complete_onboarding=False,
+        )
+
+    async def _save_base_info(
+        self,
+        *,
+        user_id: int,
+        payload: dict[str, Any],
+        db: AsyncSession,
+        complete_onboarding: bool,
+    ) -> dict[str, Any]:
+        """写入基础资料；只有首次 onboarding 可以写偏好并完成引导。"""
+        update_source = "onboarding" if complete_onboarding else "profile"
         logger.info(
-            "[ProfileService] onboarding 写入开始: user_id=%s payload=%s",
+            "[ProfileService] %s 写入开始: user_id=%s payload=%s",
+            update_source,
             user_id,
             {k: payload.get(k) for k in (
                 "school", "major", "grade", "daily_study_time",
@@ -298,7 +331,7 @@ class ProfileService:
 
         user = (await db.exec(select(User).where(User.id == user_id))).first()
         if not user:
-            logger.error("[ProfileService] onboarding 写入失败，用户不存在: user_id=%s", user_id)
+            logger.error("[ProfileService] %s 写入失败，用户不存在: user_id=%s", update_source, user_id)
             raise ValueError(f"User {user_id} not found")
 
         school_name = payload.get("school")
@@ -306,7 +339,8 @@ class ProfileService:
             school = (await db.exec(select(School).where(School.name == school_name).limit(1))).first()
             user.school_level = school.level if school and school.level else None
             logger.info(
-                "[ProfileService] onboarding school_level 解析: user_id=%s school=%s school_level=%s",
+                "[ProfileService] %s school_level 解析: user_id=%s school=%s school_level=%s",
+                update_source,
                 user_id, school_name, user.school_level,
             )
 
@@ -324,16 +358,16 @@ class ProfileService:
             user.programming_languages = payload["programming_languages"]
         if payload.get("courses") is not None:
             user.courses = payload["courses"]
-        if payload.get("foundational_level") is not None:
-            user.foundational_level = payload["foundational_level"] or None
-        if payload.get("learning_style") is not None:
-            user.learning_style = payload["learning_style"] or None
-        if payload.get("content_depth") is not None:
-            user.content_depth = payload["content_depth"] or None
-        if payload.get("weak_points") is not None:
-            user.weak_points = payload["weak_points"]
-
-        user.onboarding_completed = True
+        if complete_onboarding:
+            if payload.get("foundational_level") is not None:
+                user.foundational_level = payload["foundational_level"] or None
+            if payload.get("learning_style") is not None:
+                user.learning_style = payload["learning_style"] or None
+            if payload.get("content_depth") is not None:
+                user.content_depth = payload["content_depth"] or None
+            if payload.get("weak_points") is not None:
+                user.weak_points = payload["weak_points"]
+            user.onboarding_completed = True
         user.updated_at = datetime.now(timezone.utc)
 
         db.add(user)
@@ -342,8 +376,9 @@ class ProfileService:
         await db.refresh(user)
 
         logger.info(
-            "[ProfileService] onboarding 基础信息已提交: user_id=%s school=%s major=%s grade=%s "
+            "[ProfileService] %s 基础信息已提交: user_id=%s school=%s major=%s grade=%s "
             "daily_study_time=%s goal=%s courses_count=%s languages_count=%s onboarding_completed=%s",
+            update_source,
             user.id, user.school, user.major, user.grade,
             user.daily_study_time, user.global_learning_goal,
             len(user.courses or []), len(user.programming_languages or []), user.onboarding_completed,
@@ -351,11 +386,12 @@ class ProfileService:
 
         reloaded = (await db.exec(select(User).where(User.id == user_id))).first()
         if reloaded is None:
-            logger.error("[ProfileService] onboarding 落库校验失败，回读为空: user_id=%s", user_id)
+            logger.error("[ProfileService] %s 落库校验失败，回读为空: user_id=%s", update_source, user_id)
         else:
             logger.info(
-                "[ProfileService] onboarding 落库校验通过: user_id=%s school=%s major=%s grade=%s "
+                "[ProfileService] %s 落库校验通过: user_id=%s school=%s major=%s grade=%s "
                 "courses=%s programming_languages=%s onboarding_completed=%s",
+                update_source,
                 user_id, reloaded.school, reloaded.major, reloaded.grade,
                 reloaded.courses, reloaded.programming_languages, reloaded.onboarding_completed,
             )
@@ -369,7 +405,8 @@ class ProfileService:
             "updated_at": user.updated_at,
         }
         logger.info(
-            "[ProfileService] onboarding 写入完成: user_id=%s updated_at=%s",
+            "[ProfileService] %s 写入完成: user_id=%s updated_at=%s",
+            update_source,
             user.id, user.updated_at,
         )
         return result
