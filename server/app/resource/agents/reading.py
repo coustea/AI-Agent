@@ -85,10 +85,14 @@ class ReadingAgent(BaseResourceAgent):
                 file_type="json",
                 error="缺少教程内容",
             )
+        config: dict[str, Any] = {}
+        # 优先使用路径请求中推断的语言偏好
+        if request.language_preference:
+            config["language_preference"] = request.language_preference
         result = await self._generate_reading(
             input_text="\n\n".join(build_path_context(request)),
             title_prefix=request.node_title[:80],
-            config={},
+            config=config,
         )
         result.metadata["node_id"] = request.node_id
         return result

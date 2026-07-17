@@ -101,9 +101,17 @@ export interface InputSchema {
   items?: InputSchema
 }
 
+export interface CustomParameterInfo {
+  name: string
+  kind: 'positional_or_keyword'
+  required: boolean
+  schema: InputSchema
+  defaultValue?: unknown
+}
+
 export interface CustomFunctionInfo {
   name: string
-  parameters: string[]
+  parameters: CustomParameterInfo[]
 }
 
 export interface CustomCodeContract {

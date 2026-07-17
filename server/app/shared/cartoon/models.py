@@ -96,7 +96,7 @@ class ExecutionObject(_Model):
     label: str = Field(min_length=1)
     role: ExecutionObjectRole
     value: str = ""
-    capacity: int | None = Field(default=None, ge=1, le=12)
+    capacity: int | None = Field(default=None, ge=0, le=12)
 
     @model_validator(mode="after")
     def validate_structure(self) -> "ExecutionObject":
@@ -365,13 +365,16 @@ class TeachingScene(_Model):
                     raise ValueError("execution placement must use a valid container slot")
                 if not placement.visible:
                     raise ValueError("occupied execution object must be visible")
-                if placement.slot >= (containers[placement.container_id].capacity or 0):
-                    raise ValueError("execution object exceeds container capacity")
-                if execution_by_id[entity.id].role is not ExecutionObjectRole.POINTER:
-                    key = (placement.container_id, placement.slot)
-                    if key in occupied_slots:
-                        raise ValueError("execution trace cannot place two objects in one slot")
-                    occupied_slots.add(key)
+                container = containers[placement.container_id]
+                # Stateless containers (capacity=0) do not enforce slot capacity
+                if container.capacity and container.capacity > 0:
+                    if placement.slot >= container.capacity:
+                        raise ValueError("execution object exceeds container capacity")
+                    if execution_by_id[entity.id].role is not ExecutionObjectRole.POINTER:
+                        key = (placement.container_id, placement.slot)
+                        if key in occupied_slots:
+                            raise ValueError("execution trace cannot place two objects in one slot")
+                        occupied_slots.add(key)
             if entity.kind is EntityKind.POINTER and placement.visible and not placement.anchor_id:
                 raise ValueError("visible execution pointer must attach to an object")
 

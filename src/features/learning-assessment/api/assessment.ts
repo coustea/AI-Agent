@@ -3,19 +3,18 @@ import type { ApiResponse } from '@/shared/api/http'
 import type {
   LearningAssessment,
   AssessmentsHistoryResponse,
-  GuidanceStrategyResponse,
 } from '@/features/learning-assessment/model/assessment'
 import type { DashboardData } from '@/features/evaluation/api/evaluation'
 
 export type {
   LearningAssessment,
   AssessmentsHistoryResponse,
-  GuidanceStrategyResponse,
 }
 
-export function generateAssessment(rangeDays: 3 | 7 | 14) {
+export function generateAssessment() {
   // LLM 生成评估需要较长时间，设置 60 秒超时
-  return http.post<ApiResponse<LearningAssessment>>('/ai/evaluation/assessments', { range_days: rangeDays }, { timeout: 60000 })
+  // range_days 由后端默认为 7 天，前端不再提供选择
+  return http.post<ApiResponse<LearningAssessment>>('/ai/evaluation/assessments', { range_days: 7 }, { timeout: 60000 })
 }
 
 export function getLatestAssessment() {
@@ -30,10 +29,6 @@ export function getAssessmentsHistory(page = 1, pageSize = 10) {
 
 export function getAssessmentDetail(assessmentId: number) {
   return http.get<ApiResponse<LearningAssessment>>(`/ai/evaluation/assessments/${assessmentId}`)
-}
-
-export function getGuidanceStrategy() {
-  return http.get<ApiResponse<GuidanceStrategyResponse>>('/ai/evaluation/guidance-strategy')
 }
 
 export function getAssessmentDashboard(assessmentId: number) {

@@ -468,7 +468,6 @@ class LearningAssessment(SQLModel, table=True):
             postgresql_where=text("status = 'generating'"),
             unique=True,
         ),
-        CheckConstraint("range_days IN (3, 7, 14)", name="chk_assessments_range_days"),
         CheckConstraint("status IN ('generating', 'ready', 'failed')", name="chk_assessments_status"),
         CheckConstraint("window_end > window_start", name="chk_assessments_window_order"),
     )

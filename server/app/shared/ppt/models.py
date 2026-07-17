@@ -97,7 +97,7 @@ class LogicChapter(PPTModel):
 
 class LogicNode(PPTModel):
     id: str = Field(pattern=r"^l[0-9]{2}$")
-    chapter_id: str = Field(pattern=r"^c[0-9]{2}$")
+    chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
     title: str = Field(min_length=2)
     role: LogicNodeRole
     question: str = Field(min_length=1)
@@ -147,9 +147,12 @@ class DeckLogicModel(PPTModel):
 
         chapter_by_node = {node_id: chapter.id for chapter in self.chapters for node_id in chapter.node_ids}
         for node in self.nodes:
+            # Auto-assign chapter_id from chapters if LLM omitted it
+            if node.chapter_id is None:
+                node.chapter_id = chapter_by_node.get(node.id)
             if node.chapter_id not in known_chapters:
                 raise ValueError(f"logic node {node.id} references an unknown chapter")
-            if chapter_by_node[node.id] != node.chapter_id:
+            if chapter_by_node.get(node.id) != node.chapter_id:
                 raise ValueError(f"logic node {node.id} is assigned to the wrong chapter")
             if not node.evidence:
                 raise ValueError(f"logic node {node.id} needs evidence")
@@ -209,7 +212,7 @@ class SlideBrief(PPTModel):
     teaching_goal: str = Field(min_length=1)
     content_focus: str = Field(min_length=1)
     chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
-    logic_node_ids: list[str] = Field(default_factory=list, max_length=3)
+    logic_node_ids: list[str] = Field(default_factory=list, max_length=5)
     question: str = ""
     claim: str = ""
     bridge: str = ""
@@ -285,7 +288,7 @@ class PPTSlide(PPTModel):
     title: str = Field(min_length=1)
     subtitle: str = ""
     chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
-    logic_node_ids: list[str] = Field(default_factory=list, max_length=3)
+    logic_node_ids: list[str] = Field(default_factory=list, max_length=5)
     question: str = ""
     claim: str = ""
     bridge: str = ""

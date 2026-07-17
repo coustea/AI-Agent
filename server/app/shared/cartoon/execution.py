@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.infra.logging import get_logger
 from app.shared.cartoon.models import (
     EntityKind,
     EntityPlacement,
@@ -24,6 +25,9 @@ from app.shared.cartoon.models import (
 )
 
 
+logger = get_logger(__name__)
+
+
 class _Draft(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -33,9 +37,17 @@ class ExecutionObjectDraft(_Draft):
     label: str = Field(min_length=1)
     role: ExecutionObjectRole
     value: str = ""
-    capacity: int | None = Field(default=None, ge=1, le=12)
+    capacity: int | None = Field(default=None, ge=0, le=12)
 
-    @field_validator("name", "label", "value")
+    @field_validator("value", mode="before")
+    @classmethod
+    def coerce_value_to_str(cls, v: Any) -> str:
+        """LLM may output numeric values (e.g. 5 instead of '5'); coerce to str."""
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    @field_validator("name", "label")
     @classmethod
     def normalize_text(cls, value: str) -> str:
         return value.strip()
@@ -59,7 +71,15 @@ class ExecutionOperationDraft(_Draft):
     region: SemanticRegion | None = None
     value: str = ""
 
-    @field_validator("subject", "target", "value")
+    @field_validator("value", mode="before")
+    @classmethod
+    def coerce_value_to_str(cls, v: Any) -> str:
+        """LLM may output numeric values; coerce to str."""
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    @field_validator("subject", "target")
     @classmethod
     def normalize_text(cls, value: str) -> str:
         return value.strip()
@@ -153,6 +173,12 @@ class ExecutionCompiler:
 
     @classmethod
     def compile(cls, draft: ExecutionSceneDraft, *, scene_id: str) -> CompiledExecutionScene:
+        logger.info(
+            "[ExecutionCompiler] 编译执行场景: scene_id=%s objects=%d beats=%d",
+            scene_id,
+            len(draft.objects),
+            len(draft.beats),
+        )
         objects = [
             ExecutionObject(
                 id=f"{scene_id}-object-{index:02d}",
@@ -189,6 +215,13 @@ class ExecutionCompiler:
             after = cls._state(scene_id, index + 1, placements, relations)
             if not cls._state_changed(before, after):
                 raise ValueError(f"operation {operation.verb.value} has no observable state delta")
+            logger.debug(
+                "[ExecutionCompiler] beat %d: verb=%s subject=%s target=%s",
+                index,
+                operation.verb.value,
+                operation.subject,
+                operation.target or "-",
+            )
             states.append(after)
             focus_ids = [object_by_name[name].id for name in focus]
             beats.append(
@@ -206,6 +239,12 @@ class ExecutionCompiler:
                     operation=operation,
                 )
             )
+        logger.info(
+            "[ExecutionCompiler] 编译完成: scene_id=%s states=%d beats=%d",
+            scene_id,
+            len(states),
+            len(beats),
+        )
         return CompiledExecutionScene(program=program, entities=entities, states=states, beats=beats)
 
     @staticmethod
@@ -270,9 +309,24 @@ class ExecutionCompiler:
             return [subject.name, target.name]
         if operation.verb is ExecutionVerb.MOVE:
             if target is not None:
-                if target.role is not ExecutionObjectRole.CONTAINER or operation.slot is None:
-                    raise ValueError("move target must be a container with a slot")
-                cls._place(subject, target, operation.slot, object_by_name, placements)
+                if target.role is not ExecutionObjectRole.CONTAINER:
+                    raise ValueError("move target must be a container")
+                # Stateless containers (capacity=0) accept move without slot;
+                # the subject is placed into the container region but no slot
+                # tracking is needed.
+                if target.capacity and target.capacity > 0:
+                    if operation.slot is None:
+                        raise ValueError("move to a stateful container requires a slot")
+                    cls._place(subject, target, operation.slot, object_by_name, placements)
+                else:
+                    # Stateless container: place subject inside without slot
+                    placement = placements[subject.name]
+                    placement.container_id = target.id
+                    placement.slot = None
+                    placement.anchor_id = ""
+                    placement.region = SemanticRegion.MAIN
+                    placement.visible = True
+                    placement.status = "active"
                 show(target)
                 return [subject.name, target.name]
             placement = placements[subject.name]
@@ -343,20 +397,23 @@ class ExecutionCompiler:
     ) -> None:
         if target.role is not ExecutionObjectRole.CONTAINER:
             raise ValueError("place target must be a container")
-        if slot >= (target.capacity or 0):
-            raise ValueError("place slot exceeds container capacity")
-        occupied = next(
-            (
-                name for name, placement in placements.items()
-                if name != subject.name
-                and placement.container_id == target.id
-                and placement.slot == slot
-                and placement.visible
-            ),
-            None,
-        )
-        if occupied is not None:
-            raise ValueError(f"container slot is occupied by {occupied}")
+        # Stateless containers (capacity=0) do not track slots;
+        # accept the placement without capacity or occupancy checks.
+        if target.capacity and target.capacity > 0:
+            if slot >= target.capacity:
+                raise ValueError("place slot exceeds container capacity")
+            occupied = next(
+                (
+                    name for name, placement in placements.items()
+                    if name != subject.name
+                    and placement.container_id == target.id
+                    and placement.slot == slot
+                    and placement.visible
+                ),
+                None,
+            )
+            if occupied is not None:
+                raise ValueError(f"container slot is occupied by {occupied}")
         placement = placements[subject.name]
         placement.container_id = target.id
         placement.slot = slot

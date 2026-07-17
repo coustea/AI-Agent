@@ -63,7 +63,7 @@
               v-for="item in customContract.functions"
               :key="item.name"
               :value="item.name"
-            >{{ item.name }}({{ item.parameters.join(', ') }})</option>
+            >{{ item.name }}({{ item.parameters.map((p: { name: string } | string) => typeof p === 'string' ? p : p.name).join(', ') }})</option>
           </select>
         </label>
 

@@ -52,9 +52,9 @@ class _Profile:
 
 def _profile(brief: CartoonBrief) -> _Profile:
     return {
-        LessonDepth.FOCUSED: _Profile(5, 3, 6, "聚焦讲解"),
-        LessonDepth.STANDARD: _Profile(5, 3, 6, "标准讲解"),
-        LessonDepth.DEEP: _Profile(6, 4, 6, "深入讲解"),
+        LessonDepth.FOCUSED: _Profile(5, 3, 10, "聚焦讲解"),
+        LessonDepth.STANDARD: _Profile(5, 3, 10, "标准讲解"),
+        LessonDepth.DEEP: _Profile(6, 4, 10, "深入讲解"),
     }[brief.configuration.lesson_depth]
 
 
@@ -131,7 +131,7 @@ class _BeatDraft(_Draft):
     narration: str = Field(min_length=1)
     visual: str = Field(min_length=1)
     action: TransitionKind
-    targets: list[str] = Field(min_length=1, max_length=6)
+    targets: list[str] = Field(min_length=1, max_length=10)
 
     @field_validator("narration", "visual")
     @classmethod
@@ -168,7 +168,7 @@ class _EntityDraft(_Draft):
 
 
 class _SceneDraft(_Draft):
-    entities: list[_EntityDraft] = Field(min_length=2, max_length=6)
+    entities: list[_EntityDraft] = Field(min_length=2, max_length=10)
     beats: list[_BeatDraft] = Field(min_length=3, max_length=4)
 
     @field_validator("entities")
@@ -206,8 +206,25 @@ class CartoonPlanner:
 
     async def plan(self, brief: CartoonBrief) -> Lesson:
         try:
+            logger.info(
+                "[CartoonPlanner] 开始规划: learning_need=%s depth=%s density=%s",
+                brief.learning_need,
+                brief.configuration.lesson_depth.value,
+                brief.configuration.visual_density,
+            )
             storyboard = await self._create_storyboard(brief)
+            logger.info(
+                "[CartoonPlanner] 分镜完成: title=%s scenes=%s grammars=%s",
+                storyboard.title,
+                len(storyboard.scenes),
+                [s.grammar.value for s in storyboard.scenes],
+            )
             profile = _profile(brief)
+            logger.info(
+                "[CartoonPlanner] 场景并行生成: max_parallel=%s profile=%s",
+                self._parallelism,
+                profile.label,
+            )
             semaphore = asyncio.Semaphore(self._parallelism)
             async with asyncio.TaskGroup() as group:
                 tasks = [
@@ -223,18 +240,36 @@ class CartoonPlanner:
                     )
                     for scene_index, scene in enumerate(storyboard.scenes, start=1)
                 ]
+            scenes = [task.result() for task in tasks]
+            total_beats = sum(len(s.beats) for s in scenes)
+            logger.info(
+                "[CartoonPlanner] 规划完成: title=%s scenes=%s total_beats=%s",
+                storyboard.title.strip(),
+                len(scenes),
+                total_beats,
+            )
             return Lesson(
                 title=storyboard.title.strip(),
-                scenes=[task.result() for task in tasks],
+                scenes=scenes,
             )
         except Exception as exc:
             if isinstance(exc, CartoonPlanningError):
                 raise
             details = self._exception_details(exc)
+            logger.error(
+                "[CartoonPlanner] 规划失败: %s",
+                " | ".join(details),
+            )
             raise CartoonPlanningError("无法生成可渲染的语义动画分镜: " + " | ".join(details)) from exc
 
     async def _create_storyboard(self, brief: CartoonBrief) -> _StoryboardDraft:
         profile = _profile(brief)
+        logger.info(
+            "[CartoonPlanner] 生成分镜: scene_count=%s depth=%s density=%s",
+            profile.scene_count,
+            profile.label,
+            brief.configuration.visual_density,
+        )
         prompt = self._prompts["storyboard.md"].render(
             {
                 "scene_count": profile.scene_count,
@@ -256,7 +291,17 @@ class CartoonPlanner:
         )
         storyboard = response if isinstance(response, _StoryboardDraft) else _StoryboardDraft.model_validate(response)
         if len(storyboard.scenes) != profile.scene_count:
+            logger.error(
+                "[CartoonPlanner] 分镜场景数不匹配: expected=%s got=%s",
+                profile.scene_count,
+                len(storyboard.scenes),
+            )
             raise CartoonPlanningError(f"storyboard requires exactly {profile.scene_count} scenes")
+        logger.info(
+            "[CartoonPlanner] 分镜生成成功: title=%s scenes=%s",
+            storyboard.title,
+            [(i + 1, s.title, s.grammar.value) for i, s in enumerate(storyboard.scenes)],
+        )
         return storyboard
 
     async def _compose_scene(
@@ -268,6 +313,13 @@ class CartoonPlanner:
         profile: _Profile,
         semaphore: asyncio.Semaphore,
     ) -> TeachingScene:
+        logger.info(
+            "[CartoonPlanner] 生成场景 %d/%d: title=%s grammar=%s",
+            scene_index,
+            len(storyboard.scenes),
+            outline.title,
+            outline.grammar.value,
+        )
         prompt = self._prompts["scene_compose.md"].render(
             {
                 "grammar": outline.grammar.value,
@@ -305,9 +357,22 @@ class CartoonPlanner:
         if outline.grammar is VisualGrammar.TRACE:
             draft = response if isinstance(response, ExecutionSceneDraft) else ExecutionSceneDraft.model_validate(response)
             self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
+            logger.info(
+                "[CartoonPlanner] 场景 %d (trace) 生成完成: objects=%s beats=%s",
+                scene_index,
+                len(draft.objects),
+                len(draft.beats),
+            )
             return self._materialize_execution_scene(outline, draft, scene_index)
         draft = response if isinstance(response, _SceneDraft) else _SceneDraft.model_validate(response)
         self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
+        logger.info(
+            "[CartoonPlanner] 场景 %d (%s) 生成完成: entities=%s beats=%s",
+            scene_index,
+            outline.grammar.value,
+            len(draft.entities),
+            len(draft.beats),
+        )
         return self._materialize_scene(outline, draft, scene_index)
 
     @classmethod
@@ -352,7 +417,7 @@ class CartoonPlanner:
   ]
 }
 ```
-对象 `role` 只能是 `container`、`token`、`pointer`、`node`、`port`、`marker`；只有 `container` 声明 `capacity`。操作 `verb` 只能是 `reveal`、`place`、`move`、`remove`、`point`、`update`、`connect`、`disconnect`、`compare`、`highlight`。`place` 必须有 container `target` 和 `slot`；`point/connect/disconnect/compare` 必须有 `target`；`update` 必须有 `value`；`move` 使用 container 的 `target`+`slot`，或使用 `region`（input/output/result/left/right/top/bottom/main/code）。每个 beat 只描述一个真实操作，不要用文字代替状态变化。"""
+对象 `role` 只能是 `container`、`token`、`pointer`、`node`、`port`、`marker`；只有 `container` 声明 `capacity`（0 表示无状态容器，不分配槽位）。`value` 字段必须是字符串（如 "5" 而非 5）。操作 `verb` 只能是 `reveal`、`place`、`move`、`remove`、`point`、`update`、`connect`、`disconnect`、`compare`、`highlight`。`place` 必须有 container `target` 和 `slot`；`point/connect/disconnect/compare` 必须有 `target`；`update` 必须有 `value`；`move` 使用有状态 container 的 `target`+`slot`，或使用无状态 container（capacity=0）的 `target`（无需 slot），或使用 `region`（input/output/result/left/right/top/bottom/main/code）。每个 beat 只描述一个真实操作，不要用文字代替状态变化。"""
         return """只输出以下 JSON：
 ```json
 {
@@ -629,12 +694,28 @@ class CartoonPlanner:
         temperature: float,
         validator: Callable[[BaseModel], None] | None = None,
     ) -> Any:
-        return await get_llm().ainvoke_json(
-            schema,
-            messages,
-            temperature=temperature,
-            validator=validator,
+        logger.debug(
+            "[CartoonPlanner] LLM 调用: schema=%s temperature=%.2f messages=%d",
+            schema.__name__,
+            temperature,
+            len(messages),
         )
+        try:
+            result = await get_llm().ainvoke_json(
+                schema,
+                messages,
+                temperature=temperature,
+                validator=validator,
+            )
+            logger.debug("[CartoonPlanner] LLM 返回: schema=%s", schema.__name__)
+            return result
+        except Exception as exc:
+            logger.error(
+                "[CartoonPlanner] LLM 调用失败: schema=%s error=%s",
+                schema.__name__,
+                exc,
+            )
+            raise
 
     @classmethod
     def _material_message(

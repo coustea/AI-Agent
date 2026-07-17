@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -56,16 +57,18 @@ import asyncio
 from pydantic import BaseModel, Field
 from typing import Literal, Any
 
+logger = logging.getLogger(__name__)
+
 class SlideBriefPayload(BaseModel):
     kind: SlideKind
     title: str
     teaching_goal: str
     content_focus: str
     chapter_id: str | None = None
-    logic_node_ids: list[str]
-    question: str = ""
-    claim: str = ""
-    bridge: str = ""
+    logic_node_ids: list[str] = Field(default_factory=list)
+    question: str | None = None
+    claim: str | None = None
+    bridge: str | None = None
     logic_relation: LogicRelation | None = None
     layout: LayoutKind
 
@@ -129,6 +132,29 @@ def _validate_slide_visual(payload: SlideContentPayload) -> None:
 ProgressCallback = Callable[[str, int], Awaitable[None]]
 _PRESENTATION_TIMEZONE = ZoneInfo("Asia/Shanghai")
 PPT_PIPELINE_VERSION = "deterministic-html-v6"
+
+# Mapping from logic-node role to a default slide kind and relation when
+# synthesising a new slide for an uncovered node during storyboard patching.
+_ROLE_KIND_MAP: dict[LogicNodeRole, SlideKind] = {
+    LogicNodeRole.QUESTION: SlideKind.QUESTION,
+    LogicNodeRole.PREMISE: SlideKind.EXPLANATION,
+    LogicNodeRole.CONCEPT: SlideKind.CONCEPT,
+    LogicNodeRole.MECHANISM: SlideKind.PROCESS,
+    LogicNodeRole.METHOD: SlideKind.PROCESS,
+    LogicNodeRole.EVIDENCE: SlideKind.EXPLANATION,
+    LogicNodeRole.CASE: SlideKind.COMPARISON,
+    LogicNodeRole.CONCLUSION: SlideKind.OBJECTIVE,
+}
+_ROLE_RELATION_MAP: dict[LogicNodeRole, LogicRelation] = {
+    LogicNodeRole.QUESTION: LogicRelation.PREREQUISITE,
+    LogicNodeRole.PREMISE: LogicRelation.SUPPORTS,
+    LogicNodeRole.CONCEPT: LogicRelation.DECOMPOSES,
+    LogicNodeRole.MECHANISM: LogicRelation.CAUSES,
+    LogicNodeRole.METHOD: LogicRelation.APPLIES,
+    LogicNodeRole.EVIDENCE: LogicRelation.VERIFIES,
+    LogicNodeRole.CASE: LogicRelation.CONTRASTS,
+    LogicNodeRole.CONCLUSION: LogicRelation.SUMMARIZES,
+}
 PPT_PIPELINE_STAGES = (
     "assembling_context",
     "designing_logic",
@@ -461,9 +487,11 @@ class PPTGenerator:
    - 每个章节必须有核心问题（`question`）、最终输出结论（`outcome`），以及包含的逻辑节点 ID 列表（`node_ids`）。
 5. 逻辑节点 `nodes`：根据材料，设计 4 到 8 个核心知识节点。
    - 节点 ID 必须按顺序为 `l01`, `l02`, `l03`...。
-   - 每个节点必须归属于 `c01` 或 `c02`，确保所有节点被 chapters 覆盖且仅覆盖一次。
+   - 每个节点**必须**包含 `chapter_id` 字段，值为该节点所属章节的 ID（`c01` 或 `c02`），确保所有节点被 chapters 覆盖且仅覆盖一次。
    - 角色 `role` 必须属于：'question', 'premise', 'concept', 'mechanism', 'method', 'evidence', 'case', 'conclusion'。
+   - 每个节点**必须**包含简短标题 `title`（2-20字，概括节点核心概念）和核心问题 `question`（该节点要回答的关键问题，10-40字）。
    - 每个节点必须设定学术性的核心结论 `claim`，并且必须包含 1-3 个具体的非空支持论据 `evidence`（在 evidence 列表中，绝对不能留空或全为空白字符）。
+   - 每个节点必须包含最终输出结论 `output`（10-60字，该节点推导出的可复用结论）。
 6. 逻辑关系边 `edges`：用有向边连接逻辑节点，描述它们之间的递进关系。
    - 必须构成一个**单一的、连通的、无环的有向图（DAG）**。不能有孤立节点，也不能有环。
    - 每条边包含 `source_id`、`target_id`。
@@ -506,7 +534,7 @@ class PPTGenerator:
 4. 对于内容幻灯片：
    - `kind` 必须是：'question', 'concept', 'process', 'explanation', 'comparison', 'correction', 'map', 'objective'。
    - 必须指明所属章节 `chapter_id`（'c01' 或 'c02'）。
-   - 必须关联 1 到 3 个逻辑节点 `logic_node_ids`。内容页必须完整覆盖 logic_model 中的所有节点。
+   - 必须关联 1 到 5 个逻辑节点 `logic_node_ids`。内容页必须完整覆盖 logic_model 中的所有节点。
    - 必须指定它的主导逻辑关系 `logic_relation`（'prerequisite', 'decomposes', 'supports', 'derives', 'causes', 'contrasts', 'applies', 'verifies', 'summarizes'）。
    - 必须指定其版式 `layout`。版式必须与 `logic_relation` 严格契合：
      * `prerequisite` -> 支持 'diagram', 'sequence', 'statement'
@@ -570,9 +598,9 @@ class PPTGenerator:
                     layout = LayoutKind.ROUTE
                 elif item.kind == SlideKind.SUMMARY:
                     layout = LayoutKind.RECAP
-                question = item.question
-                claim = item.claim
-                bridge = item.bridge
+                question = item.question or ""
+                claim = item.claim or ""
+                bridge = item.bridge or ""
                 chapter_id = item.chapter_id
 
             slides.append(
@@ -593,6 +621,9 @@ class PPTGenerator:
                 )
             )
             
+        # --- Deterministic patch: ensure every logic node is covered ---
+        slides = self._patch_uncovered_nodes(slides, logic_model)
+
         return PPTStoryboard(
             title=payload.title,
             visual_direction=payload.visual_direction,
@@ -1407,6 +1438,132 @@ class PPTGenerator:
             label=cls._text(label),
             detail=cls._text(detail),
         )
+
+    @staticmethod
+    def _patch_uncovered_nodes(
+        slides: list[SlideBrief],
+        logic_model: DeckLogicModel,
+    ) -> list[SlideBrief]:
+        """Deterministically patch storyboard so every logic node is covered.
+
+        The LLM frequently omits one or more logic nodes from its slide
+        assignments.  Rather than failing hard, we patch the storyboard:
+        1. For each uncovered node, try to append it to an existing content
+           slide in the same chapter (if the slide has room for more nodes,
+           max 3 per slide).
+        2. If no existing slide has room, insert a new content slide for the
+           uncovered node at the correct chapter position.
+        """
+        known_nodes = {node.id for node in logic_model.nodes}
+        nodes_by_id = {node.id: node for node in logic_model.nodes}
+        chapters_by_id = {ch.id: ch for ch in logic_model.chapters}
+
+        # Compute current coverage
+        covered_nodes: set[str] = set()
+        for slide in slides:
+            if slide.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}:
+                covered_nodes.update(slide.logic_node_ids)
+
+        uncovered = sorted(known_nodes - covered_nodes)
+        if not uncovered:
+            return slides
+
+        logger.warning(
+            "故事板 LLM 遗漏了逻辑节点 %s，正在确定性修补",
+            uncovered,
+        )
+
+        # Build a mutable working copy
+        result = list(slides)
+
+        for node_id in uncovered:
+            node = nodes_by_id[node_id]
+            chapter_id = node.chapter_id
+
+            # Strategy 1: append to an existing content slide in the same chapter
+            # that has room (max 5 logic_node_ids per slide).
+            patched = False
+            for slide in result:
+                if (
+                    slide.kind not in {SlideKind.COVER, SlideKind.ROADMAP, SlideKind.SUMMARY}
+                    and slide.chapter_id == chapter_id
+                    and len(slide.logic_node_ids) < 3
+                ):
+                    slide.logic_node_ids.append(node_id)
+                    # Auto-fill question/claim from the newly attached node if
+                    # the slide currently uses the generic fallback.
+                    if slide.question == "如何理解本页的核心教学点？":
+                        slide.question = node.question
+                    if slide.claim == slide.title:
+                        slide.claim = node.claim
+                    patched = True
+                    logger.info(
+                        "将遗漏节点 %s 追加到已有页面 %s",
+                        node_id,
+                        slide.id,
+                    )
+                    break
+
+            if patched:
+                continue
+
+            # Strategy 2: insert a new content slide for the uncovered node.
+            # Find the insertion index — right after the last slide of the
+            # same chapter, or before the summary slide as a fallback.
+            insert_idx = None
+            for i in range(len(result) - 1, -1, -1):
+                slide = result[i]
+                if slide.chapter_id == chapter_id:
+                    insert_idx = i + 1
+                    break
+
+            if insert_idx is None:
+                # No slide for this chapter at all — insert before summary.
+                for i in range(len(result) - 1, -1, -1):
+                    if result[i].kind == SlideKind.SUMMARY:
+                        insert_idx = i
+                        break
+                if insert_idx is None:
+                    insert_idx = len(result)
+
+            # Determine slide ID — renumber all slides after insertion.
+            new_slide_id = f"s{insert_idx + 1:02d}"
+
+            # Pick a kind and relation based on the node's role.
+            kind = _ROLE_KIND_MAP.get(node.role, SlideKind.EXPLANATION)
+            relation = _ROLE_RELATION_MAP.get(node.role, LogicRelation.SUPPORTS)
+            layout = select_provisional_layout(kind, relation)
+
+            new_slide = SlideBrief(
+                id=new_slide_id,
+                kind=kind,
+                title=node.title[:15],
+                teaching_goal=f"理解{node.title}的核心概念",
+                content_focus=node.claim,
+                chapter_id=chapter_id,
+                logic_node_ids=[node_id],
+                question=node.question,
+                claim=node.claim,
+                bridge=f"接下来探讨{node.title}。",
+                logic_relation=relation,
+                layout=layout,
+                density="standard",
+            )
+
+            result.insert(insert_idx, new_slide)
+            logger.info(
+                "为遗漏节点 %s 插入新页面 %s（kind=%s, chapter=%s）",
+                node_id,
+                new_slide_id,
+                kind.value,
+                chapter_id,
+            )
+
+            # Renumber all slide IDs to maintain sequential order.
+            for i, slide in enumerate(result):
+                slide.id = f"s{i + 1:02d}"
+
+        return result
 
     @staticmethod
     def _point_label(index: int) -> str:

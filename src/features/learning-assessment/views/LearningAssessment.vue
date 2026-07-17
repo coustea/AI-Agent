@@ -1,329 +1,462 @@
 <template>
-  <div class="assessment-page">
+  <main class="assessment-page">
     <header class="page-header">
-      <div class="header-left">
+      <div class="header-copy">
+        <span class="eyebrow">LEARNING REVIEW</span>
         <h1>学习评估</h1>
-        <p class="header-subtitle">基于学习记录的自适应辅导策略调整</p>
+        <p>用学习趋势、模块投入和阶段结论，帮助你快速判断下一步该学什么。</p>
       </div>
+
       <div class="header-actions">
-        <div class="range-tabs" role="group" aria-label="评估时间范围">
-          <button
-            v-for="days in rangeOptions"
-            :key="days"
-            type="button"
-            :class="{ active: selectedRange === days }"
-            @click="selectedRange = days"
-          >
-            {{ days }} 天
-          </button>
-        </div>
-        <Button class="generate-btn" :disabled="generating" @click="triggerAssessmentGeneration">
+        <Button
+          class="generate-button"
+          :disabled="generating"
+          @click="triggerAssessmentGeneration"
+        >
           <Sparkles :size="16" />
           {{ generating ? '生成中' : '重新评估' }}
         </Button>
       </div>
     </header>
 
-    <!-- 生成进度 -->
-    <section v-if="generating" class="generation-progress" aria-label="生成进度">
-      <span
+    <section
+      v-if="generating"
+      class="generation-progress"
+      aria-label="评估生成进度"
+    >
+      <div
         v-for="(step, index) in generationSteps"
         :key="step"
-        :class="{ done: index < currentStepIdx, current: index === currentStepIdx }"
+        class="progress-step"
+        :class="{
+          done: index < currentStepIdx,
+          current: index === currentStepIdx,
+        }"
       >
-        {{ step }}
-      </span>
+        <span class="step-index">
+          <CheckCircle2 v-if="index < currentStepIdx" :size="15" />
+          <template v-else>{{ index + 1 }}</template>
+        </span>
+        <span>{{ step }}</span>
+      </div>
     </section>
 
-    <!-- 加载状态 -->
-    <section v-if="initialLoading" class="loading-state">
+    <section v-if="initialLoading" class="state-panel">
       <div class="loading-spinner" />
-      <p>正在加载学习评估数据...</p>
+      <h2>正在整理学习记录</h2>
+      <p>系统正在加载近期学习趋势、资源使用和评估结果。</p>
     </section>
 
-    <!-- 失败状态 -->
-    <section v-else-if="activeAssessment?.status === 'failed'" class="error-state">
-      <AlertCircle :size="24" />
+    <section
+      v-else-if="activeAssessment?.status === 'failed'"
+      class="state-panel error-panel"
+    >
+      <AlertCircle :size="28" />
       <h2>评估生成失败</h2>
-      <p>{{ activeAssessment.failure_code || '未知内部错误' }}</p>
-      <Button variant="outline" @click="triggerAssessmentGeneration">重试</Button>
+      <p>{{ activeAssessment.failure_code || '评估服务暂时不可用，请稍后重试。' }}</p>
+      <Button variant="outline" @click="triggerAssessmentGeneration">
+        <RefreshCw :size="15" />
+        重新生成
+      </Button>
     </section>
 
-    <!-- 生成中状态 -->
-    <section v-else-if="activeAssessment?.status === 'generating'" class="loading-state">
+    <section
+      v-else-if="activeAssessment?.status === 'generating'"
+      class="state-panel"
+    >
       <div class="loading-spinner" />
-      <p>评估正在生成中...</p>
+      <h2>评估正在生成</h2>
+      <p>模型正在汇总学习证据并生成阶段结论。</p>
     </section>
 
-    <!-- 主内容 -->
     <template v-else>
-      <!-- CASE 1: 用户从未生成过评估，且没有任何学习数据 -->
-      <div v-if="!activeAssessment && (!dashboardData || dashboardData.evaluation_summary.event_count === 0)" class="empty-guide-card ui-card">
-        <div class="empty-guide-inner">
-          <div class="guide-icon-wrapper">
-            <Compass :size="36" class="guide-icon" />
-          </div>
-          <h2>暂无评估事实，开启您的学习之旅</h2>
-          <p class="guide-subtitle">为了提供精准的自适应辅导策略，系统需要积累一些您的学习足迹（如对话、浏览、练习等）。</p>
-          <div class="guide-actions">
-            <div class="action-card-mini" @click="navigateTo('/tutor')">
-              <span class="mini-icon tutor-icon">💬</span>
-              <div class="action-card-text">
-                <strong>智能辅导</strong>
-                <span>与 AI 导师进行学术对话</span>
-              </div>
-            </div>
-            <div class="action-card-mini" @click="navigateTo('/resource-generator')">
-              <span class="mini-icon resource-icon">💡</span>
-              <div class="action-card-text">
-                <strong>资源引擎</strong>
-                <span>检索或生成多模态资源</span>
-              </div>
-            </div>
-            <div class="action-card-mini" @click="navigateTo('/question-bank')">
-              <span class="mini-icon question-icon">📚</span>
-              <div class="action-card-text">
-                <strong>学习题库</strong>
-                <span>完成推荐题目和巩固练习</span>
-              </div>
-            </div>
-          </div>
+      <section
+        v-if="!activeAssessment && !hasLearningEvidence"
+        class="empty-guide"
+      >
+        <div class="empty-visual">
+          <Compass :size="34" />
         </div>
-      </div>
 
-      <!-- CASE 2: 用户有学习数据，但从未生成过评估报告 -->
-      <div v-else-if="!activeAssessment && dashboardData" class="welcome-guide-card ui-card">
-        <div class="welcome-guide-inner">
-          <div class="guide-icon-wrapper">
-            <Sparkles :size="36" class="guide-icon sparkles" />
-          </div>
-          <h2>生成您的首份学习效果评估</h2>
-          <p class="guide-subtitle">系统已检测到您近期的学习足迹！点击下方按钮，系统将使用大语言模型为您深度定制自适应辅导策略与下一步学习计划。</p>
-          <Button class="generate-btn large-btn" :disabled="generating" @click="triggerAssessmentGeneration">
-            <Sparkles :size="18" />
-            一键生成评估报告
+        <div class="empty-copy">
+          <span class="section-kicker">暂无学习证据</span>
+          <h2>先完成一次真实学习，再生成评估</h2>
+          <p>
+            系统需要从辅导对话、资源学习和练习记录中提取事实，才能给出可信的学习结论。
+          </p>
+        </div>
+
+        <div class="guide-actions">
+          <button type="button" @click="navigateTo('/tutor')">
+            <MessageCircle :size="19" />
+            <span>
+              <strong>智能辅导</strong>
+              <small>进行一次课程问答</small>
+            </span>
+          </button>
+
+          <button type="button" @click="navigateTo('/resource-generator')">
+            <Lightbulb :size="19" />
+            <span>
+              <strong>资源生成</strong>
+              <small>生成并学习课程资源</small>
+            </span>
+          </button>
+
+          <button type="button" @click="navigateTo('/question-bank')">
+            <BookOpen :size="19" />
+            <span>
+              <strong>题库练习</strong>
+              <small>完成一次巩固练习</small>
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <section
+        v-else-if="!activeAssessment && recentAssessments.length === 0 && dashboardData"
+        class="first-report-guide"
+      >
+        <div class="first-report-copy">
+          <span class="section-kicker">学习事实已形成</span>
+          <h2>生成第一份学习效果评估</h2>
+          <p>
+            当前已经积累 {{ eventCount }} 条学习事件。生成评估后，系统会给出阶段结论、重点主题和下一步学习计划。
+          </p>
+          <Button
+            class="generate-button large"
+            :disabled="generating"
+            @click="triggerAssessmentGeneration"
+          >
+            <Sparkles :size="17" />
+            生成评估报告
           </Button>
-          <div class="guide-preview-charts">
-            <div class="preview-chart-title">您近期的学习活动趋势</div>
-            <div class="chart-box mini-chart-box">
-              <v-chart class="chart" :option="lineOption" autoresize />
-            </div>
+        </div>
+
+        <div class="first-report-chart">
+          <div class="preview-header">
+            <span>近期学习趋势</span>
+            <strong>{{ totalStudyMinutes }} 分钟</strong>
+          </div>
+          <div class="preview-chart-box">
+            <v-chart class="chart" :option="lineOption" autoresize />
           </div>
         </div>
-      </div>
+      </section>
 
-      <!-- CASE 3: 正常显示已生成的评估报告 -->
       <template v-else-if="dashboardData">
-        <!-- 历史评估横向时间线导航轨 -->
-        <section v-if="assessmentsHistory.length > 0" class="timeline-nav-section" aria-label="评估历史导航">
-          <div class="timeline-nav-card ui-card">
-            <div class="timeline-nav-header">
-              <div class="nav-title-wrapper">
-                <History :size="16" class="nav-icon" />
-                <h3>评估历程</h3>
+        <section v-if="recentAssessments.length" class="report-history-bar">
+          <div class="current-report-mark">
+            <div class="history-icon-box">
+              <FileClock :size="18" />
+            </div>
+            <div>
+              <span>{{ viewingHistorical ? '正在查看历史报告' : '当前报告' }}</span>
+              <strong>{{ currentReportTitle }}</strong>
+            </div>
+          </div>
+
+          <div class="recent-report-list" aria-label="最近评估">
+            <button
+              v-for="(item, index) in recentAssessments.slice(0, 4)"
+              :key="item.id"
+              type="button"
+              :class="{
+                active:
+                  (!viewingHistorical && !!activeAssessment && index === 0) ||
+                  (viewingHistorical && activeAssessment?.id === item.id),
+              }"
+              @click="openRecentAssessment(item, index)"
+            >
+              <strong>{{ index === 0 ? '最新' : '历史' }}</strong>
+              <span>{{ formatCompactDate(item.created_at) }}</span>
+            </button>
+          </div>
+
+          <button type="button" class="history-entry" @click="openHistoryDrawer">
+            <History :size="16" />
+            历史报告
+            <span>{{ totalAssessments }}</span>
+          </button>
+        </section>
+
+        <section class="report-overview">
+          <article class="overview-copy">
+            <div class="overview-heading">
+              <div>
+                <span class="section-kicker">阶段结论</span>
+                <h2>本期学习表现</h2>
               </div>
-              <span class="timeline-count">共 {{ totalAssessments }} 份</span>
+
+              <span class="date-badge">
+                <CalendarDays :size="14" />
+                {{ displayDateRange }}
+              </span>
             </div>
-            
-            <div class="timeline-track-container">
-              <div class="timeline-track">
-                <!-- 最新评估按钮 -->
-                <button
-                  type="button"
-                  :class="{ active: !viewingHistorical }"
-                  class="timeline-btn latest-btn"
-                  @click="returnToLatest"
-                >
-                  <span class="badge">最新</span>
-                  <strong>{{ assessmentsHistory[0]?.range_days ?? 7 }} 天评估</strong>
-                  <span class="time">{{ latestAssessmentTime }}</span>
-                </button>
-                
-                <span class="timeline-separator" />
-                
-                <!-- 历史评估列表 -->
-                <button
-                  v-for="item in assessmentsHistory.slice(1, 10)"
-                  :key="item.id"
-                  type="button"
-                  :class="{ active: viewingHistorical && activeAssessment?.id === item.id }"
-                  class="timeline-btn"
-                  @click="selectAssessment(item)"
-                >
-                  <strong>{{ item.range_days }} 天评估</strong>
-                  <span class="time">{{ formatDateTime(item.created_at) }}</span>
-                </button>
+
+            <p class="assessment-text">
+              {{ displayConclusion }}
+            </p>
+
+            <div class="overview-footnote">
+              <Target :size="15" />
+              <span>{{ strategyReasonText }}</span>
+            </div>
+          </article>
+
+          <div class="metric-grid">
+            <article class="metric-item">
+              <span class="metric-icon"><Clock3 :size="17" /></span>
+              <div>
+                <strong>{{ totalStudyMinutes }}</strong>
+                <span>学习分钟</span>
               </div>
-            </div>
-            
-            <div v-if="totalAssessments > 10" class="timeline-more-action">
-              <Button variant="ghost" size="sm" class="more-btn" @click="showHistoryDrawer = true">
-                查看全部 {{ totalAssessments }} 份
-                <ChevronRight :size="14" />
-              </Button>
-            </div>
+            </article>
+
+            <article class="metric-item">
+              <span class="metric-icon"><CalendarDays :size="17" /></span>
+              <div>
+                <strong>{{ activeStudyDays }}</strong>
+                <span>活跃天数</span>
+              </div>
+            </article>
+
+            <article class="metric-item">
+              <span class="metric-icon"><Activity :size="17" /></span>
+              <div>
+                <strong>{{ averageDailyMinutes }}</strong>
+                <span>日均分钟</span>
+              </div>
+            </article>
+
+            <article class="metric-item metric-topic">
+              <span class="metric-icon"><Layers3 :size="17" /></span>
+              <div>
+                <strong>{{ topModuleName }}</strong>
+                <span>投入最多模块</span>
+              </div>
+            </article>
           </div>
         </section>
 
-        <!-- 单栏纵向评估内容流 -->
-        <div class="report-flow-container">
-          <!-- 1. 图表区 -->
-          <section class="report-section charts-section-layout">
-            <div class="chart-panel-outer ui-card">
-              <article class="chart-panel">
-                <div class="panel-header">
-                  <h3>每日学习趋势</h3>
-                </div>
-                <div class="chart-box">
-                  <v-chart class="chart" :option="lineOption" autoresize />
-                </div>
-              </article>
-            </div>
-            
-            <div class="chart-panel-outer ui-card">
-              <article class="chart-panel">
-                <div class="panel-header">
-                  <h3>模块学习时长分布</h3>
-                </div>
-                <div class="chart-box">
-                  <v-chart class="chart" :option="pieOption" autoresize />
-                </div>
-              </article>
-            </div>
-          </section>
+        <section class="visual-analysis">
+          <article class="trend-panel analysis-panel">
+            <header class="panel-heading">
+              <div>
+                <span class="section-kicker">学习趋势</span>
+                <h3>每日学习时长</h3>
+              </div>
+              <p>{{ trendInsight }}</p>
+            </header>
 
-          <!-- 2. 结论与自适应策略 -->
-          <section class="report-section conclusion-section ui-card conclusion-editorial">
-            <div class="conclusion-card">
-              <div class="conclusion-header">
-                <h2>本期结论与策略调整</h2>
-                <span class="window-badge">
-                  <Calendar :size="14" />
-                  {{ dashboardData.window.days }} 天
-                  {{ formatDateRange(dashboardData.window.start, dashboardData.window.end) }}
-                </span>
-              </div>
-              <p class="conclusion-text">{{ activeAssessment?.assessment || guidanceStrategy?.conclusion || defaultConclusion }}</p>
-              
-              <div v-if="guidanceStrategy" class="strategy-highlights">
-                <div class="highlight-item">
-                  <span class="highlight-label">重点主题</span>
-                  <strong class="highlight-value">
-                    {{ guidanceStrategy.focus_topics?.length ? guidanceStrategy.focus_topics.join('、') : '暂无' }}
-                  </strong>
-                </div>
-                <div class="highlight-item">
-                  <span class="highlight-label">建议时长</span>
-                  <strong class="highlight-value">{{ guidanceStrategy.recommended_session_minutes }} 分钟/次</strong>
-                </div>
-                <div class="highlight-item">
-                  <span class="highlight-label">辅导方式</span>
-                  <strong class="highlight-value">{{ guidanceStrategy.tutoring_style || '暂无' }}</strong>
-                </div>
-              </div>
-              
-              <p v-if="guidanceStrategy?.reason" class="strategy-reason">
-                <span class="reason-label">策略依据</span>
-                {{ guidanceStrategy.reason }}
-              </p>
+            <div class="trend-chart-box">
+              <v-chart class="chart" :option="lineOption" autoresize />
             </div>
-          </section>
+          </article>
 
-          <!-- 3. 下一阶段学习计划 -->
-          <section v-if="actionPlan.length" class="report-section action-section-wide ui-card">
-            <div class="action-card">
-              <div class="section-header">
-                <Compass :size="18" />
-                <h3>下一阶段学习计划</h3>
+          <article class="module-panel analysis-panel">
+            <header class="panel-heading compact">
+              <div>
+                <span class="section-kicker">投入结构</span>
+                <h3>模块时长分布</h3>
               </div>
-              <div class="action-list-wide">
-                <div
-                  v-for="(action, index) in actionPlan"
-                  :key="index"
-                  class="action-item-wide"
-                >
-                  <span class="action-index-badge">{{ index + 1 }}</span>
-                  <div class="action-content-wide">
-                    <div class="action-desc-row">
-                      <p class="action-description">{{ action.description }}</p>
-                    </div>
-                    <span class="action-topic">{{ action.topic }}</span>
-                  </div>
+            </header>
+
+            <div class="module-chart-box">
+              <v-chart class="chart" :option="pieOption" autoresize />
+            </div>
+
+            <div v-if="moduleRanking.length" class="module-ranking">
+              <div
+                v-for="module in moduleRanking"
+                :key="module.name"
+                class="module-row"
+              >
+                <span
+                  class="module-dot"
+                  :style="{ backgroundColor: module.color }"
+                />
+                <span class="module-name">{{ module.name }}</span>
+                <strong>{{ module.minutes }} 分钟</strong>
+                <em>{{ module.percent }}%</em>
+              </div>
+            </div>
+
+            <p v-else class="module-empty">当前周期暂无模块学习时长。</p>
+          </article>
+        </section>
+
+        <section class="strategy-layout">
+          <article class="strategy-panel">
+            <header class="section-heading">
+              <div>
+                <span class="section-kicker">自适应策略</span>
+                <h3>下一阶段应如何调整</h3>
+              </div>
+              <BarChart3 :size="20" />
+            </header>
+
+            <div class="strategy-facts">
+              <div>
+                <span>重点主题</span>
+                <strong>{{ focusTopicsText }}</strong>
+              </div>
+              <div>
+                <span>建议时长</span>
+                <strong>{{ recommendedMinutesText }}</strong>
+              </div>
+              <div>
+                <span>辅导方式</span>
+                <strong>{{ tutoringStyleText }}</strong>
+              </div>
+            </div>
+          </article>
+
+          <article class="plan-panel">
+            <header class="section-heading">
+              <div>
+                <span class="section-kicker">行动计划</span>
+                <h3>下一阶段学习任务</h3>
+              </div>
+              <Compass :size="20" />
+            </header>
+
+            <div v-if="actionPlan.length" class="plan-list">
+              <div
+                v-for="(action, index) in actionPlan"
+                :key="`${action.topic}-${index}`"
+                class="plan-item"
+              >
+                <span class="plan-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                <div>
+                  <strong>{{ action.topic || `学习任务 ${index + 1}` }}</strong>
+                  <p>{{ action.description }}</p>
                 </div>
               </div>
             </div>
-          </section>
-        </div>
+
+            <p v-else class="plan-empty">当前评估暂未生成具体行动计划。</p>
+          </article>
+        </section>
       </template>
     </template>
 
-    <!-- 历史报告抽屉 -->
     <Teleport to="body">
-      <div v-if="showHistoryDrawer" class="drawer-overlay" @click.self="showHistoryDrawer = false">
-        <div class="drawer-panel">
+      <div
+        v-if="showHistoryDrawer"
+        class="drawer-overlay"
+        @click.self="showHistoryDrawer = false"
+      >
+        <aside class="drawer-panel" aria-label="历史评估报告">
           <header class="drawer-header">
-            <h2>历史报告</h2>
-            <button type="button" class="drawer-close" @click="showHistoryDrawer = false">
-              <X :size="20" />
+            <div>
+              <span>ASSESSMENT HISTORY</span>
+              <h2>历史评估</h2>
+              <p>按生成时间查看过去的学习结论。</p>
+            </div>
+            <button
+              type="button"
+              class="drawer-close"
+              aria-label="关闭历史评估"
+              @click="showHistoryDrawer = false"
+            >
+              <X :size="19" />
             </button>
           </header>
+
           <div class="drawer-body">
-            <div v-if="historyLoading" class="history-loading">加载中...</div>
-            <div v-else class="history-full-list">
+            <div v-if="historyLoading" class="drawer-loading">
+              <div class="loading-spinner small" />
+              <span>正在加载历史报告</span>
+            </div>
+
+            <div v-else-if="historyItems.length" class="history-full-list">
               <button
-                v-for="item in assessmentsHistory"
+                v-for="item in historyItems"
                 :key="item.id"
                 type="button"
-                :class="{ active: activeAssessment?.id === item.id }"
                 class="history-full-item"
-                @click="selectAssessment(item); showHistoryDrawer = false"
+                :class="[
+                  { active: activeAssessment?.id === item.id },
+                  `status-${item.status}`,
+                ]"
+                @click="selectAssessmentFromDrawer(item)"
               >
-                <div class="history-item-header">
-                  <strong>{{ item.range_days }} 天评估</strong>
-                  <span class="history-time">{{ formatDateTime(item.created_at) }}</span>
+                <span class="history-status-dot" />
+
+                <div class="history-item-main">
+                  <div class="history-item-heading">
+                    <strong>学习评估</strong>
+                    <span>{{ statusLabel(item.status) }}</span>
+                  </div>
+                  <time>{{ formatDateTime(item.created_at) }}</time>
                 </div>
-                <span class="history-range">{{ formatDateRange(item.window_start, item.window_end) }}</span>
-                <em>{{ statusLabel(item.status) }}</em>
+
+                <ChevronRight :size="16" />
               </button>
             </div>
-            <div v-if="totalPages > 1" class="pagination">
-              <Button variant="ghost" size="sm" :disabled="currentPage <= 1" @click="changePage(currentPage - 1)">
-                <ChevronLeft :size="14" />
-                上一页
-              </Button>
-              <span>{{ currentPage }} / {{ totalPages }}</span>
-              <Button variant="ghost" size="sm" :disabled="currentPage >= totalPages" @click="changePage(currentPage + 1)">
-                下一页
-                <ChevronRight :size="14" />
-              </Button>
-            </div>
+
+            <div v-else class="drawer-empty">暂无历史评估报告。</div>
           </div>
-        </div>
+
+          <footer v-if="totalPages > 1" class="drawer-pagination">
+            <button
+              type="button"
+              :disabled="currentPage <= 1 || historyLoading"
+              @click="changePage(currentPage - 1)"
+            >
+              <ChevronLeft :size="15" />
+              上一页
+            </button>
+
+            <span>{{ currentPage }} / {{ totalPages }}</span>
+
+            <button
+              type="button"
+              :disabled="currentPage >= totalPages || historyLoading"
+              @click="changePage(currentPage + 1)"
+            >
+              下一页
+              <ChevronRight :size="15" />
+            </button>
+          </footer>
+        </aside>
       </div>
     </Teleport>
-  </div>
+  </main>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { toast } from 'vue-sonner'
 import { useRouter } from 'vue-router'
 import { Button } from '@/components/ui/button'
 import {
+  Activity,
   AlertCircle,
-  Calendar,
+  BarChart3,
+  BookOpen,
+  CalendarDays,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Clock3,
   Compass,
+  FileClock,
   History,
+  Layers3,
+  Lightbulb,
+  MessageCircle,
+  RefreshCw,
   Sparkles,
+  Target,
   X,
 } from 'lucide-vue-next'
 import VChart from 'vue-echarts'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import { LineChart, PieChart } from 'echarts/charts'
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components'
+import { GridComponent, TitleComponent, TooltipComponent } from 'echarts/components'
 import {
   generateAssessment,
   getLatestAssessment,
@@ -331,286 +464,529 @@ import {
   getAssessmentsHistory,
   getAssessmentDashboard,
 } from '@/features/learning-assessment/api/assessment'
-import {
-  getDashboard,
-} from '@/features/evaluation/api/evaluation'
+import { getDashboard } from '@/features/evaluation/api/evaluation'
 import type {
   ActionPlanItem,
   GuidanceStrategy,
   LearningAssessment,
 } from '@/features/learning-assessment/model/assessment'
-import type {
-  DashboardData,
-} from '@/features/evaluation/api/evaluation'
+import type { DashboardData } from '@/features/evaluation/api/evaluation'
 import { normalizeGuidanceStrategy } from '@/features/learning-assessment/model/assessment'
 
-use([CanvasRenderer, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent])
+use([
+  CanvasRenderer,
+  LineChart,
+  PieChart,
+  GridComponent,
+  TitleComponent,
+  TooltipComponent,
+])
 
-const rangeOptions = [3, 7, 14] as const
-const selectedRange = ref<3 | 7 | 14>(7)
-const assessmentsHistory = ref<Omit<LearningAssessment, 'assessment'>[]>([])
+type AssessmentSummary = Omit<LearningAssessment, 'assessment'>
+
+interface ModuleRankItem {
+  name: string
+  minutes: number
+  percent: number
+  color: string
+}
+
+const recentAssessments = ref<AssessmentSummary[]>([])
+const historyItems = ref<AssessmentSummary[]>([])
 const activeAssessment = ref<LearningAssessment | null>(null)
 const dashboardData = ref<DashboardData | null>(null)
 const guidanceStrategy = ref<GuidanceStrategy | null>(null)
 const generating = ref(false)
 const historyLoading = ref(false)
 const initialLoading = ref(true)
+const viewingHistorical = ref(false)
 const currentPage = ref(1)
 const totalAssessments = ref(0)
 const totalPages = ref(1)
 const currentStepIdx = ref(0)
-const pageSize = 10
 const showHistoryDrawer = ref(false)
-const generationSteps = ['聚合学习事实', '校验证据质量', '生成评估报告', '更新辅导策略']
 
-// 历史评估联动状态
-const viewingHistorical = ref(false)
-const historicalWindow = ref<{ start: string; end: string }>({ start: '', end: '' })
+const historyPageSize = 8
+const generationSteps = [
+  '聚合学习事实',
+  '校验证据质量',
+  '生成评估结论',
+  '更新辅导策略',
+]
 
-// === 路由导航 ===
+const PIE_COLORS = [
+  '#287f78',
+  '#5573c8',
+  '#d58a43',
+  '#7c6bc3',
+  '#4e9a74',
+  '#c65f70',
+]
+
 const router = useRouter()
-function navigateTo(path: string) {
+
+function navigateTo(path: string): void {
   void router.push(path)
 }
 
-const actionPlan = computed<ActionPlanItem[]>(() => guidanceStrategy.value?.action_plan ?? [])
+const actionPlan = computed<ActionPlanItem[]>(() => {
+  return guidanceStrategy.value?.action_plan ?? []
+})
 
-const latestAssessmentTime = computed(() => {
-  const latest = assessmentsHistory.value[0]
-  return latest ? formatDateTime(latest.created_at) : ''
+const hasLearningEvidence = computed(() => {
+  return (dashboardData.value?.evaluation_summary?.event_count ?? 0) > 0
+})
+
+const eventCount = computed(() => {
+  return dashboardData.value?.evaluation_summary?.event_count ?? 0
+})
+
+const dailyBreakdown = computed(() => {
+  return dashboardData.value?.time_stats?.daily_breakdown ?? []
+})
+
+const moduleBreakdown = computed(() => {
+  return dashboardData.value?.module_time_breakdown ?? []
+})
+
+const totalStudyMinutes = computed(() => {
+  const totalSeconds = dailyBreakdown.value.reduce(
+    (sum, item) => sum + Number(item.seconds || 0),
+    0,
+  )
+  return Math.round(totalSeconds / 60)
+})
+
+const activeStudyDays = computed(() => {
+  return dailyBreakdown.value.filter(item => Number(item.seconds || 0) > 0).length
+})
+
+const averageDailyMinutes = computed(() => {
+  if (activeStudyDays.value === 0) return 0
+  return Math.round(totalStudyMinutes.value / activeStudyDays.value)
+})
+
+const topModuleName = computed(() => {
+  const top = [...moduleBreakdown.value]
+    .filter(item => Number(item.seconds || 0) > 0)
+    .sort((a, b) => Number(b.seconds || 0) - Number(a.seconds || 0))[0]
+  return top?.module || '暂无'
+})
+
+const moduleRanking = computed<ModuleRankItem[]>(() => {
+  const positiveItems = [...moduleBreakdown.value]
+    .filter(item => Number(item.seconds || 0) > 0)
+    .sort((a, b) => Number(b.seconds || 0) - Number(a.seconds || 0))
+
+  const totalSeconds = positiveItems.reduce(
+    (sum, item) => sum + Number(item.seconds || 0),
+    0,
+  )
+
+  return positiveItems.slice(0, 5).map((item, index) => ({
+    name: item.module,
+    minutes: Math.round(Number(item.seconds || 0) / 60),
+    percent:
+      totalSeconds > 0
+        ? Math.round((Number(item.seconds || 0) / totalSeconds) * 100)
+        : 0,
+    color: PIE_COLORS[index % PIE_COLORS.length],
+  }))
+})
+
+const currentReportTitle = computed(() => {
+  if (!activeAssessment.value) {
+    return '学习评估'
+  }
+
+  return viewingHistorical.value ? '历史评估' : '最新评估'
+})
+
+const displayDateRange = computed(() => {
+  const windowData = dashboardData.value?.window
+  if (!windowData) return '7 天窗口'
+  return formatDateRange(windowData.start, windowData.end)
+})
+
+const displayConclusion = computed(() => {
+  return (
+    activeAssessment.value?.assessment ||
+    guidanceStrategy.value?.conclusion ||
+    defaultConclusion.value
+  )
 })
 
 const defaultConclusion = computed(() => {
-  if (dashboardData.value?.evaluation_summary?.event_count === 0) {
-    return '当前窗口暂无学习活动记录，建议先完成一次资源学习或练习。'
+  if (!hasLearningEvidence.value) {
+    return '当前时间窗口暂无学习活动记录，建议先完成一次资源学习、辅导对话或练习。'
   }
-  return '学习证据已形成，系统已记录到学习时长、模块使用和练习表现。'
+
+  return `当前窗口共记录 ${eventCount.value} 条学习事件，系统已经形成基础学习证据，可结合下方趋势和模块投入安排下一阶段学习。`
 })
 
-// 饼图颜色 (以石英紫为主的学术感冷色系搭配)
-const PIE_COLORS = ['#8B5CF6', '#6366f1', '#10B981', '#F59E0B', '#3B82F6', '#EC4899']
+const strategyReasonText = computed(() => {
+  return (
+    guidanceStrategy.value?.reason ||
+    '策略依据来自当前时间窗口内的学习时长、模块投入和练习行为。'
+  )
+})
+
+const focusTopicsText = computed(() => {
+  const topics = guidanceStrategy.value?.focus_topics ?? []
+  return topics.length ? topics.join('、') : '保持当前重点课程'
+})
+
+const recommendedMinutesText = computed(() => {
+  const minutes = guidanceStrategy.value?.recommended_session_minutes
+  return minutes ? `${minutes} 分钟 / 次` : '30 分钟 / 次'
+})
+
+const tutoringStyleText = computed(() => {
+  return guidanceStrategy.value?.tutoring_style || '讲解与练习结合'
+})
+
+const trendInsight = computed(() => {
+  const validDays = dailyBreakdown.value.filter(
+    item => Number(item.seconds || 0) > 0,
+  )
+
+  if (!validDays.length) {
+    return '当前周期暂无学习时长，完成学习后这里会展示趋势变化。'
+  }
+
+  const peak = [...validDays].sort(
+    (a, b) => Number(b.seconds || 0) - Number(a.seconds || 0),
+  )[0]
+
+  return `本周期累计 ${totalStudyMinutes.value} 分钟，${formatShortDate(peak.date)} 达到峰值 ${Math.round(Number(peak.seconds || 0) / 60)} 分钟。`
+})
 
 const lineOption = computed(() => {
-  const daily = dashboardData.value?.time_stats.daily_breakdown ?? []
+  const daily = dailyBreakdown.value
+
   return {
-    grid: { top: 24, right: 20, bottom: 32, left: 44 },
+    animationDuration: 500,
+    grid: { top: 32, right: 18, bottom: 30, left: 42 },
     tooltip: {
       trigger: 'axis',
-      backgroundColor: 'rgba(255, 255, 255, 0.96)',
-      borderColor: '#e5e7eb',
+      backgroundColor: 'rgba(255,255,255,0.98)',
+      borderColor: '#dce3ea',
       borderWidth: 1,
-      textStyle: { color: '#1f2937', fontSize: 13 },
-      formatter: '{b}<br/>学习时长: {c} 分钟',
+      padding: [9, 11],
+      textStyle: { color: '#253449', fontSize: 12 },
+      formatter: '{b}<br/>学习时长：{c} 分钟',
     },
     xAxis: {
       type: 'category',
+      boundaryGap: false,
       data: daily.map(item => formatShortDate(item.date)),
       axisTick: { show: false },
-      axisLine: { lineStyle: { color: '#e5e7eb' } },
-      axisLabel: { color: '#6b7280', fontSize: 12 },
+      axisLine: { lineStyle: { color: '#dfe5ec' } },
+      axisLabel: { color: '#7d8999', fontSize: 11 },
     },
     yAxis: {
       type: 'value',
-      splitLine: { lineStyle: { color: '#f3f4f6', type: 'dashed' } },
-      axisLabel: { color: '#6b7280', fontSize: 12 },
+      minInterval: 1,
+      axisTick: { show: false },
+      axisLine: { show: false },
+      axisLabel: { color: '#8a95a4', fontSize: 11 },
+      splitLine: { lineStyle: { color: '#edf1f5', type: 'dashed' } },
     },
-    series: [{
-      data: daily.map(item => Number((item.seconds / 60).toFixed(1))),
-      type: 'line',
-      smooth: true,
-      symbolSize: 6,
-      lineStyle: { color: '#46B8B4', width: 2.5 },
-      itemStyle: { color: '#46B8B4' },
-      areaStyle: { color: 'rgba(70, 184, 180, 0.1)' },
-    }],
+    series: [
+      {
+        data: daily.map(item => Number((Number(item.seconds || 0) / 60).toFixed(1))),
+        type: 'line',
+        smooth: 0.35,
+        symbol: 'circle',
+        symbolSize: 7,
+        showSymbol: daily.length <= 14,
+        lineStyle: { color: '#287f78', width: 3 },
+        itemStyle: {
+          color: '#ffffff',
+          borderColor: '#287f78',
+          borderWidth: 2,
+        },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [
+              { offset: 0, color: 'rgba(40,127,120,0.22)' },
+              { offset: 1, color: 'rgba(40,127,120,0.01)' },
+            ],
+          },
+        },
+      },
+    ],
   }
 })
 
 const pieOption = computed(() => {
-  const breakdown = dashboardData.value?.module_time_breakdown ?? []
-  let data: any[] = breakdown
-    .filter(item => item.seconds > 0)
-    .map(item => ({
-      name: item.module,
-      value: Number((item.seconds / 60).toFixed(1)),
-    }))
-  
-  if (data.length === 0) {
-    data = [{
-      name: '暂无数据',
-      value: 1,
-      itemStyle: { color: '#f3f4f6' }
-    }]
-  }
+  const data = moduleRanking.value.length
+    ? moduleRanking.value.map(item => ({
+        name: item.name,
+        value: item.minutes,
+        itemStyle: { color: item.color },
+      }))
+    : [
+        {
+          name: '暂无数据',
+          value: 1,
+          itemStyle: { color: '#edf1f4' },
+        },
+      ]
 
   return {
+    animationDuration: 500,
     tooltip: {
       trigger: 'item',
-      backgroundColor: 'rgba(255, 255, 255, 0.96)',
-      borderColor: '#e5e7eb',
+      backgroundColor: 'rgba(255,255,255,0.98)',
+      borderColor: '#dce3ea',
       borderWidth: 1,
-      textStyle: { color: '#1f2937', fontSize: 13 },
-      formatter: '{b}<br/>学习时长: {c} 分钟 ({d}%)',
+      textStyle: { color: '#253449', fontSize: 12 },
+      formatter: moduleRanking.value.length
+        ? '{b}<br/>学习时长：{c} 分钟（{d}%）'
+        : '暂无模块学习数据',
     },
-    legend: {
-      orient: 'vertical',
-      right: '12%',
-      top: 'center',
-      textStyle: { color: '#6b7280', fontSize: 12 },
-      itemWidth: 10,
-      itemHeight: 10,
-      itemGap: 8,
-    },
-    color: PIE_COLORS,
-    series: [{
-      type: 'pie',
-      radius: ['40%', '70%'],
-      center: ['40%', '50%'],
-      avoidLabelOverlap: false,
-      label: { show: false },
-      emphasis: {
-        label: { show: true, fontSize: 14, fontWeight: 'bold' },
+    title: {
+      text: `${totalStudyMinutes.value}`,
+      subtext: '总分钟',
+      left: 'center',
+      top: '39%',
+      textAlign: 'center',
+      textStyle: {
+        color: '#223148',
+        fontSize: 23,
+        fontWeight: 750,
       },
-      labelLine: { show: false },
-      data,
-    }],
-  }
-})
-
-// 切换时间范围时重新加载看板数据
-watch(selectedRange, () => {
-  if (!initialLoading.value && !viewingHistorical.value) {
-    void loadDashboard()
+      subtextStyle: {
+        color: '#8a95a4',
+        fontSize: 10,
+        lineHeight: 18,
+      },
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['62%', '84%'],
+        center: ['50%', '50%'],
+        minAngle: 4,
+        avoidLabelOverlap: true,
+        label: { show: false },
+        labelLine: { show: false },
+        itemStyle: {
+          borderColor: '#ffffff',
+          borderWidth: 3,
+        },
+        emphasis: {
+          scaleSize: 5,
+        },
+        data,
+      },
+    ],
   }
 })
 
 async function loadDashboard(): Promise<void> {
   try {
-    const response = await getDashboard(selectedRange.value)
+    const response = await getDashboard(7)
     dashboardData.value = response.data.data
-    if (dashboardData.value?.guidance_strategy) {
-      guidanceStrategy.value = normalizeGuidanceStrategy(dashboardData.value.guidance_strategy as Partial<GuidanceStrategy>)
-    }
+    syncGuidanceStrategy()
   } catch (error) {
-    console.error('加载看板数据失败', error)
+    console.error('加载学习评估看板失败', error)
+    toast.error('学习评估数据加载失败')
   }
 }
 
-async function loadAssessmentsHistory(page = 1): Promise<void> {
-  historyLoading.value = true
+function syncGuidanceStrategy(): void {
+  const rawStrategy = dashboardData.value?.guidance_strategy
+  guidanceStrategy.value = rawStrategy
+    ? normalizeGuidanceStrategy(rawStrategy as Partial<GuidanceStrategy>)
+    : null
+}
+
+async function loadRecentAssessments(): Promise<void> {
   try {
-    const response = await getAssessmentsHistory(page, pageSize)
-    assessmentsHistory.value = response.data.data.items
+    const response = await getAssessmentsHistory(1, 5)
+    recentAssessments.value = response.data.data.items
     totalAssessments.value = response.data.data.total
-    totalPages.value = Math.max(1, Math.ceil(response.data.data.total / pageSize))
+  } catch (error) {
+    console.error('加载最近评估失败', error)
+  }
+}
+
+async function loadHistoryPage(page = 1): Promise<void> {
+  historyLoading.value = true
+
+  try {
+    const response = await getAssessmentsHistory(page, historyPageSize)
+    historyItems.value = response.data.data.items
+    totalAssessments.value = response.data.data.total
+    totalPages.value = Math.max(
+      1,
+      Math.ceil(response.data.data.total / historyPageSize),
+    )
     currentPage.value = page
   } catch (error) {
     console.error('加载历史评估失败', error)
-    toast.error('历史记录加载失败')
+    toast.error('历史评估加载失败')
   } finally {
     historyLoading.value = false
   }
 }
 
-async function selectAssessment(item: Omit<LearningAssessment, 'assessment'>): Promise<void> {
+async function openHistoryDrawer(): Promise<void> {
+  showHistoryDrawer.value = true
+  await loadHistoryPage(1)
+}
+
+async function openRecentAssessment(
+  item: AssessmentSummary,
+  index: number,
+): Promise<void> {
+  if (index === 0) {
+    await returnToLatest()
+    return
+  }
+
+  await selectAssessment(item)
+}
+
+async function selectAssessment(item: AssessmentSummary): Promise<void> {
   try {
-    // 加载评估详情
-    const detailResponse = await getAssessmentDetail(item.id)
+    const [detailResponse, dashboardResponse] = await Promise.all([
+      getAssessmentDetail(item.id),
+      getAssessmentDashboard(item.id),
+    ])
+
     activeAssessment.value = detailResponse.data.data
-
-    // 加载该评估时间窗口的看板数据
-    const dashboardResponse = await getAssessmentDashboard(item.id)
     dashboardData.value = dashboardResponse.data.data
-    if (dashboardData.value?.guidance_strategy) {
-      guidanceStrategy.value = normalizeGuidanceStrategy(dashboardData.value.guidance_strategy as Partial<GuidanceStrategy>)
-    }
-
-    // 标记正在查看历史评估
     viewingHistorical.value = true
-    historicalWindow.value = { start: item.window_start, end: item.window_end }
+    syncGuidanceStrategy()
   } catch (error) {
     console.error('加载评估详情失败', error)
     toast.error('评估详情加载失败')
   }
 }
 
+async function selectAssessmentFromDrawer(item: AssessmentSummary): Promise<void> {
+  await selectAssessment(item)
+  showHistoryDrawer.value = false
+}
+
 async function returnToLatest(): Promise<void> {
   viewingHistorical.value = false
-  activeAssessment.value = null
-  await loadDashboard()
 
-  // 重新获取最新评估
   try {
     const response = await getLatestAssessment()
-    if (response.data.data) {
-      activeAssessment.value = response.data.data
-    }
+    activeAssessment.value = response.data.data ?? null
+
+    await loadDashboard()
   } catch (error) {
     console.error('获取最新评估失败', error)
+    toast.error('最新评估加载失败')
   }
 }
 
 async function triggerAssessmentGeneration(): Promise<void> {
   generating.value = true
   currentStepIdx.value = 0
-  const timer = window.setInterval(() => {
-    currentStepIdx.value = Math.min(currentStepIdx.value + 1, generationSteps.length - 1)
-  }, 1000)
+
+  const progressTimer = window.setInterval(() => {
+    currentStepIdx.value = Math.min(
+      currentStepIdx.value + 1,
+      generationSteps.length - 1,
+    )
+  }, 1100)
 
   try {
-    // POST 立即返回 generating 状态，后台异步执行 LLM 生成
-    const response = await generateAssessment(selectedRange.value)
+    const response = await generateAssessment()
     activeAssessment.value = response.data.data
     viewingHistorical.value = false
 
-    // 轮询直到生成完成
-    const maxPolls = 60 // 最多轮询 60 次（约 60 秒）
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      try {
-        const latestResp = await getLatestAssessment()
-        const latest = latestResp.data.data
-        if (latest && latest.status === 'ready') {
-          activeAssessment.value = latest
-          toast.success('学习效果评估已生成')
-          await Promise.all([
-            loadAssessmentsHistory(1),
-            loadDashboard(),
-          ])
-          return
-        }
-        if (latest && latest.status === 'failed') {
-          activeAssessment.value = latest
-          toast.error('评估生成失败')
-          return
-        }
-      } catch {
-        // 轮询失败继续
-      }
+    const result = await waitForAssessmentResult()
+
+    if (result === 'ready') {
+      toast.success('学习评估已生成')
+      await Promise.all([loadRecentAssessments(), loadDashboard()])
+    } else if (result === 'failed') {
+      toast.error('评估生成失败')
+    } else {
+      toast.warning('评估生成时间较长，请稍后刷新查看')
     }
-    toast.warning('评估生成超时，请稍后刷新查看')
   } catch (error: any) {
     if (error?.response?.status === 409) {
-      toast.warning('已有评估生成中')
+      toast.warning('已有评估任务正在生成')
     } else {
       console.error('生成评估失败', error)
       toast.error('生成评估失败')
     }
   } finally {
-    window.clearInterval(timer)
+    window.clearInterval(progressTimer)
     generating.value = false
     currentStepIdx.value = 0
   }
 }
 
+async function waitForAssessmentResult(): Promise<'ready' | 'failed' | 'timeout'> {
+  const maxPolls = 60
+
+  for (let index = 0; index < maxPolls; index += 1) {
+    await delay(1000)
+
+    try {
+      const response = await getLatestAssessment()
+      const latest = response.data.data
+
+      if (!latest) continue
+
+      activeAssessment.value = latest
+
+      if (latest.status === 'ready') return 'ready'
+      if (latest.status === 'failed') return 'failed'
+    } catch {
+      // 单次轮询失败时继续等待。
+    }
+  }
+
+  return 'timeout'
+}
+
+async function pollAssessmentStatus(): Promise<void> {
+  generating.value = true
+  currentStepIdx.value = 1
+
+  const result = await waitForAssessmentResult()
+
+  generating.value = false
+  currentStepIdx.value = 0
+
+  if (result === 'ready') {
+    toast.success('学习评估已生成')
+    await Promise.all([loadRecentAssessments(), loadDashboard()])
+  } else if (result === 'failed') {
+    toast.error('评估生成失败')
+  } else {
+    toast.warning('评估生成时间较长，请稍后刷新查看')
+  }
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise(resolve => window.setTimeout(resolve, milliseconds))
+}
+
 function changePage(page: number): void {
-  void loadAssessmentsHistory(page)
+  if (page < 1 || page > totalPages.value || page === currentPage.value) return
+  void loadHistoryPage(page)
 }
 
 function statusLabel(status: LearningAssessment['status']): string {
-  if (status === 'ready') return '已就绪'
+  if (status === 'ready') return '已完成'
   if (status === 'generating') return '生成中'
-  return '失败'
+  return '生成失败'
 }
 
 function formatShortDate(value: string): string {
@@ -618,43 +994,55 @@ function formatShortDate(value: string): string {
   return parts.length === 3 ? `${parts[1]}-${parts[2]}` : value
 }
 
+function formatCompactDate(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+  return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
 function formatDateRange(start: string, end: string): string {
-  if (!start || !end) return ''
+  if (!start || !end) return '时间范围未知'
+
   const startDate = new Date(start)
   const endDate = new Date(end)
+
+  if (
+    Number.isNaN(startDate.getTime()) ||
+    Number.isNaN(endDate.getTime())
+  ) {
+    return '时间范围未知'
+  }
+
   return `${startDate.getMonth() + 1}月${startDate.getDate()}日 - ${endDate.getMonth() + 1}月${endDate.getDate()}日`
 }
 
 function formatDateTime(value: string): string {
-  if (!value) return ''
+  if (!value) return '时间未知'
+
   const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '时间未知'
+
   const month = date.getMonth() + 1
   const day = date.getDate()
   const hours = String(date.getHours()).padStart(2, '0')
   const minutes = String(date.getMinutes()).padStart(2, '0')
+
   return `${month}月${day}日 ${hours}:${minutes}`
 }
 
 onMounted(async () => {
   initialLoading.value = true
-  await Promise.all([
-    loadAssessmentsHistory(1),
-    loadDashboard(),
-  ])
+
+  await Promise.all([loadRecentAssessments(), loadDashboard()])
 
   try {
     const response = await getLatestAssessment()
-    if (response.data.data) {
-      activeAssessment.value = response.data.data
-      // 如果评估正在生成中，自动轮询
-      if (activeAssessment.value.status === 'generating') {
-        generating.value = true
-        currentStepIdx.value = 1
-        pollAssessmentStatus()
-      }
-    } else if (assessmentsHistory.value[0]?.id !== undefined) {
-      const item = assessmentsHistory.value[0]
-      await selectAssessment(item)
+    activeAssessment.value = response.data.data ?? null
+
+    if (activeAssessment.value?.status === 'generating') {
+      void pollAssessmentStatus()
+    } else if (!activeAssessment.value && recentAssessments.value[0]) {
+      await selectAssessment(recentAssessments.value[0])
     }
   } catch (error) {
     console.error('获取最新评估失败', error)
@@ -662,681 +1050,802 @@ onMounted(async () => {
     initialLoading.value = false
   }
 })
-
-/** 轮询评估生成状态，直到 ready/failed 或超时 */
-async function pollAssessmentStatus(): Promise<void> {
-  const maxPolls = 60
-  for (let i = 0; i < maxPolls; i++) {
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    try {
-      const resp = await getLatestAssessment()
-      const latest = resp.data.data
-      if (latest && latest.status === 'ready') {
-        activeAssessment.value = latest
-        generating.value = false
-        currentStepIdx.value = 0
-        toast.success('学习效果评估已生成')
-        await Promise.all([loadAssessmentsHistory(1), loadDashboard()])
-        return
-      }
-      if (latest && latest.status === 'failed') {
-        activeAssessment.value = latest
-        generating.value = false
-        currentStepIdx.value = 0
-        toast.error('评估生成失败')
-        return
-      }
-    } catch {
-      // 轮询失败继续
-    }
-  }
-  generating.value = false
-  currentStepIdx.value = 0
-  toast.warning('评估生成超时，请稍后刷新查看')
-}
 </script>
 
 <style scoped>
+.assessment-page,
+.assessment-page * {
+  box-sizing: border-box;
+}
+
 .assessment-page {
-  max-width: var(--content-max-width);
+  width: min(1180px, 100%);
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
+  padding: 28px 28px 64px;
+  color: var(--color-text-strong, #182235);
 }
 
-/* Horizontal Timeline Navigation Track */
-.timeline-nav-section {
-  margin-top: var(--space-2);
-}
-
-.timeline-nav-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  box-shadow: var(--shadow-sm);
-}
-
-.timeline-nav-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--color-border-light);
-  padding-bottom: var(--space-3);
-}
-
-.nav-title-wrapper {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--color-primary);
-}
-
-.nav-title-wrapper h3 {
-  font-size: var(--text-base);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
+h1,
+h2,
+h3,
+p {
   margin: 0;
 }
 
-.nav-icon {
-  color: var(--color-primary);
+button {
+  font: inherit;
 }
 
-.timeline-count {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: var(--weight-bold);
-}
-
-.timeline-track-container {
-  overflow-x: auto;
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* IE 10+ */
-  display: flex;
-  width: 100%;
-}
-
-.timeline-track-container::-webkit-scrollbar {
-  display: none; /* Chrome, Safari, Opera */
-}
-
-.timeline-track {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-1) 0;
-  min-width: max-content;
-}
-
-.timeline-btn {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  padding: var(--space-2.5) var(--space-4);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border-light);
-  background: var(--color-bg);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  text-align: left;
-  min-width: 10rem;
-  gap: 2px;
-}
-
-.timeline-btn:hover {
-  border-color: var(--color-primary);
-  background: var(--color-surface-hover);
-  transform: translateY(-1px);
-}
-
-.timeline-btn.active {
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary);
-  box-shadow: var(--shadow-sm);
-}
-
-.timeline-btn strong {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-}
-
-.timeline-btn .time {
-  font-size: 10px;
-  color: var(--color-text-muted);
-}
-
-.latest-btn {
-  position: relative;
-  border-color: var(--color-primary-border);
-}
-
-.latest-btn .badge {
-  position: absolute;
-  top: -6px;
-  left: 12px;
-  background: var(--color-primary);
-  color: white;
-  font-size: 9px;
-  font-weight: 700;
-  padding: 0 6px;
-  border-radius: var(--radius-pill);
-  line-height: 1.4;
-  letter-spacing: 0.02em;
-}
-
-.timeline-separator {
-  width: 1px;
-  height: 2rem;
-  background: var(--color-border-light);
-  align-self: center;
-  margin: 0 4px;
-}
-
-.timeline-more-action {
-  display: flex;
-  justify-content: flex-end;
-  border-top: 1px solid var(--color-border-light);
-  padding-top: var(--space-3);
-}
-
-.timeline-more-action .more-btn {
-  color: var(--color-primary) !important;
-  font-weight: var(--weight-bold);
-}
-
-.timeline-more-action .more-btn:hover {
-  color: var(--color-primary-dark) !important;
-}
-
-/* Single column layout container */
-.report-flow-container {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-  width: 100%;
-}
-
-.report-section {
-  width: 100%;
-}
-
-/* Charts top layout - 2 columns on desktop, stacked on mobile */
-.charts-section-layout {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: var(--space-6);
-}
-
-@media (max-width: 900px) {
-  .charts-section-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Action plan list wide styling */
-.action-section-wide {
-  background: var(--color-surface);
-}
-
-.action-list-wide {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
-  width: 100%;
-}
-
-@media (max-width: 1024px) {
-  .action-list-wide {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .action-list-wide {
-    grid-template-columns: 1fr;
-  }
-}
-
-.action-item-wide {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  transition: all var(--transition-fast);
-}
-
-.action-item-wide:hover {
-  border-color: var(--color-primary-border);
-  background: var(--color-surface-hover);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
-}
-
-.action-index-badge {
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  flex-shrink: 0;
-  margin-top: 1px;
-}
-
-.action-content-wide {
-  min-width: 0;
-  flex: 1;
-}
-
-.action-desc-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-h1, h2, h3, h4, p {
-  margin: 0;
-}
-
-/* UI Card (Clean, minimal card style) */
-.ui-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-  transition: var(--transition-base);
-}
-
-.ui-card:hover {
-  border-color: var(--color-primary-border);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-}
-
-/* Header */
 .page-header {
   display: flex;
+  align-items: flex-end;
   justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--space-4);
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--color-border-light);
+  gap: 28px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--color-border-light, #e7ebf0);
 }
 
-.header-left h1 {
-  font-size: 1.5rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
-  letter-spacing: -0.02em;
+.header-copy {
+  min-width: 0;
 }
 
-.header-subtitle {
-  margin-top: var(--space-1);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
+.eyebrow,
+.section-kicker {
+  display: block;
+  color: var(--color-primary, #287f78);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  line-height: 1.4;
+}
+
+.header-copy h1 {
+  margin-top: 5px;
+  color: var(--color-text-strong, #182235);
+  font-size: 28px;
+  font-weight: 850;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+}
+
+.header-copy p {
+  margin-top: 7px;
+  color: var(--color-text-secondary, #6f7b8d);
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .header-actions {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: var(--space-3);
+  gap: 10px;
 }
 
-.range-tabs {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
+.generate-button {
+  min-height: 38px;
+  gap: 7px;
+  border: 0 !important;
+  border-radius: 7px !important;
+  color: #ffffff !important;
+  background: var(--color-primary, #287f78) !important;
+  font-size: 12px;
+  font-weight: 800 !important;
+  box-shadow: none !important;
 }
 
-.range-tabs button {
-  min-width: 3.5rem;
-  min-height: 2rem;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-bold);
-  cursor: pointer;
-  transition: var(--transition-fast);
+.generate-button:hover {
+  background: #206e68 !important;
 }
 
-.range-tabs button:hover {
-  color: var(--color-text-strong);
-  background: var(--color-bg);
+.generate-button:disabled {
+  color: #9aa4af !important;
+  background: #e5e9ed !important;
 }
 
-.range-tabs button.active {
-  color: var(--color-primary);
-  background: var(--color-primary-soft);
-  box-shadow: var(--shadow-xs);
+.generate-button.large {
+  min-height: 42px;
+  padding: 0 18px;
+  margin-top: 22px;
 }
 
-.generate-btn {
-  min-height: 2.25rem;
-  gap: var(--space-2);
-  background: var(--color-primary) !important;
-  color: white !important;
-  border: none !important;
-  transition: var(--btn-transition) !important;
-  font-weight: var(--weight-bold) !important;
-  border-radius: var(--radius-sm) !important;
-  cursor: pointer;
-}
-
-.generate-btn:hover {
-  background: var(--color-text-strong) !important;
-  transform: translateY(-1px);
-}
-
-.generate-btn:active {
-  transform: translateY(0.5px);
-}
-
-.generate-btn:disabled {
-  background: var(--color-border) !important;
-  color: var(--color-text-muted) !important;
-  cursor: not-allowed;
-  transform: none !important;
-}
-
-/* Generation Progress with Micro-animation */
 .generation-progress {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: var(--space-3);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
 }
 
-.generation-progress span {
-  min-height: 2.5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  transition: var(--transition-base);
+.progress-step {
   position: relative;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
   overflow: hidden;
+  border: 1px solid var(--color-border, #dce3ea);
+  border-radius: 8px;
+  color: var(--color-text-muted, #8994a3);
+  background: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
 }
 
-.generation-progress span.done {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-color: var(--color-primary-soft);
+.step-index {
+  display: grid;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  place-items: center;
+  border-radius: 50%;
+  color: #758194;
+  background: #f0f3f6;
+  font-size: 10px;
 }
 
-.generation-progress span.current {
-  background: var(--color-surface);
-  color: var(--color-primary);
-  border-color: var(--color-primary);
-  box-shadow: 0 0 8px rgba(70, 184, 180, 0.015);
+.progress-step.done {
+  border-color: #cce3de;
+  color: #286f68;
+  background: #f4faf8;
 }
 
-.generation-progress span.current::after {
-  content: '';
+.progress-step.done .step-index,
+.progress-step.current .step-index {
+  color: #ffffff;
+  background: var(--color-primary, #287f78);
+}
+
+.progress-step.current {
+  border-color: var(--color-primary, #287f78);
+  color: var(--color-primary, #287f78);
+}
+
+.progress-step.current::after {
   position: absolute;
+  right: 0;
   bottom: 0;
   left: 0;
   height: 2px;
-  width: 100%;
-  background: var(--color-primary);
-  animation: progress-slide 1.5s infinite linear;
+  background: var(--color-primary, #287f78);
+  content: '';
+  animation: progress-move 1.4s ease-in-out infinite;
+  transform-origin: left;
 }
 
-@keyframes progress-slide {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-/* Loading & Empty States */
-.loading-state,
-.empty-state,
-.error-state {
-  min-height: 16rem;
+.state-panel {
   display: flex;
+  min-height: 360px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-3);
+  gap: 10px;
+  margin-top: 24px;
+  border: 1px solid var(--color-border, #dce3ea);
+  border-radius: 10px;
+  background: #ffffff;
   text-align: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+}
+
+.state-panel h2 {
+  color: var(--color-text-strong, #182235);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.state-panel p {
+  max-width: 460px;
+  color: var(--color-text-secondary, #6f7b8d);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.error-panel {
+  color: #b64d5e;
+  border-color: #edcbd1;
+  background: #fffafb;
 }
 
 .loading-spinner {
-  width: 32px;
-  height: 32px;
-  border: 2px solid var(--color-border);
-  border-top-color: var(--color-primary);
+  width: 30px;
+  height: 30px;
+  border: 2px solid #e2e7ec;
+  border-top-color: var(--color-primary, #287f78);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+.loading-spinner.small {
+  width: 22px;
+  height: 22px;
 }
 
-.empty-state .empty-icon {
-  color: var(--color-text-faint);
-}
-
-.empty-state h2,
-.error-state h2 {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
-  color: var(--color-text-strong);
-}
-
-.empty-state p,
-.loading-state p {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-}
-
-.error-state {
-  color: var(--color-danger);
-  border-color: var(--color-danger);
-  background: var(--color-danger-soft);
-}
-
-.error-state h2 {
-  color: var(--color-danger);
-}
-
-/* Historical Banner */
-.historical-banner {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--radius-md);
-  background: var(--color-primary-soft);
-  border: 1px solid var(--color-border);
-  font-size: var(--text-sm);
-  color: var(--color-primary);
-  box-shadow: var(--shadow-xs);
-}
-
-/* Conclusion Section */
-.conclusion-section {
-  margin-top: 0;
-}
-
-.conclusion-editorial {
-  padding: var(--space-8) var(--space-8);
-  border: none;
-  background: linear-gradient(135deg, rgba(70, 184, 180, 0.05) 0%, rgba(70, 184, 180, 0.01) 100%);
-  box-shadow: none;
-}
-
-.conclusion-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.conclusion-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-  color: var(--color-primary);
-}
-
-.conclusion-editorial .conclusion-header h2 {
-  font-size: 1.5rem;
-  font-weight: var(--weight-extrabold);
-  color: var(--color-primary-dark);
-  letter-spacing: -0.02em;
-}
-
-.conclusion-editorial .conclusion-text {
-  font-size: 1.125rem;
-  line-height: 1.6;
-  font-weight: 500;
-  color: var(--color-text-strong);
-  margin-top: var(--space-2);
-}
-
-.window-badge {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-2.5);
-  border-radius: var(--radius-pill);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  font-size: var(--text-xs);
-  color: var(--color-text-secondary);
-  font-weight: var(--weight-bold);
-}
-
-.conclusion-text {
-  font-size: var(--text-base);
-  color: var(--color-text-strong);
-  line-height: var(--leading-relaxed);
-  margin-bottom: var(--space-5);
-}
-
-.strategy-highlights {
+.empty-guide,
+.first-report-guide {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-4);
+  margin-top: 24px;
+  border: 1px solid var(--color-border, #dce3ea);
+  border-radius: 10px;
+  background: #ffffff;
 }
 
-.highlight-item {
-  padding: var(--space-4);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  transition: var(--transition-fast);
+.empty-guide {
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 24px;
+  padding: 34px;
 }
 
-.highlight-item:hover {
-  border-color: var(--color-primary-border);
-  transform: translateY(-1px);
+.empty-visual {
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 1px solid #cde2de;
+  border-radius: 18px;
+  color: var(--color-primary, #287f78);
+  background: #f1f8f7;
 }
 
-.highlight-label {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: var(--weight-bold);
+.empty-copy h2,
+.first-report-copy h2 {
+  margin-top: 6px;
+  color: var(--color-text-strong, #182235);
+  font-size: 22px;
+  font-weight: 850;
+  letter-spacing: -0.025em;
 }
 
-.highlight-value {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-  line-height: 1.35;
-  font-weight: var(--weight-semibold);
+.empty-copy p,
+.first-report-copy p {
+  max-width: 650px;
+  margin-top: 10px;
+  color: var(--color-text-secondary, #6f7b8d);
+  font-size: 13px;
+  line-height: 1.75;
 }
 
-.strategy-reason {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border-light);
-  font-size: var(--text-sm);
-  color: var(--color-text-secondary);
-  line-height: var(--leading-relaxed);
+.guide-actions {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 4px;
 }
 
-.reason-label {
-  display: inline-block;
-  margin-right: var(--space-1.5);
-  padding: 1px var(--space-1.5);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: var(--weight-bold);
-  vertical-align: middle;
-}
-
-/* Charts Section */
-.charts-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
-
-.chart-panel-outer {
-  display: flex;
-  flex-direction: column;
-}
-
-.chart-panel {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-.panel-header {
+.guide-actions button {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-3);
-  color: var(--color-primary);
+  gap: 11px;
+  padding: 14px;
+  border: 1px solid #e1e6eb;
+  border-radius: 8px;
+  color: #435268;
+  background: #fafbfc;
+  text-align: left;
+  cursor: pointer;
+  transition: 160ms ease;
 }
 
-.panel-header h3 {
-  font-size: var(--text-base);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
+.guide-actions button:hover {
+  border-color: #a9cbc6;
+  color: var(--color-primary, #287f78);
+  background: #f4faf8;
 }
 
-.chart-box {
+.guide-actions button > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.guide-actions strong {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.guide-actions small {
+  color: #8a95a4;
+  font-size: 10px;
+}
+
+.first-report-guide {
+  grid-template-columns: minmax(0, 0.9fr) minmax(420px, 1.1fr);
+  align-items: center;
+  gap: 34px;
+  padding: 34px;
+}
+
+.first-report-chart {
+  min-width: 0;
+  padding: 16px 18px 8px;
+  border: 1px solid #e3e8ed;
+  border-radius: 9px;
+  background: #fafcfd;
+}
+
+.preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #748092;
+  font-size: 11px;
+}
+
+.preview-header strong {
+  color: #26354a;
+  font-size: 13px;
+}
+
+.preview-chart-box {
+  height: 190px;
+}
+
+.report-history-bar {
+  display: flex;
+  min-height: 64px;
+  align-items: center;
+  gap: 18px;
+  margin-top: 20px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border, #dce3ea);
+  border-radius: 9px;
+  background: #ffffff;
+}
+
+.current-report-mark {
+  display: flex;
+  min-width: 190px;
+  align-items: center;
+  gap: 10px;
+  padding-right: 18px;
+  border-right: 1px solid #e7ebef;
+}
+
+.history-icon-box {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--color-primary, #287f78);
+  background: #edf7f5;
+}
+
+.current-report-mark > div:last-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.current-report-mark span {
+  color: #8a95a4;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.current-report-mark strong {
+  overflow: hidden;
+  color: #26354a;
+  font-size: 12px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recent-report-list {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.recent-report-list::-webkit-scrollbar {
+  display: none;
+}
+
+.recent-report-list button {
+  display: flex;
+  min-width: 74px;
+  height: 38px;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #778396;
+  background: #f6f8fa;
+  cursor: pointer;
+}
+
+.recent-report-list button:hover {
+  border-color: #c7d9d6;
+  background: #f3f8f7;
+}
+
+.recent-report-list button.active {
+  border-color: #9fc7c1;
+  color: var(--color-primary, #287f78);
+  background: #edf7f5;
+}
+
+.recent-report-list strong {
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.recent-report-list span {
+  margin-top: 2px;
+  font-size: 9px;
+}
+
+.history-entry {
+  display: inline-flex;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid #dbe2e8;
+  border-radius: 7px;
+  color: #5d6b7d;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.history-entry:hover {
+  border-color: #a9c9c4;
+  color: var(--color-primary, #287f78);
+}
+
+.history-entry span {
+  display: grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 9px;
+  color: #748092;
+  background: #f0f3f6;
+  font-size: 9px;
+}
+
+.report-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(360px, 0.75fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.overview-copy,
+.metric-grid,
+.analysis-panel,
+.strategy-panel,
+.plan-panel {
+  border: 1px solid var(--color-border, #dce3ea);
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.overview-copy {
+  padding: 26px 28px;
+  background:
+    linear-gradient(135deg, rgba(40, 127, 120, 0.07), rgba(40, 127, 120, 0) 58%),
+    #ffffff;
+}
+
+.overview-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.overview-heading h2 {
+  margin-top: 5px;
+  color: #182235;
+  font-size: 23px;
+  font-weight: 850;
+  letter-spacing: -0.03em;
+}
+
+.date-badge {
+  display: inline-flex;
+  min-height: 30px;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #dce4e8;
+  border-radius: 7px;
+  color: #687588;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.assessment-text {
+  margin-top: 22px;
+  color: #27354a;
+  font-size: 17px;
+  font-weight: 520;
+  line-height: 1.85;
+}
+
+.overview-footnote {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(40, 127, 120, 0.14);
+  color: #6f7d8f;
+  font-size: 11px;
+  line-height: 1.65;
+}
+
+.overview-footnote svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--color-primary, #287f78);
+}
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.metric-item {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+  padding: 20px;
+  border-right: 1px solid #edf0f3;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.metric-item:nth-child(2n) {
+  border-right: 0;
+}
+
+.metric-item:nth-last-child(-n + 2) {
+  border-bottom: 0;
+}
+
+.metric-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--color-primary, #287f78);
+  background: #eef7f5;
+}
+
+.metric-item > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.metric-item strong {
+  overflow: hidden;
+  color: #243247;
+  font-size: 20px;
+  font-weight: 850;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-topic strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.metric-item span:last-child {
+  color: #8792a1;
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.visual-analysis {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(340px, 0.75fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.analysis-panel {
+  min-width: 0;
+  padding: 22px;
+}
+
+.panel-heading,
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.panel-heading h3,
+.section-heading h3 {
+  margin-top: 4px;
+  color: #243247;
+  font-size: 16px;
+  font-weight: 820;
+  letter-spacing: -0.015em;
+}
+
+.panel-heading > p {
+  max-width: 330px;
+  color: #7c8797;
+  font-size: 10px;
+  line-height: 1.55;
+  text-align: right;
+}
+
+.trend-chart-box {
+  height: 310px;
+  margin-top: 8px;
+}
+
+.module-chart-box {
+  height: 184px;
+  margin-top: 3px;
+}
+
+.module-ranking {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 8px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0f3;
+}
+
+.module-row {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto 34px;
+  align-items: center;
+  gap: 7px;
+  color: #687588;
+  font-size: 10px;
+}
+
+.module-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.module-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-row strong {
+  color: #344359;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.module-row em {
+  color: #98a2af;
+  font-size: 9px;
+  font-style: normal;
+  text-align: right;
+}
+
+.module-empty,
+.plan-empty {
+  padding: 22px 0;
+  color: #929dab;
+  font-size: 11px;
+  text-align: center;
+}
+
+.strategy-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+  margin-top: 18px;
+}
+
+.strategy-panel,
+.plan-panel {
+  padding: 22px;
+}
+
+.section-heading > svg {
+  color: var(--color-primary, #287f78);
+}
+
+.strategy-facts {
+  display: flex;
+  flex-direction: column;
+  margin-top: 18px;
+}
+
+.strategy-facts > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 18px;
+  padding: 15px 0;
+  border-bottom: 1px solid #edf0f3;
+}
+
+.strategy-facts > div:last-child {
+  border-bottom: 0;
+}
+
+.strategy-facts span {
+  color: #8994a3;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.strategy-facts strong {
+  color: #344359;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.plan-list {
+  display: flex;
+  flex-direction: column;
+  margin-top: 13px;
+}
+
+.plan-item {
   position: relative;
-  width: 100%;
-  height: 18rem;
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #edf0f3;
 }
 
-.mini-chart-box {
-  height: 150px;
+.plan-item:last-child {
+  border-bottom: 0;
+}
+
+.plan-index {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid #cfe1de;
+  border-radius: 8px;
+  color: var(--color-primary, #287f78);
+  background: #f3f9f8;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.plan-item strong {
+  color: #2c3a4f;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.plan-item p {
+  margin-top: 5px;
+  color: #748092;
+  font-size: 11px;
+  line-height: 1.65;
 }
 
 .chart {
@@ -1344,493 +1853,405 @@ h1, h2, h3, h4, p {
   height: 100%;
 }
 
-.chart-empty {
-  min-height: 12rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-faint);
-  font-size: var(--text-sm);
-  flex: 1;
-}
-
-/* Action Section */
-.action-card {
-  background: var(--color-surface);
-}
-
-.section-header {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-bottom: var(--space-4);
-  color: var(--color-primary);
-}
-
-.section-header h3 {
-  font-size: var(--text-base);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
-}
-
-.history-count {
-  margin-left: auto;
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-  font-weight: var(--weight-bold);
-}
-
-.action-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-}
-
-.action-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  transition: var(--transition-fast);
-}
-
-.action-item:hover {
-  border-color: var(--color-primary-border);
-  background: var(--color-surface-hover);
-}
-
-.action-index {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  flex-shrink: 0;
-}
-
-.action-content {
-  min-width: 0;
-  flex: 1;
-}
-
-.action-description {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-  line-height: 1.45;
-  font-weight: var(--weight-medium);
-}
-
-.action-topic {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-/* History Section */
-.history-card {
-  background: var(--color-surface);
-}
-
-.history-loading,
-.history-empty {
-  min-height: 5rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-faint);
-  font-size: var(--text-sm);
-}
-
-.history-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--space-3);
-}
-
-.history-item {
-  min-height: 4rem;
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: var(--space-1);
-  transition: var(--transition-fast);
-}
-
-.history-item:hover {
-  border-color: var(--color-primary);
-  background: var(--color-surface);
-  transform: translateY(-1px);
-}
-
-.history-item.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
-  box-shadow: var(--shadow-sm);
-}
-
-.history-item strong {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-}
-
-.history-item span {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.history-item-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.history-time {
-  font-size: 11px !important;
-  color: var(--color-text-muted) !important;
-  font-weight: 500;
-}
-
-.history-range {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.history-more {
-  margin-top: var(--space-4);
-  display: flex;
-  justify-content: center;
-}
-
-.history-more button {
-  color: var(--color-primary) !important;
-}
-
-.history-more button:hover {
-  color: var(--color-text-strong) !important;
-}
-
-/* Drawers */
 .drawer-overlay {
   position: fixed;
+  z-index: 1000;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  z-index: 100;
   display: flex;
   justify-content: flex-end;
+  background: rgba(18, 27, 40, 0.38);
+  backdrop-filter: blur(3px);
 }
 
 .drawer-panel {
-  width: min(420px, 100%);
-  background: var(--color-surface);
-  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
   display: flex;
+  width: min(420px, 100%);
+  height: 100%;
   flex-direction: column;
-  animation: slideIn 0.25s ease;
-}
-
-@keyframes slideIn {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  background: #ffffff;
+  box-shadow: -16px 0 48px rgba(25, 35, 50, 0.14);
+  animation: drawer-in 220ms ease-out;
 }
 
 .drawer-header {
   display: flex;
+  align-items: flex-start;
   justify-content: space-between;
-  align-items: center;
-  padding: var(--space-4) var(--space-5);
-  border-bottom: 1px solid var(--color-border-light);
+  gap: 20px;
+  padding: 25px 24px 20px;
+  border-bottom: 1px solid #e7ebef;
+}
+
+.drawer-header > div > span {
+  color: var(--color-primary, #287f78);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
 }
 
 .drawer-header h2 {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-text-strong);
+  margin-top: 5px;
+  color: #202f43;
+  font-size: 21px;
+  font-weight: 850;
+}
+
+.drawer-header p {
+  margin-top: 5px;
+  color: #8390a0;
+  font-size: 10px;
 }
 
 .drawer-close {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 0;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--color-text-muted);
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid #e0e5ea;
+  border-radius: 7px;
+  color: #6e7a8c;
+  background: #ffffff;
   cursor: pointer;
-  transition: var(--transition-fast);
 }
 
 .drawer-close:hover {
-  background: var(--color-bg);
-  color: var(--color-text-strong);
+  color: #26354a;
+  background: #f5f7f9;
 }
 
 .drawer-body {
   flex: 1;
-  overflow: auto;
-  padding: var(--space-5);
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.drawer-loading,
+.drawer-empty {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
+  min-height: 200px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #8792a1;
+  font-size: 11px;
 }
 
 .history-full-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2.5);
+  gap: 8px;
 }
 
 .history-full-item {
-  min-height: 4.5rem;
-  padding: var(--space-4);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  background: var(--color-bg);
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) 18px;
+  gap: 10px;
+  align-items: center;
+  min-height: 82px;
+  padding: 13px 13px;
+  border: 1px solid #e1e6eb;
+  border-radius: 8px;
+  color: #7a8696;
+  background: #ffffff;
   text-align: left;
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  transition: var(--transition-fast);
+  transition: 150ms ease;
 }
 
 .history-full-item:hover {
-  border-color: var(--color-primary);
-  background: var(--color-surface);
-  transform: translateY(-1px);
+  border-color: #b5d1cd;
+  background: #f8fbfa;
 }
 
 .history-full-item.active {
-  border-color: var(--color-primary);
-  background: var(--color-primary-soft);
+  border-color: #8ebdb6;
+  background: #f0f8f6;
 }
 
-.history-full-item strong {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
+.history-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a7b0bb;
 }
 
-.history-full-item span {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
+.history-full-item.status-ready .history-status-dot {
+  background: #278777;
 }
 
-.history-full-item em {
-  font-size: var(--text-xs);
-  color: var(--color-primary);
-  font-style: normal;
-  font-weight: var(--weight-bold);
+.history-full-item.status-generating .history-status-dot {
+  background: #5573c8;
+  box-shadow: 0 0 0 4px rgba(85, 115, 200, 0.12);
 }
 
-.pagination {
+.history-full-item.status-failed .history-status-dot {
+  background: #c65f70;
+}
+
+.history-item-main {
+  min-width: 0;
+}
+
+.history-item-heading {
   display: flex;
-  justify-content: center;
   align-items: center;
-  gap: var(--space-3);
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border-light);
-  font-size: var(--text-sm);
-  color: var(--color-text-muted);
+  justify-content: space-between;
+  gap: 12px;
 }
 
-/* Responsive */
-@media (max-width: 900px) {
-  .strategy-highlights {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.history-item-heading strong {
+  color: #2b394e;
+  font-size: 12px;
+  font-weight: 800;
+}
 
-  .history-grid {
-    grid-template-columns: repeat(2, 1fr);
+.history-item-heading span {
+  color: #718092;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.history-item-main p {
+  margin-top: 6px;
+  color: #7d8999;
+  font-size: 10px;
+}
+
+.history-item-main time {
+  display: block;
+  margin-top: 3px;
+  color: #9aa3af;
+  font-size: 9px;
+}
+
+.drawer-pagination {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid #e7ebef;
+}
+
+.drawer-pagination button {
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid #dce2e8;
+  border-radius: 6px;
+  color: #5f6d80;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.drawer-pagination button:disabled {
+  color: #a8b0ba;
+  background: #f5f6f7;
+  cursor: not-allowed;
+}
+
+.drawer-pagination > span {
+  color: #7f8a99;
+  font-size: 10px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
-@media (max-width: 640px) {
-  .assessment-page {
-    padding: var(--space-4);
+@keyframes progress-move {
+  0% {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  50% {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+  51% {
+    transform-origin: right;
+  }
+  100% {
+    transform: scaleX(0);
+    transform-origin: right;
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media (max-width: 980px) {
+  .report-overview,
+  .visual-analysis,
+  .strategy-layout,
+  .first-report-guide {
+    grid-template-columns: 1fr;
   }
 
-  .page-header {
-    flex-direction: column;
-    align-items: stretch;
+  .first-report-guide {
+    gap: 24px;
   }
 
-  .header-actions {
+  .report-history-bar {
     flex-wrap: wrap;
   }
 
-  .range-tabs {
+  .current-report-mark {
+    border-right: 0;
+  }
+
+  .recent-report-list {
+    order: 3;
     width: 100%;
-    justify-content: stretch;
+    flex-basis: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .assessment-page {
+    padding: 20px 14px 44px;
   }
 
-  .range-tabs button {
-    flex: 1;
+  .page-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .generate-btn {
-    flex: 1;
-    justify-content: center;
+  .header-actions {
+    width: 100%;
   }
 
   .generation-progress {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .strategy-highlights {
+  .empty-guide {
+    grid-template-columns: 1fr;
+    padding: 24px;
+  }
+
+  .guide-actions {
     grid-template-columns: 1fr;
   }
 
-  .history-grid {
+  .first-report-guide {
+    padding: 24px;
+  }
+
+  .first-report-chart {
+    min-width: 0;
+  }
+
+  .report-overview {
+    margin-top: 14px;
+  }
+
+  .overview-copy,
+  .analysis-panel,
+  .strategy-panel,
+  .plan-panel {
+    padding: 19px;
+  }
+
+  .overview-heading {
+    flex-direction: column;
+  }
+
+  .date-badge {
+    align-self: flex-start;
+  }
+
+  .assessment-text {
+    font-size: 15px;
+  }
+
+  .metric-grid {
     grid-template-columns: 1fr;
   }
-}
-/* === Empty Guide States === */
-.empty-guide-card, .welcome-guide-card {
-  margin-top: var(--space-4);
+
+  .metric-item,
+  .metric-item:nth-child(2n),
+  .metric-item:nth-last-child(-n + 2) {
+    border-right: 0;
+    border-bottom: 1px solid #edf0f3;
+  }
+
+  .metric-item:last-child {
+    border-bottom: 0;
+  }
+
+  .panel-heading {
+    flex-direction: column;
+  }
+
+  .panel-heading > p {
+    max-width: none;
+    text-align: left;
+  }
+
+  .trend-chart-box {
+    height: 260px;
+  }
 }
 
-.empty-guide-inner, .welcome-guide-inner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  padding: var(--space-10) var(--space-6);
-  min-height: 20rem;
+@media (max-width: 480px) {
+  .header-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .generate-button {
+    width: 100%;
+  }
+
+  .generation-progress {
+    grid-template-columns: 1fr;
+  }
+
+  .report-history-bar {
+    align-items: stretch;
+  }
+
+  .current-report-mark {
+    width: 100%;
+  }
+
+  .history-entry {
+    justify-content: center;
+    width: 100%;
+  }
+
+  .module-row {
+    grid-template-columns: 7px minmax(0, 1fr) auto;
+  }
+
+  .module-row em {
+    display: none;
+  }
 }
 
-.guide-icon-wrapper {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: var(--space-4);
-  box-shadow: 0 4px 12px rgba(70, 184, 180, 0.15);
+@media (prefers-reduced-motion: reduce) {
+  .assessment-page *,
+  .assessment-page *::before,
+  .assessment-page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }
-
-.guide-icon.sparkles {
-  animation: pulse-glow 2s infinite ease-in-out;
-}
-
-@keyframes pulse-glow {
-  0% { transform: scale(0.95); opacity: 0.8; }
-  50% { transform: scale(1.05); opacity: 1; }
-  100% { transform: scale(0.95); opacity: 0.8; }
-}
-
-.empty-guide-inner h2, .welcome-guide-inner h2 {
-  font-size: var(--text-xl);
-  font-weight: var(--weight-bold);
-  color: var(--color-text-strong);
-  margin-bottom: var(--space-2);
-}
-
-.guide-subtitle {
-  color: var(--color-text-secondary);
-  font-size: var(--text-sm);
-  max-width: 500px;
-  line-height: var(--leading-relaxed);
-  margin-bottom: var(--space-6);
-}
-
-.guide-actions {
-  display: flex;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-  justify-content: center;
-  width: 100%;
-}
-
-.action-card-mini {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: var(--transition-base);
-  min-width: 200px;
-  text-align: left;
-}
-
-.action-card-mini:hover {
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary-border);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-sm);
-}
-
-.mini-icon {
-  font-size: 1.5rem;
-}
-
-.action-card-text {
-  display: flex;
-  flex-direction: column;
-}
-
-.action-card-text strong {
-  font-size: var(--text-sm);
-  color: var(--color-text-strong);
-}
-
-.action-card-text span {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
-}
-
-.large-btn {
-  padding: var(--space-3) var(--space-8);
-  font-size: var(--text-base);
-  min-height: 3rem;
-  margin-bottom: var(--space-8);
-}
-
-.guide-preview-charts {
-  width: 100%;
-  max-width: 600px;
-  background: var(--color-bg);
-  border: 1px dashed var(--color-border);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  position: relative;
-  opacity: 0.8;
-  filter: grayscale(0.2);
-}
-
-.preview-chart-title {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  color: var(--color-text-muted);
-  text-transform: uppercase;
-  margin-bottom: var(--space-3);
-}
-
-.mini-chart {
-  height: 150px !important;
-}
-
 </style>

@@ -44,7 +44,7 @@ body { background: var(--paper); color: var(--ink); font-family: Arial, sans-ser
 .execution-dock { position: absolute; top: 47%; width: 13%; height: 18%; border: 3px solid var(--amber); background: #fff8e8; display: grid; place-items: center; color: var(--amber); font-size: 20px; font-weight: 800; }
 .execution-input-dock { left: 4%; }
 .execution-output-dock { right: 4%; }
-.relation-layer { z-index: 1; overflow: visible; }
+.relation-layer { z-index: 1; overflow: visible; pointer-events: none; }
 .relation { color: var(--muted); opacity: 0; }
 .relation line { stroke: currentColor; stroke-width: 0.34; }
 .relation circle { fill: currentColor; }
@@ -88,11 +88,13 @@ body { background: var(--paper); color: var(--ink); font-family: Arial, sans-ser
 .kind-port { border-radius: 999px; }
 .kind-term { border-width: 0 0 5px; box-shadow: none; background: transparent; }
 .kind-term {
-  min-height: 132px;
   border: 2px solid currentColor;
   border-bottom-width: 6px;
   background: color-mix(in srgb, currentColor 7%, var(--paper));
   box-shadow: 5px 6px 0 rgb(21 25 29 / 8%);
+}
+.grammar-concept .kind-term {
+  min-height: 132px;
 }
 .kind-code {
   background: #20272d;

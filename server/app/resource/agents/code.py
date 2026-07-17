@@ -47,7 +47,10 @@ class CodeAgent(BaseResourceAgent):
             )
         # 将难度映射为代码输出风格
         output_style_map = {"beginner": "tutorial", "intermediate": "reference", "advanced": "challenge"}
-        config = {"output_style": output_style_map.get(request.difficulty, "tutorial")}
+        config: dict = {"output_style": output_style_map.get(request.difficulty, "tutorial")}
+        # 优先使用路径请求中推断的编程语言，否则由 Agent 默认为 python
+        if request.programming_language:
+            config["programming_language"] = request.programming_language
         result = await self._generate_code(
             input_text="\n\n".join(build_path_context(request)),
             title_prefix=request.node_title,

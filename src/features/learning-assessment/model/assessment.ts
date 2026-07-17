@@ -3,7 +3,6 @@ export interface ActionPlanItem {
   topic: string
   action_type: 'review' | 'practice' | 'quiz'
   description: string
-  link: string
 }
 
 // 辅导策略结构 — 与后端 service.py 返回值对齐
@@ -17,27 +16,16 @@ export interface GuidanceStrategy {
   reason: string
 }
 
-// 辅导策略 API 响应
-export interface GuidanceStrategyResponse {
-  guidance_strategy: Partial<GuidanceStrategy> | null
-  guidance_updated_at: string | null
-  last_assessment_id: number | null
-}
-
 // 学习评估 — 与后端 models.py LearningAssessment 对齐
 export interface LearningAssessment {
   id: number
   user_id: number
-  trigger_source: 'profile_update' | 'manual'
-  range_days: 3 | 7 | 14
-  window_start: string
-  window_end: string
+  range_days: number
   status: 'generating' | 'ready' | 'failed'
   assessment: string | null
   generated_at: string | null
   failure_code: string | null
   created_at: string
-  updated_at: string
 }
 
 // 历史评估列表响应

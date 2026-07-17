@@ -64,7 +64,6 @@
 - topic：主题名称
 - action_type：动作类型（review/practice/quiz）
 - description：简洁描述（如"完成 XX 相关练习"）
-- link：跳转链接（如"/quiz?topic=XX"）
 
 优先级：
 1. 薄弱主题复习/练习
@@ -88,8 +87,7 @@
       {
         "topic": "链表",
         "action_type": "practice",
-        "description": "完成链表相关练习",
-        "link": "/quiz?topic=链表"
+        "description": "完成链表相关练习"
       }
     ],
     "reason": "基于练习正确率偏低（链表55%、排序60%）和薄弱主题集中，优先巩固基础"
@@ -106,6 +104,5 @@
 5. action_plan 不超过 4 项
 6. recommended_session_minutes 在 15-45 分钟之间
 7. action_type 只能是 review/practice/quiz 三种
-8. link 必须是有效的相对路径，以 / 开头
-9. 数据不足时，assessment 应建议积累更多学习事实，guidance_strategy 可适当保守
-10. **所有输出必须使用中文**。practice.by_topic 中的 topic 可能是英文技术术语（如 binary_search、shortest_path、linked_list），你必须将其翻译为中文（如"二分查找"、"最短路径"、"链表"）。focus_topics、action_plan.topic、action_plan.description、conclusion、reason、assessment 中一律使用中文主题名称，不要出现英文技术术语。
+8. 数据不足时，assessment 应建议积累更多学习事实，guidance_strategy 可适当保守
+9. **所有输出必须使用中文**。practice.by_topic 中的 topic 可能是英文技术术语（如 binary_search、shortest_path、linked_list），你必须将其翻译为中文（如"二分查找"、"最短路径"、"链表"）。focus_topics、action_plan.topic、action_plan.description、conclusion、reason、assessment 中一律使用中文主题名称，不要出现英文技术术语。
