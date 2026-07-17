@@ -129,7 +129,7 @@ async def get_custom_contract(
 ):
     """Derive selectable entry functions and a normal form schema without an LLM call."""
     if len(request_data.code) > 24_000:
-        return HttpResponse.error(code=400, message="自定义代码不能超过 24000 个字符。")
+        return HttpResponse.error(code=400, message="自定义代码不能超过 24000 个字符。", data={"errorType": "CODE_TOO_LARGE"})
     try:
         contract = inspect_custom_code(request_data.code, request_data.entryFunction)
         # 从 input_schema 推导参数属性，用于构建 CustomParameterResponse
@@ -171,7 +171,7 @@ async def get_custom_contract(
         )
         return HttpResponse.success(data=payload.model_dump())
     except CustomCodeContractError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
+        return HttpResponse.error(code=400, message=str(exc), data={"errorType": "CUSTOM_CONTRACT_INVALID"})
 
 
 # 需认证接口：运行注册算法模板
@@ -215,6 +215,7 @@ async def run_visualization(
         return HttpResponse.error(
             code=400,
             message=e.message,
+            data={"errorType": e.error_type},
         )
 
     # 未预期异常，同样记录失败事件
@@ -231,6 +232,7 @@ async def run_visualization(
         return HttpResponse.error(
             code=400,
             message=str(e),
+            data={"errorType": "VISUALIZER_RUN_ERROR"},
         )
 
     # 运行成功，记录成功事件

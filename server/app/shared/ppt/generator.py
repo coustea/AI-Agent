@@ -534,7 +534,7 @@ class PPTGenerator:
 4. 对于内容幻灯片：
    - `kind` 必须是：'question', 'concept', 'process', 'explanation', 'comparison', 'correction', 'map', 'objective'。
    - 必须指明所属章节 `chapter_id`（'c01' 或 'c02'）。
-   - 必须关联 1 到 5 个逻辑节点 `logic_node_ids`。内容页必须完整覆盖 logic_model 中的所有节点。
+   - 必须关联 1 到 8 个逻辑节点 `logic_node_ids`。内容页必须完整覆盖 logic_model 中的所有节点。
    - 必须指定它的主导逻辑关系 `logic_relation`（'prerequisite', 'decomposes', 'supports', 'derives', 'causes', 'contrasts', 'applies', 'verifies', 'summarizes'）。
    - 必须指定其版式 `layout`。版式必须与 `logic_relation` 严格契合：
      * `prerequisite` -> 支持 'diagram', 'sequence', 'statement'
@@ -1481,7 +1481,7 @@ class PPTGenerator:
             chapter_id = node.chapter_id
 
             # Strategy 1: append to an existing content slide in the same chapter
-            # that has room (max 5 logic_node_ids per slide).
+            # that has room (max 8 logic_node_ids per slide).
             patched = False
             for slide in result:
                 if (

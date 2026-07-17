@@ -46,7 +46,7 @@ class _EdgeTts:
 
         selected_voice = _VOICES.get(voice, _VOICES["teacher"])
         rate = _PACE_RATES.get(pace, _PACE_RATES["balanced"])
-        logger.debug(
+        logger.info(
             "[CartoonTTS] 合成语音: voice=%s rate=%s text_len=%d output=%s",
             selected_voice,
             rate,
@@ -70,7 +70,7 @@ class _EdgeTts:
                     provider="edge",
                     voice=selected_voice,
                 )
-                logger.debug(
+                logger.info(
                     "[CartoonTTS] 合成成功: beat=%s duration_ms=%d",
                     clip.beat_id,
                     clip.duration_ms,
@@ -115,6 +115,7 @@ class CartoonSpeech:
             pace,
             len(ordered_beats),
         )
+        t0 = asyncio.get_event_loop().time()
         audio_dir = output_dir / "audio"
         audio_dir.mkdir(parents=True, exist_ok=True)
         semaphore = asyncio.Semaphore(self._parallelism)
@@ -132,10 +133,12 @@ class CartoonSpeech:
             async with asyncio.TaskGroup() as group:
                 tasks = [group.create_task(synthesize_beat(beat)) for beat in ordered_beats]
             clips = [task.result() for task in tasks]
+            tts_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
             logger.info(
-                "[CartoonSpeech] 全部旁白合成完成: clips=%d total_duration_ms=%d",
+                "[CartoonSpeech] 全部旁白合成完成: clips=%d total_duration_ms=%d elapsed_ms=%d",
                 len(clips),
                 sum(c.duration_ms for c in clips),
+                tts_ms,
             )
         except Exception as exc:
             details = self._exception_details(exc)
@@ -180,10 +183,11 @@ class CartoonSpeech:
                 cursor += duration_ms
 
         logger.info(
-            "[CartoonSpeech] 时间线构建完成: duration_ms=%d beats=%d captions=%d",
+            "[CartoonSpeech] 时间线构建完成: duration_ms=%d beats=%d captions=%d elapsed_ms=%d",
             cursor,
             len(timed_beats),
             len(captions),
+            round((asyncio.get_event_loop().time() - t0) * 1000),
         )
         return Timeline(duration_ms=cursor, beats=timed_beats, captions=captions)
 

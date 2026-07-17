@@ -158,9 +158,11 @@ def _collect_snapshot_event_types(func: ast.FunctionDef) -> list[str]:
     """Extract all literal event_type strings from tracer.snapshot() calls in *func*.
 
     Only considers calls of the form ``tracer.snapshot("literal", ...)`` where
-    the first positional argument is a string constant.
+    the first positional argument is a string constant.  Results are ordered
+    by source line number so that the first and last events correspond to the
+    actual source order (ast.walk does not guarantee traversal order).
     """
-    event_types: list[str] = []
+    found: list[tuple[int, str]] = []
     for node in ast.walk(func):
         if not isinstance(node, ast.Call):
             continue
@@ -178,8 +180,9 @@ def _collect_snapshot_event_types(func: ast.FunctionDef) -> list[str]:
         if not is_snapshot:
             continue
         if node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-            event_types.append(node.args[0].value)
-    return event_types
+            found.append((node.lineno, node.args[0].value))
+    found.sort(key=lambda pair: pair[0])
+    return [event_type for _, event_type in found]
 
 
 def _validate_event_types(entry: ast.FunctionDef, visualizer_type: str) -> None:

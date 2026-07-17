@@ -7,7 +7,6 @@ function makeEvent(id: string): TraceEvent {
   return {
     id,
     step: 0,
-    domain: 'test',
     visualizerType: 'array',
     type: 'snapshot',
     state: { structure: { array: [1] } },

@@ -320,6 +320,7 @@ class CartoonPlanner:
             outline.title,
             outline.grammar.value,
         )
+        t0 = asyncio.get_event_loop().time()
         prompt = self._prompts["scene_compose.md"].render(
             {
                 "grammar": outline.grammar.value,
@@ -354,24 +355,27 @@ class CartoonPlanner:
                     value, grammar=outline.grammar, profile=profile
                 ),
             )
+        scene_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
         if outline.grammar is VisualGrammar.TRACE:
             draft = response if isinstance(response, ExecutionSceneDraft) else ExecutionSceneDraft.model_validate(response)
             self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
             logger.info(
-                "[CartoonPlanner] 场景 %d (trace) 生成完成: objects=%s beats=%s",
+                "[CartoonPlanner] 场景 %d (trace) 生成完成: objects=%s beats=%s elapsed_ms=%d",
                 scene_index,
                 len(draft.objects),
                 len(draft.beats),
+                scene_ms,
             )
             return self._materialize_execution_scene(outline, draft, scene_index)
         draft = response if isinstance(response, _SceneDraft) else _SceneDraft.model_validate(response)
         self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
         logger.info(
-            "[CartoonPlanner] 场景 %d (%s) 生成完成: entities=%s beats=%s",
+            "[CartoonPlanner] 场景 %d (%s) 生成完成: entities=%s beats=%s elapsed_ms=%d",
             scene_index,
             outline.grammar.value,
             len(draft.entities),
             len(draft.beats),
+            scene_ms,
         )
         return self._materialize_scene(outline, draft, scene_index)
 
@@ -694,12 +698,13 @@ class CartoonPlanner:
         temperature: float,
         validator: Callable[[BaseModel], None] | None = None,
     ) -> Any:
-        logger.debug(
-            "[CartoonPlanner] LLM 调用: schema=%s temperature=%.2f messages=%d",
+        logger.info(
+            "[CartoonPlanner] LLM 调用开始: schema=%s temperature=%.2f messages=%d",
             schema.__name__,
             temperature,
             len(messages),
         )
+        t0 = asyncio.get_event_loop().time()
         try:
             result = await get_llm().ainvoke_json(
                 schema,
@@ -707,12 +712,19 @@ class CartoonPlanner:
                 temperature=temperature,
                 validator=validator,
             )
-            logger.debug("[CartoonPlanner] LLM 返回: schema=%s", schema.__name__)
+            elapsed_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
+            logger.info(
+                "[CartoonPlanner] LLM 调用成功: schema=%s elapsed_ms=%d",
+                schema.__name__,
+                elapsed_ms,
+            )
             return result
         except Exception as exc:
+            elapsed_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
             logger.error(
-                "[CartoonPlanner] LLM 调用失败: schema=%s error=%s",
+                "[CartoonPlanner] LLM 调用失败: schema=%s elapsed_ms=%d error=%s",
                 schema.__name__,
+                elapsed_ms,
                 exc,
             )
             raise

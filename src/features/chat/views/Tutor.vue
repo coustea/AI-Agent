@@ -337,7 +337,7 @@
                       复制回答
                     </button>
                     <button
-                      v-if="chatMode === 'standard' && !msg.video"
+                      v-if="!msg.video"
                       type="button"
                       @click.stop="startVideoGeneration(msg)"
                     >
@@ -491,6 +491,20 @@
                   >
                     <DataLine class="btn-icon" aria-hidden="true" />
                     <span>图解</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    class="input-tool-btn"
+                    :class="{ 'is-active-purple': needVideo }"
+                    @click="needVideo = !needVideo"
+                    :aria-pressed="needVideo"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
+                      <rect x="3" y="6" width="12" height="12" rx="2" />
+                      <path d="m15 10 5-3v10l-5-3z" />
+                    </svg>
+                    <span>视频</span>
                   </button>
 
                 </div>
@@ -779,6 +793,8 @@ const isComposing = ref(false)
 const enableWebSearch = ref(false)
 // 是否需要生成教学图解
 const needTeachingDiagram = ref(false)
+// 是否需要在回答完成后自动生成视频
+const needVideo = ref(false)
 
 const imgPreviewVisible = ref(false)
 const imgPreviewUrl = ref('')
@@ -1112,6 +1128,7 @@ const inputToolStateKey = computed(() => getInputToolStateKey({
   uploadingFile: uploadingFile.value,
   enableWebSearch: enableWebSearch.value,
   needTeachingDiagram: needTeachingDiagram.value,
+  needVideo: needVideo.value,
 }))
 
 
@@ -1824,6 +1841,14 @@ const finishStream = (messageId: number) => {
   streamingMsgId.value = null
   streamingMsgRef.value = null
   triggerGlobalProfileRefresh()
+
+  // 回答完成后，若用户开启了视频开关，自动触发视频生成
+  if (needVideo.value && Number.isSafeInteger(messageId) && messageId > 0) {
+    const aiMsg = messages.value.find(message => message.id === messageId)
+    if (aiMsg && !aiMsg.video) {
+      startVideoGeneration(aiMsg)
+    }
+  }
 }
 
 const completeStreamingMessage = (messageId: number) => {
@@ -5464,6 +5489,12 @@ onBeforeUnmount(() => {
   color: #0f766e;
   background: #f0fdfa;
   border-color: #99f6e4;
+}
+
+.input-tool-btn.is-active-purple {
+  color: #7c3aed;
+  background: #f5f3ff;
+  border-color: #c4b5fd;
 }
 
 .input-tool-btn:disabled {

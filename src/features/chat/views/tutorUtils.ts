@@ -142,17 +142,20 @@ export interface InputToolState {
   uploadingFile: boolean
   enableWebSearch: boolean
   needTeachingDiagram: boolean
+  needVideo?: boolean
 }
 
 export const getInputToolStateKey = ({
   uploadingFile,
   enableWebSearch,
   needTeachingDiagram,
+  needVideo,
 }: InputToolState): string => (
   [
     uploadingFile ? 'uploading' : 'idle',
     enableWebSearch ? 'web-on' : 'web-off',
     needTeachingDiagram ? 'diagram-on' : 'diagram-off',
+    needVideo ? 'video-on' : 'video-off',
   ].join(':')
 )
 

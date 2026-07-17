@@ -444,9 +444,11 @@ async function refreshCustomContract(force = false) {
     inputDataValid.value = true
     return true
   } catch (error) {
+    const msg = getErrorMessage(error, '未能识别代码的运行参数，请检查函数定义后重试。')
+    const responseData = (error as { response?: { data?: { data?: { errorType?: string } } } })?.response?.data?.data
     showRunError({
-      errorType: 'CUSTOM_CONTRACT_INVALID',
-      message: getErrorMessage(error, '未能识别代码的运行参数，请检查函数定义后重试。'),
+      errorType: (responseData?.errorType as RunError['errorType']) || 'CUSTOM_CONTRACT_INVALID',
+      message: msg,
     })
     return false
   } finally {
