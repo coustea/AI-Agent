@@ -403,7 +403,7 @@
           <section class="right-card summary-card">
             <div>
               <span>当前题库</span>
-              <strong>{{ totalQuestions }}</strong>
+              <strong>{{ overallTotalQuestions }}</strong>
             </div>
             <div>
               <span>错题待复习</span>
@@ -573,6 +573,7 @@ const recommendationLoading = ref(true)
 // 题库搜索状态
 const questions = shallowRef<Question[]>([])
 const totalQuestions = ref(0)
+const overallTotalQuestions = ref(0)
 const bankLoading = ref(false)
 const bankPage = ref(1)
 const bankPageSize = ref(8)
@@ -1044,6 +1045,7 @@ async function loadPracticePool() {
     allQuestionPool.value = allItems
     practicePool.value = allItems
     totalQuestions.value = total || allItems.length || totalQuestions.value
+    overallTotalQuestions.value = total || allItems.length || overallTotalQuestions.value
   } catch (error) {
     allQuestionPool.value = []
     practicePool.value = []

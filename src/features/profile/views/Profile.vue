@@ -609,6 +609,13 @@
                 </div>
 
                 <div>
+                  <dt>学习目标</dt>
+                  <dd>
+                    {{ profileForm.global_learning_goal || "未设置" }}
+                  </dd>
+                </div>
+
+                <div>
                   <dt>学习时长</dt>
                   <dd>
                     {{ profileForm.daily_study_time || "未设置" }}
@@ -809,7 +816,7 @@
                   <span class="editor-section-number">02</span>
 
                   <div>
-                    <h4>学习目标与节奏</h4>
+                    <h4>学习目标与时长</h4>
                     <p>系统将据此调整讲解深度、路径速度和练习强度。</p>
                   </div>
                 </header>
@@ -831,7 +838,7 @@
                       <SelectContent>
                         <SelectGroup>
                           <SelectItem
-                              v-for="goal in PRESET_GOALS"
+                              v-for="goal in computedPresetGoals"
                               :key="goal"
                               :value="goal"
                               class="cursor-pointer text-xs"
@@ -865,7 +872,7 @@
                       <SelectContent>
                         <SelectGroup>
                           <SelectItem
-                              v-for="time in PRESET_DAILY_STUDY_TIME"
+                              v-for="time in computedPresetDailyStudyTimes"
                               :key="time"
                               :value="time"
                               class="cursor-pointer text-xs"
@@ -956,10 +963,7 @@
                         selected:
                           profileForm.courses.includes(course),
                       }"
-                        :disabled="
-                        profileForm.courses.includes(course)
-                      "
-                        @click="addPresetCourse(course)"
+                        @click="togglePresetCourse(course)"
                     >
                       <Check
                           v-if="
@@ -1116,6 +1120,14 @@ import {
   ToggleGroup,
   ToggleGroupItem,
 } from "@/components/ui/toggle-group";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   BadgeCheckIcon as BadgeCheck,
@@ -1286,24 +1298,19 @@ const PRESET_COURSES = [
 ];
 
 const PRESET_GOALS = [
-  "期末考试冲刺",
-  "完成课程设计项目",
-  "大厂求职面试",
-  "考研初试复习",
-  "考研复试准备",
-  "系统学习进阶",
-  "零基础快速入门",
-  "竞赛获奖",
-  "个人兴趣拓展",
-  "行业证书考取",
+  "期末复习",
+  "考研学习",
+  "进阶学习",
+  "补基础",
+  "项目实战",
 ];
 
 const PRESET_DAILY_STUDY_TIME = [
-  "30min 以下",
+  "30min以下",
   "30-60min",
   "1-2h",
   "2-3h",
-  "3h 以上",
+  "3h以上",
 ];
 
 const PRESET_GRADES = [
@@ -1455,6 +1462,22 @@ const editorCompletionPercent = computed(() => {
   return boundedPercent((completed / checks.length) * 100);
 });
 
+const computedPresetGoals = computed(() => {
+  const list = [...PRESET_GOALS];
+  if (profileForm.global_learning_goal && !list.includes(profileForm.global_learning_goal)) {
+    list.push(profileForm.global_learning_goal);
+  }
+  return list;
+});
+
+const computedPresetDailyStudyTimes = computed(() => {
+  const list = [...PRESET_DAILY_STUDY_TIME];
+  if (profileForm.daily_study_time && !list.includes(profileForm.daily_study_time)) {
+    list.push(profileForm.daily_study_time);
+  }
+  return list;
+});
+
 const editorSections = computed(() => [
   {
     index: "01",
@@ -1468,8 +1491,8 @@ const editorSections = computed(() => [
   },
   {
     index: "02",
-    title: "学习目标",
-    description: "目标与每日节奏",
+    title: "学习目标与时长",
+    description: "目标与学习时长",
     completed: Boolean(
         profileForm.global_learning_goal &&
         profileForm.daily_study_time,
@@ -2146,8 +2169,11 @@ const addCourse = () => {
   newCourseInput.value = "";
 };
 
-const addPresetCourse = (course: string) => {
-  if (!profileForm.courses.includes(course)) {
+const togglePresetCourse = (course: string) => {
+  const index = profileForm.courses.indexOf(course);
+  if (index >= 0) {
+    profileForm.courses.splice(index, 1);
+  } else {
     profileForm.courses.push(course);
   }
 };
@@ -2549,6 +2575,18 @@ const submitProfile = async () => {
     profileSubmitting.value = false;
   }
 };
+
+watch(profileEditorVisible, (val) => {
+  if (val) {
+    document.documentElement.classList.add("profile-editor-open");
+  } else {
+    document.documentElement.classList.remove("profile-editor-open");
+  }
+});
+
+onBeforeUnmount(() => {
+  document.documentElement.classList.remove("profile-editor-open");
+});
 </script>
 
 <style scoped>
@@ -4745,4 +4783,19 @@ const submitProfile = async () => {
     transition-duration: 0.01ms !important;
   }
 }
+
+:global(html.profile-editor-open .top-navbar) {
+  display: none !important;
+}
+
+:global(html.profile-editor-open .app-layout) {
+  background: transparent !important;
+}
+
+:global(html.profile-editor-open .page-content) {
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
 </style>
+
