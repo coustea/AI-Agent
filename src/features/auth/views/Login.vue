@@ -131,7 +131,7 @@ const validateForm = () => {
   if (!form.password) {
     errors.password = '请输入密码'
     isValid = false
-  } else if (form.password.length < 6 || form.password.length > 50) {
+  } else if (form.password.length < 5 || form.password.length > 50) {
     errors.password = '密码长度需为 5-50 个字符'
     isValid = false
   }
