@@ -1,6 +1,5 @@
 <template>
   <div class="digital-human-canvas">
-    <div class="avatar-background"></div>
     <div ref="videoContainer" :class="['video-container', { 'is-chroma-active': chromaReady }]"></div>
     <canvas ref="chromaCanvas" :class="['chroma-canvas', { active: chromaReady }]"></canvas>
 
@@ -65,7 +64,11 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { PhUser as Avatar } from '@phosphor-icons/vue'
-import { applyGreenScreenAlpha, computeChromaRenderSize } from '../model/chromaKey'
+import {
+  applyGreenScreenAlpha,
+  computeChromaRenderSize,
+  resolveAvatarColorFrame,
+} from '../model/chromaKey'
 import type { DigitalHumanStateType } from '../model/digital-human'
 
 const props = defineProps<{
@@ -98,7 +101,6 @@ let lastChromaRenderAt = 0
 const CHROMA_SPEAKING_FPS = 24
 const CHROMA_IDLE_FPS = 12
 
-// 确保绿幕抠像用的离屏 Canvas 已创建
 const ensureWorkCanvas = () => {
   if (!workCanvas) {
     workCanvas = document.createElement('canvas')
@@ -114,7 +116,7 @@ const resizeCanvas = (canvas: HTMLCanvasElement, width: number, height: number) 
   if (workCanvas && workCanvas.height !== height) workCanvas.height = height
 }
 
-// 逐帧渲染绿幕抠像：读取视频帧 → 去绿 → 绘制到输出 Canvas
+// Keep the provider video as the source, but remove green pixels before display.
 const renderChromaFrame = (timestamp: number) => {
   chromaFrameId = window.requestAnimationFrame(renderChromaFrame)
   if (document.hidden) return
@@ -131,28 +133,41 @@ const renderChromaFrame = (timestamp: number) => {
   const context = outputContext
   const work = ensureWorkCanvas()
 
-  if (video && canvas && context && work && video.readyState >= 2) {
-    const { width, height } = computeChromaRenderSize(
-      video.videoWidth || 720,
-      video.videoHeight || 1280,
+  if (!video || !canvas || !context || !work || video.readyState < 2) return
+
+  const source = resolveAvatarColorFrame(
+    video.videoWidth || 720,
+    video.videoHeight || 1280,
+  )
+  const { width, height } = computeChromaRenderSize(source.width, source.height)
+  resizeCanvas(canvas, width, height)
+
+  try {
+    work.clearRect(0, 0, width, height)
+    work.drawImage(
+      video,
+      0,
+      0,
+      source.width,
+      source.height,
+      0,
+      0,
+      width,
+      height,
     )
-    resizeCanvas(canvas, width, height)
-
-    try {
-      work.drawImage(video, 0, 0, width, height)
-      const frame = work.getImageData(0, 0, width, height)
+    const frame = work.getImageData(0, 0, width, height)
+    if (!source.stackedAlpha) {
       applyGreenScreenAlpha(frame.data)
-      context.putImageData(frame, 0, 0)
-      chromaReady.value = true
-    } catch (error) {
-      chromaReady.value = false
-      console.warn('[DH] chroma key rendering failed:', error)
     }
+    context.clearRect(0, 0, width, height)
+    context.putImageData(frame, 0, 0)
+    chromaReady.value = true
+  } catch (error) {
+    chromaReady.value = false
+    console.warn('[DH] chroma key rendering failed:', error)
   }
-
 }
 
-// 查找 video 元素并启动绿幕渲染循环
 const startChromaKey = () => {
   const video = videoContainer.value?.querySelector('video')
   if (!(video instanceof HTMLVideoElement)) return
@@ -170,7 +185,6 @@ defineExpose({
   getContainer: () => videoContainer.value,
 })
 
-// 组件挂载后：启动绿幕 + 监听 DOM 变化
 onMounted(() => {
   nextTick(() => {
     startChromaKey()
@@ -181,7 +195,6 @@ onMounted(() => {
   })
 })
 
-// 组件卸载前：取消动画帧、断开 MutationObserver、销毁子元素
 onBeforeUnmount(() => {
   if (chromaFrameId !== null) {
     window.cancelAnimationFrame(chromaFrameId)
@@ -210,13 +223,6 @@ onBeforeUnmount(() => {
   justify-content: center;
   position: relative;
   overflow: hidden;
-}
-
-.avatar-background {
-  position: absolute;
-  inset: 0;
-  background: url('/static/avatar-background-bookshelf.jpg') center / cover no-repeat;
-  z-index: 0;
 }
 
 .video-container {

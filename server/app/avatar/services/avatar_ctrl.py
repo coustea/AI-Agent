@@ -64,7 +64,7 @@ def _normalize_background_source(value: str | None) -> str:
 
 
 # 验证并从配置中提取背景图资源 key（res_key 模式）
-def _validated_background_res_key() -> tuple[str, str] | None:
+def _validated_background_res_key() -> str | None:
     if _normalize_background_source(AVATAR_BACKGROUND_SOURCE) != "res_key":
         return None
 
@@ -73,7 +73,7 @@ def _validated_background_res_key() -> tuple[str, str] | None:
         logger.warning("Avatar background res_key ignored: empty value")
         return None
 
-    return res_key, _normalize_background_encoding(AVATAR_BACKGROUND_ENCODING)
+    return res_key
 
 
 # 从 data: URI 格式的 base64 中提取图片数据和编码
@@ -166,25 +166,16 @@ def _validated_background_config() -> tuple[str, str] | None:
     return compact_image, encoding
 
 
-# 构建 Avatar 启动参数：优先使用 res_key，否则使用 base64 图片
+# 构建 Avatar 参数。res_key 属于启动消息 header，不属于 avatar 参数。
 def build_avatar_params() -> dict:
     avatar_params = {
-        "stream": {"protocol": "xrtc"},
+        "stream": {"protocol": "xrtc", "alpha": 1},
         "avatar_id": AVATAR_ANCHOR,
         "width": 720,
         "height": 1280,
     }
 
-    background_res_key = _validated_background_res_key()
-    if background_res_key:
-        res_key, encoding = background_res_key
-        avatar_params["res_Key"] = res_key
-        avatar_params["encoding"] = encoding
-        logger.info(
-            "Avatar background resource configured (encoding=%s, res_key_len=%d)",
-            encoding,
-            len(res_key),
-        )
+    if _normalize_background_source(AVATAR_BACKGROUND_SOURCE) == "res_key":
         return avatar_params
 
     background = _validated_background_config()
@@ -203,12 +194,21 @@ def build_avatar_params() -> dict:
 
 # 构建 Avatar 服务启动指令：包含 app_id、TTS 参数、Avatar 参数
 def build_avatar_start_message() -> dict:
+    header = {
+        "app_id": AVATAR_APP_ID,
+        "request_id": str(uuid.uuid4()),
+        "ctrl": "start",
+    }
+    background_res_key = _validated_background_res_key()
+    if background_res_key:
+        header["res_key"] = background_res_key
+        logger.info(
+            "Avatar background resource configured (res_key_len=%d)",
+            len(background_res_key),
+        )
+
     return {
-        "header": {
-            "app_id": AVATAR_APP_ID,
-            "request_id": str(uuid.uuid4()),
-            "ctrl": "start",
-        },
+        "header": header,
         "parameter": {
             "tts": {"vcn": AVATAR_VCN},
             "avatar": build_avatar_params(),
