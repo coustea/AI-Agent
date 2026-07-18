@@ -252,6 +252,7 @@
                     @select-daily-option="selectDailyOption"
                     @submit-daily="submitDailyAnswer"
                     @toggle-daily-analysis="toggleDailyAnalysis"
+                    @open-analysis-review="openAnalysisReview($event, 'daily')"
                 />
 
                 <SearchTab
@@ -279,6 +280,7 @@
                     @select-option="selectBankOption"
                     @submit="submitBankAnswer"
                     @toggle-analysis="toggleBankAnalysis"
+                    @open-analysis-review="openAnalysisReview($event, 'search')"
                 />
 
                 <ExamTab
@@ -461,6 +463,9 @@
         :analysis-total="analysisQuestions.length"
         :previous-disabled="activeAnalysisQuestionIndex <= 0"
         :next-disabled="activeAnalysisQuestionIndex >= analysisQuestions.length - 1"
+        :show-question-navigation="analysisReviewSource === 'exam'"
+        :source-label="analysisReviewSourceLabel"
+        :return-label="analysisReviewReturnLabel"
         @close="closeAnalysisReview"
         @previous="showPreviousAnalysisReview"
         @next="showNextAnalysisReview"
@@ -503,6 +508,7 @@ import { pendingAnswerLabel, requiresAiReview } from '@/features/question-bank/m
 type ViewMode = 'workspace' | 'exam' | 'analysis-review'
 type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong' | 'history'
 type AnswerValue = string | string[] | undefined
+type AnalysisReviewSource = 'exam' | 'daily' | 'search'
 
 interface Question {
   id: string
@@ -662,16 +668,25 @@ const currentExamIndex = ref(-1)
 const examTime = ref(0)
 const examCorrectCount = ref(0)
 const activeAnalysisQuestionId = ref<string | null>(null)
+const analysisReviewSource = ref<AnalysisReviewSource>('exam')
+const analysisReturnQuestionId = ref<string | null>(null)
 const analysisReturnQuestionIndex = ref(0)
 let examTimer: number | null = null
 
-// 分析题列表（用于评阅翻页）
-const analysisQuestions = computed(() => examPaper.value.filter((question) => question.type === '分析题'))
+// 当前详细评阅来源的题目列表。
+const analysisSourceQuestions = computed(() => {
+  if (analysisReviewSource.value === 'daily') return dailyQuestions.value
+  if (analysisReviewSource.value === 'search') return questions.value
+  return examPaper.value
+})
+
+// 分析题列表（用于详细评阅翻页）。
+const analysisQuestions = computed(() => analysisSourceQuestions.value.filter((question) => question.type === '分析题'))
 
 // 当前评阅的分析题对象
 const activeAnalysisQuestion = computed(() => {
   if (!activeAnalysisQuestionId.value) return null
-  return examPaper.value.find((question) => question.id === activeAnalysisQuestionId.value) || null
+  return analysisQuestions.value.find((question) => question.id === activeAnalysisQuestionId.value) || null
 })
 
 // 当前评阅的分析题在列表中的索引
@@ -680,21 +695,27 @@ const activeAnalysisQuestionIndex = computed(() => {
   return analysisQuestions.value.findIndex((question) => question.id === activeAnalysisQuestion.value?.id)
 })
 
-// 当前评阅的分析题在试卷中的题号
+// 当前评阅的分析题在来源列表中的题号。
 const activeAnalysisQuestionNumber = computed(() => {
   if (!activeAnalysisQuestion.value) return 0
-  return examPaper.value.findIndex((question) => question.id === activeAnalysisQuestion.value?.id) + 1
+  const index = analysisSourceQuestions.value.findIndex((question) => question.id === activeAnalysisQuestion.value?.id)
+  if (analysisReviewSource.value === 'search') return (bankPage.value - 1) * bankPageSize.value + index + 1
+  return index + 1
 })
 
 // 当前评阅的用户答案
 const activeAnalysisAnswer = computed<AnswerValue>(() => {
   if (!activeAnalysisQuestion.value) return undefined
+  if (analysisReviewSource.value === 'daily') return dailyAnswers.value[activeAnalysisQuestion.value.id]
+  if (analysisReviewSource.value === 'search') return bankAnswers.value[activeAnalysisQuestion.value.id]
   return examAnswers.value[activeAnalysisQuestion.value.id]
 })
 
 // 当前评阅的 AI 评阅结果
 const activeAnalysisReview = computed<QuizReviewResult | null>(() => {
   if (!activeAnalysisQuestion.value) return null
+  if (analysisReviewSource.value === 'daily') return dailyReview.value[activeAnalysisQuestion.value.id] || null
+  if (analysisReviewSource.value === 'search') return bankReview.value[activeAnalysisQuestion.value.id] || null
   return examReview.value[activeAnalysisQuestion.value.id] || null
 })
 
@@ -702,9 +723,9 @@ const activeAnalysisReview = computed<QuizReviewResult | null>(() => {
 const activeAnalysisScore = computed(() => {
   const question = activeAnalysisQuestion.value
   if (!question) return 0
-  const score = examReview.value[question.id]?.score
+  const score = activeAnalysisReview.value?.score
   if (score != null) return Math.min(100, Math.max(0, Math.round(Number(score) || 0)))
-  return evaluateAnswer(question, examAnswers.value[question.id]) ? 100 : 0
+  return evaluateAnswer(question, activeAnalysisAnswer.value) ? 100 : 0
 })
 
 // 当前评阅结果文本
@@ -713,6 +734,18 @@ const activeAnalysisResultText = computed(() => {
   if (score >= 80) return '优秀'
   if (score >= 60) return '部分正确'
   return '需要改进'
+})
+
+const analysisReviewSourceLabel = computed(() => {
+  if (analysisReviewSource.value === 'daily') return '每日练习 / 评阅结果'
+  if (analysisReviewSource.value === 'search') return '全部题目 / 评阅结果'
+  return '智能组卷 / 考试报告'
+})
+
+const analysisReviewReturnLabel = computed(() => {
+  if (analysisReviewSource.value === 'daily') return '返回每日练习'
+  if (analysisReviewSource.value === 'search') return '返回全部题目'
+  return '返回考试报告'
 })
 
 const weekLabels = ['日', '一', '二', '三', '四', '五', '六']
@@ -1343,20 +1376,22 @@ async function openHistoryQuestion(questionId: string) {
 
 // 提交题库搜索中的题目答案
 async function submitBankAnswer(question: Question) {
-  if (bankSubmitted.value[question.id]) return
+  if (bankSubmitted.value[question.id] || bankReviewing.value[question.id]) return
 
   bankReviewing.value[question.id] = true
-  const result = await gradeQuestion(question, bankAnswers.value[question.id])
+  const result = await gradeQuestion(question, bankAnswers.value[question.id]).finally(() => {
+    bankReviewing.value[question.id] = false
+  })
   bankSubmitted.value[question.id] = true
   bankCorrect.value[question.id] = result.correct
   bankReview.value[question.id] = result.review
-  openedAnalysis.value = new Set(openedAnalysis.value).add(question.id)
+  const nextOpenedAnalysis = new Set(openedAnalysis.value)
+  question.type === '分析题' ? nextOpenedAnalysis.delete(question.id) : nextOpenedAnalysis.add(question.id)
+  openedAnalysis.value = nextOpenedAnalysis
   markBankQuestionSubmittedToday(question.id, result.correct)
   saveAttempt(1, result.correct ? 1 : 0)
 
-  await submitQuestionAttempt(question, bankAnswers.value[question.id], result.correct, result.review?.score)
-
-  bankReviewing.value[question.id] = false
+  void submitQuestionAttempt(question, bankAnswers.value[question.id], result.correct, result.review?.score)
 }
 
 // 每日练习选项选择
@@ -1367,19 +1402,21 @@ function selectDailyOption(question: Question, key: string) {
 
 // 提交每日练习答案
 async function submitDailyAnswer(question: Question) {
-  if (dailySubmitted.value[question.id]) return
+  if (dailySubmitted.value[question.id] || dailyReviewing.value[question.id]) return
 
   dailyReviewing.value[question.id] = true
-  const result = await gradeQuestion(question, dailyAnswers.value[question.id])
+  const result = await gradeQuestion(question, dailyAnswers.value[question.id]).finally(() => {
+    dailyReviewing.value[question.id] = false
+  })
   dailySubmitted.value[question.id] = true
   dailyCorrect.value[question.id] = result.correct
   dailyReview.value[question.id] = result.review
-  openedDailyAnalysis.value = new Set(openedDailyAnalysis.value).add(question.id)
+  const nextOpenedAnalysis = new Set(openedDailyAnalysis.value)
+  question.type === '分析题' ? nextOpenedAnalysis.delete(question.id) : nextOpenedAnalysis.add(question.id)
+  openedDailyAnalysis.value = nextOpenedAnalysis
   saveAttempt(1, result.correct ? 1 : 0)
 
-  await submitQuestionAttempt(question, dailyAnswers.value[question.id], result.correct, result.review?.score)
-
-  dailyReviewing.value[question.id] = false
+  void submitQuestionAttempt(question, dailyAnswers.value[question.id], result.correct, result.review?.score)
 
   // 全部完成后标记今日达标并更新连续打卡
   if (dailySubmittedCount.value === dailyQuestions.value.length && dailyQuestions.value.length > 0 && !isDailyCompleted.value) {
@@ -1704,14 +1741,26 @@ async function submitExam() {
   }
 }
 
-// 打开分析题评阅详情页面
-function openAnalysisReview(questionId: string) {
-  if (!examSubmitted.value) return
+// 打开智能组卷、每日练习或全部题目的分析题详细评阅页面。
+function openAnalysisReview(questionId: string, source: AnalysisReviewSource = 'exam') {
+  const sourceQuestions = source === 'daily'
+    ? dailyQuestions.value
+    : source === 'search'
+      ? questions.value
+      : examPaper.value
+  const submitted = source === 'daily'
+    ? dailySubmitted.value[questionId]
+    : source === 'search'
+      ? bankSubmitted.value[questionId]
+      : examSubmitted.value
+  if (!submitted) return
 
-  const questionIndex = examPaper.value.findIndex((question) => question.id === questionId)
-  const question = examPaper.value[questionIndex]
+  const questionIndex = sourceQuestions.findIndex((question) => question.id === questionId)
+  const question = sourceQuestions[questionIndex]
   if (!question || question.type !== '分析题') return
 
+  analysisReviewSource.value = source
+  analysisReturnQuestionId.value = questionId
   analysisReturnQuestionIndex.value = questionIndex
   activeAnalysisQuestionId.value = questionId
   viewMode.value = 'analysis-review'
@@ -1720,12 +1769,29 @@ function openAnalysisReview(questionId: string) {
 
 // 关闭分析题评阅，返回答题位置
 function closeAnalysisReview() {
+  const source = analysisReviewSource.value
+  const returnQuestionId = analysisReturnQuestionId.value
   const returnIndex = analysisReturnQuestionIndex.value
-  viewMode.value = 'exam'
   activeAnalysisQuestionId.value = null
 
+  if (source === 'exam') {
+    viewMode.value = 'exam'
+    void nextTick(() => scrollToQuestion(returnIndex))
+    return
+  }
+
+  viewMode.value = 'workspace'
+  activeModule.value = source
+
+  if (source === 'search' && returnQuestionId) {
+    highlightQuestionId.value = returnQuestionId
+    highlightVersion.value += 1
+  }
+
   void nextTick(() => {
-    scrollToQuestion(returnIndex)
+    if (source === 'daily' && returnQuestionId) {
+      document.getElementById(`daily-question-${returnQuestionId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }
   })
 }
 
@@ -1735,7 +1801,8 @@ function showPreviousAnalysisReview() {
   if (!previous) return
 
   activeAnalysisQuestionId.value = previous.id
-  analysisReturnQuestionIndex.value = examPaper.value.findIndex((question) => question.id === previous.id)
+  analysisReturnQuestionId.value = previous.id
+  analysisReturnQuestionIndex.value = analysisSourceQuestions.value.findIndex((question) => question.id === previous.id)
   void nextTick(() => scrollQuestionBankViewportToTop())
 }
 
@@ -1745,7 +1812,8 @@ function showNextAnalysisReview() {
   if (!next) return
 
   activeAnalysisQuestionId.value = next.id
-  analysisReturnQuestionIndex.value = examPaper.value.findIndex((question) => question.id === next.id)
+  analysisReturnQuestionId.value = next.id
+  analysisReturnQuestionIndex.value = analysisSourceQuestions.value.findIndex((question) => question.id === next.id)
   void nextTick(() => scrollQuestionBankViewportToTop())
 }
 
@@ -1812,8 +1880,8 @@ async function gradeQuestion(question: Question, answer: AnswerValue) {
       review: {
         score: correct ? 100 : 0,
         is_correct: correct,
-        feedback: correct ? 'Correct' : 'Review needed',
-        improvement_hints: [],
+        feedback: 'AI 评阅超时，已使用本地规则完成判定',
+        improvement_hints: correct ? [] : ['请对照参考答案检查遗漏的关键步骤'],
       },
     }
   }

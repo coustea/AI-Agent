@@ -5,15 +5,15 @@
         <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M15 18 9 12l6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        返回考试报告
+        {{ returnLabel }}
       </button>
 
       <div class="topbar-title">
-        <span>智能组卷 / 考试报告</span>
+        <span>{{ sourceLabel }}</span>
         <strong>分析题评阅详情</strong>
       </div>
 
-      <div class="question-switcher">
+      <div v-if="showQuestionNavigation" class="question-switcher">
         <button type="button" :disabled="previousDisabled" @click="$emit('previous')">上一道分析题</button>
         <span>{{ analysisIndex + 1 }} / {{ analysisTotal }}</span>
         <button type="button" :disabled="nextDisabled" @click="$emit('next')">下一道分析题</button>
@@ -200,13 +200,13 @@
         </aside>
       </div>
 
-      <footer class="analysis-page-footer">
-        <button type="button" :disabled="previousDisabled" @click="$emit('previous')">
+      <footer :class="['analysis-page-footer', { 'single-action': !showQuestionNavigation }]">
+        <button v-if="showQuestionNavigation" type="button" :disabled="previousDisabled" @click="$emit('previous')">
           <span>上一道</span>
           <strong>{{ previousDisabled ? '已经是第一道分析题' : '查看上一题解析' }}</strong>
         </button>
-        <button type="button" class="return-report" @click="$emit('close')">返回考试报告</button>
-        <button type="button" :disabled="nextDisabled" @click="$emit('next')">
+        <button type="button" class="return-report" @click="$emit('close')">{{ returnLabel }}</button>
+        <button v-if="showQuestionNavigation" type="button" :disabled="nextDisabled" @click="$emit('next')">
           <span>下一道</span>
           <strong>{{ nextDisabled ? '已经是最后一道分析题' : '查看下一题解析' }}</strong>
         </button>
@@ -251,6 +251,9 @@ const props = defineProps<{
   analysisTotal: number
   previousDisabled: boolean
   nextDisabled: boolean
+  showQuestionNavigation: boolean
+  sourceLabel: string
+  returnLabel: string
 }>()
 
 // 事件：关闭/上一道/下一道
@@ -1040,9 +1043,18 @@ function renderInline(text: string) {
   text-align: left;
 }
 
-.analysis-page-footer button:last-child {
+.analysis-page-footer button:not(.return-report):last-child {
   align-items: flex-end;
   text-align: right;
+}
+
+.analysis-page-footer.single-action {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.analysis-page-footer.single-action .return-report {
+  justify-self: center;
+  width: min(100%, 320px);
 }
 
 .analysis-page-footer button span {
@@ -1158,7 +1170,7 @@ function renderInline(text: string) {
   }
 
   .analysis-page-footer button,
-  .analysis-page-footer button:last-child {
+  .analysis-page-footer button:not(.return-report):last-child {
     align-items: center;
     text-align: center;
   }

@@ -62,6 +62,7 @@ export interface ChatMsg {
   teachingDiagram?: TeachingDiagram | null
   teachingDiagramGenerating?: boolean
   video?: ChatVideoArtifact | null
+  videoOnly?: boolean
   agentActivities?: AgentActivity[]
   sources?: KnowledgeSource[]  // 知识库来源
 }
@@ -89,7 +90,9 @@ export const finalizeAssistantGeneration = (
   message: ChatMsg,
   status: Extract<AgentActivity['status'], 'done' | 'failed'>,
 ): void => {
-  message.agentActivities = finalizeRunningAgentActivities(message.agentActivities, status)
+  message.agentActivities = status === 'done'
+    ? []
+    : finalizeRunningAgentActivities(message.agentActivities, status)
   message.teachingDiagramGenerating = false
 }
 
@@ -142,17 +145,20 @@ export interface InputToolState {
   uploadingFile: boolean
   enableWebSearch: boolean
   needTeachingDiagram: boolean
+  needVideo?: boolean
 }
 
 export const getInputToolStateKey = ({
   uploadingFile,
   enableWebSearch,
   needTeachingDiagram,
+  needVideo = false,
 }: InputToolState): string => (
   [
     uploadingFile ? 'uploading' : 'idle',
     enableWebSearch ? 'web-on' : 'web-off',
     needTeachingDiagram ? 'diagram-on' : 'diagram-off',
+    needVideo ? 'video-on' : 'video-off',
   ].join(':')
 )
 

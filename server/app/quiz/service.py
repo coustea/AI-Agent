@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from app.quiz.schemas import QuizQuestionListResponse, QuizQuestionRead
 
 # 创建模块级日志器
 logger = get_logger(__name__)
+
+QUIZ_REVIEW_TIMEOUT_SECONDS = 20
 
 
 # 题库查询服务：题目列表、筛选与 LaTeX 公式修复
@@ -366,11 +369,20 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
 
         # 调用 LLM 获取结构化审查结果，失败则降级
         try:
-            result = await llm.ainvoke_json(  # 调用 LLM 结构化输出
-                QuizReviewOutput,
-                messages,
+            result = await asyncio.wait_for(
+                llm.ainvoke_json(  # 调用 LLM 结构化输出
+                    QuizReviewOutput,
+                    messages,
+                ),
+                timeout=QUIZ_REVIEW_TIMEOUT_SECONDS,
             )
             output = QuizReviewOutput.model_validate(result)  # Pydantic 校验
+        except TimeoutError:
+            logger.warning(
+                "[QuizReview] LLM call timed out after %ss, using fallback",
+                QUIZ_REVIEW_TIMEOUT_SECONDS,
+            )
+            output = self._fallback_review(user_answer, standard_answer)
         except Exception as e:
             logger.warning("[QuizReview] LLM call failed: %s, using fallback", e)
             output = self._fallback_review(user_answer, standard_answer)  # LLM 失败时降级为关键词匹配

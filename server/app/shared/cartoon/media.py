@@ -208,6 +208,9 @@ class CartoonMedia:
     @staticmethod
     def hyperframes_path() -> Path:
         path = Path(__file__).resolve().parents[4] / "node_modules" / ".bin" / "hyperframes"
+        windows_shim = path.with_suffix(".cmd")
+        if windows_shim.is_file():
+            path = windows_shim
         if not path.is_file():
             raise RuntimeError("仓库缺少固定版本 HyperFrames，请先执行 npm install")
         return path

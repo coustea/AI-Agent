@@ -81,6 +81,9 @@ export function createChatMessage(params: StreamChatParams) {
   if (params.need_teaching_diagram != null) {
     formData.append('need_teaching_diagram', String(Boolean(params.need_teaching_diagram))) // 是否需要教学图
   }
+  if (params.need_video != null) {
+    formData.append('need_video', String(Boolean(params.need_video)))
+  }
   // 是否启用网络搜索增强
   if (params.enable_web_search != null) {
     formData.append('enable_web_search', String(Boolean(params.enable_web_search))) // 是否启用网络搜索

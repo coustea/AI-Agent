@@ -95,7 +95,8 @@ export async function fetchQuizBankQuestions(params?: {
 
 // 提交填空题或分析题给 AI 评阅
 export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizReviewResult> {
-  const response = await http.post('/ai/quiz/review', request, { timeout: 60000 })
+  // 后端 20 秒硬超时并降级，前端额外预留网络开销，避免评阅状态无限等待。
+  const response = await http.post('/ai/quiz/review', request, { timeout: 30000 })
   return response.data as QuizReviewResult
 }
 

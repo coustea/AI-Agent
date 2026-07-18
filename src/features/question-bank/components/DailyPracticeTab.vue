@@ -8,7 +8,12 @@
         </div>
       </div>
 
-      <article v-for="(question, index) in questions" :key="question.id" class="daily-question-block">
+      <article
+        v-for="(question, index) in questions"
+        :id="`daily-question-${question.id}`"
+        :key="question.id"
+        class="daily-question-block"
+      >
         <div class="question-meta">
           <div class="meta-left">
             <span class="meta-title">第 {{ index + 1 }} 题</span>
@@ -67,14 +72,22 @@
             <button
               class="action-link submit"
               type="button"
-              :disabled="submitted[question.id] || !hasAnswer(question)"
+              :disabled="reviewing[question.id] || submitted[question.id] || !hasAnswer(question)"
               @click="$emit('submit-daily', question)"
             >
-              <span v-if="reviewing[question.id]" class="reviewing-spinner"></span>
-              {{ reviewing[question.id] ? pendingAnswerLabel(question.type) : '提交答案' }}
+              <span v-if="reviewing[question.id] && !submitted[question.id]" class="reviewing-spinner"></span>
+              {{ reviewing[question.id] && !submitted[question.id] ? pendingAnswerLabel(question.type) : '提交答案' }}
             </button>
             <button
-              v-if="submitted[question.id]"
+              v-if="submitted[question.id] && question.type === '分析题'"
+              class="action-link"
+              type="button"
+              @click="$emit('open-analysis-review', question.id)"
+            >
+              查看完整解析
+            </button>
+            <button
+              v-else-if="submitted[question.id]"
               class="action-link"
               type="button"
               @click="$emit('toggle-daily-analysis', question.id)"
@@ -84,7 +97,7 @@
           </div>
         </div>
 
-        <div v-if="reviewing[question.id]" class="reviewing-banner">
+        <div v-if="reviewing[question.id] && !submitted[question.id]" class="reviewing-banner">
           <span class="reviewing-spinner-lg"></span>
           <span class="reviewing-text">{{ pendingAnswerMessage(question.type) }}</span>
         </div>
@@ -152,6 +165,7 @@ defineEmits<{
   (e: 'select-daily-option', question: DailyQuestion, key: string): void
   (e: 'submit-daily', question: DailyQuestion): void
   (e: 'toggle-daily-analysis', id: string): void
+  (e: 'open-analysis-review', questionId: string): void
 }>()
 
 // 判断是否选择题/判断题

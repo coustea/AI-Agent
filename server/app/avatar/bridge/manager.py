@@ -220,6 +220,7 @@ class RealtimeBridge:
         # Turn defaults
         self._speech_rate: float = 1.0  # TTS 语速（0.8~1.5）
         self._need_diagram_default: bool = False  # 默认是否生成教学图
+        self._need_video_default: bool = False  # 默认是否仅生成视频
         self._enable_search_default: bool = False  # 默认是否启用联网搜索
         # 对话锁 — 串行化 turn 处理，避免并发冲突
         self._turn_lock = asyncio.Lock()
@@ -705,6 +706,8 @@ class RealtimeBridge:
             self.session_id = data["session_id"].strip()
         if "enable_search" in data:
             self._enable_search_default = bool(data.get("enable_search"))
+        if "need_video" in data:
+            self._need_video_default = bool(data.get("need_video"))
 
     # 统一化附件 URL 列表：支持字符串、列表、字典多种格式
     @staticmethod
@@ -824,11 +827,14 @@ class RealtimeBridge:
         attachments = self._extract_attachments(data)
         need_diagram = bool(data.get("need_diagram", False))
         self._need_diagram_default = need_diagram
+        need_video = bool(data.get("need_video", False))
+        self._need_video_default = need_video
         self._handle_capability_flags(data)
         await self._handle_user_text(
             text,
             attachments=attachments,
             need_diagram=need_diagram,
+            need_video=need_video,
             enable_search=self._enable_search_default,
         )
 
@@ -1187,6 +1193,7 @@ class RealtimeBridge:
                                     self._handle_user_text(
                                         normalized,
                                         need_diagram=self._need_diagram_default,
+                                        need_video=self._need_video_default,
                                         enable_search=self._enable_search_default,
                                     ),
                                     label="voice-turn",
@@ -1247,6 +1254,7 @@ class RealtimeBridge:
         user_text: str,
         attachments: Optional[list[str]] = None,
         need_diagram: bool = False,
+        need_video: bool = False,
         enable_search: bool = False,
     ):
         """串行化 turn 处理 — 获取锁后再发送 turn_start，避免前端 turn_id 过滤问题。
@@ -1305,6 +1313,7 @@ class RealtimeBridge:
                 user_text=merged_text,
                 attachments=attachments,
                 need_diagram=need_diagram,
+                need_video=need_video,
                 enable_search=enable_search,
             )
 
@@ -1324,12 +1333,16 @@ class RealtimeBridge:
         user_text: str,
         attachments: Optional[list[str]] = None,
         need_diagram: bool = False,
+        need_video: bool = False,
         enable_search: bool = False,
     ):
         """执行一轮完整的对话 turn：调用 chat 服务 → 流式处理事件 → 触发 Avatar 播报。"""
         turn_started_at = time.perf_counter()
         turn_id = self._current_turn_id
-        diagram_requested = need_diagram or is_explicit_diagram_request(user_text)
+        video_requested = bool(need_video)
+        diagram_requested = False if video_requested else (
+            need_diagram or is_explicit_diagram_request(user_text)
+        )
         # 合并附件 URL 并去重
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()
@@ -1363,6 +1376,8 @@ class RealtimeBridge:
         fail_reason = ""
         last_diagram_payload = None
         diagram_forwarded = False
+        video_payload: dict | None = None
+        video_message_id: int | None = None
         try:
             async def _queue_complete_tts_response() -> None:
                 """Submit the complete answer to Avatar as one uninterrupted TTS request."""
@@ -1402,13 +1417,15 @@ class RealtimeBridge:
                     )
                 if append_to_response:
                     full_response += content
-                if self.frontend_ws:
+                if self.frontend_ws and not video_requested:
                     await self._send_event_with_turn_id("assistant_chunk", content=content)
-                tts_pending_text += content
+                if not video_requested:
+                    tts_pending_text += content
 
             async def _consume_stream_events():
                 """消费 chat 服务的 SSE 事件流，转发 token/status/error/diagram 事件。"""
                 nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
+                nonlocal video_payload, video_message_id
                 nonlocal stream_failed, fail_reason
                 event_stream = chat(
                     user_message_id=user_message_id,
@@ -1420,6 +1437,7 @@ class RealtimeBridge:
                     diagram_mode="required" if diagram_requested else "auto",
                     enable_web_search=enable_search,
                     voice_mode=True,
+                    video_mode=video_requested,
                 )
                 try:
                     while True:
@@ -1476,8 +1494,9 @@ class RealtimeBridge:
 
                         elif event_type == "diagram":
                             # 教学图事件 → 缓存并转发
-                            last_diagram_payload = payload
-                            if self.frontend_ws and not diagram_forwarded:
+                            if not video_requested:
+                                last_diagram_payload = payload
+                            if self.frontend_ws and not video_requested and not diagram_forwarded:
                                 await self._send_event_with_turn_id("diagram", data=payload)
                                 diagram_forwarded = True
 
@@ -1495,11 +1514,22 @@ class RealtimeBridge:
                                     diagram_payload = resources.get("teaching_diagram") or resources.get("diagram")
                                 if not diagram_payload:
                                     diagram_payload = payload.get("teaching_diagram") or payload.get("diagram")
-                                if diagram_payload:
+                                if diagram_payload and not video_requested:
                                     last_diagram_payload = diagram_payload
-                                if diagram_payload and self.frontend_ws and not diagram_forwarded:
+                                if (
+                                    diagram_payload
+                                    and self.frontend_ws
+                                    and not video_requested
+                                    and not diagram_forwarded
+                                ):
                                     await self._send_event_with_turn_id("diagram", data=diagram_payload)
                                     diagram_forwarded = True
+                                raw_video = payload.get("video")
+                                if isinstance(raw_video, dict):
+                                    video_payload = raw_video
+                                raw_message_id = payload.get("saved_message_id")
+                                if isinstance(raw_message_id, int) and raw_message_id > 0:
+                                    video_message_id = raw_message_id
                 finally:
                     aclose = getattr(event_stream, "aclose", None)
                     if callable(aclose):
@@ -1587,13 +1617,25 @@ class RealtimeBridge:
 
             # The user requested one uninterrupted utterance: only now, after the
             # complete answer is available, submit a single TTS request.
-            await _queue_complete_tts_response()
+            if not video_requested:
+                await _queue_complete_tts_response()
 
             # 流结束后始终发送完成标记
             if self.frontend_ws:
-                if last_diagram_payload is not None and not diagram_forwarded:
+                if not video_requested and last_diagram_payload is not None and not diagram_forwarded:
                     await self._send_event_with_turn_id("diagram", data=last_diagram_payload)
+                if video_requested and video_payload is not None and video_message_id is not None:
+                    await self._send_event_with_turn_id(
+                        "video",
+                        data={
+                            "assistant_message_id": video_message_id,
+                            "session_id": self.session_id,
+                            "video": video_payload,
+                        },
+                    )
                 await self._send_event_with_turn_id("assistant_complete")
+                if video_requested:
+                    await self._send_digital_human_state("avatar_ready", "Avatar service ready")
 
             if tts_has_queued_content:
                 logger.info(

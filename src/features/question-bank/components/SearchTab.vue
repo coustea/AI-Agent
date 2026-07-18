@@ -114,11 +114,21 @@
               :disabled="reviewing[question.id] || submitted[question.id] || !hasAnswer(question)"
               @click="submitAnswer(question)"
             >
-              <span v-if="reviewing[question.id]" class="reviewing-spinner"></span>
-              {{ reviewing[question.id] ? pendingAnswerLabel(question.type) : '提交答案' }}
+              <span v-if="reviewing[question.id] && !submitted[question.id]" class="reviewing-spinner"></span>
+              {{ reviewing[question.id] && !submitted[question.id] ? pendingAnswerLabel(question.type) : '提交答案' }}
             </button>
 
             <button
+              v-if="submitted[question.id] && question.type === '分析题'"
+              class="action-link answer"
+              type="button"
+              @click="$emit('open-analysis-review', question.id)"
+            >
+              查看完整解析
+            </button>
+
+            <button
+              v-else
               class="action-link answer"
               type="button"
               @click="$emit('toggle-analysis', question.id)"
@@ -127,7 +137,7 @@
             </button>
           </div>
 
-          <div v-if="reviewing[question.id]" class="reviewing-banner">
+          <div v-if="reviewing[question.id] && !submitted[question.id]" class="reviewing-banner">
             <span class="reviewing-spinner-lg"></span>
             <span class="reviewing-text">{{ pendingAnswerMessage(question.type) }}</span>
           </div>
@@ -232,6 +242,7 @@ const emit = defineEmits<{
   (e: 'select-option', question: any, key: string): void
   (e: 'submit', question: any): void
   (e: 'toggle-analysis', id: string): void
+  (e: 'open-analysis-review', questionId: string): void
 }>()
 
 // 当前展开作答的题目 ID

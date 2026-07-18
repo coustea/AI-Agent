@@ -299,5 +299,6 @@ export interface StreamChatParams {
   session_id?: string
   attachments?: MessageAttachmentInput[]
   need_teaching_diagram?: boolean
+  need_video?: boolean
   enable_web_search?: boolean
 }
