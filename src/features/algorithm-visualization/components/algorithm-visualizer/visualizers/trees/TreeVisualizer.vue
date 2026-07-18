@@ -15,7 +15,7 @@
         <span class="legend-item"><i class="legend-dot active"></i>当前</span>
       </div>
 
-      <div v-if="layoutNodes.length" class="tree-container">
+      <div v-if="layoutNodes.length" ref="containerRef" class="tree-container" :class="{ 'with-sequence': traversalSequence.length > 0 }" @transitionend="handleTransitionEvent">
         <svg
           class="tree-links-svg"
           viewBox="0 0 1000 600"
@@ -29,14 +29,14 @@
             :y1="link.y1"
             :x2="link.x2"
             :y2="link.y2"
-            :class="['tree-link', link.tone || 'default']"
+            :class="['tree-link', link.tone || 'default', { visible: link.isVisible }]"
           />
         </svg>
 
         <div
           v-for="node in layoutNodes"
           :key="node.id"
-          :class="['tree-node', node.tone || 'default', { active: node.isActive }]"
+          :class="['tree-node', node.isVisited ? 'visited' : (node.tone || 'default'), { active: node.isActive, visible: reachableNodes.has(String(node.id)) }]"
           :data-node-id="node.id"
           :style="{ left: `${node.leftPercent}%`, top: `${node.topPercent}%` }"
         >
@@ -44,18 +44,36 @@
         </div>
       </div>
       <div v-else class="empty-state">等待树数据初始化...</div>
+
+      <!-- 整体遍历序列展示 -->
+      <div v-if="traversalSequence.length > 0" class="sequence-panel">
+        <div class="sequence-title">遍历序列 (Result Sequence)</div>
+        <div class="sequence-list">
+          <transition-group name="list">
+            <span
+              v-for="(val, idx) in traversalSequence"
+              :key="val + '-' + idx"
+              class="sequence-item"
+              :class="{ latest: idx === traversalSequence.length - 1 }"
+            >
+              {{ val }}
+            </span>
+          </transition-group>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { TraceEvent, VisualNode } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
   currentEvent: TraceEvent | null
   currentStepIndex: number
   events: TraceEvent[]
+  onStepComplete?: () => void
 }>()
 
 // 从 trace state 解析原始树节点
@@ -69,6 +87,77 @@ const activeNodeIds = computed(() => new Set(
 ))
 
 const activeNode = computed(() => rawNodes.value.find(node => activeNodeIds.value.has(String(node.id))) ?? null)
+
+// 计算当前通过已构建边可达的所有节点集合
+const reachableNodes = computed(() => {
+  const nodes = rawNodes.value
+  const reachable = new Set<string>()
+  if (nodes.length === 0) return reachable
+
+  // 处于活动状态的 targets 节点始终可视，以对齐代码步骤
+  activeNodeIds.value.forEach(id => reachable.add(String(id)))
+
+  // 根节点（首个节点 node-0）始终是可达的起点
+  const rootId = 'node-0'
+  reachable.add(rootId)
+
+  const queue = [rootId]
+  const nodeMap = new Map<string, any>()
+  nodes.forEach(n => nodeMap.set(String(n.id), n))
+
+  while (queue.length > 0) {
+    const currentId = queue.shift()!
+    const node = nodeMap.get(currentId)
+    if (!node) continue
+
+    if (node.left && node.left_constructed !== false) {
+      const leftId = String(node.left)
+      if (!reachable.has(leftId)) {
+        reachable.add(leftId)
+        queue.push(leftId)
+      }
+    }
+    if (node.right && node.right_constructed !== false) {
+      const rightId = String(node.right)
+      if (!reachable.has(rightId)) {
+        reachable.add(rightId)
+        queue.push(rightId)
+      }
+    }
+  }
+  return reachable
+})
+
+// 提取当前步骤之前（包含当前步骤）所有被访问过的高亮目标节点的序列
+const traversalSequence = computed(() => {
+  const sequence: string[] = []
+  const seenNodeIds = new Set<string>()
+  const maxStep = Math.min(props.currentStepIndex, props.events.length - 1)
+  
+  for (let i = 0; i <= maxStep; i++) {
+    const event = props.events[i]
+    if (!event) continue
+    
+    // 只在遍历阶段收集遍历序列
+    const phase = event.state?.structure?.phase
+    if (phase !== 'traversal') continue
+
+    const targets = event.targets ?? []
+    const nodes = event.state?.structure?.nodes ?? []
+    
+    targets.forEach(targetId => {
+      const targetIdStr = String(targetId)
+      if (!seenNodeIds.has(targetIdStr)) {
+        const node = nodes.find((n: any) => String(n.id) === targetIdStr)
+        if (node && node.label !== undefined) {
+          seenNodeIds.add(targetIdStr)
+          sequence.push(String(node.label))
+        }
+      }
+    })
+  }
+  return sequence
+})
 
 // 构建树节点映射和父子连接关系
 const treeData = computed(() => {
@@ -174,6 +263,7 @@ const layoutNodes = computed(() => {
     const coord = coords.get(idStr) || { leaf: 0, depth: 0 }
     const x = leafCount > 1 ? 80 + (coord.leaf / (leafCount - 1)) * 840 : 500
     const y = startY + coord.depth * rowHeight
+    const isVisited = traversalSequence.value.includes(String(n.label))
 
     return {
       ...n,
@@ -182,13 +272,14 @@ const layoutNodes = computed(() => {
       leftPercent: x / 10,
       topPercent: y / 6,
       isActive: activeNodeIds.value.has(idStr),
+      isVisited,
     }
   })
 })
 
 // 计算树连接线的 SVG 坐标
 const treeLinks = computed(() => {
-  const { links } = treeData.value
+  const { links, nodeMap } = treeData.value
   const nodes = layoutNodes.value
   const posMap = new Map<string, { x: number; y: number; isActive: boolean }>()
   nodes.forEach(n => posMap.set(String(n.id), { x: n.x, y: n.y, isActive: n.isActive }))
@@ -196,14 +287,84 @@ const treeLinks = computed(() => {
   return links.map(l => {
     const fromPos = posMap.get(l.from) || { x: 0, y: 0, isActive: false }
     const toPos = posMap.get(l.to) || { x: 0, y: 0, isActive: false }
+    
+    // 确定该子链接在当前步骤中是否已构建
+    const parentNode = rawNodes.value.find(n => String(n.id) === l.from)
+    const isLeft = parentNode?.left !== undefined && String(parentNode.left) === l.to
+    const isConstructed = parentNode ? (isLeft ? (parentNode as any).left_constructed !== false : (parentNode as any).right_constructed !== false) : true
+    
+    let linkTone = 'default'
+    if (isConstructed) {
+      if (traversalSequence.value.length > 0) {
+        const isFromVisited = traversalSequence.value.includes(String(nodeMap.get(l.from)?.label))
+        const isToVisited = traversalSequence.value.includes(String(nodeMap.get(l.to)?.label))
+        linkTone = isFromVisited && isToVisited ? 'visited' : 'default'
+      } else {
+        linkTone = 'visited'
+      }
+    } else {
+      linkTone = 'unconstructed'
+    }
+    
+    const isVisible = reachableNodes.value.has(l.from) && reachableNodes.value.has(l.to)
+
     return {
       x1: fromPos.x,
       y1: fromPos.y,
       x2: toPos.x,
       y2: toPos.y,
-      tone: l.tone === 'visited' && (fromPos.isActive || toPos.isActive) ? 'active' : l.tone,
+      tone: linkTone === 'visited' && (fromPos.isActive || toPos.isActive) ? 'active' : linkTone,
+      isVisible,
     }
   })
+})
+
+// 动画完成通知：监听 CSS transitionend 事件，防抖后调用 onStepComplete
+const containerRef = ref<HTMLElement | null>(null)
+let transitionDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let hasActiveTransition = false
+
+function onTransitionEnd() {
+  if (transitionDebounceTimer !== null) {
+    clearTimeout(transitionDebounceTimer)
+  }
+  transitionDebounceTimer = setTimeout(() => {
+    hasActiveTransition = false
+    props.onStepComplete?.()
+  }, 60)
+}
+
+function handleTransitionEvent() {
+  hasActiveTransition = true
+  onTransitionEnd()
+}
+
+watch(
+  [() => props.currentStepIndex, () => props.currentEvent],
+  () => {
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    if (reducedMotion || !containerRef.value) {
+      requestAnimationFrame(() => {
+        if (!hasActiveTransition) {
+          props.onStepComplete?.()
+        }
+      })
+      return
+    }
+    if (transitionDebounceTimer !== null) {
+      clearTimeout(transitionDebounceTimer)
+    }
+    transitionDebounceTimer = setTimeout(() => {
+      hasActiveTransition = false
+      props.onStepComplete?.()
+    }, 350)
+  },
+)
+
+onBeforeUnmount(() => {
+  if (transitionDebounceTimer !== null) {
+    clearTimeout(transitionDebounceTimer)
+  }
 })
 </script>
 
@@ -316,7 +477,18 @@ const treeLinks = computed(() => {
   stroke: var(--color-border-hover);
   stroke-width: 1.75;
   vector-effect: non-scaling-stroke;
-  transition: stroke 0.25s ease;
+  opacity: 0;
+  pointer-events: none;
+  transition: stroke 0.25s ease, opacity 0.3s ease;
+}
+
+.tree-link.visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.tree-link.visible.unconstructed {
+  opacity: 0.35;
 }
 
 .tree-link.visited {
@@ -342,11 +514,19 @@ const treeLinks = computed(() => {
   font-size: 13px;
   color: var(--color-text-strong);
   transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
   transition:
     border-color 0.2s ease,
     background-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    opacity 0.3s ease;
   z-index: 1;
+}
+
+.tree-node.visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .tree-node.visited {
@@ -385,5 +565,85 @@ const treeLinks = computed(() => {
   .tree-node {
     transition: none;
   }
+}
+
+.tree-container {
+  transition: height 0.25s ease;
+}
+
+.tree-container.with-sequence {
+  height: calc(100% - 62px);
+}
+
+.sequence-panel {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 10;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.sequence-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.sequence-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.sequence-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border-light);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.sequence-item.latest {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-text);
+  transform: scale(1.05);
+}
+
+/* 序列元素滑入动画 */
+.list-enter-active,
+.list-leave-active {
+  transition: all 0.25s ease;
+}
+.list-enter-from {
+  opacity: 0;
+  transform: translateY(6px) scale(0.9);
+}
+.list-leave-to {
+  opacity: 0;
+  transform: scale(0.9);
+}
+.tree-link.unconstructed {
+  stroke: var(--color-border);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0;
 }
 </style>

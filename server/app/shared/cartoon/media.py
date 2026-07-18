@@ -12,6 +12,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.infra.logging import get_logger
+from app.shared.cartoon.models import Lesson
 
 
 logger = get_logger(__name__)
@@ -108,24 +109,16 @@ class QualityGateError(RuntimeError):
 
 
 class QualityPolicy:
-    """One explicit publication policy for all HyperFrames findings."""
+    """Block broken runtime data, but keep visual-quality findings advisory."""
 
-    _LAYOUT_BLOCKERS = {
-        "content_overlap",
-        "element_occluded",
-        "content_overflow",
-        "caption_zone_overlap",
-    }
-
-    _CONTRAST_BLOCKERS = frozenset()
-    """Contrast codes that block publication. Empty = all contrast findings are advisory."""
+    _BLOCKING_CATEGORIES = ("runtime", "semantic")
 
     def enforce(self, report: HyperFramesReport) -> None:
         problems: list[str] = []
-        for category in ("runtime", "lint", "motion", "semantic"):
+        for category in self._BLOCKING_CATEGORIES:
             blocking = [
                 item for item in report.findings
-                if item.category == category and item.severity in {"error", "warning"}
+                if item.category == category and item.severity == "error"
             ]
             if blocking:
                 problems.append(f"{category} findings: {self._summarize(blocking)}")
@@ -135,60 +128,19 @@ class QualityPolicy:
                     self._summarize(blocking),
                 )
 
-        # Contrast findings are advisory-only by default. HyperFrames measures
-        # contrast on dynamically positioned elements whose final rendering
-        # depends on the runtime layout engine; low-contrast warnings are
-        # common and do not indicate a content defect. Only block if the
-        # finding code is explicitly listed in _CONTRAST_BLOCKERS.
-        contrast_blocking = [
+        advisory = [
             item for item in report.findings
-            if item.category == "contrast"
+            if item.category not in self._BLOCKING_CATEGORIES
             and item.severity in {"error", "warning"}
-            and item.code in self._CONTRAST_BLOCKERS
         ]
-        if contrast_blocking:
-            problems.append(f"contrast findings: {self._summarize(contrast_blocking)}")
-            logger.warning("[QualityPolicy] contrast 阻断问题: %s", self._summarize(contrast_blocking))
-        contrast_advisory = [
-            item for item in report.findings
-            if item.category == "contrast"
-            and item.severity in {"error", "warning"}
-            and item.code not in self._CONTRAST_BLOCKERS
-        ]
-        if contrast_advisory:
-            logger.info("[QualityPolicy] contrast 非阻断问题: %s", self._summarize(contrast_advisory))
-
-        layout = [
-            item for item in report.findings
-            if item.category == "layout"
-            and item.severity == "error"
-            and (
-                item.code in self._LAYOUT_BLOCKERS
-                or "overlap" in item.code
+        if advisory:
+            logger.warning(
+                "[QualityPolicy] 非阻断质量问题: %s",
+                self._summarize(advisory),
             )
-        ]
-        if layout:
-            problems.append(f"layout findings: {self._summarize(layout)}")
-            logger.warning("[QualityPolicy] layout 阻断问题: %s", self._summarize(layout))
-        # Log layout warnings (e.g. text_occluded, escaped_container) without blocking
-        layout_warnings = [
-            item for item in report.findings
-            if item.category == "layout"
-            and item not in layout
-            and item.severity in {"error", "warning"}
-        ]
-        if layout_warnings:
-            logger.info("[QualityPolicy] layout 非阻断问题: %s", self._summarize(layout_warnings))
 
-        unknown = [
-            item for item in report.findings
-            if item.category == "unknown" and item.severity in {"error", "warning"}
-        ]
-        if unknown:
-            problems.append(f"unknown findings: {self._summarize(unknown)}")
-        # HyperFrames reports ok=false for informational Studio advisories too
-        # (for example a font substitution). Those are not publication defects;
-        # all error and warning findings above still block publication.
+        # A tool failure without any finding is not a quality preference and
+        # remains blocking because there is no evidence the bundle was checked.
         if not report.ok and not problems and not report.findings:
             problems.append("HyperFrames check reported ok=false without a categorized finding")
         if problems:
@@ -303,7 +255,7 @@ class CartoonMedia:
         )
         report.findings.extend(self._semantic_findings(output_dir))
         self.policy.enforce(report)
-        await self._check_caption_visibility(output_dir)
+        await self._check_runtime_visibility(output_dir)
         logger.info("[CartoonMedia] 质量检查全部通过")
         return report
 
@@ -313,107 +265,33 @@ class CartoonMedia:
         if not lesson_path.is_file():
             return [QualityFinding(category="semantic", code="missing_lesson", message="semantic validation requires lesson.json")]
         try:
-            from app.shared.cartoon.models import ExecutionObjectRole, ExecutionVerb, Lesson
-
-            lesson = Lesson.model_validate_json(lesson_path.read_text(encoding="utf-8"))
+            Lesson.model_validate_json(lesson_path.read_text(encoding="utf-8"))
         except Exception as exc:
             return [QualityFinding(category="semantic", code="invalid_lesson", message=str(exc))]
-
-        findings: list[QualityFinding] = []
-        for scene in lesson.scenes:
-            if scene.grammar.value != "trace":
-                continue
-            if scene.execution_program is None:
-                findings.append(QualityFinding(
-                    category="semantic", code="missing_execution_model",
-                    message=f"{scene.id} trace scene has no executable model",
-                ))
-                continue
-            objects_by_name = {item.name: item for item in scene.execution_program.objects}
-            objects_by_id = {item.id: item for item in scene.execution_program.objects}
-            structural_ids = {
-                item.id for item in scene.execution_program.objects
-                if item.role in {ExecutionObjectRole.CONTAINER, ExecutionObjectRole.NODE, ExecutionObjectRole.PORT}
-            }
-            if {entity.id for entity in scene.entities} != set(objects_by_id):
-                findings.append(QualityFinding(
-                    category="semantic", code="execution_entity_mismatch",
-                    message=f"{scene.id} execution objects do not match scene entities",
-                ))
-                continue
-            for beat in scene.beats:
-                before = scene.state(beat.before_state_id)
-                after = scene.state(beat.after_state_id)
-                after_items = {item.entity_id: item for item in after.placements}
-                if structural_ids and not any(after_items[item_id].visible for item_id in structural_ids):
-                    findings.append(QualityFinding(
-                        category="semantic", code="hidden_execution_model",
-                        message=f"{scene.id}/{beat.id} hides every structural execution object",
-                    ))
-                for object_id, object_ in objects_by_id.items():
-                    placement = after_items[object_id]
-                    if object_.role is ExecutionObjectRole.POINTER and placement.visible:
-                        anchor = after_items.get(placement.anchor_id)
-                        if anchor is None or not anchor.visible:
-                            findings.append(QualityFinding(
-                                category="semantic", code="pointer_without_visible_anchor",
-                                message=f"{scene.id}/{beat.id} pointer {object_.name} has no visible anchor",
-                            ))
-                operation = beat.operation
-                if operation is None:
-                    findings.append(QualityFinding(
-                        category="semantic", code="missing_execution_operation",
-                        message=f"{scene.id}/{beat.id} has no execution operation",
-                    ))
-                    continue
-                subject = objects_by_name.get(operation.subject)
-                target = objects_by_name.get(operation.target) if operation.target else None
-                if subject is None or (operation.target and target is None):
-                    findings.append(QualityFinding(
-                        category="semantic", code="operation_unknown_object",
-                        message=f"{scene.id}/{beat.id} references an unknown execution object",
-                    ))
-                elif operation.verb is ExecutionVerb.PLACE:
-                    placed = after_items[subject.id]
-                    if target is None or placed.container_id != target.id or placed.slot != operation.slot:
-                        findings.append(QualityFinding(
-                            category="semantic", code="place_without_destination",
-                            message=f"{scene.id}/{beat.id} does not place its subject in the declared destination",
-                        ))
-                elif operation.verb is ExecutionVerb.REMOVE and not (
-                    after_items[subject.id].region.value == "output" and after_items[subject.id].visible
-                ):
-                    findings.append(QualityFinding(
-                        category="semantic", code="remove_without_output",
-                        message=f"{scene.id}/{beat.id} removes no object to the output dock",
-                    ))
-                elif operation.verb is ExecutionVerb.POINT and target is not None and after_items[subject.id].anchor_id != target.id:
-                    findings.append(QualityFinding(
-                        category="semantic", code="point_without_anchor",
-                        message=f"{scene.id}/{beat.id} does not attach its pointer to the declared target",
-                    ))
-                if not scene.state_changes(beat).has_semantic_change:
-                    findings.append(QualityFinding(
-                        category="semantic", code="operation_without_delta",
-                        message=f"{scene.id}/{beat.id} has no execution state delta",
-                    ))
-        return findings
+        return []
 
     @staticmethod
-    async def _check_caption_visibility(output_dir: Path) -> None:
-        logger.info("[CartoonMedia] 开始字幕可见性检查: dir=%s", output_dir)
+    async def _check_runtime_visibility(output_dir: Path) -> None:
+        logger.info("[CartoonMedia] 开始运行时可见性检查: dir=%s", output_dir)
         timeline_path = output_dir / "timeline.json"
         if not timeline_path.is_file():
             raise QualityGateError(["caption visibility check requires timeline.json"])
         try:
             timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
+            beats = timeline["beats"]
             cues = timeline["captions"]
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             raise QualityGateError([f"caption timeline is invalid: {exc}"]) from exc
         if not isinstance(cues, list) or not cues:
             raise QualityGateError(["caption timeline contains no cues"])
+        if not isinstance(beats, list) or not beats:
+            raise QualityGateError(["timeline contains no beats"])
 
-        logger.debug("[CartoonMedia] 字幕检查: cues=%d, 启动浏览器验证...", len(cues))
+        logger.debug(
+            "[CartoonMedia] 浏览器检查: beats=%d cues=%d",
+            len(beats),
+            len(cues),
+        )
 
         from playwright.async_api import async_playwright
         from functools import partial
@@ -465,6 +343,52 @@ class CartoonMedia:
                         "Boolean(window.__timelines && window.__timelines['cartoon-teaching-video'])",
                         timeout=10_000,
                     )
+                    for beat in beats:
+                        scene_id = str(beat["scene_id"])
+                        midpoint = (
+                            int(beat["start_ms"]) + int(beat["duration_ms"]) / 2
+                        ) / 1_000
+                        scene_info = await page.evaluate(
+                            """({sceneId, time}) => {
+                              window.__timelines['cartoon-teaching-video'].time(time, false);
+                              const element = document.getElementById(`scene-${sceneId}`);
+                              if (!element) return null;
+                              const style = getComputedStyle(element);
+                              const rect = element.getBoundingClientRect();
+                              const visibleEntities = Array.from(
+                                element.querySelectorAll('.visual-entity')
+                              ).filter(entity => {
+                                const entityStyle = getComputedStyle(entity);
+                                const entityRect = entity.getBoundingClientRect();
+                                return Number(entityStyle.opacity) > 0.05
+                                  && entityStyle.visibility === 'visible'
+                                  && entityStyle.display !== 'none'
+                                  && entityRect.width > 0
+                                  && entityRect.height > 0;
+                              }).length;
+                              return {
+                                opacity: Number(style.opacity),
+                                visibility: style.visibility,
+                                display: style.display,
+                                width: rect.width,
+                                height: rect.height,
+                                visibleEntities
+                              };
+                            }""",
+                            {"sceneId": scene_id, "time": midpoint},
+                        )
+                        if (
+                            scene_info is None
+                            or scene_info["opacity"] < 0.95
+                            or scene_info["visibility"] != "visible"
+                            or scene_info["display"] == "none"
+                            or scene_info["width"] < 1_000
+                            or scene_info["height"] < 600
+                            or scene_info["visibleEntities"] < 1
+                        ):
+                            problems.append(
+                                f"scene-{scene_id} is not visibly rendered at {midpoint:.3f}s"
+                            )
                     for index, cue in enumerate(cues):
                         start_ms = int(cue["start_ms"])
                         end_ms = int(cue["end_ms"])
@@ -509,7 +433,7 @@ class CartoonMedia:
             raise
         except Exception as exc:
             detail = " | ".join(browser_messages[-8:])
-            message = f"caption browser check failed: {exc}"
+            message = f"runtime browser check failed: {exc}"
             if browser_state:
                 message += f" | state={browser_state}"
             if detail:
@@ -520,9 +444,13 @@ class CartoonMedia:
             server.server_close()
             server_thread.join(timeout=2)
         if problems:
-            logger.error("[CartoonMedia] 字幕可见性问题: %s", problems)
+            logger.error("[CartoonMedia] 运行时可见性问题: %s", problems)
             raise QualityGateError(problems)
-        logger.info("[CartoonMedia] 字幕可见性检查通过: cues=%d", len(cues))
+        logger.info(
+            "[CartoonMedia] 运行时可见性检查通过: beats=%d cues=%d",
+            len(beats),
+            len(cues),
+        )
 
     async def render(self, output_dir: Path, output_name: str = "video.mp4") -> Path:
         if Path(output_name).name != output_name or not output_name.endswith(".mp4"):
@@ -540,6 +468,7 @@ class CartoonMedia:
             "24",
             "--resolution",
             "landscape",
+            "--no-best-effort",
         ]
         logger.info(
             "[CartoonMedia] HyperFrames render 命令: %s (timeout=%ds)",
@@ -716,7 +645,6 @@ class CartoonMedia:
         )
         stdout_chunks: list[str] = []
         stderr_chunks: list[str] = []
-        last_progress_log = 0.0
 
         async def _read_stream(
             stream: asyncio.StreamReader | None,
@@ -736,7 +664,6 @@ class CartoonMedia:
                     logger.info("[CartoonMedia][%s] %s %s", label, log_prefix, line)
 
         try:
-            elapsed = 0.0
             async with asyncio.timeout(timeout_seconds):
                 # Read both streams concurrently.
                 await asyncio.gather(

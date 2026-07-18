@@ -1,4 +1,4 @@
-"""Plan a lesson as semantic entities, state transitions and teaching beats."""
+"""Plan teaching videos as replayable semantic scenes, never card layouts."""
 
 from __future__ import annotations
 
@@ -7,29 +7,24 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any, Mapping
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.shared.cartoon.execution import ExecutionCompiler, ExecutionSceneDraft
+from app.shared.cartoon.execution import (
+    SemanticCompiler,
+    SemanticSceneDraft,
+)
 from app.shared.cartoon.models import (
     CartoonBrief,
-    EntityKind,
-    EntityPlacement,
     Lesson,
     LessonDepth,
-    Relation,
-    SemanticRegion,
-    TeachingBeat,
+    SceneMode,
+    SceneTopology,
     TeachingScene,
-    Transition,
-    TransitionKind,
-    VisualEntity,
-    VisualGrammar,
-    VisualState,
 )
 
 
@@ -42,19 +37,11 @@ class CartoonPlanningError(RuntimeError):
     pass
 
 
-@dataclass(frozen=True)
-class _Profile:
-    scene_count: int
-    beats_per_scene: int
-    entity_limit: int
-    label: str
-
-
-def _profile(brief: CartoonBrief) -> _Profile:
+def _depth_label(brief: CartoonBrief) -> str:
     return {
-        LessonDepth.FOCUSED: _Profile(4, 2, 10, "聚焦讲解"),
-        LessonDepth.STANDARD: _Profile(4, 3, 10, "标准讲解"),
-        LessonDepth.DEEP: _Profile(5, 3, 10, "深入讲解"),
+        LessonDepth.FOCUSED: "聚焦讲解",
+        LessonDepth.STANDARD: "标准讲解",
+        LessonDepth.DEEP: "深入讲解",
     }[brief.configuration.lesson_depth]
 
 
@@ -68,131 +55,114 @@ class _PromptDocument:
     def load(cls, path: Path) -> "_PromptDocument":
         content = path.read_text(encoding="utf-8")
         variables = frozenset(match.group("name") for match in _PROMPT_VARIABLE.finditer(content))
-        remaining = _PROMPT_VARIABLE.sub("", content)
-        if "{{" in remaining or "}}" in remaining:
+        if "{{" in _PROMPT_VARIABLE.sub("", content) or "}}" in _PROMPT_VARIABLE.sub("", content):
             raise CartoonPlanningError(f"提示词 {path.name} 包含未闭合变量")
         return cls(path.name, content, variables)
 
     def render(self, values: Mapping[str, object]) -> str:
-        provided = frozenset(values)
-        if provided != self.variables:
+        if frozenset(values) != self.variables:
             raise CartoonPlanningError(
                 f"提示词 {self.name} 变量不一致: "
-                f"missing={sorted(self.variables - provided)} "
-                f"unexpected={sorted(provided - self.variables)}"
+                f"missing={sorted(self.variables - frozenset(values))} "
+                f"unexpected={sorted(frozenset(values) - self.variables)}"
             )
         return _PROMPT_VARIABLE.sub(lambda match: str(values[match.group("name")]), self.content)
 
 
 class _Draft(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
 
 class _StoryboardSceneDraft(_Draft):
-    title: str = Field(min_length=1)
-    teaching_goal: str = Field(min_length=1)
-    grammar: VisualGrammar
+    title: str = ""
+    teaching_goal: str = ""
+    mode: SceneMode | str = SceneMode.CONCEPT
+    topology: SceneTopology | str = SceneTopology.SPATIAL
 
-    @field_validator("title", "teaching_goal")
+    @field_validator("title", "teaching_goal", mode="before")
     @classmethod
-    def normalize_required_text(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("storyboard text cannot be blank")
-        return normalized
+    def normalize_text(cls, value: Any) -> str:
+        return str(value or "").strip()
 
 
 class _StoryboardDraft(_Draft):
-    title: str = Field(min_length=1)
-    scenes: list[_StoryboardSceneDraft] = Field(min_length=3, max_length=6)
+    title: str = ""
+    scenes: list[_StoryboardSceneDraft] = Field(default_factory=list)
 
-    @field_validator("title")
+    @field_validator("title", mode="before")
     @classmethod
-    def normalize_title(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("storyboard title cannot be blank")
-        return normalized
+    def normalize_title(cls, value: Any) -> str:
+        return str(value or "").strip()
 
-    @model_validator(mode="after")
-    def validate_arc(self) -> "_StoryboardDraft":
-        grammars = {scene.grammar for scene in self.scenes}
-        # At least 3 distinct grammars; 4-scene lessons may not cover all four
-        if len(grammars) < 3:
-            raise ValueError("storyboard must use at least three distinct grammars")
-        if self.scenes[0].grammar != VisualGrammar.CONCEPT:
-            raise ValueError("storyboard must begin with a concept scene")
-        if self.scenes[-1].grammar not in {VisualGrammar.CONCEPT, VisualGrammar.MODEL}:
-            raise ValueError("storyboard must end with concept or model consolidation")
-        return self
-
-
-class _BeatDraft(_Draft):
-    narration: str = Field(min_length=1)
-    visual: str = Field(min_length=1)
-    action: TransitionKind
-    targets: list[str] = Field(min_length=1, max_length=10)
-
-    @field_validator("narration", "visual")
+    @field_validator("scenes", mode="before")
     @classmethod
-    def normalize_required_text(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("beat text cannot be blank")
-        return normalized
+    def normalize_scenes(cls, value: Any) -> Any:
+        if value is None:
+            return []
+        return [value] if isinstance(value, dict) else value
 
-    @field_validator("targets")
-    @classmethod
-    def normalize_unique_targets(cls, values: list[str]) -> list[str]:
-        normalized = [value.strip() for value in values]
-        if any(not value for value in normalized):
-            raise ValueError("beat targets cannot contain blank labels")
-        if len(normalized) != len(set(normalized)):
-            raise ValueError("beat contains duplicate targets")
-        return normalized
-
-
-class _EntityDraft(_Draft):
-    """One stable visual object, expressed without renderer implementation details."""
-
-    label: str = Field(min_length=1)
-    detail: str = Field(min_length=1)
-
-    @field_validator("label", "detail")
-    @classmethod
-    def normalize_required_text(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("entity text cannot be blank")
-        return normalized
+def _scene_example_steps() -> str:
+    examples = [
+        {
+            "narration": "任务 A 进入输入容器，因此处理流程获得了可观察的待处理状态。",
+            "actions": [
+                {"verb": "place", "subject": "tokenA", "target": "source", "slot": 0}
+            ],
+        },
+        {
+            "narration": "处理开始后，任务 A 的可见值随状态推进而更新。",
+            "actions": [
+                {"verb": "update", "subject": "tokenA", "value": "处理中"}
+            ],
+        },
+        {
+            "narration": "处理完成后，任务 A 离开输入容器并移动到输出区域。",
+            "actions": [
+                {"verb": "move", "subject": "tokenA", "region": "output"}
+            ],
+        },
+    ]
+    return json.dumps(examples, ensure_ascii=False, indent=2)
 
 
-class _SceneDraft(_Draft):
-    entities: list[_EntityDraft] = Field(min_length=2, max_length=10)
-    beats: list[_BeatDraft] = Field(min_length=1, max_length=5)
-
-    @field_validator("entities")
-    @classmethod
-    def unique_entity_labels(cls, values: list[_EntityDraft]) -> list[_EntityDraft]:
-        labels = [value.label for value in values]
-        if len(labels) != len(set(labels)):
-            raise ValueError("scene contains duplicate entity labels")
-        return values
-
-    @model_validator(mode="after")
-    def validate_references(self) -> "_SceneDraft":
-        labels = [value.label for value in self.entities]
-        if len(labels) != len(set(labels)):
-            raise ValueError("scene contains duplicate entity labels")
-        known = set(labels)
-        for beat in self.beats:
-            if set(beat.targets) - known:
-                raise ValueError("beat target must exactly match an entity label")
-        return self
+def _storyboard_example_scenes() -> str:
+    examples = [
+        {
+            "title": "核心问题与判断条件",
+            "teaching_goal": "用对象和值建立本课核心问题及成立条件。",
+            "mode": "concept",
+            "topology": "spatial",
+        },
+        {
+            "title": "组成结构与协作关系",
+            "teaching_goal": "展示关键部件、边界和连接关系。",
+            "mode": "mechanism",
+            "topology": "network",
+        },
+        {
+            "title": "状态推进过程",
+            "teaching_goal": "播放同一批对象随操作发生的状态变化。",
+            "mode": "execution",
+            "topology": "flow",
+        },
+        {
+            "title": "方案差异与适用条件",
+            "teaching_goal": "比较两种状态或策略并明确选择依据。",
+            "mode": "comparison",
+            "topology": "grid",
+        },
+        {
+            "title": "结论验证与迁移方法",
+            "teaching_goal": "用可观察结果验证结论并形成判断方法。",
+            "mode": "evidence",
+            "topology": "sequence",
+        },
+    ]
+    return json.dumps(examples, ensure_ascii=False, indent=2)
 
 
 class CartoonPlanner:
-    """Generate one validated lesson while keeping renderer details private."""
+    """Generate renderer-neutral scene programs and compile all of them alike."""
 
     def __init__(self, *, max_parallel_scenes: int = 3) -> None:
         self._parallelism = max(1, max_parallel_scenes)
@@ -201,117 +171,58 @@ class CartoonPlanner:
             for name in ("storyboard.md", "scene_compose.md")
         }
 
-    def prompt_variables(self, name: str) -> frozenset[str]:
-        return self._prompts[name].variables
-
     async def plan(self, brief: CartoonBrief) -> Lesson:
         try:
-            logger.info(
-                "[CartoonPlanner] 开始规划: learning_need=%s depth=%s density=%s",
-                brief.learning_need,
-                brief.configuration.lesson_depth.value,
-                brief.configuration.visual_density,
-            )
             storyboard = await self._create_storyboard(brief)
-            logger.info(
-                "[CartoonPlanner] 分镜完成: title=%s scenes=%s grammars=%s",
-                storyboard.title,
-                len(storyboard.scenes),
-                [s.grammar.value for s in storyboard.scenes],
-            )
-            profile = _profile(brief)
-            logger.info(
-                "[CartoonPlanner] 场景并行生成: max_parallel=%s profile=%s",
-                self._parallelism,
-                profile.label,
-            )
             semaphore = asyncio.Semaphore(self._parallelism)
             async with asyncio.TaskGroup() as group:
                 tasks = [
-                    group.create_task(
-                        self._compose_scene(
-                            brief,
-                            storyboard,
-                            scene,
-                            scene_index,
-                            profile,
-                            semaphore,
-                        )
-                    )
-                    for scene_index, scene in enumerate(storyboard.scenes, start=1)
+                    group.create_task(self._compose_scene(brief, storyboard, outline, index, semaphore))
+                    for index, outline in enumerate(storyboard.scenes, start=1)
                 ]
             scenes = [task.result() for task in tasks]
-            total_beats = sum(len(s.beats) for s in scenes)
+            lesson = Lesson(title=storyboard.title, scenes=scenes)
             logger.info(
-                "[CartoonPlanner] 规划完成: title=%s scenes=%s total_beats=%s",
-                storyboard.title.strip(),
-                len(scenes),
-                total_beats,
+                "[CartoonPlanner] 规划完成: title=%s scenes=%d beats=%d modes=%s",
+                lesson.title, len(scenes), sum(len(scene.program.beats) for scene in scenes),
+                sorted({scene.mode.value for scene in scenes}),
             )
-            return Lesson(
-                title=storyboard.title.strip(),
-                scenes=scenes,
-            )
+            return lesson
         except Exception as exc:
             if isinstance(exc, CartoonPlanningError):
                 raise
             details = self._exception_details(exc)
-            logger.error(
-                "[CartoonPlanner] 规划失败: %s",
-                " | ".join(details),
-            )
+            logger.error("[CartoonPlanner] 规划失败: %s", " | ".join(details))
             raise CartoonPlanningError("无法生成可渲染的语义动画分镜: " + " | ".join(details)) from exc
 
     async def _create_storyboard(self, brief: CartoonBrief) -> _StoryboardDraft:
-        profile = _profile(brief)
-        logger.info(
-            "[CartoonPlanner] 生成分镜: scene_count=%s depth=%s density=%s",
-            profile.scene_count,
-            profile.label,
-            brief.configuration.visual_density,
-        )
-        prompt = self._prompts["storyboard.md"].render(
-            {
-                "scene_count": profile.scene_count,
-                "lesson_depth": profile.label,
-                "density": brief.configuration.visual_density,
-            }
-        )
-        response = await self._invoke(
+        prompt = self._prompts["storyboard.md"].render({
+            "lesson_depth": _depth_label(brief),
+            "density": brief.configuration.visual_density,
+            "example_scenes": _storyboard_example_scenes(),
+        })
+        response = await get_llm().ainvoke_json(
             _StoryboardDraft,
-            [
-                SystemMessage(content=prompt),
-                self._material_message(
-                    brief,
-                    task="规划整套动画的教学推进顺序",
-                    limit=8_000,
-                ),
-            ],
+            [SystemMessage(content=prompt), self._material_message(brief, task="规划整套动画的教学推进顺序", limit=8_000)],
             temperature=0.1,
+            include_schema_example=False,
         )
-        storyboard = response if isinstance(response, _StoryboardDraft) else _StoryboardDraft.model_validate(response)
-        scene_count = len(storyboard.scenes)
-        if not (profile.scene_count - 1 <= scene_count <= profile.scene_count + 1):
-            logger.error(
-                "[CartoonPlanner] 分镜场景数偏差过大: expected=%s got=%s",
-                profile.scene_count,
-                scene_count,
+        if not isinstance(response, _StoryboardDraft):
+            raise TypeError("storyboard payload did not validate as _StoryboardDraft")
+        if not response.title.strip():
+            response = response.model_copy(update={"title": brief.learning_need.strip() or "动画讲解"})
+        if not response.scenes:
+            response = response.model_copy(
+                update={
+                    "scenes": [
+                        _StoryboardSceneDraft(
+                            title="核心概念",
+                            teaching_goal="展示学习主题的关键对象和基本关系。",
+                        )
+                    ]
+                }
             )
-            raise CartoonPlanningError(
-                f"storyboard scene count {scene_count} too far from target {profile.scene_count}"
-            )
-        if scene_count != profile.scene_count:
-            logger.warning(
-                "[CartoonPlanner] 分镜场景数微调: expected=%s got=%s (继续执行)",
-                profile.scene_count,
-                scene_count,
-            )
-        logger.info(
-            "[CartoonPlanner] 分镜生成成功: title=%s scenes=%s",
-            storyboard.title,
-            [(i + 1, s.title, s.grammar.value) for i, s in enumerate(storyboard.scenes)],
-        )
-        return storyboard
+        return response
 
     async def _compose_scene(
         self,
@@ -319,457 +230,87 @@ class CartoonPlanner:
         storyboard: _StoryboardDraft,
         outline: _StoryboardSceneDraft,
         scene_index: int,
-        profile: _Profile,
         semaphore: asyncio.Semaphore,
     ) -> TeachingScene:
-        logger.info(
-            "[CartoonPlanner] 生成场景 %d/%d: title=%s grammar=%s",
-            scene_index,
-            len(storyboard.scenes),
-            outline.title,
-            outline.grammar.value,
-        )
-        t0 = asyncio.get_event_loop().time()
-        prompt = self._prompts["scene_compose.md"].render(
-            {
-                "grammar": outline.grammar.value,
-                "beat_count": profile.beats_per_scene,
-                "density": brief.configuration.visual_density,
-                "scene_contract": self._scene_contract(outline.grammar),
-            }
-        )
+        mode = self._scene_mode(outline.mode)
+        topology = self._scene_topology(outline.topology)
+        prompt = self._prompts["scene_compose.md"].render({
+            "mode": mode.value,
+            "topology": topology.value,
+            "density": brief.configuration.visual_density,
+            "example_steps": _scene_example_steps(),
+        })
         context = {
             "lesson_title": storyboard.title,
             "scene_title": outline.title,
             "teaching_goal": outline.teaching_goal,
-            "grammar": outline.grammar.value,
+            "mode": mode.value,
+            "topology": topology.value,
         }
         async with semaphore:
-            schema: type[BaseModel] = (
-                ExecutionSceneDraft if outline.grammar is VisualGrammar.TRACE else _SceneDraft
-            )
-            response = await self._invoke(
-                schema,
-                [
-                    SystemMessage(content=prompt),
-                    self._material_message(
-                        brief,
-                        task="只生成当前场景的实体、状态和教学节拍",
-                        limit=5_000,
-                        context=context,
-                    ),
-                ],
+            response = await get_llm().ainvoke_json(
+                SemanticSceneDraft,
+                [SystemMessage(content=prompt), self._material_message(brief, task="只生成当前场景的对象与可播放状态操作", limit=5_000, context=context)],
                 temperature=0.12,
-                validator=lambda value: self._validate_scene_draft(
-                    value, grammar=outline.grammar, profile=profile
-                ),
+                validator=self._validate_scene_draft,
+                include_schema_example=False,
             )
-        scene_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
-        if outline.grammar is VisualGrammar.TRACE:
-            draft = response if isinstance(response, ExecutionSceneDraft) else ExecutionSceneDraft.model_validate(response)
-            self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
-            logger.info(
-                "[CartoonPlanner] 场景 %d (trace) 生成完成: objects=%s beats=%s elapsed_ms=%d",
-                scene_index,
-                len(draft.objects),
-                len(draft.beats),
-                scene_ms,
-            )
-            return self._materialize_execution_scene(outline, draft, scene_index)
-        draft = response if isinstance(response, _SceneDraft) else _SceneDraft.model_validate(response)
-        self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
-        logger.info(
-            "[CartoonPlanner] 场景 %d (%s) 生成完成: entities=%s beats=%s elapsed_ms=%d",
-            scene_index,
-            outline.grammar.value,
-            len(draft.entities),
-            len(draft.beats),
-            scene_ms,
-        )
-        return self._materialize_scene(outline, draft, scene_index)
-
-    @classmethod
-    def _validate_scene_draft(
-        cls,
-        value: BaseModel,
-        *,
-        grammar: VisualGrammar,
-        profile: _Profile,
-    ) -> None:
-        if grammar is VisualGrammar.TRACE:
-            if not isinstance(value, ExecutionSceneDraft):
-                raise ValueError("trace payload must validate as ExecutionSceneDraft")
-            beat_count = len(value.beats)
-            if not (profile.beats_per_scene - 1 <= beat_count <= profile.beats_per_scene + 1):
-                raise ValueError(
-                    f"trace scene beat count {beat_count} too far from target {profile.beats_per_scene}"
-                )
-            if len(value.objects) > profile.entity_limit:
-                raise ValueError(f"trace scene exceeds object capacity {profile.entity_limit}")
-            ExecutionCompiler.compile(value, scene_id="validation-scene")
-            return
-        if not isinstance(value, _SceneDraft):
-            raise ValueError("scene payload must validate as _SceneDraft")
-        if len(value.entities) > profile.entity_limit:
-            raise ValueError(f"scene exceeds entity capacity {profile.entity_limit}")
-        beat_count = len(value.beats)
-        if not (profile.beats_per_scene - 1 <= beat_count <= profile.beats_per_scene + 1):
-            raise ValueError(
-                f"scene beat count {beat_count} too far from target {profile.beats_per_scene}"
-            )
-
-    @staticmethod
-    def _scene_contract(grammar: VisualGrammar) -> str:
-        if grammar is VisualGrammar.TRACE:
-            return """你正在生成算法或计算机过程的可执行场景。只输出以下 JSON，不得输出 entities、targets、visual、action、states、placements、ID、坐标或样式：
-```json
-{
-  "objects":[
-    {"name":"buffer","label":"缓冲区","role":"container","capacity":3},
-    {"name":"packetA","label":"数据包 A","role":"token","value":"A"},
-    {"name":"cursor","label":"读指针","role":"pointer"}
-  ],
-  "beats":[
-    {"narration":"数据包进入缓冲区的第一个位置。","operation":{"verb":"place","subject":"packetA","target":"buffer","slot":0}},
-    {"narration":"读指针指向即将处理的数据包。","operation":{"verb":"point","subject":"cursor","target":"packetA"}},
-    {"narration":"处理完成后，数据包进入输出区。","operation":{"verb":"remove","subject":"packetA"}}
-  ]
-}
-```
-对象 `role` 只能是 `container`、`token`、`pointer`、`node`、`port`、`marker`；只有 `container` 声明 `capacity`（0 表示无状态容器，不分配槽位）。`value` 字段必须是字符串（如 "5" 而非 5）。操作 `verb` 只能是 `reveal`、`place`、`move`、`remove`、`point`、`update`、`connect`、`disconnect`、`compare`、`highlight`。`place` 必须有 container `target` 和 `slot`；`point/connect/disconnect/compare` 必须有 `target`；`update` 必须有 `value`；`move` 使用有状态 container 的 `target`+`slot`，或使用无状态 container（capacity=0）的 `target`（无需 slot），或使用 `region`（input/output/result/left/right/top/bottom/main/code）。每个 beat 只描述一个真实操作，不要用文字代替状态变化。"""
-        return """只输出以下 JSON：
-```json
-{
-  "entities":[{"label":"稳定对象名称","detail":"对象的实际公式、值或条件"}],
-  "beats":[{"narration":"解释当前变化的原因和结果","visual":"画面上可见的具体知识表达","action":"reveal","targets":["稳定对象名称"]}]
-}
-```
-规则：
-- 不得输出 states、placements、relations、实体 ID、位置、容器、区域、颜色、样式或焦点字段
-- `targets` 必须精确引用已有实体的 label
-- `narration` 控制在 80 字以内，解释因果而非罗列步骤
-- `visual` 必须包含具体公式、数值或结论，不能只是"更新"或"执行"
-- `action` 只能是：reveal（首次显示）、move（位置变化）、insert（加入新元素）、remove（移除元素）、update（值或状态更新）、connect（建立关联）、disconnect（解除关联）、execute（执行操作）、compare（对比）
-- 每个 beat 只推进一个可观察的变化，不要把多个步骤压缩在一个 beat 中"""
-
-    @classmethod
-    def _materialize_execution_scene(
-        cls,
-        outline: _StoryboardSceneDraft,
-        draft: ExecutionSceneDraft,
-        scene_index: int,
-    ) -> TeachingScene:
-        scene_id = f"scene-{scene_index:02d}"
-        compiled = ExecutionCompiler.compile(draft, scene_id=scene_id)
-        return TeachingScene(
-            id=scene_id,
-            title=outline.title,
-            grammar=VisualGrammar.TRACE,
-            execution_program=compiled.program,
-            entities=compiled.entities,
-            states=compiled.states,
-            beats=compiled.beats,
-        )
-
-    @classmethod
-    def _materialize_scene(
-        cls,
-        outline: _StoryboardSceneDraft,
-        draft: _SceneDraft,
-        scene_index: int,
-    ) -> TeachingScene:
-        scene_id = f"scene-{scene_index:02d}"
-        entity_ids = [
-            f"{scene_id}-entity-{index:02d}"
-            for index in range(1, len(draft.entities) + 1)
-        ]
-        entities = [
-            VisualEntity(
-                id=entity_id,
-                label=entity.label,
-                kind=cls._entity_kind(outline.grammar, index),
-            )
-            for index, (entity_id, entity) in enumerate(
-                zip(entity_ids, draft.entities, strict=True)
-            )
-        ]
-        entity_ids_by_label = {
-            entity.label: entity.id
-            for entity in entities
-        }
-        compiled_beats = [
-            (beat, [entity_ids_by_label[label] for label in beat.targets])
-            for beat in draft.beats
-        ]
-        initial_values = {
-            entity_id: entity.detail
-            for entity_id, entity in zip(entity_ids, draft.entities, strict=True)
-        }
-        states = cls._compile_states(scene_id, entities, compiled_beats, initial_values)
-        beats = [
-            TeachingBeat(
-                id=f"{scene_id}-beat-{index:02d}",
-                narration=beat.narration,
-                caption=cls._action_caption(beat.action, beat.targets),
-                before_state_id=states[index - 1].id,
-                after_state_id=states[index].id,
-                transition=Transition(
-                    kind=beat.action,
-                    entity_ids=target_ids,
-                ),
-                focus_entity_ids=target_ids,
-            )
-            for index, (beat, target_ids) in enumerate(compiled_beats, start=1)
-        ]
-        return TeachingScene(
-            id=scene_id,
-            title=outline.title,
-            grammar=outline.grammar,
-            entities=entities,
-            states=states,
-            beats=beats,
+        if not isinstance(response, SemanticSceneDraft):
+            raise TypeError("scene payload did not validate as SemanticSceneDraft")
+        response = response.model_copy(update={"mode": mode, "topology": topology})
+        return SemanticCompiler.compile(
+            response,
+            scene_id=f"scene-{scene_index:02d}",
+            title=outline.title.strip() or f"场景 {scene_index}",
         )
 
     @staticmethod
-    def _entity_kind(grammar: VisualGrammar, index: int) -> EntityKind:
-        if grammar in {VisualGrammar.MODEL, VisualGrammar.TRACE} and index == 0:
-            return EntityKind.CONTAINER
-        if grammar is VisualGrammar.TRACE:
-            return EntityKind.TOKEN
-        if grammar is VisualGrammar.EVIDENCE:
-            return EntityKind.CODE if index == 0 else EntityKind.METRIC
-        return EntityKind.TERM
-
-    @staticmethod
-    def _action_caption(action: TransitionKind, targets: list[str]) -> str:
-        labels = "、".join(targets)
-        verbs = {
-            TransitionKind.REVEAL: "显示",
-            TransitionKind.MOVE: "推进",
-            TransitionKind.INSERT: "加入",
-            TransitionKind.REMOVE: "移除",
-            TransitionKind.UPDATE: "更新",
-            TransitionKind.CONNECT: "建立关联",
-            TransitionKind.DISCONNECT: "解除关联",
-            TransitionKind.EXECUTE: "执行",
-            TransitionKind.COMPARE: "比较",
-        }
-        return f"{verbs[action]}：{labels}"
-
-    @classmethod
-    def _compile_states(
-        cls,
-        scene_id: str,
-        entities: list[VisualEntity],
-        beats: list[tuple[_BeatDraft, list[str]]],
-        initial_values: dict[str, str],
-    ) -> list[VisualState]:
-        regions = (
-            SemanticRegion.LEFT,
-            SemanticRegion.RIGHT,
-            SemanticRegion.TOP,
-            SemanticRegion.BOTTOM,
-            SemanticRegion.INPUT,
-            SemanticRegion.OUTPUT,
-            SemanticRegion.RESULT,
-            SemanticRegion.CODE,
-        )
-        placements = [
-            EntityPlacement(
-                entity_id=entity.id,
-                region=regions[index % len(regions)],
-                visible=(index == 0),
-                value=initial_values[entity.id],
-                status=("active" if index == 0 else "idle"),
-            )
-            for index, entity in enumerate(entities)
-        ]
-        states = [
-            VisualState(
-                id=f"{scene_id}-state-01",
-                placements=placements,
-                relations=[],
-            )
-        ]
-        for index, (beat, target_ids) in enumerate(beats, start=1):
-            states.append(
-                cls._advance_state(
-                    state=states[-1],
-                    state_id=f"{scene_id}-state-{index + 1:02d}",
-                    entity_ids=[entity.id for entity in entities],
-                    beat=beat,
-                    target_ids=target_ids,
-                    step=index,
-                )
-            )
-        return states
-
-    @staticmethod
-    def _advance_state(
-        *,
-        state: VisualState,
-        state_id: str,
-        entity_ids: list[str],
-        beat: _BeatDraft,
-        target_ids: list[str],
-        step: int,
-    ) -> VisualState:
-        placements = [item.model_copy(deep=True) for item in state.placements]
-        relations = [item.model_copy(deep=True) for item in state.relations]
-        by_id = {item.entity_id: item for item in placements}
-        targets = target_ids
-        changed = False
-
-        def mark_value(entity_id: str, status: str = "active") -> None:
-            nonlocal changed
-            placement = by_id[entity_id]
-            # A beat may focus several stable objects, but its visual statement
-            # belongs to one focal object.  Repeating it in every card turns a
-            # diagram into a caption wall and loses the object-level meaning.
-            value = beat.visual if entity_id == targets[0] else placement.value
-            if (
-                placement.value != value
-                or placement.status != status
-                or not placement.visible
-            ):
-                placement.value = value
-                placement.status = status
-                placement.visible = True
-                changed = True
-
-        if beat.action is TransitionKind.REVEAL:
-            for entity_id in targets:
-                placement = by_id[entity_id]
-                if not placement.visible or placement.status != "active":
-                    placement.visible = True
-                    placement.status = "active"
-                    changed = True
-        elif beat.action is TransitionKind.MOVE:
-            regions = list(SemanticRegion)
-            for entity_id in targets:
-                placement = by_id[entity_id]
-                placement.region = regions[(regions.index(placement.region) + 1) % len(regions)]
-                placement.visible = True
-                placement.status = "active"
-                changed = True
-        elif beat.action is TransitionKind.INSERT:
-            for entity_id in targets:
-                placement = by_id[entity_id]
-                if not placement.visible or placement.status != "active":
-                    placement.visible = True
-                    placement.status = "active"
-                    changed = True
-                mark_value(entity_id)
-        elif beat.action is TransitionKind.REMOVE:
-            for entity_id in targets:
-                placement = by_id[entity_id]
-                if placement.visible or placement.status != "warning":
-                    placement.visible = False
-                    placement.status = "warning"
-                    changed = True
-        elif beat.action is TransitionKind.CONNECT:
-            source_id = targets[0]
-            target_id = next((value for value in targets[1:] if value != source_id), None)
-            if target_id is None:
-                target_id = next(value for value in entity_ids if value != source_id)
-            for entity_id in {source_id, target_id}:
-                placement = by_id[entity_id]
-                if not placement.visible or placement.status != "active":
-                    placement.visible = True
-                    placement.status = "active"
-                    changed = True
-            relation = Relation(source_id=source_id, target_id=target_id)
-            if relation not in relations:
-                relations.append(relation)
-                changed = True
-        elif beat.action is TransitionKind.DISCONNECT:
-            target_set = set(targets)
-            for index, relation in enumerate(relations):
-                if relation.source_id in target_set or relation.target_id in target_set:
-                    relations.pop(index)
-                    changed = True
-                    break
-        else:
-            for entity_id in targets:
-                mark_value(
-                    entity_id,
-                    status="success" if beat.action is TransitionKind.EXECUTE else "active",
-                )
-
-        # Every beat carries one learner-visible statement.  Actions such as
-        # reveal, connect and move used to mutate only presentation state, so
-        # the renderer had no domain content to show for most of the narration.
-        # Keep it on the first focus object; the remaining targets retain their
-        # own stable details instead of becoming duplicate caption cards.
-        if beat.action is not TransitionKind.REMOVE:
-            focal = by_id[targets[0]]
-            if focal.value != beat.visual:
-                focal.value = beat.visual
-                changed = True
-
-        if not changed:
-            mark_value(targets[0], status="success")
-        return VisualState(id=state_id, placements=placements, relations=relations)
-
-    async def _invoke(
-        self,
-        schema: type[BaseModel],
-        messages: list[SystemMessage | HumanMessage],
-        *,
-        temperature: float,
-        validator: Callable[[BaseModel], None] | None = None,
-    ) -> Any:
-        logger.info(
-            "[CartoonPlanner] LLM 调用开始: schema=%s temperature=%.2f messages=%d",
-            schema.__name__,
-            temperature,
-            len(messages),
-        )
-        t0 = asyncio.get_event_loop().time()
+    def _scene_mode(value: SceneMode | str) -> SceneMode:
         try:
-            result = await get_llm().ainvoke_json(
-                schema,
-                messages,
-                temperature=temperature,
-                validator=validator,
-            )
-            elapsed_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
-            logger.info(
-                "[CartoonPlanner] LLM 调用成功: schema=%s elapsed_ms=%d",
-                schema.__name__,
-                elapsed_ms,
-            )
-            return result
-        except Exception as exc:
-            elapsed_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
-            logger.error(
-                "[CartoonPlanner] LLM 调用失败: schema=%s elapsed_ms=%d error=%s",
-                schema.__name__,
-                elapsed_ms,
-                exc,
-            )
-            raise
+            return SceneMode(value)
+        except (TypeError, ValueError):
+            return SceneMode.CONCEPT
 
-    @classmethod
+    @staticmethod
+    def _scene_topology(value: SceneTopology | str) -> SceneTopology:
+        try:
+            return SceneTopology(value)
+        except (TypeError, ValueError):
+            return SceneTopology.SPATIAL
+
+    @staticmethod
+    def _validate_scene_draft(value: BaseModel) -> None:
+        if not isinstance(value, SemanticSceneDraft):
+            raise ValueError("scene payload must validate as SemanticSceneDraft")
+        # The storyboard is guidance only.  The compiler owns the final scene
+        # mode/topology and the payload is accepted even when the model drifts.
+        SemanticCompiler.compile(value, scene_id="validation-scene", title="validation scene")
+
+    @staticmethod
     def _material_message(
-        cls,
         brief: CartoonBrief,
         *,
         task: str,
         limit: int,
-        context: dict[str, object] | None = None,
+        context: dict[str, str] | None = None,
     ) -> HumanMessage:
+        material = CartoonPlanner._teaching_material(brief)
         payload = {
             "task": task,
             "context": context or {},
-            "teaching_material": cls._source(brief, limit),
+            "teaching_material": material,
         }
-        return HumanMessage(
-            content=json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
-        )
+        content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        while len(content) > limit and payload["teaching_material"]:
+            overflow = len(content) - limit
+            payload["teaching_material"] = payload["teaching_material"][:-overflow]
+            content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        if len(content) > limit:
+            raise CartoonPlanningError("场景上下文超过提示词预算")
+        return HumanMessage(content=content)
 
     @staticmethod
-    def _source(brief: CartoonBrief, limit: int) -> str:
+    def _teaching_material(brief: CartoonBrief) -> str:
         sections = [
             f"学习主题：{brief.learning_need}",
             "教学上下文：" + json.dumps(brief.instruction_context, ensure_ascii=False),
@@ -777,20 +318,10 @@ class CartoonPlanner:
             "薄弱点：" + "、".join(brief.weak_knowledge_points),
             *brief.source_materials,
         ]
-        output: list[str] = []
-        remaining = limit
-        for section in sections:
-            normalized = str(section).strip()
-            if not normalized or remaining <= 0:
-                continue
-            value = normalized[:remaining]
-            output.append(value)
-            remaining -= len(value) + 2
-        return "\n\n".join(output)
+        return "\n\n".join(value.strip() for value in sections if value.strip())
 
-    @classmethod
-    def _exception_details(cls, exc: BaseException) -> list[str]:
+    @staticmethod
+    def _exception_details(exc: BaseException) -> list[str]:
         if isinstance(exc, BaseExceptionGroup):
-            details = [detail for nested in exc.exceptions for detail in cls._exception_details(nested)]
-            return details[:8]
-        return [f"{type(exc).__name__}: {str(exc).strip() or type(exc).__name__}"]
+            return [detail for child in exc.exceptions for detail in CartoonPlanner._exception_details(child)]
+        return [str(exc) or type(exc).__name__]

@@ -22,10 +22,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { HighlightedCell, TraceEvent } from '@/features/algorithm-visualization/types'
 
-const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[] }>()
+const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[]; onStepComplete?: () => void }>()
 
 // DP 表的表头、数值网格、高亮单元格坐标
 const headers = computed<string[]>(() => { const raw = props.currentEvent?.state?.structure?.headers; return Array.isArray(raw) ? raw : [] })
@@ -46,6 +46,18 @@ function getCellTone(row: number, col: number) {
   const matched = highlighted.value.find((item: any) => item.row === row && item.col === col)
   return matched?.tone || ''
 }
+
+// 动画完成通知：DP 表无 CSS 过渡，步骤变化后立即完成
+watch(
+  [() => props.currentStepIndex, () => props.currentEvent],
+  () => {
+    requestAnimationFrame(() => {
+      props.onStepComplete?.()
+    })
+  },
+)
+
+onBeforeUnmount(() => {})
 </script>
 
 <style scoped>

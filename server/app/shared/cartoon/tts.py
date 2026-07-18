@@ -108,7 +108,7 @@ class CartoonSpeech:
         voice: str,
         pace: str = "fast",
     ) -> Timeline:
-        ordered_beats = [beat for scene in lesson.scenes for beat in scene.beats]
+        ordered_beats = [beat for scene in lesson.scenes for beat in scene.program.beats]
         logger.info(
             "[CartoonSpeech] 开始旁白合成: voice=%s pace=%s total_beats=%d",
             voice,
@@ -161,7 +161,7 @@ class CartoonSpeech:
         captions: list[CaptionCue] = []
         cursor = 0
         for scene in lesson.scenes:
-            for beat in scene.beats:
+            for beat in scene.program.beats:
                 clip = clips[len(timed_beats)]
                 duration_ms = max(_MIN_BEAT_MS, clip.duration_ms + _AUDIO_TAIL_MS)
                 timed = TimedBeat(

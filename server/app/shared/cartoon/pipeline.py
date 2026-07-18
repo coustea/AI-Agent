@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -22,7 +23,15 @@ from app.shared.cartoon.tts import CartoonSpeech
 
 
 logger = get_logger(__name__)
-_PUBLISH_LOCKS: dict[str, asyncio.Lock] = {}
+
+
+@dataclass
+class _PublishLock:
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    users: int = 0
+
+
+_PUBLISH_LOCKS: dict[str, _PublishLock] = {}
 _PUBLISH_LOCKS_GUARD = asyncio.Lock()
 
 
@@ -129,15 +138,15 @@ class CartoonPipeline:
             audit["stages"]["planning"] = {
                 "passed": True,
                 "scene_count": len(lesson.scenes),
-                "beat_count": sum(len(scene.beats) for scene in lesson.scenes),
-                "grammars": sorted({scene.grammar.value for scene in lesson.scenes}),
+                "beat_count": sum(len(scene.program.beats) for scene in lesson.scenes),
+                "modes": sorted({scene.mode.value for scene in lesson.scenes}),
                 "elapsed_ms": planning_ms,
             }
             logger.info(
-                "[Cartoon] 阶段 planning: 完成 scenes=%s beats=%s grammars=%s elapsed_ms=%d",
+                "[Cartoon] 阶段 planning: 完成 scenes=%s beats=%s modes=%s elapsed_ms=%d",
                 len(lesson.scenes),
-                sum(len(s.beats) for s in lesson.scenes),
-                sorted({s.grammar.value for s in lesson.scenes}),
+                sum(len(s.program.beats) for s in lesson.scenes),
+                sorted({s.mode.value for s in lesson.scenes}),
                 planning_ms,
             )
 
@@ -179,9 +188,7 @@ class CartoonPipeline:
             self.media.install_runtime(output_dir)
             required_files = [
                 bundle.html_path,
-                bundle.scene_data_path,
                 bundle.caption_path,
-                *bundle.scene_paths,
                 output_dir / "assets" / "runtime.js",
                 output_dir / "assets" / "theme.css",
                 output_dir / "assets" / "vendor" / "gsap.min.js",
@@ -201,13 +208,13 @@ class CartoonPipeline:
                 "caption_artifact": bundle.caption_path.name,
                 "caption_mode": "burned-in+vtt",
                 "html_size_bytes": html_size,
-                "scene_count": len(bundle.scene_paths),
+                "scene_count": len(lesson.scenes),
                 "elapsed_ms": compose_ms,
             }
             logger.info(
                 "[Cartoon] 阶段 compose: 完成 html=%s scenes=%s html_size=%d elapsed_ms=%d",
                 bundle.html_path,
-                len(bundle.scene_paths),
+                len(lesson.scenes),
                 html_size,
                 compose_ms,
             )
@@ -311,24 +318,31 @@ class CartoonPipeline:
         logger.info("[Cartoon] 发布: workspace=%s -> output_dir=%s", workspace, output_dir)
         key = str(output_dir.resolve())
         async with _PUBLISH_LOCKS_GUARD:
-            lock = _PUBLISH_LOCKS.setdefault(key, asyncio.Lock())
-        async with lock:
-            backup = output_dir.parent / f".{output_dir.name}.backup-{uuid4().hex}"
-            moved_previous = False
-            try:
-                if output_dir.exists():
-                    output_dir.rename(backup)
-                    moved_previous = True
-                workspace.rename(output_dir)
-            except Exception:
-                if output_dir.exists() and not workspace.exists():
-                    shutil.rmtree(output_dir, ignore_errors=True)
-                if moved_previous and backup.exists() and not output_dir.exists():
-                    backup.rename(output_dir)
-                raise
-            else:
-                if backup.exists():
-                    shutil.rmtree(backup, ignore_errors=True)
+            entry = _PUBLISH_LOCKS.setdefault(key, _PublishLock())
+            entry.users += 1
+        try:
+            async with entry.lock:
+                backup = output_dir.parent / f".{output_dir.name}.backup-{uuid4().hex}"
+                moved_previous = False
+                try:
+                    if output_dir.exists():
+                        output_dir.rename(backup)
+                        moved_previous = True
+                    workspace.rename(output_dir)
+                except Exception:
+                    if output_dir.exists() and not workspace.exists():
+                        shutil.rmtree(output_dir, ignore_errors=True)
+                    if moved_previous and backup.exists() and not output_dir.exists():
+                        backup.rename(output_dir)
+                    raise
+                else:
+                    if backup.exists():
+                        shutil.rmtree(backup, ignore_errors=True)
+        finally:
+            async with _PUBLISH_LOCKS_GUARD:
+                entry.users -= 1
+                if entry.users == 0 and _PUBLISH_LOCKS.get(key) is entry:
+                    del _PUBLISH_LOCKS[key]
         logger.info("[Cartoon] 发布完成: output_dir=%s", output_dir)
 
     @staticmethod

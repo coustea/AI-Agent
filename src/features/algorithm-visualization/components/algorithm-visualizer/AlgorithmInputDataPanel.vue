@@ -22,7 +22,7 @@
         <span class="field-label">{{ field.label }}<b v-if="field.required">必填</b></span>
         <textarea
           v-if="field.schema.type === 'array'"
-          :value="formatFieldValue(field.key, field.schema)"
+          v-model="localRawValues[field.key]"
           :disabled="disabled"
           :class="{ invalid: fieldErrors[field.key] }"
           :placeholder="fieldPlaceholder(field.schema)"
@@ -32,7 +32,7 @@
         />
         <select
           v-else-if="field.schema.type === 'boolean'"
-          :value="String(modelValue[field.key])"
+          v-model="localRawValues[field.key]"
           :disabled="disabled"
           @change="updateField(field.key, field.schema, ($event.target as HTMLSelectElement).value)"
         >
@@ -42,7 +42,7 @@
         <input
           v-else
           :type="field.schema.type === 'integer' || field.schema.type === 'number' ? 'number' : 'text'"
-          :value="formatFieldValue(field.key, field.schema)"
+          v-model="localRawValues[field.key]"
           :disabled="disabled"
           :class="{ invalid: fieldErrors[field.key] }"
           :placeholder="fieldPlaceholder(field.schema)"
@@ -51,12 +51,20 @@
         >
         <span :id="`${field.key}-help`" class="field-help">{{ fieldErrors[field.key] || fieldHelp(field.schema) }}</span>
       </label>
+
+      <!-- 空白占位提示 -->
+      <div v-if="fields.length === 0" class="empty-fields-placeholder">
+        <Settings class="placeholder-icon" />
+        <p>暂无输入参数</p>
+        <span>请先在“代码”页签编写合法的 Python 代码，我们将自动解析函数参数并在此处生成输入表单。</span>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, toRaw, watch } from 'vue'
+import { computed, ref, toRaw, watch, onMounted } from 'vue'
+import { Settings } from 'lucide-vue-next'
 import type { InputSchema } from '@/features/algorithm-visualization/types'
 
 const props = withDefaults(defineProps<{
@@ -76,6 +84,8 @@ const emit = defineEmits<{
 }>()
 
 const fieldErrors = ref<Record<string, string>>({})
+const localRawValues = ref<Record<string, string>>({})
+
 const labels: Record<string, string> = {
   arr: '数组元素', candidates: '候选数字', capacity: '背包容量', char_freq: '字符与频率',
   edges: '边', exp: '指数', grid: '网格', interval_len: '区间长度', intervals: '区间',
@@ -92,25 +102,98 @@ const fields = computed(() => Object.entries(props.inputSchema?.properties ?? {}
   required: props.inputSchema?.required?.includes(key) ?? false,
 })))
 
+// 检查两个对象或数组是否深层相等（主要支持 JSON 基础类型如数组、数值、布尔值）
+function isSameValue(val1: unknown, val2: unknown): boolean {
+  return JSON.stringify(val1) === JSON.stringify(val2)
+}
+
+// 从 props.modelValue 或 props.defaultData 同步本地字符串缓存
+function syncLocalValuesFromProps() {
+  const nextRaw: Record<string, string> = {}
+  for (const [key, schema] of Object.entries(props.inputSchema?.properties ?? {})) {
+    const val = props.modelValue[key] !== undefined ? props.modelValue[key] : props.defaultData?.[key]
+    nextRaw[key] = formatValue(val, schema)
+  }
+  localRawValues.value = nextRaw
+}
+
+onMounted(() => {
+  syncLocalValuesFromProps()
+})
+
+// 监听默认数据变化（算法模版切换或重置等）
 watch(
   () => props.defaultData,
-  (data) => {
+  (newVal, oldVal) => {
+    if (newVal && oldVal && isSameValue(newVal, oldVal)) return
+
     fieldErrors.value = {}
-    emit('update:modelValue', cloneInputData(data))
+    const nextVal = cloneInputData(newVal)
+    emit('update:modelValue', nextVal)
     emit('validity-change', true)
+
+    const nextRaw: Record<string, string> = {}
+    for (const [key, schema] of Object.entries(props.inputSchema?.properties ?? {})) {
+      nextRaw[key] = formatValue(newVal?.[key], schema)
+    }
+    localRawValues.value = nextRaw
   },
-  { immediate: true },
+)
+
+// 监听 schema 结构发生变化（切换自定义入口函数或 official/custom 模式等）
+watch(
+  () => props.inputSchema,
+  (newVal, oldVal) => {
+    if (newVal && oldVal && isSameValue(newVal, oldVal)) return
+    syncLocalValuesFromProps()
+  },
+  { deep: true }
+)
+
+// 监听 modelValue 改变，用于外部（父级）强制覆盖，但正在输入且格式不正确的字段不强制覆盖
+watch(
+  () => props.modelValue,
+  (newVal, oldVal) => {
+    if (!newVal) return
+    if (newVal && oldVal && isSameValue(newVal, oldVal)) return
+
+    for (const [key, schema] of Object.entries(props.inputSchema?.properties ?? {})) {
+      const propVal = newVal[key]
+      const currentRaw = localRawValues.value[key]
+
+      if (currentRaw === undefined) {
+        localRawValues.value[key] = formatValue(propVal ?? props.defaultData?.[key], schema)
+        continue
+      }
+
+      try {
+        const required = props.inputSchema?.required?.includes(key) ?? false
+        const currentParsed = parseValue(currentRaw, schema, required)
+        if (!isSameValue(currentParsed, propVal)) {
+          localRawValues.value[key] = formatValue(propVal ?? props.defaultData?.[key], schema)
+        }
+      } catch {
+        // 当前输入无效，不覆写以避免影响用户打字
+      }
+    }
+  },
+  { deep: true }
 )
 
 function updateField(key: string, schema: InputSchema, raw: string) {
   try {
-    const next = { ...props.modelValue, [key]: parseValue(raw, schema) }
+    const required = props.inputSchema?.required?.includes(key) ?? false
+    const parsed = parseValue(raw, schema, required)
+    
+    // 解析成功：更新错误信息并向外更新 modelValue
+    const next = { ...props.modelValue, [key]: parsed }
     const errors = { ...fieldErrors.value }
     delete errors[key]
     fieldErrors.value = errors
     emit('update:modelValue', next)
     emit('validity-change', Object.keys(errors).length === 0)
   } catch (error) {
+    // 解析失败：记录错误，但不覆盖父级的值，也不强制恢复本地值
     fieldErrors.value = { ...fieldErrors.value, [key]: error instanceof Error ? error.message : '输入格式不正确' }
     emit('validity-change', false)
   }
@@ -118,38 +201,55 @@ function updateField(key: string, schema: InputSchema, raw: string) {
 
 function restoreDefaults() {
   fieldErrors.value = {}
-  emit('update:modelValue', cloneInputData(props.defaultData))
+  const defaults = cloneInputData(props.defaultData)
+  emit('update:modelValue', defaults)
   emit('validity-change', true)
+
+  const nextRaw: Record<string, string> = {}
+  for (const [key, schema] of Object.entries(props.inputSchema?.properties ?? {})) {
+    nextRaw[key] = formatValue(defaults[key], schema)
+  }
+  localRawValues.value = nextRaw
 }
 
 function cloneInputData(data?: Record<string, unknown>) {
   return structuredClone(toRaw(data ?? {}))
 }
 
-function parseValue(raw: string, schema: InputSchema): unknown {
+function parseValue(raw: string, schema: InputSchema, required = false): unknown {
+  const trimmed = raw.trim()
+  if (trimmed === '') {
+    if (required) {
+      throw new Error('此字段为必填项')
+    }
+    if (schema.type === 'array') {
+      return []
+    }
+    if (schema.type === 'integer' || schema.type === 'number') {
+      return undefined
+    }
+    return ''
+  }
+
   if (schema.type === 'array') {
     const items = schema.items ?? {}
     if (items.type === 'array') {
-      return raw.split(/\n+/).filter(Boolean).map((row) => parseValue(row, items))
+      return raw.split(/\n+/).filter(Boolean).map((row) => parseValue(row, items, true))
     }
-    return raw.split(',').map((item) => parseValue(item.trim(), items))
+    return raw.split(',').map((item) => parseValue(item.trim(), items, true))
   }
   if (schema.type === 'integer') {
-    if (!/^-?\d+$/.test(raw.trim())) throw new Error('请输入整数')
-    return Number(raw)
+    if (!/^-?\d+$/.test(trimmed)) throw new Error('请输入整数')
+    return Number(trimmed)
   }
   if (schema.type === 'number') {
-    const value = Number(raw)
-    if (!Number.isFinite(value)) throw new Error('请输入数字')
+    const value = Number(trimmed)
+    if (!Number.isFinite(value) || isNaN(value)) throw new Error('请输入数字')
     return value
   }
-  if (schema.type === 'boolean') return raw === 'true'
+  if (schema.type === 'boolean') return trimmed === 'true'
   if (schema.type === 'null') return null
   return raw
-}
-
-function formatFieldValue(key: string, schema: InputSchema): string {
-  return formatValue(props.modelValue[key] ?? props.defaultData?.[key], schema)
 }
 
 function formatValue(value: unknown, schema: InputSchema): string {
@@ -177,18 +277,53 @@ function fieldHelp(schema: InputSchema): string {
 .input-data-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-5); padding-bottom: var(--space-4); border-bottom: 1px solid var(--color-border-light); }
 .input-data-header h3 { margin: 0; color: var(--color-text-strong); font-size: var(--text-base); font-weight: var(--weight-bold); }
 .input-data-header p, .field-help { margin: 4px 0 0; color: var(--color-text-muted); font-size: var(--text-sm); line-height: var(--leading-normal); }
-.reset-button { min-height: 36px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0 var(--space-3); background: var(--color-surface); color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
+.reset-button { min-height: 36px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 0 var(--space-3); background: var(--color-surface); color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: var(--weight-semibold); transition: var(--btn-transition); }
 .reset-button:hover:not(:disabled) { border-color: var(--color-primary); background: var(--color-surface-hover); color: var(--color-primary-text); }
 .reset-button:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 2px; }
+.reset-button:active:not(:disabled) { transform: translateY(0.5px); }
 .input-fields { display: grid; gap: var(--space-5); }
 .input-field { display: grid; gap: var(--space-2); }
 .field-label { color: var(--color-text-secondary); font-size: var(--text-sm); font-weight: var(--weight-semibold); }
 .field-label b { margin-left: 6px; color: var(--color-danger); font-size: var(--text-xs); }
 input, textarea, select { width: 100%; box-sizing: border-box; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--color-surface); color: var(--color-text); font: inherit; font-size: var(--text-sm); outline: none; transition: border-color var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast); }
 textarea { resize: vertical; min-height: 88px; line-height: var(--leading-normal); }
-input:focus, textarea:focus, select:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px var(--color-primary-soft); }
+input:focus, textarea:focus, select:focus { border-color: var(--color-primary); outline: 3px solid var(--color-primary); outline-offset: 2px; }
 .invalid { border-color: var(--color-danger); background: var(--color-danger-soft); }
 .input-field:has(.invalid) .field-help { color: var(--color-danger); }
 input:disabled, textarea:disabled, select:disabled, .reset-button:disabled { cursor: not-allowed; opacity: .6; }
 @media (max-width: 620px) { .input-data-panel { padding: var(--space-4); } }
+
+.empty-fields-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--color-text-muted);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-hover);
+}
+
+.placeholder-icon {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 12px;
+  stroke-width: 1.5;
+  color: var(--color-text-muted);
+}
+
+.empty-fields-placeholder p {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--color-text-secondary);
+}
+
+.empty-fields-placeholder span {
+  font-size: 12px;
+  line-height: 1.6;
+  max-width: 320px;
+}
 </style>

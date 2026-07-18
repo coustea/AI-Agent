@@ -1,398 +1,242 @@
 (function () {
   "use strict";
 
-  function byId(id) {
-    return document.getElementById(id);
+  function byId(id) { return document.getElementById(id); }
+  function mapById(items) { return Object.fromEntries(items.map(function (item) { return [item.id, item]; })); }
+  function stateById(scene, id) { return scene.program.states.find(function (state) { return state.id === id; }); }
+  function sceneById(payload) { return mapById(payload.scenes); }
+
+  function grid(count, width, height, centerX, centerY) {
+    if (count === 0) return [];
+    var columns = count <= 3 ? count : count <= 6 ? 3 : 4;
+    var rows = Math.ceil(Math.max(1, count) / columns);
+    var cellW = Math.min(width / columns - 3, 26);
+    var cellH = Math.min(height / rows - 4, 30);
+    return Array.from({ length: count }, function (_item, index) {
+      return { x: centerX - width / 2 + (index % columns + 0.5) * width / columns,
+        y: centerY - height / 2 + (Math.floor(index / columns) + 0.5) * height / rows,
+        w: cellW, h: cellH };
+    });
   }
 
-  function sceneMap(payload) {
-    const result = {};
-    payload.scenes.forEach(function (scene) { result[scene.id] = scene; });
+  function freeLayout(scene, state, objects) {
+    var layout = {};
+    var free = state.placements.filter(function (placement) {
+      var object = objects[placement.object_id];
+      var region = placement.region || "main";
+      return object && object.role !== "container" && object.role !== "pointer"
+        && !placement.container_id && (region === "main" || region === "input");
+    });
+    var topology = scene.topology;
+    var positions;
+    var hasContainers = scene.program.objects.some(function (object) { return object.role === "container"; });
+    var dense = (topology === "flow" && free.length > 5)
+      || (topology === "sequence" && free.length > 5)
+      || (topology === "hierarchical" && free.length > 8)
+      || (topology === "network" && free.length > 10)
+      || (topology === "spatial" && free.length > 6);
+    if (hasContainers) {
+      positions = grid(free.length, 80, 22, 50, 18);
+    } else if (dense) {
+      positions = grid(free.length, 76, 62, 50, 51);
+    } else if (topology === "flow") {
+      positions = free.map(function (_item, index) { return { x: 16 + index * (68 / Math.max(1, free.length - 1)), y: 50, w: 18, h: 18 }; });
+    } else if (topology === "sequence") {
+      positions = free.map(function (_item, index) { return { x: 16 + index * (68 / Math.max(1, free.length - 1)), y: 53 + (index % 2 ? 8 : -8), w: 17, h: 17 }; });
+    } else if (topology === "hierarchical") {
+      positions = free.map(function (_item, index) {
+        var row = index === 0 ? 0 : index <= 2 ? 1 : 2;
+        var count = row === 0 ? 1 : row === 1 ? Math.min(2, Math.max(0, free.length - 1)) : Math.max(1, free.length - 3);
+        var offset = row === 0 ? 0 : index - (row === 1 ? 1 : 3);
+        return { x: 50 + (offset - (count - 1) / 2) * (row === 2 ? 21 : 30), y: 25 + row * 29, w: 17, h: 17 };
+      });
+    } else if (topology === "network") {
+      positions = free.map(function (_item, index) {
+        var angle = (Math.PI * 2 * index / Math.max(1, free.length)) - Math.PI / 2;
+        return { x: 50 + Math.cos(angle) * 30, y: 49 + Math.sin(angle) * 25, w: 16, h: 16 };
+      });
+    } else if (topology === "spatial") {
+      positions = free.map(function (_item, index) {
+        var angles = [-2.1, -0.65, 0.35, 1.6, 2.65, 3.65];
+        var angle = angles[index % angles.length];
+        return index === 0 ? { x: 50, y: 50, w: 24, h: 20 } : { x: 50 + Math.cos(angle) * 31, y: 50 + Math.sin(angle) * 27, w: 17, h: 15 };
+      });
+    } else {
+      positions = grid(free.length, 70, 58, 50, 50);
+    }
+    free.forEach(function (placement, index) { layout[placement.object_id] = positions[index]; });
+    return layout;
+  }
+
+  function layout(scene, state) {
+    var objects = mapById(scene.program.objects);
+    var result = freeLayout(scene, state, objects);
+    var containers = scene.program.objects.filter(function (object) { return object.role === "container"; });
+    var containerBoxes = containers.length <= 3
+      ? containers.map(function (_container, index) {
+        var width = containers.length === 1 ? 72 : containers.length === 2 ? 34 : 22;
+        return { x: 50 + (index - (containers.length - 1) / 2) * (width + 4), y: 62, w: width, h: 50 };
+      })
+      : grid(containers.length, 86, 58, 50, 57);
+    containers.forEach(function (container, index) {
+      result[container.id] = containerBoxes[index];
+    });
+    var regionCounts = {};
+    state.placements.forEach(function (placement) {
+      var object = objects[placement.object_id];
+      if (!object || object.role === "container" || object.role === "pointer") return;
+      if (placement.container_id && placement.slot !== null && placement.slot !== undefined) {
+        var container = result[placement.container_id];
+        var capacity = (objects[placement.container_id] || {}).capacity || 1;
+        if (container) {
+          var slots = grid(capacity, container.w * 0.82, container.h * 0.58, container.x, container.y + 4);
+          result[object.id] = slots[placement.slot];
+        }
+        return;
+      }
+      if (placement.container_id) {
+        var logicalContainer = result[placement.container_id];
+        if (logicalContainer) {
+          var members = state.placements.filter(function (item) {
+            return item.container_id === placement.container_id && (item.slot === null || item.slot === undefined);
+          });
+          var memberIndex = members.findIndex(function (item) { return item.object_id === placement.object_id; });
+          var memberBoxes = grid(members.length, logicalContainer.w * 0.78, logicalContainer.h * 0.58, logicalContainer.x, logicalContainer.y + 3);
+          result[object.id] = memberBoxes[memberIndex];
+          return;
+        }
+      }
+      if (result[object.id]) return;
+      var region = placement.region || "main";
+      var index = regionCounts[region] || 0;
+      regionCounts[region] = index + 1;
+      var anchors = { input: [11, 48], output: [89, 48], left: [14, 50], right: [86, 50], top: [50, 16], bottom: [50, 83], code: [22, 76], result: [80, 76], main: [50, 50] };
+      var anchor = anchors[region] || anchors.main;
+      result[object.id] = { x: anchor[0], y: anchor[1] + index * 13, w: 15, h: 14 };
+    });
+    state.placements.forEach(function (placement) {
+      var object = objects[placement.object_id];
+      if (!object || object.role !== "pointer") return;
+      var anchor = result[placement.anchor_id];
+      result[object.id] = anchor ? { x: anchor.x, y: Math.max(10, anchor.y - anchor.h / 2 - 8), w: 13, h: 8 } : { x: 50, y: 14, w: 13, h: 8 };
+    });
     return result;
   }
 
-  function stateById(scene, stateId) {
-    return scene.states.find(function (state) { return state.id === stateId; });
-  }
-
-  function placementById(state, entityId) {
-    return state.placements.find(function (item) { return item.entity_id === entityId; });
-  }
-
-  function entityById(scene, entityId) {
-    return scene.entities.find(function (item) { return item.id === entityId; });
-  }
-
-  function gridSpec(count) {
-    const columns = count <= 4 ? 2 : count <= 9 ? 3 : 4;
-    const rows = Math.ceil(Math.max(1, count) / columns);
-    const width = columns === 2 ? 38 : columns === 3 ? 27 : 20;
-    const height = Math.min(62, (88 - (rows - 1) * 6) / rows);
-    const xs = Array.from({ length: columns }, function (_value, index) {
-      return 50 + (index - (columns - 1) / 2) * (width + 4);
-    });
-    const ys = Array.from({ length: rows }, function (_value, index) {
-      return 50 + (index - (rows - 1) / 2) * (height + 6);
-    });
-    return { columns: columns, width: width, height: height, xs: xs, ys: ys };
-  }
-
-  function grammarLayout(scene) {
-    const count = scene.entities.length;
-    const grid = gridSpec(count);
-    const layout = {};
-    if (scene.grammar === "model") {
-      scene.entities.forEach(function (entity, index) {
-        if (index === 0) {
-          layout[entity.id] = { x: 50, y: 40, w: 72, h: 42 };
-          return;
-        }
-        const columns = Math.min(4, Math.max(1, count - 1));
-        layout[entity.id] = {
-          x: 50 + (index - (columns + 1) / 2) * (76 / columns),
-          y: 72, w: Math.min(23, 76 / columns - 3), h: 28
-        };
-      });
-      return layout;
-    }
-    if (scene.grammar === "trace") {
-      return layout;
-    }
-    if (scene.grammar === "evidence") {
-      scene.entities.forEach(function (entity, index) {
-        if (index === 0) {
-          layout[entity.id] = { x: 31, y: 50, w: 48, h: 70 };
-          return;
-        }
-        const metricIndex = index - 1;
-        const metricCount = Math.max(1, count - 1);
-        layout[entity.id] = {
-          x: 77, y: 24 + metricIndex * (54 / metricCount), w: 31, h: 46 / metricCount
-        };
-      });
-      return layout;
-    }
-    scene.entities.forEach(function (entity, index) {
-      const column = index % grid.columns;
-      const row = Math.floor(index / grid.columns);
-      layout[entity.id] = {
-        x: grid.xs[column], y: grid.ys[row], w: grid.width, h: grid.height
-      };
-    });
-    return layout;
-  }
-
-  function stateLayout(scene, state) {
-    if (scene.grammar === "trace" && scene.execution_program) {
-      return executionLayout(scene, state);
-    }
-    return grammarLayout(scene);
-  }
-
-  function executionLayout(scene, state) {
-    const layout = {};
-    const program = scene.execution_program;
-    const objectById = {};
-    program.objects.forEach(function (object) { objectById[object.id] = object; });
-    const containers = program.objects.filter(function (object) { return object.role === "container"; });
-    const outputIds = state.placements
-      .filter(function (placement) { return placement.region === "output" && placement.visible; })
-      .map(function (placement) { return placement.entity_id; });
-    const inputIds = state.placements
-      .filter(function (placement) { return placement.region === "input" && placement.visible; })
-      .map(function (placement) { return placement.entity_id; });
-    const rackWidth = containers.length > 1 ? 62 : 58;
-    containers.forEach(function (container, index) {
-      const width = Math.min(58, rackWidth / Math.max(1, containers.length));
-      layout[container.id] = {
-        x: 50 + (index - (containers.length - 1) / 2) * (width + 4),
-        y: 52, w: width, h: 48
-      };
-    });
-    const loose = state.placements.filter(function (placement) {
-      const object = objectById[placement.entity_id];
-      return object && object.role !== "container" && object.role !== "pointer"
-        && !placement.container_id && placement.region === "main";
-    });
-    const looseGrid = gridSpec(Math.max(1, loose.length));
-    loose.forEach(function (placement, index) {
-      const column = index % looseGrid.columns;
-      const row = Math.floor(index / looseGrid.columns);
-      layout[placement.entity_id] = {
-        x: looseGrid.xs[column], y: looseGrid.ys[row], w: looseGrid.width, h: looseGrid.height
-      };
-    });
-    state.placements.forEach(function (placement) {
-      const object = objectById[placement.entity_id];
-      if (!object || object.role === "container" || object.role === "pointer") return;
-      if (placement.container_id && placement.slot !== null && placement.slot !== undefined) {
-        const container = layout[placement.container_id];
-        const capacity = (objectById[placement.container_id] || {}).capacity || 1;
-        if (container) {
-          layout[object.id] = {
-            x: container.x - container.w / 2 + ((placement.slot + 0.5) * container.w / capacity),
-            y: container.y, w: Math.min(14, Math.max(8, container.w / capacity - 2)), h: 24
-          };
-        }
-        return;
-      }
-      if (layout[object.id]) return;
-      if (placement.region === "input") {
-        const inputIndex = Math.max(0, inputIds.indexOf(object.id));
-        layout[object.id] = { x: 10.5, y: 50 + inputIndex * 17, w: 11, h: 16 };
-        return;
-      }
-      if (placement.region === "output") {
-        const outputIndex = Math.max(0, outputIds.indexOf(object.id));
-        layout[object.id] = { x: 89.5, y: 50 + outputIndex * 17, w: 11, h: 16 };
-        return;
-      }
-      const regions = {
-        left: { x: 14, y: 50 }, right: { x: 86, y: 50 }, top: { x: 50, y: 18 },
-        bottom: { x: 50, y: 84 }, result: { x: 82, y: 76 }, code: { x: 22, y: 78 }
-      };
-      const region = regions[placement.region] || { x: 50, y: 50 };
-      layout[object.id] = { x: region.x, y: region.y, w: 16, h: 16 };
-    });
-    state.placements.forEach(function (placement) {
-      const object = objectById[placement.entity_id];
-      if (!object || object.role !== "pointer") return;
-      const anchor = placement.anchor_id ? layout[placement.anchor_id] : null;
-      layout[object.id] = anchor
-        ? { x: anchor.x, y: Math.max(11, anchor.y - anchor.h / 2 - 8), w: 12, h: 10 }
-        : { x: 50, y: 16, w: 12, h: 10 };
-    });
-    return layout;
-  }
-
-  function relationKey(relation) {
-    return [relation.source_id, relation.target_id, relation.label].join("|");
-  }
-
-  function relationCatalog(scene) {
-    const keys = [];
-    scene.states.forEach(function (state) {
-      state.relations.forEach(function (relation) {
-        const key = relationKey(relation);
-        if (!keys.includes(key)) keys.push(key);
-      });
-    });
+  function relationKey(relation) { return [relation.source_id, relation.target_id].join("|"); }
+  function relations(scene) {
+    var keys = [];
+    scene.program.states.forEach(function (state) { state.relations.forEach(function (relation) { var key = relationKey(relation); if (!keys.includes(key)) keys.push(key); }); });
     return keys.sort();
   }
-
-  function relationGeometry(layout, key) {
-    const parts = key.split("|");
-    const source = layout[parts[0]];
-    const target = layout[parts[1]];
+  function relationGeometry(boxes, key) {
+    var parts = key.split("|"); var source = boxes[parts[0]]; var target = boxes[parts[1]];
     if (!source || !target) return null;
-    const dx = target.x - source.x;
-    const dy = target.y - source.y;
-    const denominator = Math.max(Math.abs(dx) / Math.max(source.w, 1), Math.abs(dy) / Math.max(source.h, 1), 1);
-    const sourceScale = 0.5 / denominator;
-    const targetDenominator = Math.max(Math.abs(dx) / Math.max(target.w, 1), Math.abs(dy) / Math.max(target.h, 1), 1);
-    const targetScale = 0.5 / targetDenominator;
+    var dx = target.x - source.x; var dy = target.y - source.y;
+    var distance = Math.max(Math.abs(dx), Math.abs(dy), 1);
+    return { x1: source.x + dx * Math.min(0.4, source.w / distance * 0.45), y1: source.y + dy * Math.min(0.4, source.h / distance * 0.45),
+      x2: target.x - dx * Math.min(0.4, target.w / distance * 0.45), y2: target.y - dy * Math.min(0.4, target.h / distance * 0.45) };
+  }
+
+  function textVars(node, text) {
+    var label = node.querySelector(".entity-label");
+    var length = (label.textContent || "").length + text.length;
     return {
-      x1: source.x + dx * sourceScale,
-      y1: source.y + dy * sourceScale,
-      x2: target.x - dx * targetScale,
-      y2: target.y - dy * targetScale
+      "--entity-label-size": (length > 70 ? 15 : length > 42 ? 18 : 23) + "px",
+      "--entity-value-size": (length > 70 ? 12 : length > 42 ? 14 : 16) + "px"
     };
   }
-
-  function setTextScale(node) {
-    const label = node.querySelector(".entity-label");
-    const value = node.querySelector(".entity-value");
-    const length = ((label && label.textContent) || "").length + ((value && value.textContent) || "").length;
-    const labelSize = length > 96 ? 13 : length > 64 ? 16 : length > 40 ? 19 : 25;
-    const valueSize = length > 96 ? 11 : length > 64 ? 13 : 16;
-    node.style.setProperty("--entity-label-size", labelSize + "px");
-    node.style.setProperty("--entity-value-size", valueSize + "px");
-  }
-
-  function applyEntityContent(scene, state) {
+  function content(scene, state, timeline, at) {
     state.placements.forEach(function (placement) {
-      const entity = entityById(scene, placement.entity_id);
-      const node = byId("entity-" + scene.id + "-" + entity.id);
-      if (!node) return;
-      const valueNode = node.querySelector(".entity-value");
-      const value = placement.value || "";
-      if (valueNode) {
-        valueNode.textContent = value;
-        valueNode.style.display = value ? "block" : "none";
+      var node = byId("entity-" + scene.id + "-" + placement.object_id); if (!node) return;
+      var value = node.querySelector(".entity-value");
+      var text = placement.value || "";
+      var styles = textVars(node, text);
+      if (timeline) {
+        timeline.set(value, { textContent: text, display: text ? "block" : "none" }, at);
+        timeline.set(node, Object.assign({ attr: { "data-status": placement.status } }, styles), at);
+      } else {
+        value.textContent = text;
+        value.style.display = text ? "block" : "none";
+        node.dataset.status = placement.status;
+        Object.keys(styles).forEach(function (name) { node.style.setProperty(name, styles[name]); });
       }
-      node.dataset.status = placement.status;
-      setTextScale(node);
     });
   }
-
-  function entityVars(box, placement, focused) {
-    return {
-      left: box.x + "%", top: box.y + "%", width: box.w + "%", height: box.h + "%",
-      xPercent: -50, yPercent: -50,
-      autoAlpha: placement.visible ? 1 : 0,
-      scale: focused ? 1.035 : 1
-    };
+  function vars(box, placement, focus) {
+    return { left: box.x + "%", top: box.y + "%", width: box.w + "%", height: box.h + "%", xPercent: -50, yPercent: -50, autoAlpha: placement.visible ? 1 : 0, scale: focus ? 1.06 : 1 };
   }
-
-  function entityMotionVars(box, focused) {
-    return {
-      left: box.x + "%", top: box.y + "%", width: box.w + "%", height: box.h + "%",
-      xPercent: -50, yPercent: -50,
-      scale: focused ? 1.035 : 1
-    };
-  }
-
-  function moveVector(region) {
-    const distance = 16;
-    const vectors = {
-      left: { x: -distance, y: 0 }, right: { x: distance, y: 0 },
-      top: { x: 0, y: -distance }, bottom: { x: 0, y: distance },
-      input: { x: -distance, y: 0 }, output: { x: distance, y: 0 },
-      code: { x: -distance, y: 0 }, result: { x: distance, y: 0 },
-      main: { x: 0, y: -distance }
-    };
-    return vectors[region] || vectors.main;
-  }
-
-  function setRelations(scene, state, layout, immediate, timeline, at) {
-    const activeRelations = new Set(state.relations.map(relationKey));
-    relationCatalog(scene).forEach(function (key, index) {
-      const group = byId("relation-" + scene.id + "-" + index);
-      if (!group) return;
-      const geometry = relationGeometry(layout, key);
-      const visible = activeRelations.has(key) && geometry;
-      const line = group.querySelector("line");
-      const head = group.querySelector("circle");
-      if (geometry) {
-        const attrs = { x1: geometry.x1, y1: geometry.y1, x2: geometry.x2, y2: geometry.y2 };
-        if (immediate) {
-          line.setAttribute("x1", attrs.x1); line.setAttribute("y1", attrs.y1);
-          line.setAttribute("x2", attrs.x2); line.setAttribute("y2", attrs.y2);
-          head.setAttribute("cx", geometry.x2); head.setAttribute("cy", geometry.y2);
-        } else {
-          timeline.set(line, { attr: attrs }, at);
-          timeline.set(head, { attr: { cx: geometry.x2, cy: geometry.y2 } }, at);
-        }
-      }
-      if (immediate) window.gsap.set(group, { autoAlpha: visible ? 1 : 0 });
-      else timeline.to(group, { autoAlpha: visible ? 1 : 0, duration: 0.24 }, at);
+  function setRelations(scene, state, boxes, timeline, at, duration) {
+    var active = new Set(state.relations.map(relationKey));
+    relations(scene).forEach(function (key, index) {
+      var group = byId("relation-" + scene.id + "-" + index); if (!group) return;
+      var shape = relationGeometry(boxes, key); var visible = active.has(key) && shape;
+      var line = group.querySelector("line"); var head = group.querySelector("circle");
+      if (shape) { timeline.set(line, { attr: { x1: shape.x1, y1: shape.y1, x2: shape.x2, y2: shape.y2 } }, at); timeline.set(head, { attr: { cx: shape.x2, cy: shape.y2 } }, at); }
+      timeline.to(group, { autoAlpha: visible ? 1 : 0, duration: Math.min(0.38, duration * 0.3), ease: "power1.out" }, at);
     });
   }
-
   function setState(scene, state) {
-    const layout = stateLayout(scene, state);
-    applyEntityContent(scene, state);
-    state.placements.forEach(function (placement) {
-      const entity = entityById(scene, placement.entity_id);
-      const node = byId("entity-" + scene.id + "-" + entity.id);
-      const box = layout[entity.id];
-      if (node && box) window.gsap.set(node, entityVars(box, placement, placement.status === "active"));
+    var boxes = layout(scene, state); content(scene, state);
+    state.placements.forEach(function (placement) { var node = byId("entity-" + scene.id + "-" + placement.object_id); if (node && boxes[placement.object_id]) window.gsap.set(node, vars(boxes[placement.object_id], placement, placement.status === "active")); });
+    var active = new Set(state.relations.map(relationKey));
+    relations(scene).forEach(function (key, index) {
+      var group = byId("relation-" + scene.id + "-" + index); var shape = relationGeometry(boxes, key);
+      if (!group) return;
+      if (shape) {
+        var line = group.querySelector("line"); var head = group.querySelector("circle");
+        line.setAttribute("x1", shape.x1); line.setAttribute("y1", shape.y1); line.setAttribute("x2", shape.x2); line.setAttribute("y2", shape.y2);
+        head.setAttribute("cx", shape.x2); head.setAttribute("cy", shape.y2);
+      }
+      window.gsap.set(group, { autoAlpha: active.has(key) && shape ? 1 : 0 });
     });
-    setRelations(scene, state, layout, true);
+  }
+  function tweenState(scene, beat, after, timeline, at, duration) {
+    var boxes = layout(scene, after); content(scene, after, timeline, at);
+    var action = beat.actions[0];
+    after.placements.forEach(function (placement) {
+      var node = byId("entity-" + scene.id + "-" + placement.object_id); var box = boxes[placement.object_id]; if (!node || !box) return;
+      var focused = action.subject_id === placement.object_id || action.target_id === placement.object_id;
+      var verb = focused ? action.verb : "settle";
+      var motion = vars(box, placement, focused);
+      if (verb === "reveal") { motion.scale = focused ? 1.08 : 1; motion.duration = duration * 0.62; motion.ease = "back.out(1.7)"; }
+      else if (verb === "traverse" || verb === "move" || verb === "place" || verb === "remove") { motion.duration = duration; motion.ease = "power3.inOut"; }
+      else if (verb === "compare") { motion.duration = duration * 0.72; motion.ease = "elastic.out(1,0.55)"; }
+      else { motion.duration = duration * 0.65; motion.ease = "power2.out"; }
+      timeline.to(node, motion, at);
+      if (focused && (verb === "traverse" || verb === "compare" || verb === "focus")) timeline.to(node, { scale: 1.1, duration: duration * 0.3, yoyo: true, repeat: 1, ease: "sine.inOut" }, at + duration * 0.38);
+    });
+    setRelations(scene, after, boxes, timeline, at + duration * 0.2, duration);
   }
 
-  function addStateTween(timeline, scene, beforeState, state, at, duration, focusIds, transitionKind, transitionEntityIds) {
-    const layout = stateLayout(scene, state);
-    const beforeLayout = stateLayout(scene, beforeState);
-    timeline.call(function () { applyEntityContent(scene, state); }, null, at);
-    state.placements.forEach(function (placement) {
-      const entity = entityById(scene, placement.entity_id);
-      const node = byId("entity-" + scene.id + "-" + entity.id);
-      const box = layout[entity.id];
-      if (!node || !box) return;
-      const beforePlacement = placementById(beforeState, entity.id);
-      const beforeBox = beforeLayout[entity.id];
-      // Text must never be partially transparent: sampled transition frames
-      // would blend its ink with the paper and make contrast nondeterministic.
-      // Visibility changes are atomic; emphasis still moves through scale.
-      const movedBetweenStates = beforePlacement && beforeBox && (
-        beforePlacement.container_id !== placement.container_id ||
-        beforePlacement.slot !== placement.slot ||
-        beforePlacement.region !== placement.region
-      );
-      if (movedBetweenStates) {
-        timeline.set(node, Object.assign({}, entityVars(beforeBox, beforePlacement, false), { autoAlpha: 1 }), at);
-      } else {
-        timeline.set(node, { autoAlpha: placement.visible ? 1 : 0 }, at);
-      }
-      const motion = entityMotionVars(box, focusIds.includes(entity.id));
-      const isMove = movedBetweenStates || (transitionKind === "move" && transitionEntityIds.includes(entity.id));
-      if (isMove) {
-        timeline.to(node, Object.assign({}, motion, {
-          autoAlpha: placement.visible ? 1 : 0, duration: duration, ease: "power2.inOut"
-        }), at);
-      } else {
-        timeline.to(node, Object.assign(motion, {
-          duration: duration, ease: "power2.inOut"
-        }), at);
-      }
+  function tween(scene, beat, timeline, at, duration) {
+    var states = beat.action_state_ids;
+    var segment = duration / states.length;
+    states.forEach(function (stateId, index) {
+      var actionBeat = {
+        actions: [beat.actions[index]]
+      };
+      var next = stateById(scene, stateId);
+      tweenState(scene, actionBeat, next, timeline, at + segment * index, segment);
     });
-    setRelations(scene, state, layout, false, timeline, at);
   }
 
   function mount(payload) {
     if (!window.gsap) throw new Error("GSAP failed to load");
-    const scenes = sceneMap(payload);
-    const timeline = window.gsap.timeline({ paused: true });
-    const sceneTimes = {};
-
-    payload.beats.forEach(function (beat) {
-      const range = sceneTimes[beat.scene_id] || { start: beat.start_ms, end: beat.start_ms + beat.duration_ms };
-      range.start = Math.min(range.start, beat.start_ms);
-      range.end = Math.max(range.end, beat.start_ms + beat.duration_ms);
-      sceneTimes[beat.scene_id] = range;
-    });
-
+    var timeline = window.gsap.timeline({ paused: true }); var scenes = sceneById(payload); var windows = {};
+    payload.beats.forEach(function (item) { var range = windows[item.scene_id] || { start: item.start_ms, end: item.end_ms }; range.start = Math.min(range.start, item.start_ms); range.end = Math.max(range.end, item.end_ms); windows[item.scene_id] = range; });
     payload.scenes.forEach(function (scene) {
-      const sceneNode = byId("scene-" + scene.id);
-      const firstBeat = scene.beats[0];
-      setState(scene, stateById(scene, firstBeat.before_state_id));
-      window.gsap.set(sceneNode, { autoAlpha: 0 });
-      const range = sceneTimes[scene.id];
-      // A scene contains text. Fading its parent changes every descendant's
-      // effective foreground color, so scene transitions are deliberately
-      // discrete. Card and relation motion provides the visual transition.
-      timeline.set(sceneNode, { autoAlpha: 1 }, range.start / 1000);
-      timeline.set(sceneNode, { autoAlpha: 0 }, range.end / 1000);
+      var node = byId("scene-" + scene.id); var range = windows[scene.id]; var startsAtZero = range.start === 0;
+      setState(scene, stateById(scene, scene.program.beats[0].before_state_id));
+      window.gsap.set(node, { autoAlpha: startsAtZero ? 1 : 0 });
+      if (!startsAtZero) timeline.set(node, { autoAlpha: 1 }, range.start / 1000);
+      timeline.set(node, { autoAlpha: 0 }, range.end / 1000);
     });
-
-    payload.beats.forEach(function (timedBeat) {
-      const scene = scenes[timedBeat.scene_id];
-      const beat = scene.beats.find(function (item) { return item.id === timedBeat.beat_id; });
-      const beforeState = stateById(scene, beat.before_state_id);
-      const state = stateById(scene, beat.after_state_id);
-      const at = (timedBeat.start_ms + Math.min(900, timedBeat.duration_ms * 0.22)) / 1000;
-      const duration = Math.min(1.1, Math.max(0.62, timedBeat.duration_ms / 5000));
-      addStateTween(
-        timeline,
-        scene,
-        beforeState,
-        state,
-        at,
-        duration,
-        beat.focus_entity_ids,
-        beat.transition.kind,
-        beat.transition.entity_ids
-      );
-    });
-
-    payload.captions.forEach(function (cue, index) {
-      const node = byId("caption-" + index);
-      if (!node) return;
-      const start = cue.start_ms / 1000;
-      const end = cue.end_ms / 1000;
-      // Caption fades make white text partially transparent and fail contrast
-      // checks on sampled transition frames. Visibility changes are discrete;
-      // scene motion still supplies the visual rhythm.
-      timeline.set(node, { autoAlpha: 1, y: 0 }, start);
-      timeline.set(node, { autoAlpha: 0 }, end);
-    });
-
-    const progress = byId("progress-fill");
-    timeline.fromTo(progress, { scaleX: 0 }, { scaleX: 1, duration: payload.duration_ms / 1000, ease: "none" }, 0);
+    payload.beats.forEach(function (timed) { var scene = scenes[timed.scene_id]; var beat = scene.program.beats.find(function (item) { return item.id === timed.beat_id; }); var start = timed.start_ms / 1000; var at = start + Math.min(0.72, timed.duration_ms / 1000 * 0.13); var duration = Math.min(3.0, Math.max(1.05, timed.duration_ms / 1000 * 0.44)); tween(scene, beat, timeline, at, duration); });
+    payload.captions.forEach(function (cue, index) { var node = byId("caption-" + index); if (node) { timeline.set(node, { autoAlpha: 1 }, cue.start_ms / 1000); timeline.set(node, { autoAlpha: 0 }, cue.end_ms / 1000); } });
+    timeline.fromTo(byId("progress-fill"), { scaleX: 0 }, { scaleX: 1, duration: payload.duration_ms / 1000, ease: "none" }, 0);
     timeline.to({}, { duration: payload.duration_ms / 1000 }, 0);
     return timeline;
   }
-
   window.CartoonRuntime = { mount: mount };
 }());

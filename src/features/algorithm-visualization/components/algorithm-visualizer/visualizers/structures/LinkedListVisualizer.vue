@@ -29,10 +29,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { TraceEvent, VisualNode, VisualPointer } from '@/features/algorithm-visualization/types'
 
-const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[] }>()
+const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[]; onStepComplete?: () => void }>()
 
 // 当前步骤的链表节点和指针数据
 const nodes = computed<VisualNode[]>(() => { const raw = props.currentEvent?.state?.structure?.nodes; return Array.isArray(raw) ? raw as VisualNode[] : [] })
@@ -49,6 +49,18 @@ function getNextLabel(nextId: string | null | undefined) {
   if (!nextId) return '∅'
   return nodes.value.find(node => node.id === nextId)?.label ?? nextId
 }
+
+// 动画完成通知：链表无 CSS 过渡，步骤变化后立即完成
+watch(
+  [() => props.currentStepIndex, () => props.currentEvent],
+  () => {
+    requestAnimationFrame(() => {
+      props.onStepComplete?.()
+    })
+  },
+)
+
+onBeforeUnmount(() => {})
 </script>
 
 <style scoped>

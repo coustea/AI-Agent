@@ -152,13 +152,14 @@ watch(
   },
 )
 
-// 高亮当前执行行
-watch(
-  () => props.activeLine,
-  (line) => {
-    updateActiveLine(line)
-  },
-)
+// 高亮当前执行行 — 由编排器在步骤切换时命令式调用
+
+// 暴露命令式方法供编排器同步调用
+function highlightLine(line: number | undefined) {
+  updateActiveLine(line)
+}
+
+defineExpose({ highlightLine })
 
 // 创建 Monaco 编辑器并绑定事件
 function createEditor() {

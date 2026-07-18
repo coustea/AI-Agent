@@ -49,11 +49,9 @@ class LinkedListAdapter(BaseAdapter):
         local_values: dict[str, object],
         result: object | None,
     ) -> tuple[dict[str, object], list[object]]:
-        # Auto-discover linked-list nodes from local variables.
-        if not self._discovered:
-            head = _find_linked_head(local_values, result)
-            if head is not None:
-                self.set_head(head)
+        head = _find_linked_head(local_values, result)
+        if head is not None and id(head) not in self._object_ids:
+            self.set_head(head)
 
         pointers: list[dict[str, object]] = []
         active_ids: set[str] = set()
@@ -93,47 +91,102 @@ class TreeAdapter(BaseAdapter):
 
     def __init__(self, input_data: dict[str, object]) -> None:
         super().__init__(input_data)
+        self._root_node: object | None = None
         self._object_ids: dict[int, str] = {}
         self._discovered: bool = False
+        self._execution_started: bool = False
 
     def set_root(self, root: object) -> None:
         """Register the tree root for identity tracking."""
+        self._root_node = root
         _, self._object_ids = _tree_nodes(root)
         self._discovered = True
 
     def _build_initial_structure(self) -> dict[str, object]:
-        if self._discovered:
-            # We don't store the root, so we can't rebuild here.
-            # Return fallback nodes; capture() will fix it.
-            pass
         nodes = _fallback_tree_nodes(self._input_data)
-        return {"nodes": nodes}
+        for node in nodes:
+            node["left_constructed"] = False
+            node["right_constructed"] = False
+        return {"nodes": nodes, "phase": "construction"}
 
     def _do_capture(
         self,
         local_values: dict[str, object],
         result: object | None,
     ) -> tuple[dict[str, object], list[object]]:
-        # Rebuild tree nodes from object identity each capture.
-        root = _find_tree_root(local_values)
-        if root is not None:
-            nodes, self._object_ids = _tree_nodes(root)
-            self._discovered = True
-        elif self._discovered:
-            nodes = copy.deepcopy(self._last_structure.get("nodes", []))
-        else:
-            nodes = _fallback_tree_nodes(self._input_data)
+        # Always use the fallback tree layout to keep positions stable and prevent jumping
+        nodes = _fallback_tree_nodes(self._input_data)
 
-        targets: list[str] = []
-        for name in ("node", "root", "current"):
-            value = local_values.get(name)
-            node_id = self._object_ids.get(id(value))
-            if node_id is not None:
-                targets.append(node_id)
-                for node in nodes:
-                    if isinstance(node, dict) and node.get("id") == node_id:
-                        node["tone"] = "visited"
-        return {"nodes": nodes}, targets
+        is_building = self.current_func_name in {"_build_tree", "__init__"}
+        phase = "construction" if is_building else "traversal"
+
+        if is_building:
+            self._execution_started = False
+            # During construction: build a map of all node objects by their
+            # position-index (from the local `nodes` list in _build_tree).
+            # Start all edges as unconstructed, then set True for each node
+            # whose .left / .right attribute is already non-None.
+            nodes_list = local_values.get("nodes")
+            node_objects: dict[str, object] = {}
+            if isinstance(nodes_list, list):
+                for index, obj in enumerate(nodes_list):
+                    if obj is not None:
+                        nid = f"node-{index}"
+                        self._object_ids[id(obj)] = nid
+                        node_objects[nid] = obj
+
+            for node in nodes:
+                nid = node["id"]
+                obj = node_objects.get(nid)
+                if obj is not None:
+                    node["left_constructed"] = (
+                        hasattr(obj, "left") and getattr(obj, "left") is not None
+                    )
+                    node["right_constructed"] = (
+                        hasattr(obj, "right") and getattr(obj, "right") is not None
+                    )
+                else:
+                    # Object not yet in nodes list → definitely not constructed
+                    node["left_constructed"] = False
+                    node["right_constructed"] = False
+
+            targets: list[str] = []
+            # Highlight the parent node currently being wired (loop variable `node`)
+            loop_node = local_values.get("node")
+            loop_id = self._object_ids.get(id(loop_node))
+            if loop_id is not None:
+                targets.append(loop_id)
+
+            # Highlight the child node currently being connected
+            child_index = local_values.get("child_index")
+            if isinstance(child_index, int) and isinstance(nodes_list, list) and 0 <= child_index < len(nodes_list):
+                child_node = nodes_list[child_index]
+                child_id = self._object_ids.get(id(child_node))
+                if child_id is not None:
+                    targets.append(child_id)
+
+        else:
+            # Traversal phase: all links are fully constructed.
+            # Auto-discover root on first traversal frame.
+            if not self._execution_started:
+                root = _find_tree_root(local_values)
+                if root is not None:
+                    self.set_root(root)
+                    self._execution_started = True
+
+            for node in nodes:
+                node["left_constructed"] = "left" in node
+                node["right_constructed"] = "right" in node
+
+            # Highlight the active node being visited
+            targets = []
+            for name in ("node", "root", "current"):
+                value = local_values.get(name)
+                nid = self._object_ids.get(id(value))
+                if nid is not None:
+                    targets.append(nid)
+
+        return {"nodes": nodes, "phase": phase}, targets
 
 
 # ---------------------------------------------------------------------------

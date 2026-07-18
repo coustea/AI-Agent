@@ -334,23 +334,30 @@ def _normalize_messages(input_data: Any) -> list[BaseMessage]:
 def _build_json_generation_messages(
     schema: type[BaseModel],
     messages: list[BaseMessage],
+    *,
+    include_schema_example: bool = True,
 ) -> list[BaseMessage]:
-    """构造结构化 JSON 生成的消息，使用实例模板而非 schema 定义。"""
-    instance_template = _schema_instance_template(schema)
+    """构造结构化 JSON 生成消息，可由领域 prompt 独占完整示例。"""
+    format_hint = ""
+    if include_schema_example:
+        format_hint = (
+            "\n\n输出字段形状示例（字段约束仍以原始任务为准）：\n"
+            + _schema_instance_template(schema)
+        )
     return [
         SystemMessage(
             content=(
-                "你是严格 JSON 生成器。\n"
+                "你是 JSON 生成器。\n"
                 "必须只输出一个完整 JSON 对象，不要 Markdown，不要代码围栏，不要解释。\n"
                 "不要调用工具，不要输出 tool_calls，不要输出 function_call。\n"
-                "输出必须能被 Python json.loads 直接解析，必须符合给定格式。"
+                "输出必须能被 Python json.loads 直接解析；字段含义和示例以原始任务提示为准，语义内容优先。"
             )
         ),
         *messages,
         HumanMessage(
             content=(
-                "请根据以上任务输出 JSON。\n\n"
-                f"输出格式示例（按此结构输出，字段值根据任务调整）：\n{instance_template}\n\n"
+                "请根据以上任务输出 JSON。"
+                f"{format_hint}\n\n"
                 "再次强调：只输出 JSON object 本体，不要任何额外文本。"
             )
         ),
@@ -363,29 +370,32 @@ def _build_repair_prompt(
     original_messages: list[BaseMessage],
     raw_output: str,
     error_msg: str,
+    *,
+    include_schema_example: bool = True,
 ) -> list[BaseMessage]:
     """Build a repair request without discarding the original generation task."""
-    instance_template = _schema_instance_template(schema)
+    format_hint = ""
+    if include_schema_example:
+        format_hint = (
+            "\n\n输出字段形状示例（字段约束仍以原始任务为准）：\n"
+            + _schema_instance_template(schema)
+        )
     return [
         SystemMessage(
             content=(
-                "你是 JSON 修正助手。上一次输出无法被后端解析或无法通过校验。\n"
-                "规则：\n"
-                "- 只输出修正后的完整 JSON 对象\n"
-                "- 不要 Markdown 代码围栏\n"
-                "- 不要解释文字\n"
-                "- 不要调用工具或 function_call\n"
-                "- 必须严格遵守字段约束\n"
-                "- 保留未报错字段及数组中有效元素的相对顺序\n"
-                "- 如果缺少必填字段，必须依据原始任务重新补全完整对象"
+                "你是 JSON 修正助手。上一轮已经生成了内容，但后端无法解析或无法物化。\n"
+                "请以原始任务和上一轮 JSON 为基础继续完善，优先保留原有语义，不要删掉有效内容。\n"
+                "只要求输出一个可被 Python json.loads 解析的 JSON 对象；字段含义、可选字段和示例以原始任务提示为准。\n"
+                "不要输出 Markdown 代码围栏、解释文字、工具调用或 function_call。\n"
+                "缺少字段时补上最小合理值，字段类型不一致时转换为最接近的合理值；未知字段可以保留，后端会忽略。"
             )
         ),
         *original_messages,
         HumanMessage(
             content=(
                 f"上一次输出：\n```\n{raw_output}\n```\n\n"
-                f"错误信息：{error_msg}\n\n"
-                f"正确格式示例：\n{instance_template}\n\n"
+                f"错误信息：{error_msg}"
+                f"{format_hint}\n\n"
                 "请修正后输出完整 JSON。"
             )
         ),
@@ -400,6 +410,9 @@ def _build_repair_prompt(
 _INFRA_EXCEPTIONS: tuple[type[Exception], ...] = ()
 _LLM_INFRA_RETRY_DELAYS_SECONDS = (1.0, 3.0)
 _LLM_EMPTY_RESPONSE_RETRY_DELAYS_SECONDS = (0.5,)
+# JSON 校验失败通常是字段遗漏或局部类型漂移。把上一轮完整输出带回模型，
+# 给它多次机会保留语义并补齐可解析结构，而不是在网关层重写内容。
+_JSON_REPAIR_ATTEMPTS = 3
 
 
 # 延迟注册 openai / httpx 等基础设施异常类型到判断集合
@@ -870,7 +883,7 @@ class Llm:
 
         return ToolExcute(tools, event_handler=event_handler)
 
-    # 结构化 JSON 输出：先生成一次，失败则带原文自修复一次
+    # 结构化 JSON 输出：先生成一次，失败则带原文连续自修复
     async def ainvoke_json(
         self,
         schema: type[BaseModel],
@@ -879,8 +892,9 @@ class Llm:
         temperature: float | None = None,
         max_tokens: int | None = None,
         validator: callable | None = None,
+        include_schema_example: bool = True,
     ) -> BaseModel:
-        """结构化 JSON 输出：生成一次，失败后带原文修复一次。
+        """结构化 JSON 输出：生成一次，失败后带原文连续修复。
 
         不使用 with_structured_output(function_calling)，避免 OpenAI-compatible
         网关把结果塞进 tool_calls 后解析成 None。
@@ -892,6 +906,8 @@ class Llm:
             max_tokens: 最大输出 token 数（可选）
             validator: 自定义校验函数（可选），接收 candidate 对象，
                        校验失败时抛异常，异常信息会用于修复提示。
+            include_schema_example: 是否追加通用字段形状示例。领域 prompt
+                       已提供完整合法示例时应关闭，避免重复或冲突约束。
 
         Returns:
             BaseModel: 校验后的 Pydantic 实例
@@ -908,7 +924,11 @@ class Llm:
         error_msg = ""
 
         try:
-            generation_messages = _build_json_generation_messages(schema, messages)
+            generation_messages = _build_json_generation_messages(
+                schema,
+                messages,
+                include_schema_example=include_schema_example,
+            )
             raw_output = await _ainvoke_text_with_retries(
                 model,
                 generation_messages,
@@ -939,56 +959,57 @@ class Llm:
             _safe_log_text(raw_output),
         )
 
-        # 修复阶段即使 raw_output 为空也执行：让模型基于原任务重新输出 JSON。
-        # 这样不会再出现“无原文可修复”导致业务直接失败。
+        # 修复阶段始终带回上一轮完整输出。每次失败都把新输出作为下一轮
+        # 输入，避免只重复发送同一份错误 JSON；空输出则退回原始任务重生成。
         t0 = time.perf_counter()
-        try:
-            repair_messages = _build_repair_prompt(
-                schema,
-                messages,
-                raw_output or "<empty response>",
-                error_msg,
-            )
-            repair_content = await _ainvoke_text_with_retries(
-                model,
-                repair_messages,
-                operation=f"ainvoke_json.repair.{schema.__name__}",
-            )
+        repair_content = raw_output
+        repair_error = error_msg
+        last_exc: Exception | None = None
+        for attempt in range(1, _JSON_REPAIR_ATTEMPTS + 1):
+            candidate = ""
+            try:
+                repair_messages = _build_repair_prompt(
+                    schema,
+                    messages,
+                    repair_content or "<empty response>",
+                    repair_error,
+                    include_schema_example=include_schema_example,
+                )
+                candidate = await _ainvoke_text_with_retries(
+                    model,
+                    repair_messages,
+                    operation=f"ainvoke_json.repair.{schema.__name__}.{attempt}",
+                )
+                parsed = _parse_json(candidate, schema, validator)
+                logger.info(
+                    "[LLM] ainvoke_json 成功（修复后）: schema=%s attempt=%d %dms raw_len=%d",
+                    schema.__name__,
+                    attempt,
+                    round((time.perf_counter() - t0) * 1000),
+                    len(candidate),
+                )
+                return parsed
+            except Exception as exc:
+                if _is_infra_error(exc):
+                    raise
+                last_exc = exc
+                repair_error = f"{type(exc).__name__}: {exc}"
+                # 只有拿到新文本时才覆盖上一轮，确保解析异常也能把原文带回去。
+                if candidate:
+                    repair_content = candidate
+                logger.warning(
+                    "[LLM] ainvoke_json 修复失败: schema=%s attempt=%d/%d error=%s raw_len=%d",
+                    schema.__name__,
+                    attempt,
+                    _JSON_REPAIR_ATTEMPTS,
+                    _short_error(repair_error),
+                    len(repair_content or ""),
+                )
 
-            parsed = _parse_json(repair_content, schema, validator)
-            logger.info(
-                "[LLM] ainvoke_json 成功（修复后）: schema=%s %dms raw_len=%d",
-                schema.__name__,
-                round((time.perf_counter() - t0) * 1000),
-                len(repair_content),
-            )
-            return parsed
-
-        except Exception as exc:
-            if _is_infra_error(exc):
-                raise
-            repair_err = f"{type(exc).__name__}: {exc}"
-            raise ServiceError(
-                f"[{schema.__name__}] 结构化输出失败: "
-                f"generate={error_msg_short}; repair={_short_error(repair_err)}"
-            ) from exc
-
-    # 兼容入口：基于 function_calling 的结构化输出（默认不再使用）
-    async def _invoke_structured(
-        self,
-        model: Any,
-        schema: type[BaseModel],
-        messages: list[BaseMessage],
-    ) -> tuple[BaseModel | None, str]:
-        """保留兼容入口，但不再被 ainvoke_json 默认使用。
-
-        仅供少量确实需要 function_calling 的内部实验调用。
-        """
-        runnable = model.with_structured_output(schema, method="function_calling")
-        result = await runnable.ainvoke(messages)
-        if not isinstance(result, BaseModel):
-            return None, ""
-        return result, result.model_dump_json()
+        raise ServiceError(
+            f"[{schema.__name__}] 结构化输出失败: "
+            f"generate={error_msg_short}; repair={_short_error(repair_error)}"
+        ) from last_exc
 
     # 图片理解：调用 vision 模型
     async def vision(

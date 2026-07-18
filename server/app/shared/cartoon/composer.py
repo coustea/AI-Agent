@@ -1,8 +1,7 @@
-"""Compile semantic lesson data into one deterministic HyperFrames composition."""
+"""Compile semantic lesson data into a responsive HyperFrames composition."""
 
 from __future__ import annotations
 
-import asyncio
 import html
 import json
 import shutil
@@ -13,8 +12,6 @@ from app.shared.cartoon.models import CartoonBundle, Lesson, TeachingScene, Time
 
 
 logger = get_logger(__name__)
-
-
 COMPOSITION_ID = "cartoon-teaching-video"
 _ASSET_DIR = Path(__file__).with_name("assets")
 
@@ -31,267 +28,121 @@ def _vtt_time(milliseconds: int) -> str:
 
 
 class CartoonComposer:
-    """Own HTML structure, layout runtime and the parent caption track."""
+    """Own the teaching canvas; runtime owns measured geometry and motion."""
 
     def write(self, lesson: Lesson, timeline: Timeline, output_dir: Path) -> CartoonBundle:
-        logger.info(
-            "[CartoonComposer] 开始合成: title=%s scenes=%d beats=%d duration_ms=%d",
-            lesson.title,
-            len(lesson.scenes),
-            len(timeline.beats),
-            timeline.duration_ms,
-        )
-        t0 = asyncio.get_event_loop().time()
         output_dir.mkdir(parents=True, exist_ok=True)
         assets_dir = output_dir / "assets"
         assets_dir.mkdir(exist_ok=True)
         shutil.copy2(_ASSET_DIR / "runtime.js", assets_dir / "runtime.js")
         shutil.copy2(_ASSET_DIR / "theme.css", assets_dir / "theme.css")
-        logger.info("[CartoonComposer] 静态资源已复制: runtime.js + theme.css")
-
-        scene_data_path = output_dir / "scene-data.json"
-        caption_path = output_dir / "captions.vtt"
-        html_path = output_dir / "index.html"
-        compositions_dir = output_dir / "compositions"
-        compositions_dir.mkdir(exist_ok=True)
 
         payload = self._payload(lesson, timeline)
-        scene_windows = self._scene_windows(lesson, timeline)
-        scene_paths = [
-            compositions_dir / f"{scene.id}.html"
-            for scene in lesson.scenes
-        ]
-        for index, (scene, path) in enumerate(zip(lesson.scenes, scene_paths, strict=True), start=1):
-            path.write_text(self._scene_document(index, scene), encoding="utf-8")
-            logger.debug("[CartoonComposer] 场景文件已写入: %s size=%d", path.name, path.stat().st_size)
-        scene_data_path.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
+        self._validate_timeline(lesson, timeline)
+
+        caption_path = output_dir / "captions.vtt"
+        html_path = output_dir / "index.html"
         caption_path.write_text(self._captions_vtt(timeline), encoding="utf-8")
-        html_path.write_text(
-            self._html(lesson, timeline, payload, scene_windows),
-            encoding="utf-8",
-        )
-        compose_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
-        html_size = html_path.stat().st_size
-        logger.info(
-            "[CartoonComposer] 合成完成: html=%s scenes=%d captions=%d html_size=%d elapsed_ms=%d",
-            html_path.name,
-            len(scene_paths),
-            len(timeline.captions),
-            html_size,
-            compose_ms,
-        )
+        html_path.write_text(self._html(lesson, timeline, payload), encoding="utf-8")
+        logger.info("[CartoonComposer] 合成完成: scenes=%d beats=%d", len(lesson.scenes), len(timeline.beats))
         return CartoonBundle(
-            output_dir=output_dir,
             html_path=html_path,
-            scene_data_path=scene_data_path,
             caption_path=caption_path,
-            scene_paths=scene_paths,
         )
 
     @staticmethod
     def _payload(lesson: Lesson, timeline: Timeline) -> dict[str, object]:
-        scenes = lesson.model_dump(mode="json")["scenes"]
-        beats = timeline.model_dump(mode="json")["beats"]
-        captions = timeline.model_dump(mode="json")["captions"]
+        timed_beats = [
+            {**beat.model_dump(mode="json"), "end_ms": beat.end_ms}
+            for beat in timeline.beats
+        ]
         return {
             "composition_id": COMPOSITION_ID,
             "title": lesson.title,
             "duration_ms": timeline.duration_ms,
-            "scenes": scenes,
-            "beats": beats,
-            "captions": captions,
+            "scenes": lesson.model_dump(mode="json")["scenes"],
+            "beats": timed_beats,
+            "captions": timeline.model_dump(mode="json")["captions"],
         }
 
     @staticmethod
     def _captions_vtt(timeline: Timeline) -> str:
         lines = ["WEBVTT", ""]
         for index, cue in enumerate(timeline.captions, start=1):
-            lines.extend(
-                [
-                    str(index),
-                    f"{_vtt_time(cue.start_ms)} --> {_vtt_time(cue.end_ms)}",
-                    cue.text,
-                    "",
-                ]
-            )
+            lines.extend([str(index), f"{_vtt_time(cue.start_ms)} --> {_vtt_time(cue.end_ms)}", cue.text, ""])
         return "\n".join(lines)
 
     @staticmethod
-    def _scene_windows(lesson: Lesson, timeline: Timeline) -> dict[str, tuple[int, int]]:
-        windows: dict[str, tuple[int, int]] = {}
-        known_scene_ids = {scene.id for scene in lesson.scenes}
-        for beat in timeline.beats:
-            if beat.scene_id not in known_scene_ids:
-                continue
-            start_ms, end_ms = windows.get(
-                beat.scene_id,
-                (beat.start_ms, beat.start_ms),
+    def _validate_timeline(lesson: Lesson, timeline: Timeline) -> None:
+        scene_by_id = {scene.id: scene for scene in lesson.scenes}
+        timed_scene_ids = {beat.scene_id for beat in timeline.beats}
+        if timed_scene_ids != set(scene_by_id):
+            raise ValueError(
+                "timeline scene ids do not match lesson scenes: "
+                f"missing={sorted(set(scene_by_id) - timed_scene_ids)}, "
+                f"unknown={sorted(timed_scene_ids - set(scene_by_id))}"
             )
-            windows[beat.scene_id] = (
-                min(start_ms, beat.start_ms),
-                max(end_ms, beat.start_ms + beat.duration_ms),
-            )
-        missing = known_scene_ids - set(windows)
-        if missing:
-            raise ValueError(f"timeline is missing scene windows: {sorted(missing)}")
-        return windows
-
-    def _html(
-        self,
-        lesson: Lesson,
-        timeline: Timeline,
-        payload: dict[str, object],
-        scene_windows: dict[str, tuple[int, int]],
-    ) -> str:
-        scenes = "\n".join(
-            self._scene_mount(scene, scene_windows[scene.id])
+        beat_to_scene = {
+            beat.id: scene.id
             for scene in lesson.scenes
+            for beat in scene.program.beats
+        }
+        for timed in timeline.beats:
+            if beat_to_scene.get(timed.beat_id) != timed.scene_id:
+                raise ValueError(
+                    f"timeline beat {timed.beat_id} does not belong to scene {timed.scene_id}"
+                )
+
+    def _html(self, lesson: Lesson, timeline: Timeline, payload: dict[str, object]) -> str:
+        scenes = "\n".join(
+            self._scene_html(index, scene)
+            for index, scene in enumerate(lesson.scenes, start=1)
         )
         captions = "\n".join(
-            (
-                f'<p id="caption-{index}" class="caption-cue" '
-                f'data-caption-index="{index}">{html.escape(cue.text)}</p>'
-            )
+            f'<p id="caption-{index}" class="caption-cue" data-caption-index="{index}">{html.escape(cue.text)}</p>'
             for index, cue in enumerate(timeline.captions)
         )
         audio = "\n".join(
-            (
-                f'<audio id="audio-{html.escape(beat.beat_id)}" '
-                f'data-start="{_seconds(beat.start_ms)}" '
-                f'data-duration="{_seconds(beat.audio_duration_ms or beat.duration_ms)}" '
-                'data-track-index="20" data-volume="1" '
-                f'src="{html.escape(beat.audio_src)}"></audio>'
-            )
+            f'<audio id="audio-{html.escape(beat.beat_id)}" data-start="{_seconds(beat.start_ms)}" '
+            f'data-duration="{_seconds(beat.audio_duration_ms or beat.duration_ms)}" data-track-index="20" '
+            f'data-volume="1" src="{html.escape(beat.audio_src)}"></audio>'
             for beat in timeline.beats
         )
         data_json = json.dumps(payload, ensure_ascii=False).replace("</", "<\\/")
         return f"""<!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=1920, height=1080">
-  <title>{html.escape(lesson.title)}</title>
-  <link rel="stylesheet" href="assets/theme.css">
-  <link rel="alternate" type="text/vtt" href="captions.vtt" hreflang="zh-CN">
-</head>
-<body>
-  <main id="root" data-composition-id="{COMPOSITION_ID}" data-start="0"
-        data-duration="{_seconds(timeline.duration_ms)}" data-width="1920" data-height="1080">
-    <div class="lesson-field" aria-hidden="true"></div>
-    {scenes}
-    <div id="caption-track" class="caption-track" aria-hidden="true">
-      {captions}
-    </div>
-    <div class="progress-rail" aria-hidden="true"><span id="progress-fill"></span></div>
-    {audio}
-  </main>
-  <script src="assets/vendor/gsap.min.js"></script>
-  <script src="assets/runtime.js"></script>
-  <script>window.__timelines=window.__timelines||{{}};window.__timelines['{COMPOSITION_ID}']=window.CartoonRuntime.mount({data_json});</script>
-</body>
-</html>
-"""
-
-    @staticmethod
-    def _scene_mount(scene: TeachingScene, window: tuple[int, int]) -> str:
-        start_ms, end_ms = window
-        scene_id = html.escape(scene.id)
-        return (
-            f'<div id="scene-mount-{scene_id}" data-composition-id="{scene_id}" '
-            f'data-composition-src="compositions/{scene_id}.html" '
-            f'data-start="{_seconds(start_ms)}" '
-            f'data-duration="{_seconds(end_ms - start_ms)}" '
-            'data-track-index="1"></div>'
-        )
-
-    @staticmethod
-    def _scene_document(index: int, scene: TeachingScene) -> str:
-        scene_id = html.escape(scene.id)
-        return f"""<!doctype html>
-<html lang="zh-CN">
-<body>
-  <template>
-    <div data-composition-id="{scene_id}" data-width="1920" data-height="1080"
-         data-layout-allow-overlap>
-      {CartoonComposer._scene_html(index, scene)}
-    </div>
-  </template>
-</body>
-</html>
-"""
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=1920, height=1080">
+	<title>{html.escape(lesson.title)}</title><link rel="stylesheet" href="assets/theme.css">
+	<link rel="alternate" type="text/vtt" href="captions.vtt" hreflang="zh-CN"></head>
+	<body><main id="root" data-composition-id="{COMPOSITION_ID}" data-start="0" data-duration="{_seconds(timeline.duration_ms)}" data-width="1920" data-height="1080">
+	<div class="lesson-field" aria-hidden="true"></div>{scenes}
+	<div id="caption-track" class="caption-track" aria-hidden="true">{captions}</div>
+<div class="progress-rail" aria-hidden="true"><span id="progress-fill"></span></div>{audio}
+</main><script src="assets/vendor/gsap.min.js"></script><script src="assets/runtime.js"></script>
+<script>window.__timelines=window.__timelines||{{}};window.__timelines['{COMPOSITION_ID}']=window.CartoonRuntime.mount({data_json});</script></body></html>"""
 
     @staticmethod
     def _scene_html(index: int, scene: TeachingScene) -> str:
         scene_id = html.escape(scene.id)
-        structure = CartoonComposer._structure_html(scene)
+        objects = scene.program.objects
         entities = "\n".join(
-            f"""<div id="entity-{scene_id}-{html.escape(entity.id)}"
-                 class="visual-entity kind-{entity.kind.value} tone-{('primary', 'secondary', 'accent', 'warning')[index % 4]}"
-                 data-entity-id="{html.escape(entity.id)}" data-kind="{entity.kind.value}">
-              <span class="entity-label" data-layout-allow-occlusion>{html.escape(entity.label)}</span>
-              <span class="entity-value" data-layout-allow-occlusion></span>
-            </div>"""
-            for index, entity in enumerate(scene.entities)
+            f'''<div id="entity-{scene_id}-{html.escape(item.id)}" class="visual-entity role-{item.role.value}"
+                  data-object-id="{html.escape(item.id)}" data-role="{item.role.value}">
+                <span class="entity-label">{html.escape(item.label)}</span>
+                <span class="entity-value"></span></div>'''
+            for item in objects
         )
         relation_keys = {
-            (relation.source_id, relation.target_id, relation.label)
-            for state in scene.states
-            for relation in state.relations
+            (relation.source_id, relation.target_id)
+            for state in scene.program.states for relation in state.relations
         }
         relations = "\n".join(
-            f"""<g id="relation-{scene_id}-{relation_index}" class="relation" data-relation-index="{relation_index}">
-              <line></line><circle class="relation-head" r="0.55"></circle>
-            </g>"""
-            for relation_index, _relation in enumerate(sorted(relation_keys))
+            f'<g id="relation-{scene_id}-{number}" class="relation" data-relation-index="{number}"><line></line><circle class="relation-head" r="0.55"></circle></g>'
+            for number, _ in enumerate(sorted(relation_keys))
         )
-        grammar_label = {
-            "concept": "概念",
-            "model": "模型",
-            "trace": "推演",
-            "evidence": "证据",
-        }[scene.grammar.value]
-        return f"""<section id="scene-{scene_id}" class="teaching-scene grammar-{scene.grammar.value}"
-                 data-scene-id="{scene_id}" data-grammar="{scene.grammar.value}">
-          <header class="scene-heading">
-            <span class="scene-number">{index:02d}</span>
-            <div><span class="grammar-label">{grammar_label}</span><h1>{html.escape(scene.title)}</h1></div>
-          </header>
-          <div class="visual-stage">
-            {structure}
-            <svg class="relation-layer" viewBox="0 0 100 100" preserveAspectRatio="none"
-                 data-layout-allow-overlap aria-hidden="true">
-              {relations}
-            </svg>
-            <div class="entity-layer">{entities}</div>
-          </div>
-        </section>"""
-
-    @staticmethod
-    def _structure_html(scene: TeachingScene) -> str:
-        if scene.execution_program is None:
-            return ""
-        containers = [
-            item for item in scene.execution_program.objects
-            if item.role.value == "container"
-        ]
-        racks = "".join(
-            f'''<div class="execution-container-shell" data-container-id="{html.escape(item.id)}"
-                     style="--execution-capacity:{item.capacity}">
-                  <span class="execution-container-label" data-layout-allow-occlusion>{html.escape(item.label)}</span>
-                  <div class="execution-cells">{
-                      "".join(
-                          f'<div class="execution-cell" data-slot="{slot}"><span>{slot}</span></div>'
-                          for slot in range(item.capacity or 0)
-                      )
-                  }</div>
-                </div>'''
-            for item in containers
-        )
-        return f"""<div class="execution-stage" aria-hidden="true" data-layout-allow-occlusion>
-              <div class="execution-dock execution-input-dock"><span>输入</span></div>
-              <div class="execution-rack">{racks}</div>
-              <div class="execution-dock execution-output-dock"><span>输出</span></div>
-            </div>"""
+        mode_label = {"concept": "概念", "mechanism": "机制", "execution": "推演", "comparison": "比较", "evidence": "验证"}[scene.mode.value]
+        return f'''<section id="scene-{scene_id}" class="teaching-scene mode-{scene.mode.value} topology-{scene.topology.value}"
+                    data-scene-id="{scene_id}" data-mode="{scene.mode.value}" data-topology="{scene.topology.value}">
+  <header class="scene-heading"><span class="scene-number">{index:02d}</span><div><span class="mode-label">{mode_label}</span><h1>{html.escape(scene.title)}</h1></div></header>
+  <div class="visual-stage">
+  <svg class="relation-layer" viewBox="0 0 100 100" preserveAspectRatio="none" data-layout-allow-overlap aria-hidden="true">{relations}</svg>
+  <div class="entity-layer">{entities}</div></div></section>'''

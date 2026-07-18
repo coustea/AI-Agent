@@ -11,11 +11,12 @@
 
       <div class="legend">
         <span class="legend-item"><i class="legend-dot default"></i>未访问</span>
+        <span v-if="queueList" class="legend-item"><i class="legend-dot queued"></i>等待中</span>
         <span class="legend-item"><i class="legend-dot visited"></i>已访问</span>
         <span class="legend-item"><i class="legend-dot active"></i>当前</span>
       </div>
 
-      <div v-if="layoutNodes.length" class="graph-container">
+      <div v-if="layoutNodes.length" ref="containerRef" class="graph-container" :class="{ 'with-panel': orderList || queueList }" @transitionend="handleTransitionEvent">
         <svg
           class="graph-links-svg"
           viewBox="0 0 1000 600"
@@ -55,12 +56,45 @@
         </div>
       </div>
       <div v-else class="empty-state">等待图数据初始化...</div>
+
+      <!-- 整体展示面板：队列与遍历序列 -->
+      <div v-if="orderList || queueList" class="graph-status-panel">
+        <div v-if="queueList" class="status-section">
+          <div class="status-section-title">队列状态 (BFS Queue)</div>
+          <div class="status-section-list">
+            <span
+              v-for="(val, idx) in queueList"
+              :key="'q-' + val + '-' + idx"
+              class="queue-item"
+              :class="{ head: idx === 0 }"
+            >
+              {{ val }}
+            </span>
+            <span v-if="queueList.length === 0" class="empty-text">Empty</span>
+          </div>
+        </div>
+
+        <div v-if="orderList" class="status-section">
+          <div class="status-section-title">遍历序列 (Result Sequence)</div>
+          <div class="status-section-list">
+            <span
+              v-for="(val, idx) in orderList"
+              :key="'o-' + val + '-' + idx"
+              class="order-item"
+              :class="{ latest: idx === orderList.length - 1 }"
+            >
+              {{ val }}
+            </span>
+            <span v-if="orderList.length === 0" class="empty-text">Empty</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import * as d3 from 'd3'
 import type { TraceEvent, VisualEdge, VisualNode } from '@/features/algorithm-visualization/types'
 
@@ -90,6 +124,7 @@ const props = defineProps<{
   currentEvent: TraceEvent | null
   currentStepIndex: number
   events: TraceEvent[]
+  onStepComplete?: () => void
 }>()
 
 const layoutPositionCache = new Map<string, Map<string, { x: number; y: number }>>()
@@ -105,6 +140,16 @@ const activeNodeIds = computed(() => new Set(
 ))
 
 const activeNode = computed(() => rawNodes.value.find(node => activeNodeIds.value.has(String(node.id))) ?? null)
+
+const queueList = computed(() => {
+  const q = props.currentEvent?.state?.structure?.queue
+  return Array.isArray(q) ? q as string[] : null
+})
+
+const orderList = computed(() => {
+  const o = props.currentEvent?.state?.structure?.order
+  return Array.isArray(o) ? o as string[] : null
+})
 
 // 构建图的边列表（优先使用节点声明的 edges，否则用默认拓扑）
 const edgesList = computed<GraphConnection[]>(() => {
@@ -245,19 +290,85 @@ const graphEdges = computed(() => {
   return edges.map(e => {
     const uPos = posMap.get(e.u) || { x: 0, y: 0, tone: 'default', isActive: false }
     const vPos = posMap.get(e.v) || { x: 0, y: 0, tone: 'default', isActive: false }
-    
+
+    // 找出两个方向的连接边对象，并确定该边是否已构建
+    const parentNodeU = rawNodes.value.find(n => String(n.id) === e.u)
+    const edgeU = parentNodeU?.edges?.find((edge: any) => String(edge.to) === e.v)
+    const parentNodeV = rawNodes.value.find(n => String(n.id) === e.v)
+    const edgeV = parentNodeV?.edges?.find((edge: any) => String(edge.to) === e.u)
+    const isConstructed = (edgeU ? edgeU.constructed !== false : true) && (edgeV ? edgeV.constructed !== false : true)
+
     // 两端节点都已访问时高亮该边（表示遍历路径）
     const isVisitedPath = uPos.tone === 'visited' && vPos.tone === 'visited'
+
+    let edgeTone = 'default'
+    if (isConstructed) {
+      edgeTone = isVisitedPath && (uPos.isActive || vPos.isActive) ? 'active' : isVisitedPath ? 'visited' : 'default'
+    } else {
+      edgeTone = 'unconstructed'
+    }
 
     return {
       x1: uPos.x,
       y1: uPos.y,
       x2: vPos.x,
       y2: vPos.y,
-      tone: isVisitedPath && (uPos.isActive || vPos.isActive) ? 'active' : isVisitedPath ? 'visited' : 'default',
+      tone: edgeTone,
       weight: e.weight,
     }
   })
+})
+
+// 动画完成通知：监听 CSS transitionend 事件，防抖后调用 onStepComplete
+const containerRef = ref<HTMLElement | null>(null)
+let transitionDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let hasActiveTransition = false
+
+function onTransitionEnd() {
+  if (transitionDebounceTimer !== null) {
+    clearTimeout(transitionDebounceTimer)
+  }
+  transitionDebounceTimer = setTimeout(() => {
+    hasActiveTransition = false
+    props.onStepComplete?.()
+  }, 60)
+}
+
+function handleTransitionEvent() {
+  hasActiveTransition = true
+  onTransitionEnd()
+}
+
+// 步骤变化时检测是否有 CSS 过渡
+watch(
+  [() => props.currentStepIndex, () => props.currentEvent],
+  () => {
+    // 如果没有 CSS 过渡（如 reduced-motion），立即完成
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    if (reducedMotion || !containerRef.value) {
+      // 延迟一帧让 DOM 更新后再判断
+      requestAnimationFrame(() => {
+        if (!hasActiveTransition) {
+          props.onStepComplete?.()
+        }
+      })
+      return
+    }
+    // 设置安全超时：如果 300ms 内没有 transitionend，自动完成
+    if (transitionDebounceTimer !== null) {
+      clearTimeout(transitionDebounceTimer)
+    }
+    transitionDebounceTimer = setTimeout(() => {
+      hasActiveTransition = false
+      props.onStepComplete?.()
+    }, 350)
+  },
+)
+
+onBeforeUnmount(() => {
+  if (transitionDebounceTimer !== null) {
+    clearTimeout(transitionDebounceTimer)
+  }
 })
 </script>
 
@@ -459,6 +570,103 @@ const graphEdges = computed(() => {
   .graph-node {
     transition: none;
   }
+}
 
+.legend-dot.queued {
+  background: var(--color-primary-soft);
+  border: 1px dashed var(--color-primary);
+}
+
+.graph-node.queued {
+  border-color: var(--color-primary-border);
+  background: var(--color-primary-soft);
+  color: var(--color-primary-text);
+  border-style: dashed;
+}
+
+.graph-container {
+  transition: height 0.25s ease;
+}
+
+.graph-container.with-panel {
+  height: calc(100% - 62px);
+}
+
+.graph-status-panel {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 10;
+  display: flex;
+  gap: 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.status-section {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-section-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+
+.status-section-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.queue-item, .order-item {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  background: var(--color-surface-hover);
+  border: 1px solid var(--color-border-light);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  transition: all 0.2s ease;
+}
+
+.queue-item.head {
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary-border);
+  color: var(--color-primary-text);
+  font-weight: 800;
+}
+
+.order-item.latest {
+  background: var(--color-success-soft);
+  border-color: var(--color-success);
+  color: var(--color-success-text);
+  transform: scale(1.05);
+}
+
+.empty-text {
+  font-size: 11px;
+  color: var(--color-text-faint);
+  font-style: italic;
+}
+.graph-edge.unconstructed {
+  stroke: var(--color-border);
+  stroke-dasharray: 3 3;
+  stroke-width: 1;
+  opacity: 0.35;
 }
 </style>

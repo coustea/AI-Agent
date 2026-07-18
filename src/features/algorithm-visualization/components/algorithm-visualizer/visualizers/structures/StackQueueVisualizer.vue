@@ -11,7 +11,7 @@
         <code>{{ currentValue }}</code>
       </div>
 
-      <div v-if="items.length" :class="['linear-strip', mode]">
+      <div v-if="items.length" ref="containerRef" :class="['linear-strip', mode]" @transitionend="handleTransitionEvent">
         <div
           v-for="(item, index) in items"
           :key="item.id"
@@ -38,13 +38,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import type { TraceEvent, VisualPointer } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{
   currentEvent: TraceEvent | null
   currentStepIndex: number
   events: TraceEvent[]
+  onStepComplete?: () => void
 }>()
 
 // 栈/队列模式（降级为 stack）
@@ -74,6 +75,54 @@ function getPointers(index: number) {
     pointer.nodeIndex === index || pointer.itemIndex === index
   ))
 }
+
+// 动画完成通知：监听 CSS transitionend 事件，防抖后调用 onStepComplete
+const containerRef = ref<HTMLElement | null>(null)
+let transitionDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let hasActiveTransition = false
+
+function onTransitionEnd() {
+  if (transitionDebounceTimer !== null) {
+    clearTimeout(transitionDebounceTimer)
+  }
+  transitionDebounceTimer = setTimeout(() => {
+    hasActiveTransition = false
+    props.onStepComplete?.()
+  }, 60)
+}
+
+function handleTransitionEvent() {
+  hasActiveTransition = true
+  onTransitionEnd()
+}
+
+watch(
+  [() => props.currentStepIndex, () => props.currentEvent],
+  () => {
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+    if (reducedMotion || !containerRef.value) {
+      requestAnimationFrame(() => {
+        if (!hasActiveTransition) {
+          props.onStepComplete?.()
+        }
+      })
+      return
+    }
+    if (transitionDebounceTimer !== null) {
+      clearTimeout(transitionDebounceTimer)
+    }
+    transitionDebounceTimer = setTimeout(() => {
+      hasActiveTransition = false
+      props.onStepComplete?.()
+    }, 350)
+  },
+)
+
+onBeforeUnmount(() => {
+  if (transitionDebounceTimer !== null) {
+    clearTimeout(transitionDebounceTimer)
+  }
+})
 </script>
 
 <style scoped>

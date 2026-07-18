@@ -30,6 +30,7 @@ interface Props {
   currentEvent: TraceEvent | null
   currentStepIndex: number
   events: TraceEvent[]
+  onStepComplete?: () => void
 }
 
 interface BarDatum {
@@ -280,33 +281,52 @@ function animateStep(transitions: ChartTransitions) {
   }
 
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
+
+  // 收集所有动画 tween，在最后一个完成时调用 onStepComplete
+  let longestDuration = 0
   transitions.bars.forEach(({ element, fromY, fromHeight, toY, toHeight }) => {
+    const duration = reducedMotion ? 0 : 0.42
+    if (duration > longestDuration) longestDuration = duration
     gsap.fromTo(
       element,
       { attr: { y: fromY, height: fromHeight } },
-      { attr: { y: toY, height: toHeight }, duration: reducedMotion ? 0 : 0.42, ease: 'power2.inOut' },
+      { attr: { y: toY, height: toHeight }, duration, ease: 'power2.inOut' },
     )
   })
 
   transitions.groups.forEach(({ element, fromX, toX }) => {
+    const duration = reducedMotion ? 0 : 0.58
+    if (duration > longestDuration) longestDuration = duration
     gsap.fromTo(
       element,
       { attr: { transform: `translate(${fromX}, 0)` } },
-      { attr: { transform: `translate(${toX}, 0)` }, duration: reducedMotion ? 0 : 0.58, ease: 'power3.inOut' },
+      { attr: { transform: `translate(${toX}, 0)` }, duration, ease: 'power3.inOut' },
     )
   })
 
+  // 入场动画
   if (props.currentStepIndex === 0) {
+    longestDuration = Math.max(longestDuration, 0.35 + 0.04 * rects.length)
     gsap.fromTo(rects, { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.35, ease: 'power2.out', stagger: 0.04 })
-    return
   }
 
+  // 脉冲动画
   if (targets.length > 0) {
+    longestDuration = Math.max(longestDuration, 0.4)
     gsap.fromTo(
       targets,
       { y: 0, scaleY: 1 },
       { y: -7, scaleY: 1.025, duration: reducedMotion ? 0 : 0.2, yoyo: !reducedMotion, repeat: reducedMotion ? 0 : 1, ease: 'power2.out', transformOrigin: 'center bottom' },
     )
+  }
+
+  // 无动画时立即完成，有动画时延迟调用
+  if (longestDuration === 0) {
+    props.onStepComplete?.()
+  } else {
+    setTimeout(() => {
+      props.onStepComplete?.()
+    }, longestDuration * 1000 + 50)
   }
 }
 

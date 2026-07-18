@@ -117,8 +117,6 @@ class CartoonAgent(BaseResourceAgent):
                 "task": task.model_dump(mode="json"),
             },
             source_materials=CartoonAgent._source_materials(input_data.upstream_handoffs),
-            knowledge_points=CartoonAgent._strings(raw_config.get("knowledge_points"), 30),
-            weak_knowledge_points=CartoonAgent._strings(raw_config.get("weak_knowledge_points"), 20),
             configuration=configuration,
         )
 
@@ -140,20 +138,6 @@ class CartoonAgent(BaseResourceAgent):
                     lines.extend(["", value])
             sections.append("\n".join(lines)[:4_000])
         return sections[:12]
-
-    @staticmethod
-    def _strings(value: Any, limit: int) -> list[str]:
-        if value is None:
-            return []
-        raw = value.replace("，", ",").split(",") if isinstance(value, str) else list(value)
-        result: list[str] = []
-        for item in raw:
-            normalized = str(item).strip()[:160]
-            if normalized and normalized not in result:
-                result.append(normalized)
-            if len(result) == limit:
-                break
-        return result
 
     @staticmethod
     def _safe_username(value: Any) -> str:

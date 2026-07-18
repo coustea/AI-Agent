@@ -108,13 +108,21 @@ def execute_official_template(
                 return None  # Stop tracing this file
         if event not in {"line", "return"}:
             return observe
+        if frame.f_code.co_name == "__init__":
+            return observe
 
         structure, targets = adapter.capture(
             frame.f_locals,
             arg if event == "return" else None,
+            func_name=frame.f_code.co_name,
         )
         fingerprint = _snapshot_fingerprint(structure, targets)
-        if fingerprint != last_fingerprint and snapshot_count < spec.max_events:
+        is_construction = frame.f_code.co_name in {
+            "_build_tree",
+            "_build_undirected_graph",
+            "_build_weighted_graph",
+        }
+        if (is_construction or fingerprint != last_fingerprint) and snapshot_count < spec.max_events:
             event_type = _describe_step(
                 spec, last_structure, structure, targets
             )
@@ -140,7 +148,7 @@ def execute_official_template(
         sys.settrace(previous_trace)
 
     # Final snapshot from the return value.
-    final_structure, final_targets = adapter.capture({}, result)
+    final_structure, final_targets = adapter.capture({}, result, func_name=spec.entry_point)
     final_fingerprint = _snapshot_fingerprint(final_structure, final_targets)
     if final_fingerprint != last_fingerprint:
         builder.add(

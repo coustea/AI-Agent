@@ -11,10 +11,12 @@ from app.path.schemas import PathResourceRequest
 from app.resource.schemas import AgentResult
 from app.shared.cartoon import (
     CartoonBrief,
+    CartoonGenerationConfig,
     CartoonGenerationError,
     CartoonPipeline,
     CartoonResourceMetadata,
 )
+from app.shared.cartoon.models import LessonDepth
 
 
 logger = get_logger(__name__)
@@ -96,6 +98,23 @@ class PathCartoonAdapter:
             source_materials=[tutorial.content_markdown[:30_000]],
             knowledge_points=list(tutorial.knowledge_points)[:30],
             weak_knowledge_points=list(tutorial.weak_knowledge_points)[:20],
+            configuration=CartoonGenerationConfig(
+                lesson_depth={
+                    "coarse": LessonDepth.FOCUSED,
+                    "standard": LessonDepth.STANDARD,
+                    "fine": LessonDepth.DEEP,
+                }[request.preferences.granularity],
+                visual_density={
+                    "coarse": "moderate",
+                    "standard": "rich",
+                    "fine": "intensive",
+                }[request.preferences.granularity],
+                pace={
+                    "slow": "calm",
+                    "normal": "balanced",
+                    "fast": "fast",
+                }[request.preferences.pace],
+            ),
         )
 
     @staticmethod

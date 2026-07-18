@@ -36,40 +36,51 @@
           @select="selectTemplate"
         />
 
-        <label
-          v-else
-          class="custom-visualizer-select"
-        >
-          可视化类型
-          <select v-model="customVisualizerType">
-            <option
-              v-for="type in visualizerTypes"
-              :key="type"
-              :value="type"
-            >{{ getVisualizerLabel(type) }}</option>
-          </select>
-        </label>
-
-        <label
-          v-if="executionMode === 'custom' && customContract"
-          class="custom-visualizer-select"
-        >
-          入口函数
-          <select
-            v-model="customEntryFunction"
-            :disabled="generating || customContractLoading"
+        <div v-else class="custom-visualizer-picker">
+          <label class="custom-category-select">
+            算法分类
+            <select v-model="customVisualizerCategory">
+              <option
+                v-for="cat in VISUALIZER_CATEGORIES"
+                :key="cat.domain"
+                :value="cat.domain"
+              >{{ cat.label }}</option>
+            </select>
+          </label>
+          <label
+            v-if="customCategoryVisualizerTypes.length > 1"
+            class="custom-visualizer-select"
           >
-            <option
-              v-for="item in customContract.functions"
-              :key="item.name"
-              :value="item.name"
-            >{{ item.name }}({{ item.parameters.map((p: { name: string } | string) => typeof p === 'string' ? p : p.name).join(', ') }})</option>
-          </select>
-        </label>
-
+            可视化类型
+            <select v-model="customVisualizerType">
+              <option
+                v-for="type in customCategoryVisualizerTypes"
+                :key="type"
+                :value="type"
+              >{{ getVisualizerLabel(type) }}</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       <div class="toolbar-actions">
+        <div class="visualizer-state">
+          <span :class="['state-dot', { active: hasEvents }]"></span>
+          <span>{{ visualizerStatusText }}</span>
+        </div>
+
+        <button
+          class="control-btn primary"
+          :disabled="generating || (!hasEvents && runDisabled)"
+          @click="handlePrimaryAction"
+        >
+          <component
+            :is="primaryIcon"
+            :class="['btn-icon', { spin: generating }]"
+          />
+          <span>{{ primaryLabel }}</span>
+        </button>
+
         <Button
           v-if="executionMode === 'custom'"
           variant="outline"
@@ -90,12 +101,9 @@
         :events="events"
         :current-event="currentEvent"
         :current-step-index="currentStepIndex"
-        :generating="generating"
         :run-version="runVersion"
-        :playing="playback.playing.value"
-        :finished="playback.finished.value"
-        :run-disabled="loading || !inputDataValid || customContractLoading"
-        @primary="handlePrimaryAction"
+        :execution-mode="executionMode"
+        :on-step-complete="handleStepComplete"
       />
 
       <aside class="visualizer-right">
@@ -104,7 +112,7 @@
             type="button"
             class="editor-tab-btn"
             :class="{ active: activeEditorTab === 'code' }"
-            @click="activeEditorTab = 'code'"
+            @click="setEditorTab('code')"
           >
             <Code2 class="tab-icon" />
             代码
@@ -113,7 +121,7 @@
             type="button"
             class="editor-tab-btn"
             :class="{ active: activeEditorTab === 'input' }"
-            @click="activeEditorTab = 'input'"
+            @click="setEditorTab('input')"
           >
             <Settings class="tab-icon" />
             输入数据
@@ -122,6 +130,7 @@
 
         <div class="editor-content">
           <AlgorithmCodeEditorPanel
+            ref="codeEditorRef"
             v-show="activeEditorTab === 'code'"
             :model-value="editorCode"
             :title="executionMode === 'official' ? '官方模板代码' : '自定义 Python 代码'"
@@ -158,7 +167,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Code2, RotateCcw, Settings } from 'lucide-vue-next'
+import { Code2, RotateCcw, Settings, Loader2, Pause, Play } from 'lucide-vue-next'
 import { Button } from '@/components/ui/button'
 import { getErrorMessage } from '@/shared/api/http'
 import type { CustomCodeContract, RunError, VisualizerType } from '@/features/algorithm-visualization/types'
@@ -167,16 +176,16 @@ import AlgorithmVisualizerStage from '@/features/algorithm-visualization/compone
 import AlgorithmCodeEditorPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmCodeEditorPanel.vue'
 import AlgorithmInputDataPanel from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmInputDataPanel.vue'
 import AlgorithmRunErrorDialog from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmRunErrorDialog.vue'
-import { useTracePlayer } from '@/features/algorithm-visualization/composables/useTracePlayer'
+import { useAnimationOrchestrator } from '@/features/algorithm-visualization/composables/useAnimationOrchestrator'
 import { useAlgorithmTemplate } from '@/features/algorithm-visualization/composables/useAlgorithmTemplate'
 import { useAlgorithmRun } from '@/features/algorithm-visualization/composables/useAlgorithmRun'
-import { useVisualizerTimeline } from '@/features/algorithm-visualization/composables/useVisualizerTimeline'
 import { fetchCustomCodeContract } from '@/features/algorithm-visualization/api/algorithmVisualizer'
 import {
   getDomainLabel,
   getVisualizerLabel,
   groupAlgorithmsByDomain,
   VISUALIZER_LABELS,
+  VISUALIZER_CATEGORIES,
 } from '@/features/algorithm-visualization/data/visualizerMetadata'
 
 defineOptions({
@@ -211,40 +220,50 @@ const {
   clear: clearRun,
 } = useAlgorithmRun()
 
-// 步骤播放器
-const playback = useTracePlayer(() => events.value)
+// 代码编辑器模板引用（用于命令式调用 highlightLine）
+const codeEditorRef = ref<InstanceType<typeof AlgorithmCodeEditorPanel> | null>(null)
+
+// 统一动画编排器 — 替代 useTracePlayer + useVisualizerTimeline
+const orchestrator = useAnimationOrchestrator({
+  events: () => events.value,
+  onStepChange(event) {
+    // 同步 Monaco 行高亮
+    codeEditorRef.value?.highlightLine(event?.line)
+  },
+})
+
 const errorDialogOpen = ref(false)
 const executionMode = ref<'official' | 'custom'>('official')
 const activeEditorTab = ref<'code' | 'input'>('code')
 const inputDataJson = ref<Record<string, unknown>>({})
 const inputDataValid = ref(true)
-const customCode = ref(`def bubble_sort(values):
-  arr = list(values)
-  for end in range(len(arr) - 1, 0, -1):
-    for index in range(end):
-      if arr[index] > arr[index + 1]:
-        arr[index], arr[index + 1] = arr[index + 1], arr[index]
-  return arr
-`)
-const defaultCustomCode = customCode.value
+const customCode = ref('')
+const defaultCustomCode = ''
 const customVisualizerType = ref<VisualizerType>('array')
+const customVisualizerCategory = ref('sorting')
 const visualizerTypes = Object.keys(VISUALIZER_LABELS) as VisualizerType[]
+
+// 当前自定义分类下的可视化器类型列表
+const customCategoryVisualizerTypes = computed(() => {
+  const category = VISUALIZER_CATEGORIES.find(c => c.domain === customVisualizerCategory.value)
+  return category?.visualizerTypes ?? ['array']
+})
+
+// 切换自定义分类时，自动选择该分类下第一个可视化器类型
+watch(customVisualizerCategory, (newCategory) => {
+  const category = VISUALIZER_CATEGORIES.find(c => c.domain === newCategory)
+  if (category && !category.visualizerTypes.includes(customVisualizerType.value)) {
+    customVisualizerType.value = category.visualizerTypes[0]
+  }
+})
 const customContract = ref<CustomCodeContract | null>(null)
 const customContractLoading = ref(false)
 const customContractStale = ref(true)
 const customEntryFunction = ref('')
 
-// 自动播放时间线调度
-useVisualizerTimeline({
-  playing: playback.playing,
-  currentEvent: playback.currentEvent,
-  next: playback.next,
-  pause: playback.pause,
-})
-
 // 当前事件和步骤索引
-const currentEvent = computed(() => playback.currentEvent.value)
-const currentStepIndex = computed(() => playback.currentStepIndex.value)
+const currentEvent = computed(() => orchestrator.currentEvent.value)
+const currentStepIndex = computed(() => orchestrator.currentStepIndex.value)
 const editorCode = computed(() => executionMode.value === 'official' ? code.value : customCode.value)
 
 // 按领域分组的算法分类
@@ -278,6 +297,31 @@ const resolvedVisualizerType = computed(() => {
 // 当前算法的默认输入数据
 const currentAlgorithmDefaultData = computed(() => {
   return executionMode.value === 'custom' ? customContract.value?.defaultInput ?? {} : templateData.value?.defaultInput ?? {}
+})
+
+const hasEvents = computed(() => events.value.length > 0)
+
+const visualizerStatusText = computed(() => {
+  if (generating.value) return '运行中'
+  if (hasEvents.value) return `${events.value.length} 个轨迹步骤`
+  return '未运行'
+})
+
+const primaryLabel = computed(() => {
+  if (generating.value) return '正在生成...'
+  if (!hasEvents.value) return '运行可视化'
+  if (orchestrator.playing.value) return '暂停展示'
+  if (orchestrator.finished.value) return '重新展示'
+  return '开始展示'
+})
+
+const primaryIcon = computed(() => {
+  if (generating.value) return Loader2
+  return orchestrator.playing.value ? Pause : Play
+})
+
+const runDisabled = computed(() => {
+  return loading.value || !inputDataValid.value || customContractLoading.value
 })
 
 const currentAlgorithmInputSchema = computed(() => {
@@ -318,24 +362,32 @@ async function selectTemplate(algorithmKey: string) {
   await setAlgorithm(algorithmKey)
 }
 
+function setEditorTab(tab: 'code' | 'input') {
+  activeEditorTab.value = tab
+  if (tab === 'input' && executionMode.value === 'custom' && customContractStale.value) {
+    void refreshCustomContract(false, true)
+  }
+}
+
 function setExecutionMode(mode: 'official' | 'custom') {
   executionMode.value = mode
   activeEditorTab.value = 'code'
   discardVisualization()
   inputDataJson.value = structuredClone(mode === 'custom' ? customContract.value?.defaultInput ?? {} : currentAlgorithmDefaultData.value)
-  if (mode === 'custom') void refreshCustomContract()
+  if (mode === 'custom') void refreshCustomContract(false, true)
   if (mode === 'official' && !code.value.trim()) void loadTemplate()
 }
 
 function updateEditorCode(nextCode: string) {
   if (executionMode.value === 'official') {
+    if (nextCode === code.value) return
     // 编辑官方模板代码时自动切换到自定义模式
     executionMode.value = 'custom'
     customCode.value = nextCode
     customEntryFunction.value = ''
     customContractStale.value = true
     discardVisualization()
-    void refreshCustomContract()
+    void refreshCustomContract(false, true)
   } else {
     customCode.value = nextCode
     customEntryFunction.value = ''
@@ -349,7 +401,7 @@ function handleReset() {
     customCode.value = defaultCustomCode
     customEntryFunction.value = ''
     customContractStale.value = true
-    void refreshCustomContract()
+    void refreshCustomContract(false, true)
     discardVisualization()
     return
   }
@@ -363,11 +415,16 @@ async function handlePrimaryAction() {
     await handleRun()
     return
   }
-  if (playback.playing.value) {
-    playback.pause()
+  if (orchestrator.playing.value) {
+    orchestrator.pause()
     return
   }
-  playback.play()
+  orchestrator.play()
+}
+
+// 可视化器动画完成回调 — 通知编排器
+function handleStepComplete() {
+  orchestrator.notifyStepComplete()
 }
 
 // 运行算法可视化
@@ -404,10 +461,10 @@ async function handleRun() {
         inputData: inputDataJson.value,
       }
   await runAlgorithm(params)
-  // 运行完成后重置播放器并自动播放
-  playback.reset()
+  // 运行完成后重置编排器并自动播放
+  orchestrator.reset()
   if (events.value.length > 0) {
-    playback.play()
+    orchestrator.play()
   }
 }
 
@@ -417,16 +474,20 @@ function showRunError(error: RunError) {
 }
 
 function discardVisualization() {
-  playback.reset()
+  orchestrator.reset()
   clearRun()
 }
 
-async function refreshCustomContract(force = false) {
+async function refreshCustomContract(force = false, showQuietly = false) {
   if (!customCode.value.trim()) {
-    showRunError({
-      errorType: 'CUSTOM_CONTRACT_INVALID',
-      message: '请先输入一段可执行的 Python 代码。',
-    })
+    if (!showQuietly) {
+      showRunError({
+        errorType: 'CUSTOM_CONTRACT_INVALID',
+        message: '请先输入一段可执行的 Python 代码。',
+      })
+    }
+    customContract.value = null
+    customEntryFunction.value = ''
     return false
   }
   if (!force && !customContractStale.value && customContract.value && customEntryFunction.value) return true
@@ -467,7 +528,7 @@ watch(customEntryFunction, (entryFunction, previousEntryFunction) => {
   if (!entryFunction || entryFunction === previousEntryFunction || !customContract.value || customContractLoading.value) return
   discardVisualization()
   customContractStale.value = true
-  void refreshCustomContract()
+  void refreshCustomContract(false, true)
 })
 
 watch(inputDataJson, () => {
@@ -556,11 +617,19 @@ watch(customVisualizerType, () => {
 }
 
 .execution-mode-switch button:focus-visible,
+.custom-category-select select:focus-visible,
 .custom-visualizer-select select:focus-visible {
   outline: 3px solid var(--color-primary);
   outline-offset: 2px;
 }
 
+.custom-visualizer-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.custom-category-select,
 .custom-visualizer-select {
   display: inline-flex;
   align-items: center;
@@ -570,6 +639,7 @@ watch(customVisualizerType, () => {
   font-weight: 800;
 }
 
+.custom-category-select select,
 .custom-visualizer-select select {
   height: 32px;
   border: 1px solid var(--color-border);
@@ -587,20 +657,18 @@ watch(customVisualizerType, () => {
 }
 
 .reset-btn {
-  height: 36px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   border-radius: var(--radius-sm) !important;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
-}
-
-.reset-btn {
   padding: 0 12px;
   border: 1px solid var(--color-border);
   background: var(--color-surface);
   color: var(--color-text-secondary);
+  transition: var(--btn-transition);
 }
 
 .reset-btn:hover:not(:disabled) {
@@ -608,9 +676,83 @@ watch(customVisualizerType, () => {
   color: var(--color-text-strong);
 }
 
+.visualizer-state {
+  flex: 0 0 auto;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-hover);
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.state-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-text-faint);
+}
+
+.state-dot.active {
+  background: var(--color-primary);
+}
+
+.control-btn {
+  height: 32px;
+  min-width: 104px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+  transition: var(--btn-transition);
+}
+
+.control-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: var(--color-surface-hover);
+}
+
+.control-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.control-btn.primary {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.control-btn.primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
 .btn-icon {
   width: 14px;
   height: 14px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .algorithm-visualizer-main {

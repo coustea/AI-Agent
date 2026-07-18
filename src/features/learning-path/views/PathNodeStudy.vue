@@ -796,27 +796,6 @@
                   </div>
                 </div>
 
-                <button
-                    v-if="quizResult.next_node_id"
-                    class="next-node-button"
-                    type="button"
-                    @click="
-                    goToNextNode(
-                      quizResult.next_node_id,
-                    )
-                  "
-                >
-                  <span>进入下一学习节点</span>
-
-                  <svg
-                      viewBox="0 0 24 24"
-                      fill="currentColor"
-                  >
-                    <path
-                        d="M5 13h11.86l-5.43 5.43 1.42 1.42L21.14 12l-8.29-8.29-1.42 1.42L16.86 11H5v2Z"
-                    />
-                  </svg>
-                </button>
               </div>
             </section>
 
@@ -861,6 +840,7 @@ import {
   watch,
 } from 'vue'
 import {
+  onBeforeRouteLeave,
   useRoute,
   useRouter,
 } from 'vue-router'
@@ -2274,14 +2254,6 @@ function closeQuiz() {
   showQuizOverlay.value = false
 }
 
-function goToNextNode(
-    nextNodeId: number,
-) {
-  router.push(
-      `/path-planner/node/${nextNodeId}`,
-  )
-}
-
 function choiceEntries(
     choice:
         | Record<string, string>
@@ -2450,6 +2422,14 @@ onMounted(() => {
   loadWorkspace()
 })
 
+// 提交测验期间阻止离开页面，确保后端解锁下一节点完成
+onBeforeRouteLeave(() => {
+  if (submitLoading.value) {
+    toast.warning('正在提交测验，请稍候…')
+    return false
+  }
+})
+
 onBeforeUnmount(() => {
   isPageActive = false
 
@@ -2575,8 +2555,7 @@ onBeforeUnmount(() => {
 .tutorial-tab:focus-visible,
 .toc-item:focus-visible,
 .nav-back-button:focus-visible,
-.viewer-close-button:focus-visible,
-.next-node-button:focus-visible {
+.viewer-close-button:focus-visible {
   outline: 3px solid
   var(--study-focus-ring);
   outline-offset: 2px;
@@ -4285,36 +4264,6 @@ onBeforeUnmount(() => {
   color: #a65353;
   font-size: 10px;
   font-weight: 650;
-}
-
-.next-node-button {
-  display: inline-flex;
-  width: 100%;
-  min-height: 40px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: 1px solid var(--study-accent, #46b8b4);
-  border-radius: 8px;
-  background: var(--study-accent, #46b8b4);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(70, 184, 180, 0.2);
-  transition: all 0.2s ease;
-}
-
-.next-node-button:hover {
-  background: #3fa8a4;
-  border-color: #3fa8a4;
-  box-shadow: 0 4px 12px rgba(70, 184, 180, 0.3);
-  transform: translateY(-1px);
-}
-
-.next-node-button svg {
-  width: 15px;
-  height: 15px;
 }
 
 .viewer-fade-enter-active,
