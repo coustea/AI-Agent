@@ -26,7 +26,10 @@ logger = get_logger(__name__)
 
 DEFAULT_WIDTH = 1400
 DEFAULT_HEIGHT = 900
-PNG_DEVICE_SCALE_FACTOR = 2
+# Preserve the 1400px logical layout while exporting a high-density PNG for
+# full-screen viewing and download. Three times density is visibly sharper
+# than the previous 2x output without the memory cost of a 4x canvas.
+PNG_DEVICE_SCALE_FACTOR = 3
 Screenshotter = Callable[[str, int, int], Awaitable[bytes]]
 ImageUrlBuilder = Callable[[str], str]
 DiagramRenderer = Callable[..., Awaitable[dict[str, Any]]]

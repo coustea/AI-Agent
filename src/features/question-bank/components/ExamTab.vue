@@ -381,12 +381,30 @@
         </div>
       </section>
     </div>
+
+    <div
+      v-if="!examSubmitted && !examReviewing && examExitNoticeVisible"
+      class="submit-confirm-backdrop"
+      role="presentation"
+      @click.self="$emit('cancel-exit-exam')"
+    >
+      <section class="submit-confirm-dialog exit-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="exit-confirm-title">
+        <span class="submit-confirm-kicker">退出确认</span>
+        <h2 id="exit-confirm-title">确定退出本次考试？</h2>
+        <p>当前试卷尚未提交，退出后本次作答进度将不会保留。</p>
+        <div class="submit-confirm-actions">
+          <button class="btn-secondary" type="button" @click="$emit('cancel-exit-exam')">继续答题</button>
+          <button class="btn-primary exit-confirm-button" type="button" @click="$emit('confirm-exit-exam')">确认退出</button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { requiresAiReview } from '@/features/question-bank/model/grading'
+import { renderQuestionMarkdown } from '@/features/question-bank/model/questionText'
 
 type AnswerValue = string | string[] | undefined
 
@@ -426,6 +444,7 @@ const props = defineProps<{
   examSubmitted: boolean
   examReviewing: boolean
   examSubmitNoticeVisible: boolean
+  examExitNoticeVisible: boolean
   currentExamIndex: number
   formattedExamTime: string
   examAnsweredCount: number
@@ -447,6 +466,8 @@ defineEmits<{
   (e: 'cancel-submit-exam'): void
   (e: 'scroll-to-question', index: number): void
   (e: 'exit-exam'): void
+  (e: 'confirm-exit-exam'): void
+  (e: 'cancel-exit-exam'): void
   (e: 'back-workspace'): void
   (e: 'open-analysis-review', questionId: string): void
 }>()
@@ -475,16 +496,7 @@ function summarize(text: string) {
 }
 
 function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
+  return renderQuestionMarkdown(text)
 }
 
 // 判断是否选择题/判断题
@@ -1849,6 +1861,20 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.12em;
+}
+
+.exit-confirm-dialog .submit-confirm-kicker {
+  color: #dc2626;
+}
+
+.exit-confirm-button {
+  border-color: #dc2626;
+  background: #dc2626;
+}
+
+.exit-confirm-button:hover {
+  border-color: #b91c1c;
+  background: #b91c1c;
 }
 
 .submit-confirm-dialog h2 {

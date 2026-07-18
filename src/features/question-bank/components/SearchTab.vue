@@ -52,9 +52,7 @@
               </div>
             </div>
 
-            <div class="question-summary">
-              {{ summarizeText(question.content) }}
-            </div>
+            <div class="question-summary" v-html="renderInline(question.content)"></div>
 
             <div v-if="question.knowledge_points?.length" class="knowledge-points">
               <span v-for="point in visibleKnowledgePoints(question)" :key="point">{{ point }}</span>
@@ -211,7 +209,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
 import { normalizePageNumber } from '@/features/question-bank/model/pagination'
-import { summarizeQuestionText } from '@/features/question-bank/model/questionText'
+import { renderQuestionMarkdown } from '@/features/question-bank/model/questionText'
 
 // 组件属性：题库列表、筛选、答题状态
 const props = defineProps<{
@@ -392,10 +390,6 @@ function formatReferenceAnswer(question: any) {
   return formatAnswer(question.answer)
 }
 
-function summarizeText(text: string) {
-  return summarizeQuestionText(text)
-}
-
 function visibleKnowledgePoints(question: any) {
   return (question.knowledge_points || []).slice(0, 3)
 }
@@ -431,16 +425,7 @@ function subjectiveScoreText(question: any) {
 }
 
 function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
+  return renderQuestionMarkdown(text)
 }
 </script>
 

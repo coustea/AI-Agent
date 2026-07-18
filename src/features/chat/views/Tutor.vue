@@ -739,6 +739,11 @@ import type {
 } from '@/features/chat/types/chat'
 import type { ChatEvent } from '@/features/chat/types/chatEvent'
 import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
+import {
+  selectSessionForMode,
+  type TutorChatMode,
+} from '@/features/chat/model/chatModeSession'
+import { consumeTutorEntryIntent } from '@/features/chat/model/tutorEntryIntent'
 import DigitalHumanCanvas from '@/features/chat/digital-human/views/DigitalHumanCanvas.vue'
 import {
   type PendingFile,
@@ -764,7 +769,7 @@ const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 const { userName } = useCurrentUser()
 
 // 聊天模式：standard（文本）| digital_human（数字人）
-const chatMode = ref('standard')
+const chatMode = ref<TutorChatMode>('standard')
 // 用户输入文本
 const userInput = ref('')
 // AI 是否正在思考/生成中
@@ -2028,7 +2033,7 @@ const snapToEdge = () => {
   fabPos.value = { x: targetX, y: targetY }
 }
 
-const setChatMode = (mode: string) => {
+const setChatMode = (mode: TutorChatMode) => {
   chatMode.value = mode
   showFabMenu.value = false
   resetDimTimer()
@@ -2092,7 +2097,10 @@ const newSession = () => {
 }
 
 // 从 API 加载指定会话的历史消息
-const loadHistoryFromAPI = async (sessionId: string) => {
+const loadHistoryFromAPI = async (
+  sessionId: string,
+  shouldApply: () => boolean = () => true,
+): Promise<boolean> => {
   try {
     const res = await getChatHistory(sessionId)
     const history = res.data.data || []
@@ -2198,6 +2206,8 @@ const loadHistoryFromAPI = async (sessionId: string) => {
       }
     }
 
+    if (!shouldApply()) return false
+
     // 防止刷新后历史中相邻重复消息导致双排显示
     messages.value = renderableHistory.filter((item, idx) => {
       if (idx === 0) return true
@@ -2216,18 +2226,35 @@ const loadHistoryFromAPI = async (sessionId: string) => {
         watchChatVideo(sessionId, message.id, chatMode.value === 'digital_human')
       }
     }
+    return true
   } catch (err) {
-    toast.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
+    if (shouldApply()) {
+      toast.error({ message: getErrorMessage(err, '加载会话历史失败'), plain: true })
+    }
+    return false
   }
 }
 
 // 切换会话：加载历史 → 恢复流状态 → 绑定回调
+let sessionSwitchToken = 0
+
 const switchSession = async (sessionId: string) => {
+  const switchToken = ++sessionSwitchToken
+  const modeAtStart = chatMode.value
+  const isCurrentSwitch = () => (
+    switchToken === sessionSwitchToken
+    && chatMode.value === modeAtStart
+  )
+
   setAvatarExternalActivityBusy(false)
   videoTasks.dispose()
-  currentSessionId.value = sessionId
-  if (chatMode.value === 'digital_human') {
-    digitalHumanSessionId.value = sessionId
+  const nextSessionIds = selectSessionForMode(modeAtStart, sessionId, {
+    standard: currentSessionId.value,
+    digitalHuman: digitalHumanSessionId.value,
+  })
+  currentSessionId.value = nextSessionIds.standard
+  digitalHumanSessionId.value = nextSessionIds.digitalHuman
+  if (modeAtStart === 'digital_human') {
     switchAvatarSession(sessionId)
     if (isVoiceChatting.value) configureContinuousVoice(true)
   }
@@ -2239,7 +2266,8 @@ const switchSession = async (sessionId: string) => {
   if (streamState?.status === 'streaming') {
     // ── Branch 1: Stream still active ──
     // Load persisted history (won't include the in-progress AI msg)
-    await loadHistoryFromAPI(sessionId)
+    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
+    if (!isCurrentSwitch()) return
 
     // Show the accumulated AI response from the stream buffer
     const { text, events } = streamManager.getBuffer(sessionId)
@@ -2318,12 +2346,13 @@ const switchSession = async (sessionId: string) => {
     // ── Branch 2: Stream completed in background ──
     // Backend has persisted the AI message. Load from API only.
     streamManager.stopStream(sessionId)
-    await loadHistoryFromAPI(sessionId)
+    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
 
   } else if (streamState?.status === 'error') {
     // ── Branch 3: Stream errored in background ──
     streamManager.stopStream(sessionId)
-    await loadHistoryFromAPI(sessionId)
+    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
+    if (!isCurrentSwitch()) return
     messages.value.push({
       id: Date.now() + 99999,
       role: 'ai',
@@ -2333,9 +2362,10 @@ const switchSession = async (sessionId: string) => {
 
   } else {
     // ── Branch 4: No stream state — normal load ──
-    await loadHistoryFromAPI(sessionId)
+    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
   }
 
+  if (!isCurrentSwitch()) return
   scrollToBottom()
 }
 
@@ -2789,14 +2819,30 @@ const handleSend = async () => {
 }
 
 // 监听聊天模式切换：数字人 ↔ 标准文本
+let chatModeTransitionToken = 0
+
 watch(chatMode, async (newMode) => {
+  const transitionToken = ++chatModeTransitionToken
+  sessionSwitchToken += 1
+
   if (newMode === 'digital_human') {
+    pauseForegroundStreaming()
+    streamingMsgId.value = null
+    streamingMsgRef.value = null
+    isAIThinking.value = false
     sessionSidebarCollapsed.value = true
     digitalHumanSessionId.value = undefined
     messages.value = []
     clearPendingFiles()
     switchAvatarSession()
     await connectAvatar()
+    if (
+      transitionToken !== chatModeTransitionToken
+      || chatMode.value !== 'digital_human'
+    ) {
+      if (chatMode.value !== 'digital_human') disconnectAvatar()
+      return
+    }
     setAvatarNeedDiagram(needTeachingDiagram.value)
     nextTick(() => {
       const container = canvasRef.value?.getContainer()
@@ -2807,12 +2853,27 @@ watch(chatMode, async (newMode) => {
   } else if (newMode === 'standard') {
     sessionSidebarCollapsed.value = false
     isVoiceChatting.value = false
+    isRecording.value = false
+    hasSpeechDetected.value = false
+    lastAsrText.value = ''
+    lastAsrCommittedText.value = ''
+    digitalHumanBackendStatus.value = ''
+    asrRecoveryStatus.value = ''
     configureContinuousVoice(false)
+    stopVad()
+    clearAsrProcessing()
+    clearAsrPreview()
+    clearAvatarThinkingTimeout()
+    stopStreamFlushLoop()
+    streamingMsgId.value = null
+    streamingMsgRef.value = null
+    isAIThinking.value = false
     setAvatarExternalActivityBusy(false)
     disconnectAvatar()
     clearPendingFiles()
-    if (currentSessionId.value) {
-      await switchSession(currentSessionId.value)
+    const standardSessionId = currentSessionId.value
+    if (standardSessionId) {
+      await switchSession(standardSessionId)
     } else {
       messages.value = []
     }
@@ -2836,6 +2897,8 @@ watch(enableWebSearch, () => {
 
 // 组件挂载：加载用户信息、会话列表、恢复上次会话
 onMounted(async () => {
+  const shouldStartBlankSession = consumeTutorEntryIntent()
+
   fabPos.value = { x: 16, y: window.innerHeight - 150 }
   resetDimTimer()
   document.addEventListener('mousedown', handleGlobalClick)
@@ -2843,6 +2906,11 @@ onMounted(async () => {
 
   await ensureCurrentUser()
   await loadSessions()
+
+  if (shouldStartBlankSession) {
+    newSession()
+    return
+  }
 
   // If we still have a currentSessionId (from before navigating away),
   // switch back to it. This recovers streams that completed or are still

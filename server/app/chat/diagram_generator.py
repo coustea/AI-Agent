@@ -46,6 +46,8 @@ class TeachingDiagramGenerator:
                     f"{request.user_input}\n\n"
                     "图解焦点：\n"
                     f"{focus}\n\n"
+                    "图解取舍：默认只画 1 个核心视觉；只有单个视觉确实无法讲清时才增加第 2 个。"
+                    "不要为了覆盖所有知识点而增加图块，其余知识写入 teaching_content。\n\n"
                     "补充上下文（仅用于完善图解，不得覆盖学生问题）：\n"
                     f"{context or '无'}"
                 )

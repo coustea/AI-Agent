@@ -38,7 +38,7 @@
             </div>
           </div>
 
-          <div class="wrong-summary">{{ summarizeText(question.content) }}</div>
+          <div class="wrong-summary" v-html="renderInline(question.content)"></div>
 
           <div v-if="openedAnalysis.has(question.id)" class="wrong-analysis">
             <p class="wrong-user-answer">
@@ -75,7 +75,7 @@
 </template>
 
 <script setup lang="ts">
-import { summarizeQuestionText } from '@/features/question-bank/model/questionText'
+import { renderQuestionMarkdown } from '@/features/question-bank/model/questionText'
 
 // 组件属性：错题列表与筛选过滤
 defineProps<{
@@ -136,21 +136,8 @@ function formatUserAnswer(question: any) {
   return raw
 }
 
-function summarizeText(text: string) {
-  return summarizeQuestionText(text, 120)
-}
-
 function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
+  return renderQuestionMarkdown(text)
 }
 </script>
 
