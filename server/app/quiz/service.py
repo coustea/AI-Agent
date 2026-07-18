@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import re
-from pathlib import Path
 
 from pydantic import BaseModel, Field
 from sqlalchemy import distinct, func, or_
@@ -14,18 +13,37 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.infra.models import QuizQuestion
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
+from app.infra.utils import parse_first_json_object
 from app.quiz.schemas import QuizQuestionListResponse, QuizQuestionRead
 
 # 创建模块级日志器
 logger = get_logger(__name__)
 
-QUIZ_REVIEW_TIMEOUT_SECONDS = 20
+# 单次 LLM 硬超时（秒）。分析题走短输出路径，不宜拖到 20s+
+QUIZ_REVIEW_TIMEOUT_SECONDS = 12
 # 批量评阅时限制同时进行的 LLM 调用数，避免打满上游配额
-QUIZ_REVIEW_CONCURRENCY = 3
+QUIZ_REVIEW_CONCURRENCY = 4
+# 限制输出长度，显著降低生成时延（feedback 足够短即可）
+QUIZ_REVIEW_MAX_TOKENS = 220
+# 多题合并时，单次 LLM 最多评多少道分析题
+QUIZ_REVIEW_MULTI_CHUNK_SIZE = 5
+# 题干/答案过长时截断，降低预填时延
+QUIZ_REVIEW_TEXT_LIMIT = 2500
 _FILL_BLANK_TYPES = frozenset({"填空题", "fill_blank", "fill"})
 # 多空分隔：不含 /|，二者保留给「同一空的多写法」
 _ANSWER_PART_SPLIT = re.compile(r"[,，、;；\n]+")
 _WHITESPACE_RE = re.compile(r"\s+")
+
+# 精简评分规则（替代超长 quiz_review.md，保留关键给分口径）
+_COMPACT_SCORING_RULES = """评分规则：
+- 要点全覆盖 → score>=80；大部分覆盖有遗漏 → 60-79；严重偏离 → <60
+- 分析题：过程正确结果有误 → 60-75
+- 分析题：正确方法、关键中间结果和最终结果均正确，仅省略重复算术展开 → score>=80
+- 分析题：结果与方法正确但缺少部分推导 → 70-85
+- 分析题：只有孤立结论/数值，没有方法、公式或关键中间结果 → 40-55
+- 不要求机械重复题干数据或逐项展开相同的算术代入
+- 不得把已经给出算法顺序、公式或关键中间结果的答案认定为“仅写出最终结果”
+- feedback 一句话；improvement_hints 最多 2 条，短句"""
 
 
 # 题库查询服务：题目列表、筛选与 LaTeX 公式修复
@@ -286,57 +304,27 @@ class QuizReviewOutput(BaseModel):
 
 # AI 答案审查服务：使用 LLM 评判主观题答案质量
 class QuizReviewService:
-    """AI 答案审查服务 — 使用 LLM 评判主观题答案质量。"""
+    """AI 答案审查服务 — 使用 LLM 评判主观题答案质量。
 
-    # 审查 prompt 模板路径
-    _PROMPT_PATH = Path(__file__).parent / "prompts" / "quiz_review.md"  # 审查 prompt 模板路径
+    性能策略（分析题）：
+    1. 精简 prompt，避免超长 system 模板
+    2. 用 ainvoke_text + max_tokens 替代 ainvoke_json（去掉二次 repair）
+    3. 批量接口把多道分析题合并成一次 LLM 调用
+    """
 
     def __init__(self, concurrency: int = QUIZ_REVIEW_CONCURRENCY):
-        # 延迟加载模板，先置为 None
-        self._prompt_template: str | None = None
         self._concurrency = max(1, concurrency)
         # 进程内共享信号量：单题接口与批量接口共用，避免外部并发打满 LLM
         self._llm_semaphore = asyncio.Semaphore(self._concurrency)
 
-    # 加载审查 prompt 模板，文件缺失时降级为内置模板
-    def _load_prompt(self) -> str:
-        """加载审查 prompt 模板，文件不存在时使用内置降级模板。"""
-        # 仅首次加载，缓存模板内容
-        if self._prompt_template is None:
-            try:
-                self._prompt_template = self._PROMPT_PATH.read_text(encoding="utf-8")
-            except FileNotFoundError:
-                # 模板文件不存在则使用降级 prompt 并记录告警
-                logger.warning("[QuizReview] Prompt file not found, using fallback")
-                self._prompt_template = self._fallback_prompt()
-        return self._prompt_template
+    @staticmethod
+    def _clip_text(text: str, limit: int = QUIZ_REVIEW_TEXT_LIMIT) -> str:
+        raw = (text or "").strip()
+        if len(raw) <= limit:
+            return raw
+        return raw[:limit] + "…(已截断)"
 
-    # 返回内置降级审查 prompt 模板
-    def _fallback_prompt(self) -> str:
-        """返回内置降级审查 prompt 模板。"""
-        # 内置模板文本（模板占位符由 _build_messages 填充）
-        return """# 任务
-评判用户答案质量。
-
-# 输入
-- 题目类型: {{question_type}}
-- 题目: {{question_content}}
-- 标准答案: {{standard_answer}}
-- 用户答案: {{user_answer}}
-- 相关知识点: {{knowledge_points}}
-
-# 评分规则
-- 完全覆盖标准答案要点 → score >= 80
-- 覆盖大部分要点但有遗漏 → score 60-79
-- 严重偏离标准答案 → score < 60
-- 分析题：过程正确但结果有误 → score 60-75
-- 分析题：正确方法、关键中间结果和最终结果均正确，仅省略重复算术展开 → score >= 80
-- 只有孤立结论且没有方法、公式或关键中间结果，才视为“仅写最终结果”
-
-# 输出格式
-JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
-
-    # 将审查参数填充进 prompt 模板，构建 LLM 消息列表
+    # 构建单题精简审查 prompt（字符串，直接喂 ainvoke_text）
     def _build_messages(
         self,
         question_type: str,
@@ -345,16 +333,49 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         user_answer: str,
         knowledge_points: list[str],
     ) -> list:
-        """将审查参数填充到 prompt 模板中，构建 LLM 消息列表。"""
-        # 加载模板并替换全部占位符
-        prompt = self._load_prompt()
-        filled = prompt.replace("{{question_type}}", question_type).replace(
-            "{{question_content}}", question_content
-        ).replace("{{standard_answer}}", standard_answer).replace(
-            "{{user_answer}}", user_answer
-        ).replace("{{knowledge_points}}", ", ".join(knowledge_points) if knowledge_points else "无")
-        # 以 system 角色返回消息
-        return [{"role": "system", "content": filled}]
+        """构建轻量审查消息（短规则 + 题目输入）。
+
+        返回 list[dict] 以兼容既有测试；真正调用时取 content 字符串。
+        """
+        kps = ", ".join(knowledge_points) if knowledge_points else "无"
+        content = (
+            "你是阅卷助手。对比标准答案给用户作答打分。\n"
+            "只输出纯 JSON，不要 Markdown，不要解释：\n"
+            '{"score":0,"feedback":"一句话点评","improvement_hints":["建议1"]}\n\n'
+            f"{_COMPACT_SCORING_RULES}\n\n"
+            f"题目类型：{question_type}\n"
+            f"题目：{self._clip_text(question_content)}\n"
+            f"标准答案：{self._clip_text(standard_answer)}\n"
+            f"用户答案：{self._clip_text(user_answer)}\n"
+            f"知识点：{kps}"
+        )
+        return [{"role": "user", "content": content}]
+
+    def _build_multi_prompt(self, items: list[dict]) -> str:
+        """构建多题合并审查 prompt，一次返回全部结果。"""
+        blocks: list[str] = []
+        for index, item in enumerate(items, start=1):
+            qid = str(item.get("question_id") or f"q{index}")
+            kps = item.get("knowledge_points") or []
+            kps_text = ", ".join(str(x) for x in kps) if kps else "无"
+            blocks.append(
+                f"### 题{index}\n"
+                f"question_id: {qid}\n"
+                f"类型: {item.get('question_type') or '分析题'}\n"
+                f"题目: {self._clip_text(str(item.get('question_content') or ''))}\n"
+                f"标准答案: {self._clip_text(str(item.get('standard_answer') or ''))}\n"
+                f"用户答案: {self._clip_text(str(item.get('user_answer') or ''))}\n"
+                f"知识点: {kps_text}"
+            )
+        ids = ", ".join(str(item.get("question_id") or "") for item in items)
+        return (
+            "你是阅卷助手。对下列多道题分别评分。\n"
+            "只输出纯 JSON，不要 Markdown：\n"
+            '{"results":[{"question_id":"id","score":0,"feedback":"点评","improvement_hints":["建议"]}]}\n'
+            f"results 必须包含全部题目且顺序一致，question_id 集合为：{ids}\n\n"
+            f"{_COMPACT_SCORING_RULES}\n\n"
+            + "\n\n".join(blocks)
+        )
 
     @staticmethod
     def _normalize_answer_text(text: str) -> str:
@@ -465,8 +486,105 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
             "score": output.score,
             "is_correct": output.score >= 60,
             "feedback": output.feedback,
-            "improvement_hints": output.improvement_hints[:3],
+            "improvement_hints": (output.improvement_hints or [])[:2],
         }
+
+    def _parse_review_output(self, raw: str) -> QuizReviewOutput:
+        """从模型文本中解析单题评分 JSON。"""
+        payload = parse_first_json_object(raw)
+        # 兼容模型把单题包在 results 数组里的情况
+        if isinstance(payload, dict) and "score" not in payload and isinstance(payload.get("results"), list):
+            first = payload["results"][0] if payload["results"] else {}
+            payload = first if isinstance(first, dict) else {}
+        return QuizReviewOutput.model_validate(payload)
+
+    async def _llm_review_one(
+        self,
+        *,
+        question_type: str,
+        question_content: str,
+        standard_answer: str,
+        user_answer: str,
+        knowledge_points: list[str],
+    ) -> QuizReviewOutput:
+        """轻量 LLM 评阅：ainvoke_text + 限 max_tokens，失败走关键词 fallback。"""
+        llm = get_llm()
+        prompt = self._build_messages(
+            question_type=question_type,
+            question_content=question_content,
+            standard_answer=standard_answer,
+            user_answer=user_answer,
+            knowledge_points=knowledge_points,
+        )[0]["content"]
+        try:
+            async with self._llm_semaphore:
+                raw = await asyncio.wait_for(
+                    llm.ainvoke_text(
+                        prompt,
+                        temperature=0.1,
+                        max_tokens=QUIZ_REVIEW_MAX_TOKENS,
+                    ),
+                    timeout=QUIZ_REVIEW_TIMEOUT_SECONDS,
+                )
+            return self._parse_review_output(raw)
+        except TimeoutError:
+            logger.warning(
+                "[QuizReview] LLM timed out after %ss, using fallback",
+                QUIZ_REVIEW_TIMEOUT_SECONDS,
+            )
+            return self._fallback_review(user_answer, standard_answer)
+        except Exception as e:
+            logger.warning("[QuizReview] LLM failed: %s, using fallback", e)
+            return self._fallback_review(user_answer, standard_answer)
+
+    async def _llm_review_multi(self, items: list[dict]) -> dict[str, dict] | None:
+        """一次 LLM 评多道题。成功返回 question_id -> result；失败返回 None。"""
+        if not items:
+            return {}
+        llm = get_llm()
+        prompt = self._build_multi_prompt(items)
+        # 多题输出稍放宽 token，但仍远小于默认 8192
+        max_tokens = min(900, QUIZ_REVIEW_MAX_TOKENS * max(2, len(items)))
+        try:
+            async with self._llm_semaphore:
+                raw = await asyncio.wait_for(
+                    llm.ainvoke_text(
+                        prompt,
+                        temperature=0.1,
+                        max_tokens=max_tokens,
+                    ),
+                    timeout=QUIZ_REVIEW_TIMEOUT_SECONDS + 4 * max(0, len(items) - 1),
+                )
+            payload = parse_first_json_object(raw)
+            rows = payload.get("results") if isinstance(payload, dict) else None
+            if not isinstance(rows, list) or not rows:
+                raise ValueError("multi review missing results array")
+
+            by_id: dict[str, dict] = {}
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                qid = str(row.get("question_id") or "").strip()
+                if not qid:
+                    continue
+                output = QuizReviewOutput.model_validate(
+                    {
+                        "score": row.get("score", 0),
+                        "feedback": row.get("feedback") or "",
+                        "improvement_hints": row.get("improvement_hints") or [],
+                    }
+                )
+                by_id[qid] = self._to_result(output)
+
+            # 必须覆盖本批全部 id，否则降级为逐题
+            expected = {str(item.get("question_id") or "") for item in items}
+            if not expected.issubset(by_id.keys()):
+                missing = expected - by_id.keys()
+                raise ValueError(f"multi review missing ids: {missing}")
+            return by_id
+        except Exception as e:
+            logger.warning("[QuizReview] multi review failed, fallback per-item: %s", e)
+            return None
 
     # 执行 AI 答案审查：调用 LLM 并返回评分与反馈
     async def review(
@@ -478,7 +596,7 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         user_answer: str,
         knowledge_points: list[str] | None = None,
     ) -> dict:
-        """执行 AI 答案审查 — 规则短路优先，否则调用 LLM 评判。"""
+        """执行 AI 答案审查 — 规则短路优先，否则调用轻量 LLM 评判。"""
         rule_result = self._try_rule_review(
             question_type=question_type,
             standard_answer=standard_answer,
@@ -487,61 +605,111 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         if rule_result is not None:
             return rule_result
 
-        llm = get_llm()  # 获取 LLM 单例
-        messages = self._build_messages(  # 构建审查 prompt
+        output = await self._llm_review_one(
             question_type=question_type,
             question_content=question_content,
             standard_answer=standard_answer,
             user_answer=user_answer,
             knowledge_points=knowledge_points or [],
         )
-
-        # 调用 LLM 获取结构化审查结果，失败则降级；信号量限制并发
-        try:
-            async with self._llm_semaphore:
-                result = await asyncio.wait_for(
-                    llm.ainvoke_json(  # 调用 LLM 结构化输出
-                        QuizReviewOutput,
-                        messages,
-                    ),
-                    timeout=QUIZ_REVIEW_TIMEOUT_SECONDS,
-                )
-            output = QuizReviewOutput.model_validate(result)  # Pydantic 校验
-        except TimeoutError:
-            logger.warning(
-                "[QuizReview] LLM call timed out after %ss, using fallback",
-                QUIZ_REVIEW_TIMEOUT_SECONDS,
-            )
-            output = self._fallback_review(user_answer, standard_answer)
-        except Exception as e:
-            logger.warning("[QuizReview] LLM call failed: %s, using fallback", e)
-            output = self._fallback_review(user_answer, standard_answer)  # LLM 失败时降级为关键词匹配
-
         return self._to_result(output)
 
     async def review_batch(self, items: list[dict]) -> list[dict]:
         """批量审查主观题。
 
-        每题走 ``review``（含规则短路）；真正调用 LLM 时由实例级信号量
-        限制并发，结果顺序与输入一致。
+        - 空答/填空：规则短路
+        - 多道分析题：优先合并成一次 LLM 调用（chunk）
+        - 合并失败：退回有限并发逐题
         """
         if not items:
             return []
 
-        async def _run_one(item: dict) -> dict:
-            result = await self.review(
-                question_type=str(item.get("question_type") or ""),
-                question_content=str(item.get("question_content") or ""),
-                standard_answer=str(item.get("standard_answer") or ""),
-                user_answer=str(item.get("user_answer") or ""),
-                knowledge_points=list(item.get("knowledge_points") or []),
-            )
-            return {
-                "question_id": str(item.get("question_id") or ""),
-                **result,
-            }
+        results: list[dict | None] = [None] * len(items)
+        llm_jobs: list[tuple[int, dict]] = []
 
-        return list(await asyncio.gather(*[_run_one(item) for item in items]))
+        for index, item in enumerate(items):
+            question_type = str(item.get("question_type") or "")
+            standard_answer = str(item.get("standard_answer") or "")
+            user_answer = str(item.get("user_answer") or "")
+            rule = self._try_rule_review(
+                question_type=question_type,
+                standard_answer=standard_answer,
+                user_answer=user_answer,
+            )
+            if rule is not None:
+                results[index] = {
+                    "question_id": str(item.get("question_id") or ""),
+                    **rule,
+                }
+            else:
+                llm_jobs.append((index, item))
+
+        # 多题合并：按 chunk 调用，显著减少分析题总时延
+        if llm_jobs:
+            chunk_size = max(1, QUIZ_REVIEW_MULTI_CHUNK_SIZE)
+            pending: list[tuple[int, dict]] = []
+
+            async def _grade_pending(batch: list[tuple[int, dict]]) -> None:
+                if not batch:
+                    return
+                if len(batch) == 1:
+                    index, item = batch[0]
+                    graded = await self.review(
+                        question_type=str(item.get("question_type") or ""),
+                        question_content=str(item.get("question_content") or ""),
+                        standard_answer=str(item.get("standard_answer") or ""),
+                        user_answer=str(item.get("user_answer") or ""),
+                        knowledge_points=list(item.get("knowledge_points") or []),
+                    )
+                    results[index] = {
+                        "question_id": str(item.get("question_id") or ""),
+                        **graded,
+                    }
+                    return
+
+                multi = await self._llm_review_multi([item for _, item in batch])
+                if multi is not None:
+                    for index, item in batch:
+                        qid = str(item.get("question_id") or "")
+                        results[index] = {"question_id": qid, **multi[qid]}
+                    return
+
+                # 合并失败：并发逐题
+                async def _one(index: int, item: dict) -> None:
+                    graded = await self.review(
+                        question_type=str(item.get("question_type") or ""),
+                        question_content=str(item.get("question_content") or ""),
+                        standard_answer=str(item.get("standard_answer") or ""),
+                        user_answer=str(item.get("user_answer") or ""),
+                        knowledge_points=list(item.get("knowledge_points") or []),
+                    )
+                    results[index] = {
+                        "question_id": str(item.get("question_id") or ""),
+                        **graded,
+                    }
+
+                await asyncio.gather(*[_one(i, it) for i, it in batch])
+
+            for job in llm_jobs:
+                pending.append(job)
+                if len(pending) >= chunk_size:
+                    await _grade_pending(pending)
+                    pending = []
+            if pending:
+                await _grade_pending(pending)
+
+        return [
+            item
+            if item is not None
+            else {
+                "question_id": str(items[i].get("question_id") or ""),
+                "score": 0,
+                "is_correct": False,
+                "feedback": "评阅失败",
+                "improvement_hints": [],
+            }
+            for i, item in enumerate(results)
+        ]
 
     # LLM 失败时的关键词匹配降级判定
     def _fallback_review(self, user_answer: str, standard_answer: str) -> QuizReviewOutput:
