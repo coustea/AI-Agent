@@ -66,6 +66,7 @@ class _LiveSubscribers:
         queue: asyncio.Queue[ResourceEvent] = asyncio.Queue(maxsize=128)
         async with self._lock:
             self._queues.setdefault(resource_id, set()).add(queue)
+        logger.debug("[ResourceEvent] SSE订阅: resource_id=%s queue_count=%d", resource_id, len(self._queues.get(resource_id, set())))
         return queue
 
     async def unsubscribe(self, resource_id: int, queue: asyncio.Queue[ResourceEvent]) -> None:
@@ -76,6 +77,7 @@ class _LiveSubscribers:
             queues.discard(queue)
             if not queues:
                 self._queues.pop(resource_id, None)
+        logger.debug("[ResourceEvent] SSE取消订阅: resource_id=%s remaining=%d", resource_id, len(self._queues.get(resource_id, set())))
 
     async def publish(self, event: ResourceEvent) -> None:
         async with self._lock:

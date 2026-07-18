@@ -651,6 +651,10 @@ async def retrieve(
     effective_k = max(1, min(_FINAL_TOP_K_LIMIT, top_k or KB_TOP_K))
     query_text = _build_query_text(normalized_query, course_name)
     start = time.monotonic()
+    logger.info(
+        "[retriever] 检索开始: query=%r course=%s top_k=%s",
+        normalized_query[:80], course_name, effective_k,
+    )
 
     # 获取健康状态（带缓存）
     health = await _get_cached_health()
@@ -685,6 +689,10 @@ async def retrieve(
     # 索引未就绪时尝试用 BM25 兜底
     if not health.ready:
         if bm25_chunks:
+            logger.info(
+                "[retriever] 检索完成(向量不可用,BM25兜底): chunks=%d elapsed_ms=%d",
+                len(bm25_chunks[:effective_k]), _elapsed_ms(start),
+            )
             return RetrievalResult(
                 status="ok",
                 query=normalized_query,
@@ -802,6 +810,11 @@ async def retrieve(
     final_status = "partial" if dense_status != "ok" else "ok"
 
     # 返回检索成功结果
+    logger.info(
+        "[retriever] 检索完成: status=%s chunks=%d dense=%s bm25=%s filter=%s elapsed_ms=%d",
+        final_status, len(chunks), dense_status, bm25_status,
+        course_filter_mode, _elapsed_ms(start),
+    )
     return RetrievalResult(
         status=final_status,
         query=normalized_query,

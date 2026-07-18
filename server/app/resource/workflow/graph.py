@@ -12,6 +12,7 @@ from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
+from app.infra.logging import get_logger
 from app.resource.workflow.nodes import (
     aggregation_node,
     merge_workers_node,
@@ -22,9 +23,12 @@ from app.resource.workflow.nodes import (
 )
 from app.resource.workflow.state import ParentState
 
+logger = get_logger(__name__)
+
 
 @lru_cache(maxsize=1)
 def build_parent_graph() -> Any:
+    logger.info("[ResourceGraph] 编译全局编排状态图")
     # 构建全局编排状态图（仅编译一次并缓存）
     workflow = StateGraph(ParentState)
 

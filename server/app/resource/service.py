@@ -113,6 +113,7 @@ class ResourceService:
         except Exception:
             # 提交失败回滚，避免悬挂事务
             await self.session.rollback()
+            logger.warning("[ResourceService] 事务提交失败，已回滚")
             raise
 
     # =========================================================================
@@ -159,6 +160,10 @@ class ResourceService:
             )
         # 落库并返回新任务 ID
         await self._commit(resource)
+        logger.info(
+            "[ResourceService] 任务创建成功: resource_id=%s user_id=%s agents=%s",
+            resource_id, user_id, request_snapshot["selected_agents"],
+        )
         return {"resource_id": resource_id, "status": ResourceLifecycleStatus.PENDING.value}
 
     async def publish_agent_status(
@@ -350,6 +355,10 @@ class ResourceService:
         self.session.add(event)
         await self._commit(event)
         await self.session.refresh(item)
+        logger.info(
+            "[ResourceService] Agent产物保存成功: resource_id=%s agent_id=%s artifact_id=%s title=%s",
+            resource_id, agent_id, str(item.id), result.title[:80],
+        )
         return item, event
 
     async def list_run_events(
@@ -407,6 +416,10 @@ class ResourceService:
 
         不接收调用者声称的成功集合，不再次保存资源项。
         """
+        logger.info(
+            "[ResourceService] 终态计算开始: resource_id=%s expected_agents=%s",
+            resource_id, sorted(expected_agent_ids),
+        )
         resource = await self.session.get(GeneratedResource, resource_id)
         if resource is None or resource.user_id != user_id:
             raise ValueError("资源不存在或无权限")
@@ -450,6 +463,10 @@ class ResourceService:
 
         resource.status = status.value
         await self._commit(resource)
+        logger.info(
+            "[ResourceService] 终态计算完成: resource_id=%s status=%s successful=%s failed=%s",
+            resource_id, status.value, sorted(successful), sorted(failed),
+        )
         # 记录资源生成事件供学习评估聚合（失败不影响主流程）
         try:
             await record_resource_generated_event(

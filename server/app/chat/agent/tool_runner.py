@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import uuid4
@@ -54,6 +55,11 @@ class TutorToolRunner:
         context: ToolExecutionContext | None = None,
         tool_excute: ToolExcute | None = None,
     ) -> ToolExecutionResult:
+        logger.info(
+            "[TutorToolRunner] execute 开始: tool=%s tool_call_id=%s",
+            tool_name, tool_call_id,
+        )
+        _exec_start = time.time()
         # 复制入参并归一化：长期记忆工具需将类别名映射为规范分类
         normalized_payload = dict(arguments)
         if tool_name == "get_long_term_memory":
@@ -160,6 +166,10 @@ class TutorToolRunner:
         }
 
         # 返回执行结果（调用记录/证据/来源/错误）
+        logger.info(
+            "[TutorToolRunner] execute 完成: tool=%s status=%s evidence=%d elapsed=%.2fs",
+            tool_name, tool_status, len(node_evidence), time.time() - _exec_start,
+        )
         return ToolExecutionResult(
             invocation=invocation,
             evidence=node_evidence,

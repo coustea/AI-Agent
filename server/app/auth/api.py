@@ -15,9 +15,12 @@ from app.auth.schemas import UserLogin, UserRead, UserRegister, UserUpdate
 from app.auth.security import get_current_user
 from app.auth.service import auth_usecases
 from app.infra.database import get_session
+from app.infra.logging import get_logger
 from app.infra.models import User
 from app.config import user_avatar_dir, avatar_url
 from app.infra.response import HttpResponse
+
+logger = get_logger(__name__)
 
 # 创建路由实例，挂载在 /api/v1/users 下
 router = APIRouter()
@@ -39,12 +42,13 @@ async def create_user(
     # 调用认证用例层执行注册逻辑
     result = await auth_usecases.register(session, data)
     if not result.success:
+        logger.info("[AuthAPI] 注册失败: username=%s reason=%s", data.username, result.error_message)
         return HttpResponse.error(
             code=400,
             message=result.error_message,
             data={"field": result.error_field},
         )
-    # 注册成功，返回 201 及用户数据
+    logger.info("[AuthAPI] 注册成功: username=%s user_id=%s", data.username, result.data.get("user", {}).get("id") if result.data else None)
     return HttpResponse.success(data=result.data, status_code=201)
 
 
@@ -62,12 +66,13 @@ async def login(
     # 调用认证用例层执行登录校验
     result = await auth_usecases.login(session, data)
     if not result.success:
+        logger.info("[AuthAPI] 登录失败: username=%s reason=%s", data.username, result.error_message)
         return HttpResponse.error(
             code=401,
             message=result.error_message,
             data={"field": result.error_field},
         )
-    # 登录成功，返回 Token 与用户信息
+    logger.info("[AuthAPI] 登录成功: username=%s", data.username)
     return HttpResponse.success(data=result.data)
 
 
@@ -86,6 +91,7 @@ async def logout(
     """
     # 撤销 Token，使其立即失效
     await auth_usecases.logout(session, credentials.credentials)
+    logger.info("[AuthAPI] 登出成功: user_id=%s", current_user.id)
     # 后台任务：异步更新用户学习画像（不影响响应速度）
     background_tasks.add_task(auth_usecases.upsert_profile_on_logout, current_user.id)
     return HttpResponse.success(message="退出登录成功")
@@ -118,8 +124,9 @@ async def update_me(
     # 调用业务层更新当前登录用户
     user = await auth_usecases.update_me(session, current_user.id, data)
     if not user:
-        # 目标用户不存在，返回 404
+        logger.warning("[AuthAPI] 更新用户信息失败，用户不存在: user_id=%s", current_user.id)
         return HttpResponse.error(code=404, message="用户不存在")
+    logger.info("[AuthAPI] 更新用户信息成功: user_id=%s fields=%s", current_user.id, list(data.model_dump(exclude_unset=True).keys()))
     return HttpResponse.success(data=UserRead.model_validate(user))
 
 
@@ -137,6 +144,7 @@ async def upload_avatar(
     # 验证文件类型：只允许常见的图片格式
     allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     if file.content_type not in allowed_types:
+        logger.info("[AuthAPI] 头像上传格式不支持: user_id=%s content_type=%s", current_user.id, file.content_type)
         return HttpResponse.error(
             code=400,
             message="不支持的图片格式，仅支持 jpg, png, gif, webp",
@@ -147,6 +155,7 @@ async def upload_avatar(
     content = await file.read()
     max_size = 2 * 1024 * 1024  # 2MB
     if len(content) > max_size:
+        logger.info("[AuthAPI] 头像上传超过大小限制: user_id=%s size=%d", current_user.id, len(content))
         return HttpResponse.error(
             code=400,
             message=f"文件大小超过限制（最大 {max_size // (1024 * 1024)}MB）",
@@ -165,6 +174,7 @@ async def upload_avatar(
     # 将文件内容写入磁盘
     # 写入头像文件到磁盘
     file_path.write_bytes(content)
+    logger.info("[AuthAPI] 头像上传成功: user_id=%s ext=%s size=%d", current_user.id, ext, len(content))
 
     # 生成头像访问 URL 并更新用户记录
     avatar_url_str = avatar_url(username, ext)
@@ -190,6 +200,7 @@ async def get_avatar(username: str, filename: str):
     file_path = avatar_dir / filename
     # 头像文件不存在时返回 404
     if not file_path.exists():
+        logger.debug("[AuthAPI] 头像文件不存在: username=%s filename=%s", username, filename)
         return HttpResponse.error(code=404, message="头像不存在")
     # 直接返回文件响应（FastAPI 自动处理 Content-Type）
     return FileResponse(file_path)

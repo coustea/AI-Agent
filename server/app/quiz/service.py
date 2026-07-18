@@ -597,6 +597,7 @@ class QuizReviewService:
         knowledge_points: list[str] | None = None,
     ) -> dict:
         """执行 AI 答案审查 — 规则短路优先，否则调用轻量 LLM 评判。"""
+        logger.info("[QuizReview] 开始审查: question_type=%s", question_type)
         rule_result = self._try_rule_review(
             question_type=question_type,
             standard_answer=standard_answer,
@@ -624,6 +625,7 @@ class QuizReviewService:
         if not items:
             return []
 
+        logger.info("[QuizReview] 批量审查开始: item_count=%s", len(items))
         results: list[dict | None] = [None] * len(items)
         llm_jobs: list[tuple[int, dict]] = []
 

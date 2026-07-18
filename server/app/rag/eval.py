@@ -16,7 +16,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from app.infra.logging import get_logger
 from app.rag.retriever import retrieve
+
+logger = get_logger(__name__)
 
 
 # 从 jsonl 文件逐行加载评测用例
@@ -112,8 +115,11 @@ async def main() -> None:
     # 加载评测用例，为空则直接退出
     cases = _load_cases(Path(args.cases))
     if not cases:
+        logger.warning("[eval] 无评测用例: path=%s", args.cases)
         print("No eval cases found.")
         return
+
+    logger.info("[eval] 开始评测: cases=%d top_k=%d", len(cases), args.top_k)
 
     rows = []
     # 逐条执行评测并打印结果

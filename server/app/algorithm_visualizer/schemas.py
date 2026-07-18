@@ -77,7 +77,7 @@ class CustomCodeContractResponse(_StrictDto):
     sourceHash: Sha256Version
     entryFunction: str
     functions: list[CustomFunctionResponse]
-    observableVariables: list[ObservableVariableResponse]
+    observableVariables: list[ObservableVariableResponse] = []
     inputSchema: dict[str, JsonValue]
     defaultInput: dict[str, JsonValue]
 

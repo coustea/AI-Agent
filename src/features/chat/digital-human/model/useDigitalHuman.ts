@@ -605,16 +605,13 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         } else if (type === 'status') {
             callbacks?.onStatus?.(data.data || {})
         } else if (type === 'assistant_complete') {
-            // The complete sentence is now available. Show it immediately as
-            // one subtitle instead of withholding all text until the Avatar
-            // transport reports tts_start. TTS is still submitted only once by
-            // the backend, so this does not reintroduce segmented speech.
+            // The backend has the complete sentence, but the subtitle should
+            // still follow the avatar's actual playback instead of appearing
+            // all at once. Speech remains a single TTS request; this only
+            // controls the visual reveal cadence.
             endThinking(turn_id)
-            clearAssistantRevealTimer()
-            flushBufferedAssistantTextImmediately()
-            pendingAssistantComplete = false
-            callbacks?.onAssistantComplete?.(activeTurnId ?? undefined)
-            updateCache('', false)
+            pendingAssistantComplete = true
+            if (isSpeaking.value) startAssistantReveal()
         } else if (type === 'avatar_speaking') {
             clearAvatarStopWait()
             isSpeaking.value = true
@@ -1565,7 +1562,6 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 break
             }
             if (!emitted && assistantRevealBudget < unitCost) {
-                assistantRevealBudget += 0.45
                 break
             }
             bufferedAssistantText = bufferedAssistantText.slice(nextUnit.length)

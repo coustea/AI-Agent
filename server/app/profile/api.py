@@ -89,6 +89,7 @@ async def update_profile(
     session: AsyncSession = Depends(get_session),
 ):
     """更新个人中心展示的基础资料，不改变 onboarding 完成状态或偏好字段。"""
+    logger.info("[ProfileAPI] 更新基础资料: user_id=%s", current_user.id)
     result = await get_profile_service().save_profile_info(
         user_id=int(current_user.id),
         payload=payload.model_dump(),

@@ -156,6 +156,7 @@ async def list_quiz(
 @router.post("/quiz/review")
 async def review_answer(request: QuizReviewRequest) -> QuizReviewResponse:
     """AI 审查主观题答案。"""
+    logger.info("[QuizAPI] AI审查主观题: question_type=%s", request.question_type)
     # 调用 AI 审查服务评判用户答案
     result = await quiz_review_service.review(
         question_type=request.question_type,
@@ -164,6 +165,7 @@ async def review_answer(request: QuizReviewRequest) -> QuizReviewResponse:
         user_answer=request.user_answer,
         knowledge_points=request.knowledge_points,
     )
+    logger.info("[QuizAPI] AI审查完成: question_type=%s score=%s is_correct=%s", request.question_type, result.get("score"), result.get("is_correct"))
     # 返回结构化审查结果
     return QuizReviewResponse(**result)
 
@@ -176,6 +178,7 @@ async def review_answers_batch(request: QuizReviewBatchRequest) -> HttpResponse:
     服务端使用并发池限制 LLM 调用；填空题精确匹配会规则短路，不走模型。
     返回顺序与请求 items 一致。
     """
+    logger.info("[QuizAPI] 批量审查: item_count=%s", len(request.items))
     results = await quiz_review_service.review_batch(
         [item.model_dump() for item in request.items]
     )
@@ -288,6 +291,7 @@ async def submit_quiz(
     current_user: User = Depends(get_current_user),
 ) -> HttpResponse:
     """提交客观题结果，自动收录错题。"""
+    logger.info("[QuizAPI] 提交客观题: user_id=%s question_count=%s", current_user.id, len(request.results))
     # 获取当前用户 ID 并初始化错题计数
     user_id = current_user.id
     wrong_count = 0
@@ -391,6 +395,7 @@ async def submit_quiz(
         logger.exception("记录 quiz_submitted 事件失败: user_id=%s", user_id)
 
     # 返回处理结果
+    logger.info("[QuizAPI] 提交完成: user_id=%s total=%s wrong_saved=%s", user_id, total, wrong_count)
     return HttpResponse.success(data=ObjectiveSubmitResponse(
         processed_count=total,
         wrong_saved_count=wrong_count,

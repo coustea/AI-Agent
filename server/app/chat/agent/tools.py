@@ -68,15 +68,18 @@ def build_tutor_tools(
 
     async def generate_teaching_diagram(focus: str) -> dict[str, Any]:
         nonlocal generator
+        logger.info("[ChatTools] generate_teaching_diagram 开始: focus_len=%d", len(focus))
         if generator is None:
             from app.chat.diagram_generator import TeachingDiagramGenerator
 
             generator = TeachingDiagramGenerator()
-        return await generator.generate(
+        result = await generator.generate(
             request=request,
             focus=focus,
             context=diagram_context,
         )
+        logger.info("[ChatTools] generate_teaching_diagram 完成")
+        return result
 
     return [
         # 用户上下文工具（画像 + 长期记忆）

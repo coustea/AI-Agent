@@ -180,6 +180,10 @@ class ChatContextBuilder:
         exclude_message_id: int | None = None,
     ) -> list[AnyMessage]:
         """构建历史消息列表，自动排除本轮用户消息。"""
+        logger.info(
+            "[ChatContext] build_history 开始: user_id=%s session_id=%s exclude_message_id=%s",
+            user_id, session_id, exclude_message_id,
+        )
         # 读取原始消息、压缩摘要块与附件分析
         svc = get_chat_memory_service()
         raw_messages = await svc.list_messages(
@@ -249,4 +253,9 @@ class ChatContextBuilder:
                     )
 
         # 清理无效工具链后返回历史消息
-        return sanitize_tool_message_chain(messages)
+        result = sanitize_tool_message_chain(messages)
+        logger.info(
+            "[ChatContext] build_history 完成: raw=%d messages=%d summarized_through=%s",
+            len(raw_messages), len(result), summarized_through_id,
+        )
+        return result

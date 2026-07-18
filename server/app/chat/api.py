@@ -65,6 +65,7 @@ async def create_chat_video(
             assistant_message_id=assistant_message_id,
         )
     except (ValueError, PermissionError) as exc:
+        logger.warning("[ChatAPI] 创建视频任务参数错误: user_id=%s err=%s", current_user.id, exc)
         return HttpResponse.error(code=400, message=str(exc))
     except Exception:
         logger.exception("[ChatAPI] 创建视频任务失败")
@@ -77,6 +78,7 @@ async def create_chat_video(
         session_id=effective_session,
         assistant_message_id=task["assistant_message_id"],
     )
+    logger.info("[ChatAPI] 视频任务已创建: user_id=%s assistant_message_id=%s", current_user.id, assistant_message_id)
     return HttpResponse.success(data=task, status_code=202)
 
 
@@ -93,6 +95,7 @@ async def get_chat_video(
         assistant_message_id=assistant_message_id,
     )
     if video is None:
+        logger.debug("[ChatAPI] 视频任务不存在: user_id=%s session_id=%s assistant_message_id=%s", current_user.id, session_id, assistant_message_id)
         return HttpResponse.error(code=404, message="视频任务不存在或无权限")
     return HttpResponse.success(data={"assistant_message_id": assistant_message_id, "video": video})
 
@@ -184,6 +187,7 @@ async def create_mentor_chat_message(
 
     # 支持纯附件上传（无文字输入）
     if not effective_message and not parsed_attachments:
+        logger.debug("[ChatAPI] 空消息请求: user_id=%s", current_user.id)
         return HttpResponse.error(code=400, message="请输入问题或上传附件")
 
     # 纯附件场景：填充默认引导语
@@ -192,6 +196,7 @@ async def create_mentor_chat_message(
 
     # 同一会话若已有进行中的回答则拒绝并发请求
     if await has_active_chat_channel(current_user.id, effective_session):
+        logger.info("[ChatAPI] 并发请求被拒绝: user_id=%s session_id=%s", current_user.id, effective_session)
         return HttpResponse.error(code=409, message="当前回答尚未完成，请稍候")
 
     # 确保会话已存在，避免 SSE 订阅 404
@@ -214,6 +219,7 @@ async def create_mentor_chat_message(
             attachments=parsed_attachments,
         )
     except (ValueError, FileNotFoundError) as exc:
+        logger.warning("[ChatAPI] 保存用户消息失败(参数错误): user_id=%s err=%s", current_user.id, exc)
         return HttpResponse.error(code=400, message=str(exc))
     except Exception as exc:
         logger.exception("[ChatAPI] 保存用户消息失败")
@@ -460,7 +466,9 @@ async def delete_session(
     svc = get_chat_memory_service()
     success = await svc.archive_session(user_id=current_user.id, session_id=session_id)
     if not success:
+        logger.warning("[ChatAPI] 归档会话失败(不存在或无权限): user_id=%s session_id=%s", current_user.id, session_id)
         return HttpResponse.error(code=404, message="会话不存在或无权操作")
+    logger.info("[ChatAPI] 会话已归档: user_id=%s session_id=%s", current_user.id, session_id)
     return HttpResponse.success(message="会话已归档")
 
 
@@ -478,6 +486,7 @@ async def update_session(
     svc = get_chat_memory_service()
     success = await svc.update_session_title(user_id=current_user.id, session_id=session_id, title=title)
     if not success:
+        logger.warning("[ChatAPI] 更新会话标题失败: user_id=%s session_id=%s", current_user.id, session_id)
         return HttpResponse.error(code=404, message="会话不存在或无权操作")
     return HttpResponse.success(message="标题已更新")
 

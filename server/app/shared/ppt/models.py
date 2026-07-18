@@ -36,6 +36,7 @@ class PPTPreferences(PPTModel):
     emphasis: list[Literal["core_concepts", "cases", "pitfalls", "derivation"]] = Field(
         default_factory=lambda: ["core_concepts"], min_length=1, max_length=4
     )
+    include_speaker_notes: bool = True
 
 
 class ResourcePPT(PPTModel):

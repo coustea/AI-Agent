@@ -125,7 +125,6 @@
             v-show="activeEditorTab === 'code'"
             :model-value="editorCode"
             :title="executionMode === 'official' ? '官方模板代码' : '自定义 Python 代码'"
-            :readonly="executionMode === 'official'"
             @update:model-value="updateEditorCode"
             :language="language"
             :languages="supportedEditorLanguages"
@@ -329,7 +328,15 @@ function setExecutionMode(mode: 'official' | 'custom') {
 }
 
 function updateEditorCode(nextCode: string) {
-  if (executionMode.value === 'custom') {
+  if (executionMode.value === 'official') {
+    // 编辑官方模板代码时自动切换到自定义模式
+    executionMode.value = 'custom'
+    customCode.value = nextCode
+    customEntryFunction.value = ''
+    customContractStale.value = true
+    discardVisualization()
+    void refreshCustomContract()
+  } else {
     customCode.value = nextCode
     customEntryFunction.value = ''
     customContractStale.value = true

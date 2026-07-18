@@ -493,8 +493,14 @@ async def preprocess_node(
     session_id = state.get("session_id", "")
     user_message_id = state.get("user_message_id", 0)
 
+    logger.info(
+        "[preprocess_node] 开始: user_id=%s session_id=%s attachments=%d",
+        user_id, session_id, len(attachments),
+    )
+
     # 无附件则直接返回空上下文
     if not attachments:
+        logger.debug("[preprocess_node] 无附件，跳过")
         return {"attachment_context": ""}
 
     # 按扩展名将附件分为图片与文档两类
@@ -623,6 +629,12 @@ async def preprocess_node(
         done_events.extend(await agent._emit_event(state, event))
 
     # 返回附件上下文与全部流式事件，供状态图累积
+    logger.info(
+        "[preprocess_node] 完成: image=%s document=%s context_len=%d",
+        "ok" if "image" in analysis_results else ("failed" if "image" in analysis_errors else "skip"),
+        "ok" if "document" in analysis_results else ("failed" if "document" in analysis_errors else "skip"),
+        len(attachment_context),
+    )
     return {
         "attachment_context": attachment_context,
         "stream_events": events + done_events,
@@ -664,6 +676,12 @@ async def react_node(
     diagram_required = diagram_mode == "required"
     voice_mode = state.get("voice_mode", False)
     video_mode = state.get("video_mode", False)
+
+    logger.info(
+        "[react_node] 开始: user_id=%s session_id=%s question_len=%d history=%d diagram_mode=%s voice=%s video=%s",
+        user_id, session_id, len(question), len(history), diagram_mode, voice_mode, video_mode,
+    )
+    _react_start = time.time()
     fast_voice_response = _should_use_fast_voice_response(
         question=question,
         voice_mode=voice_mode,
@@ -1184,6 +1202,15 @@ async def react_node(
             )
 
     # ── 5. 返回 state 更新（最终回答、图解、消息、事件、调用记录、来源、错误）──
+    logger.info(
+        "[react_node] 完成: answer_len=%d diagram=%s iterations=%d tools=%d errors=%d elapsed=%.2fs",
+        len(full_answer),
+        bool(node_diagram_result),
+        iteration,
+        len(node_tool_invocations),
+        len(node_errors),
+        time.time() - _react_start,
+    )
     return {
         "final_answer": full_answer,
         "diagram_result": node_diagram_result,
