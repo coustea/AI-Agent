@@ -20,6 +20,12 @@ from app.quiz.schemas import QuizQuestionListResponse, QuizQuestionRead
 logger = get_logger(__name__)
 
 QUIZ_REVIEW_TIMEOUT_SECONDS = 20
+# 批量评阅时限制同时进行的 LLM 调用数，避免打满上游配额
+QUIZ_REVIEW_CONCURRENCY = 3
+_FILL_BLANK_TYPES = frozenset({"填空题", "fill_blank", "fill"})
+# 多空分隔：不含 /|，二者保留给「同一空的多写法」
+_ANSWER_PART_SPLIT = re.compile(r"[,，、;；\n]+")
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 # 题库查询服务：题目列表、筛选与 LaTeX 公式修复
@@ -285,9 +291,12 @@ class QuizReviewService:
     # 审查 prompt 模板路径
     _PROMPT_PATH = Path(__file__).parent / "prompts" / "quiz_review.md"  # 审查 prompt 模板路径
 
-    def __init__(self):
+    def __init__(self, concurrency: int = QUIZ_REVIEW_CONCURRENCY):
         # 延迟加载模板，先置为 None
         self._prompt_template: str | None = None
+        self._concurrency = max(1, concurrency)
+        # 进程内共享信号量：单题接口与批量接口共用，避免外部并发打满 LLM
+        self._llm_semaphore = asyncio.Semaphore(self._concurrency)
 
     # 加载审查 prompt 模板，文件缺失时降级为内置模板
     def _load_prompt(self) -> str:
@@ -347,6 +356,118 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         # 以 system 角色返回消息
         return [{"role": "system", "content": filled}]
 
+    @staticmethod
+    def _normalize_answer_text(text: str) -> str:
+        """规范化答案文本：去首尾空白、全角转半角、折叠空白、小写。"""
+        if not text:
+            return ""
+        chars: list[str] = []
+        for ch in text.strip():
+            code = ord(ch)
+            # 全角空格
+            if code == 0x3000:
+                chars.append(" ")
+            # 全角 ASCII 范围
+            elif 0xFF01 <= code <= 0xFF5E:
+                chars.append(chr(code - 0xFEE0))
+            else:
+                chars.append(ch)
+        normalized = "".join(chars).lower()
+        return _WHITESPACE_RE.sub(" ", normalized).strip()
+
+    @classmethod
+    def _split_fill_parts(cls, text: str) -> list[str]:
+        """按常见分隔符拆分多空填空答案。"""
+        parts = [p.strip() for p in _ANSWER_PART_SPLIT.split(text or "") if p.strip()]
+        return parts or ([text.strip()] if (text or "").strip() else [])
+
+    @classmethod
+    def _split_answer_alternatives(cls, text: str) -> list[str]:
+        """拆分同一空的多种可接受写法（/ 或 |）。"""
+        raw = (text or "").strip()
+        if not raw:
+            return []
+        alts = [a.strip() for a in re.split(r"[/|]", raw) if a.strip()]
+        return alts or [raw]
+
+    @classmethod
+    def _is_fill_blank_type(cls, question_type: str) -> bool:
+        key = (question_type or "").strip()
+        return key in _FILL_BLANK_TYPES or key.lower() in _FILL_BLANK_TYPES
+
+    def _fill_blank_matches(self, standard_answer: str, user_answer: str) -> bool:
+        """判断填空题用户答案是否与标准答案（含多空/多写法）匹配。"""
+        user_norm = self._normalize_answer_text(user_answer)
+        if not user_norm:
+            return False
+
+        # 整题等价（含标准答案多写法）
+        for alt in self._split_answer_alternatives(standard_answer):
+            if self._normalize_answer_text(alt) == user_norm:
+                return True
+        if self._normalize_answer_text(standard_answer) == user_norm:
+            return True
+
+        # 多空：按分隔符拆分后逐空比对（每空可有 / 多写法）
+        user_parts = self._split_fill_parts(user_answer)
+        std_parts = self._split_fill_parts(standard_answer)
+        if len(user_parts) != len(std_parts) or len(std_parts) <= 1:
+            return False
+
+        for user_part, std_part in zip(user_parts, std_parts):
+            user_part_norm = self._normalize_answer_text(user_part)
+            if not any(
+                self._normalize_answer_text(alt) == user_part_norm
+                for alt in self._split_answer_alternatives(std_part)
+            ):
+                return False
+        return True
+
+    def _try_rule_review(
+        self,
+        *,
+        question_type: str,
+        standard_answer: str,
+        user_answer: str,
+    ) -> dict | None:
+        """规则短路：空答 / 填空精确匹配可直接出分，无需调用 LLM。"""
+        user_text = (user_answer or "").strip()
+        if not user_text:
+            return {
+                "score": 0,
+                "is_correct": False,
+                "feedback": "本题未作答",
+                "improvement_hints": ["请完成作答后再提交"],
+            }
+
+        if not self._is_fill_blank_type(question_type):
+            return None
+
+        if self._fill_blank_matches(standard_answer, user_answer):
+            return {
+                "score": 100,
+                "is_correct": True,
+                "feedback": "答案正确",
+                "improvement_hints": [],
+            }
+
+        # 规范化后仍不匹配：直接判错，避免填空题占用 LLM 配额
+        return {
+            "score": 0,
+            "is_correct": False,
+            "feedback": "答案与标准答案不一致",
+            "improvement_hints": ["请对照参考答案检查拼写、大小写与空格", "确认多空是否按顺序填写完整"],
+        }
+
+    def _to_result(self, output: QuizReviewOutput) -> dict:
+        """将结构化输出转为 API 结果字典。"""
+        return {
+            "score": output.score,
+            "is_correct": output.score >= 60,
+            "feedback": output.feedback,
+            "improvement_hints": output.improvement_hints[:3],
+        }
+
     # 执行 AI 答案审查：调用 LLM 并返回评分与反馈
     async def review(
         self,
@@ -357,7 +478,15 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
         user_answer: str,
         knowledge_points: list[str] | None = None,
     ) -> dict:
-        """执行 AI 答案审查 — 调用 LLM 评判并返回评分和反馈。"""
+        """执行 AI 答案审查 — 规则短路优先，否则调用 LLM 评判。"""
+        rule_result = self._try_rule_review(
+            question_type=question_type,
+            standard_answer=standard_answer,
+            user_answer=user_answer,
+        )
+        if rule_result is not None:
+            return rule_result
+
         llm = get_llm()  # 获取 LLM 单例
         messages = self._build_messages(  # 构建审查 prompt
             question_type=question_type,
@@ -367,15 +496,16 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
             knowledge_points=knowledge_points or [],
         )
 
-        # 调用 LLM 获取结构化审查结果，失败则降级
+        # 调用 LLM 获取结构化审查结果，失败则降级；信号量限制并发
         try:
-            result = await asyncio.wait_for(
-                llm.ainvoke_json(  # 调用 LLM 结构化输出
-                    QuizReviewOutput,
-                    messages,
-                ),
-                timeout=QUIZ_REVIEW_TIMEOUT_SECONDS,
-            )
+            async with self._llm_semaphore:
+                result = await asyncio.wait_for(
+                    llm.ainvoke_json(  # 调用 LLM 结构化输出
+                        QuizReviewOutput,
+                        messages,
+                    ),
+                    timeout=QUIZ_REVIEW_TIMEOUT_SECONDS,
+                )
             output = QuizReviewOutput.model_validate(result)  # Pydantic 校验
         except TimeoutError:
             logger.warning(
@@ -387,15 +517,31 @@ JSON: {score: 0-100, feedback: "点评", improvement_hints: ["建议"]}"""
             logger.warning("[QuizReview] LLM call failed: %s, using fallback", e)
             output = self._fallback_review(user_answer, standard_answer)  # LLM 失败时降级为关键词匹配
 
-        # 60 分以上判定为正确
-        is_correct = output.score >= 60  # 60 分以上视为正确
-        # 返回评分、正确性与前三条建议
-        return {
-            "score": output.score,
-            "is_correct": is_correct,
-            "feedback": output.feedback,
-            "improvement_hints": output.improvement_hints[:3],
-        }
+        return self._to_result(output)
+
+    async def review_batch(self, items: list[dict]) -> list[dict]:
+        """批量审查主观题。
+
+        每题走 ``review``（含规则短路）；真正调用 LLM 时由实例级信号量
+        限制并发，结果顺序与输入一致。
+        """
+        if not items:
+            return []
+
+        async def _run_one(item: dict) -> dict:
+            result = await self.review(
+                question_type=str(item.get("question_type") or ""),
+                question_content=str(item.get("question_content") or ""),
+                standard_answer=str(item.get("standard_answer") or ""),
+                user_answer=str(item.get("user_answer") or ""),
+                knowledge_points=list(item.get("knowledge_points") or []),
+            )
+            return {
+                "question_id": str(item.get("question_id") or ""),
+                **result,
+            }
+
+        return list(await asyncio.gather(*[_run_one(item) for item in items]))
 
     # LLM 失败时的关键词匹配降级判定
     def _fallback_review(self, user_answer: str, standard_answer: str) -> QuizReviewOutput:

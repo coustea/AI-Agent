@@ -489,7 +489,7 @@ import {
   PhListMagnifyingGlass,
 } from '@phosphor-icons/vue'
 import { getProfileOnboarding } from '@/features/profile/api/profile'
-import { fetchQuizBankQuestions, fetchQuizReview, fetchQuizAnswerHistory, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult, type QuizAnswerHistoryItem } from '@/features/question-bank/api/quizBank'
+import { fetchQuizBankQuestions, fetchQuizReview, fetchQuizReviewBatch, fetchQuizAnswerHistory, submitObjectiveResults, toQuestionTypeLabel, type QuizReviewResult, type QuizAnswerHistoryItem } from '@/features/question-bank/api/quizBank'
 import {
   archiveWrongQuestion,
   fetchWrongQuestions,
@@ -503,7 +503,13 @@ import AnalysisReviewPage from '@/features/question-bank/components/AnalysisRevi
 import WrongBookTab from '@/features/question-bank/components/WrongBookTab.vue'
 import HistoryTab from '@/features/question-bank/components/HistoryTab.vue'
 import { getErrorMessage } from '@/shared/api/http'
-import { pendingAnswerLabel, requiresAiReview } from '@/features/question-bank/model/grading'
+import {
+  mapWithConcurrency,
+  pendingAnswerLabel,
+  QUIZ_REVIEW_CLIENT_CONCURRENCY,
+  requiresAiReview,
+  tryRuleGrade,
+} from '@/features/question-bank/model/grading'
 
 type ViewMode = 'workspace' | 'exam' | 'analysis-review'
 type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong' | 'history'
@@ -1646,7 +1652,7 @@ function cancelSubmitExam() {
   examSubmitNoticeVisible.value = false
 }
 
-// 执行交卷：判客观题 + AI 评阅主观题 + 提交记录
+// 执行交卷：判客观题 + 批量评阅主观题 + 提交记录
 async function submitExam() {
   if (examSubmitted.value || examReviewing.value) return
 
@@ -1678,19 +1684,28 @@ async function submitExam() {
       }
     })
 
-    const subjectiveTasks = examPaper.value
-      .filter((q) => requiresAiReview(q.type))
-      .map(async (q) => {
-        const result = await gradeQuestion(q, examAnswers.value[q.id])
-        examReview.value[q.id] = result.review
-        const correct = result.correct
-        if (correct) correctCount += 1
+    // 主观题：本地规则短路（空答/填空）+ 剩余题目一次批量请求（后端并发池）
+    const subjectiveQuestions = examPaper.value.filter((q) => requiresAiReview(q.type))
+    const remoteReviewItems: Array<{
+      question_id: string
+      question_type: string
+      question_content: string
+      standard_answer: string
+      user_answer: string
+      knowledge_points: string[]
+    }> = []
 
+    for (const q of subjectiveQuestions) {
+      const userAnswer = formatUserAnswer(examAnswers.value[q.id])
+      const rule = tryRuleGrade(q.type, q.answer, userAnswer)
+      if (rule) {
+        examReview.value[q.id] = rule
+        if (rule.is_correct) correctCount += 1
         batchResults.push({
           question_id: q.id,
-          user_answer: formatUserAnswer(examAnswers.value[q.id]),
-          is_correct: correct,
-          score: result.review?.score,
+          user_answer: userAnswer,
+          is_correct: rule.is_correct,
+          score: rule.score,
           subject: q.subject,
           question_type: q.type,
           content: q.content,
@@ -1698,9 +1713,105 @@ async function submitExam() {
           answer: q.answer,
           analysis: q.analysis,
         })
-      })
+        continue
+      }
 
-    await Promise.all(subjectiveTasks)
+      remoteReviewItems.push({
+        question_id: q.id,
+        question_type: q.type,
+        question_content: q.content,
+        standard_answer: q.answer,
+        user_answer: userAnswer,
+        knowledge_points: q.knowledge_points || [],
+      })
+    }
+
+    if (remoteReviewItems.length > 0) {
+      const questionById = new Map(examPaper.value.map((q) => [q.id, q]))
+
+      const applySubjectiveResult = (
+        item: (typeof remoteReviewItems)[number],
+        review: QuizReviewResult,
+      ) => {
+        const q = questionById.get(item.question_id)
+        examReview.value[item.question_id] = review
+        if (review.is_correct) correctCount += 1
+        batchResults.push({
+          question_id: item.question_id,
+          user_answer: item.user_answer,
+          is_correct: review.is_correct,
+          score: review.score,
+          subject: q?.subject,
+          question_type: item.question_type,
+          content: item.question_content,
+          options: q?.options || {},
+          answer: item.standard_answer,
+          analysis: q?.analysis,
+        })
+      }
+
+      try {
+        const remoteResults = await fetchQuizReviewBatch({ items: remoteReviewItems })
+        const reviewById = new Map(remoteResults.map((item) => [item.question_id, item]))
+
+        for (const item of remoteReviewItems) {
+          const review = reviewById.get(item.question_id)
+          if (review) {
+            applySubjectiveResult(item, {
+              score: review.score,
+              is_correct: review.is_correct,
+              feedback: review.feedback,
+              improvement_hints: review.improvement_hints || [],
+            })
+            continue
+          }
+
+          // 批量结果缺失时本地兜底，避免整卷失败
+          const q = questionById.get(item.question_id)
+          const fallbackCorrect = q ? evaluateAnswer(q, examAnswers.value[item.question_id]) : false
+          applySubjectiveResult(item, {
+            score: fallbackCorrect ? 100 : 0,
+            is_correct: fallbackCorrect,
+            feedback: 'AI 评阅结果缺失，已使用本地规则完成判定',
+            improvement_hints: fallbackCorrect ? [] : ['请对照参考答案检查遗漏的关键步骤'],
+          })
+        }
+      } catch {
+        // 批量接口失败时降级为有限并发单题评阅
+        const fallbackGrades = await mapWithConcurrency(
+          remoteReviewItems,
+          QUIZ_REVIEW_CLIENT_CONCURRENCY,
+          async (item) => {
+            const q = questionById.get(item.question_id)
+            if (!q) {
+              return {
+                item,
+                review: {
+                  score: 0,
+                  is_correct: false,
+                  feedback: '题目不存在',
+                  improvement_hints: [],
+                } satisfies QuizReviewResult,
+              }
+            }
+            const result = await gradeQuestion(q, examAnswers.value[q.id], { skipRule: true })
+            return {
+              item,
+              review: result.review || {
+                score: result.correct ? 100 : 0,
+                is_correct: result.correct,
+                feedback: '',
+                improvement_hints: [],
+              },
+            }
+          },
+        )
+
+        for (const graded of fallbackGrades) {
+          applySubjectiveResult(graded.item, graded.review)
+        }
+      }
+    }
 
     if (batchResults.length > 0) await submitObjectiveResults({ results: batchResults as any[] })
 
@@ -1847,11 +1958,21 @@ function updateExamAnswer(id: string, value: string) {
   examAnswers.value[id] = value
 }
 
-// 仅填空题和分析题调用 AI，其余题型在前端精确判定。
-async function gradeQuestion(question: Question, answer: AnswerValue) {
+// 主观题：规则短路优先；分析题再调 AI。其余题型前端精确判定。
+async function gradeQuestion(
+  question: Question,
+  answer: AnswerValue,
+  options: { skipRule?: boolean } = {},
+) {
   if (!requiresAiReview(question.type)) return { correct: evaluateAnswer(question, answer), review: null }
 
-  // 未作答的主观题直接记 0 分，避免空答案仍发起耗时的 AI 评阅请求。
+  const userAnswer = formatUserAnswer(answer)
+  if (!options.skipRule) {
+    const rule = tryRuleGrade(question.type, question.answer, userAnswer)
+    if (rule) return { correct: rule.is_correct, review: rule }
+  }
+
+  // 未作答已由 tryRuleGrade 处理；skipRule 路径仍需兜底
   if (!hasAnswerData(answer)) {
     return {
       correct: false,
@@ -1870,7 +1991,7 @@ async function gradeQuestion(question: Question, answer: AnswerValue) {
       question_type: question.type,
       question_content: question.content,
       standard_answer: question.answer,
-      user_answer: formatUserAnswer(answer),
+      user_answer: userAnswer,
       knowledge_points: question.knowledge_points || [],
     })
 

@@ -100,6 +100,34 @@ export async function fetchQuizReview(request: QuizReviewRequest): Promise<QuizR
   return response.data as QuizReviewResult
 }
 
+/** 批量评阅结果（含 question_id，顺序与请求一致） */
+export interface QuizReviewBatchItemResult extends QuizReviewResult {
+  question_id: string
+}
+
+export interface QuizReviewBatchRequest {
+  items: QuizReviewRequest[]
+}
+
+export interface QuizReviewBatchResponse {
+  results: QuizReviewBatchItemResult[]
+}
+
+/**
+ * 批量提交主观题评阅。
+ * 后端并发池 + 填空规则短路；超时按题数放宽（单题约 30s 量级，上限 3 分钟）。
+ */
+export async function fetchQuizReviewBatch(
+  request: QuizReviewBatchRequest,
+): Promise<QuizReviewBatchItemResult[]> {
+  if (!request.items.length) return []
+
+  const timeout = Math.min(180000, Math.max(30000, request.items.length * 25000))
+  const response = await http.post('/ai/quiz/review/batch', request, { timeout })
+  const payload = (response.data?.data ?? response.data) as Partial<QuizReviewBatchResponse>
+  return Array.isArray(payload?.results) ? payload.results : []
+}
+
 export interface ObjectiveQuestionResult {
   question_id: string
   user_answer: string

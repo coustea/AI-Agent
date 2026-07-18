@@ -20,6 +20,8 @@ from app.quiz.schemas import (
     ObjectiveSubmitResponse,
     QuizAnswerHistoryItem,
     QuizAnswerHistoryResponse,
+    QuizReviewBatchRequest,
+    QuizReviewBatchResponse,
     QuizReviewRequest,
     QuizReviewResponse,
     WrongQuestionListResponse,
@@ -164,6 +166,32 @@ async def review_answer(request: QuizReviewRequest) -> QuizReviewResponse:
     )
     # 返回结构化审查结果
     return QuizReviewResponse(**result)
+
+
+# 批量 AI 主观题答案审查接口（交卷等多题场景）
+@router.post("/quiz/review/batch")
+async def review_answers_batch(request: QuizReviewBatchRequest) -> HttpResponse:
+    """批量审查主观题答案。
+
+    服务端使用并发池限制 LLM 调用；填空题精确匹配会规则短路，不走模型。
+    返回顺序与请求 items 一致。
+    """
+    results = await quiz_review_service.review_batch(
+        [item.model_dump() for item in request.items]
+    )
+    payload = QuizReviewBatchResponse(
+        results=[
+            {
+                "question_id": item["question_id"],
+                "score": item["score"],
+                "is_correct": item["is_correct"],
+                "feedback": item["feedback"],
+                "improvement_hints": item["improvement_hints"],
+            }
+            for item in results
+        ]
+    )
+    return HttpResponse.success(data=payload.model_dump())
 
 
 # 答题历史查询接口：获取用户做过的所有题目（支持分页和筛选）
