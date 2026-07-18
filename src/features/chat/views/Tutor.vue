@@ -304,12 +304,12 @@
                   </div>
 
                   <AgentActivityCard
-                    v-if="msg.role === 'ai' && msg.agentActivities?.length && !getDisplayContent(msg)"
+                    v-if="msg.role === 'ai' && !msg.videoOnly && msg.agentActivities?.length && !getDisplayContent(msg)"
                     :activities="msg.agentActivities"
                   />
 
                   <div
-                    v-if="getDisplayContent(msg)"
+                    v-if="!msg.videoOnly && getDisplayContent(msg)"
                     :class="[
                       'bubble',
                       'markdown-body',
@@ -326,7 +326,7 @@
                   </div>
 
                   <div
-                    v-if="msg.role === 'ai' && getDisplayContent(msg) && !isStreamingMessage(msg)"
+                    v-if="msg.role === 'ai' && !msg.videoOnly && getDisplayContent(msg) && !isStreamingMessage(msg)"
                     class="message-actions"
                   >
                     <button type="button" @click.stop="copyAssistantAnswer(msg)">
@@ -336,20 +336,9 @@
                       </svg>
                       复制回答
                     </button>
-                    <button
-                      v-if="!msg.video"
-                      type="button"
-                      @click.stop="startVideoGeneration(msg)"
-                    >
-                      <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                        <rect x="2.5" y="5" width="11" height="10" rx="1.5" />
-                        <path d="m13.5 8 4-2.5v9l-4-2.5z" />
-                      </svg>
-                      生成动画讲解
-                    </button>
                   </div>
 
-                  <div v-if="msg.teachingDiagramGenerating" class="diagram-generation-panel">
+                  <div v-if="!msg.videoOnly && msg.teachingDiagramGenerating" class="diagram-generation-panel">
                     <div class="diagram-blueprint" aria-hidden="true">
                       <span class="blueprint-node node-a"></span>
                       <span class="blueprint-node node-b"></span>
@@ -367,7 +356,7 @@
                     </div>
                   </div>
 
-                  <div v-if="msg.teachingDiagram" class="msg-teaching-diagram">
+                  <div v-if="!msg.videoOnly && msg.teachingDiagram" class="msg-teaching-diagram">
                     <TeachingDiagramImage
                       v-if="msg.teachingDiagram.kind === 'image'"
                       :diagram="msg.teachingDiagram"
@@ -497,12 +486,12 @@
                     type="button"
                     class="input-tool-btn"
                     :class="{ 'is-active-purple': needVideo }"
-                    @click="needVideo = !needVideo"
+                    @click="handleVideoToggle"
                     :aria-pressed="needVideo"
                   >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
-                      <rect x="3" y="6" width="12" height="12" rx="2" />
-                      <path d="m15 10 5-3v10l-5-3z" />
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
+                      <rect x="2.5" y="5" width="11" height="10" rx="1.5" />
+                      <path d="m13.5 8 4-2.5v9l-4-2.5z" />
                     </svg>
                     <span>视频</span>
                   </button>
@@ -742,7 +731,6 @@ import {
   updateSessionTitle,
   getChatHistory,
   retryDiagramImage,
-  createChatVideo,
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
@@ -793,7 +781,7 @@ const isComposing = ref(false)
 const enableWebSearch = ref(false)
 // 是否需要生成教学图解
 const needTeachingDiagram = ref(false)
-// 是否需要在回答完成后自动生成视频
+// 勾选后本轮只生成视频，不展示文字或图解回答
 const needVideo = ref(false)
 
 const imgPreviewVisible = ref(false)
@@ -859,6 +847,7 @@ const {
   sendText: sendAvatarText,
   setSpeechRate: setAvatarSpeechRate,
   setNeedDiagram: setAvatarNeedDiagram,
+  setExternalActivityBusy: setAvatarExternalActivityBusy,
   startVad,
   stopVad,
   setContinuousVoice,
@@ -986,6 +975,38 @@ const {
     aiMsg.teachingDiagramGenerating = false
     scrollToBottom()
   },
+  onVideo: (data) => {
+    const assistantMessageId = Number(data?.assistant_message_id)
+    const sessionId = String(data?.session_id || digitalHumanSessionId.value || '')
+    const video = data?.video
+    if (!Number.isSafeInteger(assistantMessageId) || assistantMessageId <= 0 || !sessionId || !video) return
+
+    let aiMsg = streamingMsgId.value !== null
+      ? messages.value.find(message => message.id === streamingMsgId.value && message.role === 'ai')
+      : undefined
+    if (!aiMsg) {
+      aiMsg = {
+        id: assistantMessageId,
+        role: 'ai',
+        content: '',
+        time: now(),
+        videoOnly: true,
+        agentActivities: [],
+      }
+      messages.value.push(aiMsg)
+    }
+    aiMsg.id = assistantMessageId
+    aiMsg.content = ''
+    aiMsg.videoOnly = true
+    aiMsg.agentActivities = []
+    aiMsg.teachingDiagram = null
+    aiMsg.teachingDiagramGenerating = false
+    aiMsg.video = video
+    streamingMsgId.value = assistantMessageId
+    streamingMsgRef.value = aiMsg
+    watchChatVideo(sessionId, assistantMessageId, true)
+    scrollToBottom()
+  },
   onAssistantComplete: () => {
     digitalHumanBackendStatus.value = ''
     clearAvatarThinkingTimeout()
@@ -1084,6 +1105,7 @@ const {
       toast.error({ message: msg, plain: true })
       return
     }
+    setAvatarExternalActivityBusy(false)
     digitalHumanBackendStatus.value = ''
     asrRecoveryStatus.value = ''
     clearAvatarThinkingTimeout()
@@ -1245,6 +1267,7 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   }
 
   if (event.event === 'content.replace') {
+    if (aiMsg.videoOnly) return
     const content = typeof data.content === 'string' ? data.content : ''
     if (content) {
       if (streamingMsgRef.value?.id === aiMsg.id || streamingMsgId.value === aiMsg.id) {
@@ -1464,6 +1487,7 @@ const isStreamingMessage = (msg: ChatMsg) => {
   return isAIThinking.value
 }
 const getDisplayContent = (msg: ChatMsg) => {
+  if (msg.videoOnly) return ''
   if (msg.id === streamingMsgId.value && streamDisplayText.value) {
     return streamDisplayText.value
   }
@@ -1841,14 +1865,6 @@ const finishStream = (messageId: number) => {
   streamingMsgId.value = null
   streamingMsgRef.value = null
   triggerGlobalProfileRefresh()
-
-  // 回答完成后，若用户开启了视频开关，自动触发视频生成
-  if (needVideo.value && Number.isSafeInteger(messageId) && messageId > 0) {
-    const aiMsg = messages.value.find(message => message.id === messageId)
-    if (aiMsg && !aiMsg.video) {
-      startVideoGeneration(aiMsg)
-    }
-  }
 }
 
 const completeStreamingMessage = (messageId: number) => {
@@ -2122,17 +2138,19 @@ const loadHistoryFromAPI = async (sessionId: string) => {
       const video = rawVideo && typeof rawVideo === 'object'
         ? rawVideo as ChatVideoArtifactData
         : null
+      const videoOnly = msg.usage_metadata?.response_mode === 'video' || Boolean(video)
 
       return {
         id: msg.id || Date.now() + i,
         userMessageId: msg.user_message_id || undefined,
         role: msg.role === 'user' ? 'user' as const : 'ai' as const,
-        content: textContent,
+        content: videoOnly && msg.role === 'assistant' ? '' : textContent,
         time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
         attachments,
         agentActivities: (msg.activities || []) as AgentActivity[],
         teachingDiagram: diagram,
         video,
+        videoOnly,
       }
     })
     // Abandoned/failed streams can leave an assistant row containing only
@@ -2173,6 +2191,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
             agentActivities: [],
             teachingDiagram: null,
             video: item.video,
+            videoOnly: true,
           })
         }
         item.video = null
@@ -2194,12 +2213,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
     })
     for (const message of messages.value) {
       if (message.video?.status === 'queued' || message.video?.status === 'running') {
-        // The video is now on an AI message; find its preceding user message
-        // to get the user_message_id for polling.
-        const idx = messages.value.indexOf(message)
-        const userMsg = idx > 0 ? messages.value[idx - 1] : null
-        const pollId = userMsg?.id || message.id
-        watchChatVideo(sessionId, pollId)
+        watchChatVideo(sessionId, message.id, chatMode.value === 'digital_human')
       }
     }
   } catch (err) {
@@ -2209,6 +2223,7 @@ const loadHistoryFromAPI = async (sessionId: string) => {
 
 // 切换会话：加载历史 → 恢复流状态 → 绑定回调
 const switchSession = async (sessionId: string) => {
+  setAvatarExternalActivityBusy(false)
   videoTasks.dispose()
   currentSessionId.value = sessionId
   if (chatMode.value === 'digital_human') {
@@ -2423,6 +2438,7 @@ const clearPendingFiles = () => {
 const getAvatarCapabilities = () => ({
   session_id: digitalHumanSessionId.value,
   enable_search: enableWebSearch.value,
+  need_video: needVideo.value,
 })
 
 const configureContinuousVoice = (enabled: boolean) => {
@@ -2431,6 +2447,12 @@ const configureContinuousVoice = (enabled: boolean) => {
 
 const handleTeachingDiagramToggle = () => {
   needTeachingDiagram.value = !needTeachingDiagram.value
+  if (needTeachingDiagram.value) needVideo.value = false
+}
+
+const handleVideoToggle = () => {
+  needVideo.value = !needVideo.value
+  if (needVideo.value) needTeachingDiagram.value = false
 }
 
 // 确保当前有活跃会话（没有则创建）
@@ -2520,43 +2542,20 @@ const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
 }
 
-const watchChatVideo = (sessionId: string, assistantMessageId: number) => {
+const watchChatVideo = (
+  sessionId: string,
+  assistantMessageId: number,
+  keepAvatarConnected = false,
+) => {
+  if (keepAvatarConnected) setAvatarExternalActivityBusy(true)
   videoTasks.watch(sessionId, assistantMessageId, (video) => {
     const message = messages.value.find(item => item.id === assistantMessageId)
     if (message) message.video = video
+    if (keepAvatarConnected && video.status !== 'queued' && video.status !== 'running') {
+      setAvatarExternalActivityBusy(false)
+    }
     if (video.status === 'completed') scrollToBottom()
   })
-}
-
-const startVideoGeneration = async (message: ChatMsg) => {
-  if (!await ensureCurrentSession('standard')) return
-  const sessionId = currentSessionId.value
-  if (!sessionId) return
-  if (!Number.isSafeInteger(message.id) || message.id <= 0) {
-    toast.warning({ message: '回答尚未保存，请稍后再试', plain: true })
-    return
-  }
-
-  message.video = {
-    task_id: `pending-${message.id}`,
-    status: 'queued',
-    topic: '正在整理本轮讲解内容',
-  }
-
-  try {
-    const response = await createChatVideo(message.id, sessionId)
-    const task = response.data.data
-    message.video = task.video
-    watchChatVideo(task.session_id, task.assistant_message_id)
-  } catch (error) {
-    if (message.video) {
-      message.video = {
-        ...message.video,
-        status: 'failed',
-        error: getErrorMessage(error, '视频任务创建失败，请重新发起请求。'),
-      }
-    }
-  }
 }
 
 // 发送消息：上传附件 → 创建 AI 消息 → 启动 SSE 流 / 数字人消息
@@ -2567,6 +2566,7 @@ const handleSend = async () => {
   if ((!text && !hasFiles) || isAIThinking.value) return
 
   const shouldGenerateTeachingDiagram = needTeachingDiagram.value
+  const shouldGenerateVideo = needVideo.value
   const sessionMode = chatMode.value === 'digital_human' ? 'digital_human' : 'standard'
 
   if (chatMode.value === 'digital_human' && !isAvatarConnected.value) {
@@ -2696,6 +2696,7 @@ const handleSend = async () => {
     content: '',
     time: now(),
     agentActivities: [],
+    videoOnly: shouldGenerateVideo,
   })
   streamingMsgId.value = aiMsgId
   streamingMsgRef.value = messages.value[messages.value.length - 1] || null
@@ -2705,6 +2706,7 @@ const handleSend = async () => {
   streamDisplayText.value = ''
 
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
+    if (shouldGenerateVideo) setAvatarExternalActivityBusy(true)
     startAvatarThinkingTimeout()
     const aiMsg = messages.value.find(message => message.id === aiMsgId)
     if (aiMsg) aiMsg.teachingDiagramGenerating = shouldGenerateTeachingDiagram
@@ -2714,6 +2716,7 @@ const handleSend = async () => {
       need_diagram: shouldGenerateTeachingDiagram,
       attachments: attachmentUrls.length ? attachmentUrls : undefined,
       ...getAvatarCapabilities(),
+      need_video: shouldGenerateVideo,
       speech_rate: avatarSpeechRate.value,
     })
     return
@@ -2726,11 +2729,13 @@ const handleSend = async () => {
       session_id: activeSessionId,
       attachments: messageAttachments.length ? messageAttachments : undefined,
       need_teaching_diagram: shouldGenerateTeachingDiagram,
+      need_video: shouldGenerateVideo,
       enable_web_search: enableWebSearch.value,
     },
     {
       onChunk: (chunk) => {
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
+        if (shouldGenerateVideo) return
         if (aiMsg && shouldGenerateTeachingDiagram && !aiMsg.teachingDiagram) {
           aiMsg.teachingDiagramGenerating = true
         }
@@ -2738,11 +2743,25 @@ const handleSend = async () => {
       },
       onDone: (data) => {
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        if (aiMsg) finalizeAssistantGeneration(aiMsg, 'done')
+        if (aiMsg) {
+          finalizeAssistantGeneration(aiMsg, 'done')
+          if (shouldGenerateVideo) {
+            aiMsg.content = ''
+            aiMsg.videoOnly = true
+            aiMsg.teachingDiagram = null
+            const video = data.video
+            if (video && typeof video === 'object') {
+              aiMsg.video = video as ChatVideoArtifactData
+            }
+          }
+        }
         const persistedMessageId = aiMsg
           ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
           : aiMsgId
         if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
+        if (shouldGenerateVideo && aiMsg?.video) {
+          watchChatVideo(activeSessionId, persistedMessageId)
+        }
         completeStreamingMessage(persistedMessageId)
         void refreshSessionTitleWithRetry(activeSessionId)
       },
@@ -2789,6 +2808,7 @@ watch(chatMode, async (newMode) => {
     sessionSidebarCollapsed.value = false
     isVoiceChatting.value = false
     configureContinuousVoice(false)
+    setAvatarExternalActivityBusy(false)
     disconnectAvatar()
     clearPendingFiles()
     if (currentSessionId.value) {
@@ -2803,6 +2823,10 @@ watch(needTeachingDiagram, (enabled) => {
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     setAvatarNeedDiagram(enabled)
   }
+  if (isVoiceChatting.value) configureContinuousVoice(true)
+})
+
+watch(needVideo, () => {
   if (isVoiceChatting.value) configureContinuousVoice(true)
 })
 
@@ -2863,6 +2887,7 @@ onDeactivated(() => {
 onBeforeUnmount(() => {
   clearAvatarThinkingTimeout()
   detachCurrentStreamCallbacks()
+  setAvatarExternalActivityBusy(false)
   disconnectAvatar()
   flushPendingStreamText()
   stopStreamFlushLoop()

@@ -10,6 +10,7 @@ ChatUseCases 保留会话管理、文件上传等辅助功能，对话核心逻�
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 from pathlib import Path
 from typing import Any, AsyncIterator
@@ -25,6 +26,7 @@ from app.chat.memory.service import get_chat_memory_service
 from app.chat.schemas import DiagramMode, TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.schemas import ChatMessageItem
+from app.chat.video import get_chat_video_service
 from app.config import MAX_UPLOAD_FILES_PER_REQUEST
 from app.infra.database import session_scope
 from app.infra.logging import get_logger
@@ -119,6 +121,7 @@ async def chat(
     enable_web_search: bool = False,
     diagram_mode: DiagramMode = "auto",
     voice_mode: bool = False,
+    video_mode: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """执行一次辅导对话，所有派生记录关联当前 UserMessage。"""
     uc = get_chat_usecases()
@@ -176,6 +179,7 @@ async def chat(
         _get_voice_quick_reply(current_message)
         if (
             voice_mode
+            and not video_mode
             and not merged_attachments
             and not enable_web_search
             and diagram_mode == "auto"
@@ -243,6 +247,7 @@ async def chat(
         enable_web_search=enable_web_search,
         diagram_mode=diagram_mode,
         voice_mode=voice_mode,
+        video_mode=video_mode,
     )
 
     agent = TutorAgent()
@@ -270,7 +275,7 @@ async def chat(
                 tool_invocations = sse_data.get("tool_invocations", [])
                 sources = sse_data.get("sources", [])
 
-                if diagram_result is not None:
+                if diagram_result is not None and not video_mode:
                     diagram_result = await ensure_teaching_diagram_png_payload(
                         diagram_result,
                         username=username,
@@ -308,6 +313,16 @@ async def chat(
 
     # ── 4. 持久化助手回复（含图解、来源等元数据） ──
     # 若正常产出（文字回答或图解），则保存助手消息并记录工具/来源/图解元数据
+    if video_mode and diagram_result is not None:
+        if not full_answer.strip():
+            full_answer = (
+                f"围绕用户问题“{current_message}”制作完整动画讲解。"
+                "可参考以下结构化教学素材："
+                + json.dumps(diagram_result, ensure_ascii=False, separators=(",", ":"))
+            )
+        diagram_result = None
+        logger.warning("[chat] 视频模式收到图解结果，已转换为纯视频脚本素材")
+
     has_output = bool(full_answer.strip()) or diagram_result is not None
     saved_message_id: int | None = None
     if not has_error and has_output:
@@ -321,6 +336,8 @@ async def chat(
             ]
         if diagram_result:
             usage_meta["diagram"] = diagram_result
+        if video_mode:
+            usage_meta["response_mode"] = "video"
 
         assistant_content = (
             [{"type": "text", "text": full_answer}] if full_answer.strip() else []
@@ -340,6 +357,36 @@ async def chat(
         yield {"event": "error", "data": "模型未生成可用回答"}
         yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
         return
+
+    video_task: dict[str, Any] | None = None
+    if video_mode and saved_message_id is not None:
+        video_service = get_chat_video_service()
+        try:
+            created = await video_service.create_task(
+                user_id=user_id,
+                session_id=effective_session,
+                assistant_message_id=saved_message_id,
+            )
+            raw_video = created.get("video")
+            if isinstance(raw_video, dict):
+                video_task = raw_video
+            uc._spawn_background(
+                video_service.run_task(
+                    user_id=user_id,
+                    username=username,
+                    session_id=effective_session,
+                    assistant_message_id=saved_message_id,
+                ),
+                label=f"chat_video:{saved_message_id}",
+            )
+        except Exception as exc:
+            logger.exception("[chat] 自动创建视频任务失败: message_id=%s", saved_message_id)
+            video_task = {
+                "task_id": f"chat-video-{saved_message_id}",
+                "status": "failed",
+                "topic": current_message,
+                "error": f"视频任务创建失败: {exc}",
+            }
 
     # ── 5. 最终内容校准：确保前端显示与数据库一致 ──
     # 用完整回答覆盖前端已流式显示的内容
@@ -363,6 +410,8 @@ async def chat(
         }
         if diagram_result is not None:
             completion_data["diagram"] = diagram_result
+        if video_task is not None:
+            completion_data["video"] = video_task
         yield {
             "event": "done",
             "data": completion_data,
@@ -403,6 +452,7 @@ async def run_chat_agent(
     attachments: list[str],
     enable_web_search: bool,
     diagram_mode: DiagramMode,
+    need_video: bool = False,
 ) -> None:
     """后台执行一次辅导，并通过 ChatEvents 推送运行状态。
 
@@ -443,9 +493,12 @@ async def run_chat_agent(
             attachments=attachments or None,
             enable_web_search=enable_web_search,
             diagram_mode=diagram_mode,
+            video_mode=need_video,
         ):
             if event.get("event") == "done" and isinstance(event.get("data"), dict):
                 completion_data = event["data"]
+            if need_video and event.get("event") in {"token", "content_replace", "diagram"}:
+                continue
             failed = await _publish_chat_runtime_event(events, event) or failed
         if failed:
             # 失败：持久化失败活动并发送 message.failed

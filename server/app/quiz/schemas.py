@@ -57,6 +57,28 @@ class QuizReviewResponse(BaseModel):
     improvement_hints: list[str] = Field(default_factory=list, description="改进建议")
 
 
+# 批量 AI 答案审查请求
+class QuizReviewBatchRequest(BaseModel):
+    """批量 AI 答案审查请求 — 一次提交多道主观题。"""
+    items: list[QuizReviewRequest] = Field(
+        min_length=1,
+        max_length=50,
+        description="待审查题目列表（最多 50 道）",
+    )
+
+
+# 批量审查中的单题结果（附带 question_id 便于前端回填）
+class QuizReviewBatchItemResult(QuizReviewResponse):
+    """批量审查单题结果。"""
+    question_id: str = Field(description="题目唯一标识")
+
+
+# 批量 AI 答案审查响应
+class QuizReviewBatchResponse(BaseModel):
+    """批量 AI 答案审查响应 — 与请求 items 顺序一致。"""
+    results: list[QuizReviewBatchItemResult] = Field(default_factory=list)
+
+
 # 单道客观题判卷结果模型
 class ObjectiveQuestionResult(BaseModel):
     """单道题目的前端判卷结果。"""

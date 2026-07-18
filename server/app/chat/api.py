@@ -164,6 +164,7 @@ async def create_mentor_chat_message(
     attachments: str | None = Form(default=None),
     diagram_mode: DiagramMode | None = Form(default=None),
     need_teaching_diagram: bool | None = Form(default=None),
+    need_video: bool = Form(default=False),
     enable_web_search: bool = Form(default=False),
     current_user: User = Depends(get_current_user_flexible),
 ):
@@ -239,7 +240,12 @@ async def create_mentor_chat_message(
         user_input=effective_message,
         attachments=[str(item.get("url") or "") for item in parsed_attachments],
         enable_web_search=enable_web_search,
-        diagram_mode=resolve_diagram_mode(diagram_mode=diagram_mode, need_teaching_diagram=need_teaching_diagram),
+        diagram_mode=(
+            "auto"
+            if need_video
+            else resolve_diagram_mode(diagram_mode=diagram_mode, need_teaching_diagram=need_teaching_diagram)
+        ),
+        need_video=need_video,
     )
 
     logger.info(

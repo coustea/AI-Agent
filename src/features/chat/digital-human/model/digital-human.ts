@@ -1,6 +1,7 @@
 export interface TextMessageParams {
   text: string
   need_diagram?: boolean
+  need_video?: boolean
   session_id?: string
   attachments?: string[]
   enable_search?: boolean
@@ -10,6 +11,7 @@ export interface TextMessageParams {
 export interface DigitalHumanCapabilities {
   session_id?: string
   enable_search?: boolean
+  need_video?: boolean
 }
 
 export interface StreamExtend {
@@ -71,6 +73,16 @@ export interface DiagramMessage {
   data: unknown
 }
 
+export interface VideoMessage {
+  type: 'video'
+  turn_id?: string
+  data: {
+    assistant_message_id: number
+    session_id: string
+    video: import('@/features/chat/types/chat').ChatVideoArtifact
+  }
+}
+
 export interface StatusMessage {
   type: 'status'
   turn_id?: string
@@ -92,6 +104,7 @@ export interface DigitalHumanCallbacks {
   onAssistantComplete?: (turn_id?: string) => void
   onStatus?: (status: { stage?: string; message?: string }) => void
   onDiagram?: (diagram: unknown, turn_id?: string) => void
+  onVideo?: (data: VideoMessage['data'], turn_id?: string) => void
   onAsrResult?: (text: string) => void
   onAsrPartial?: (text: string) => void
   onError?: (msg: string, context?: DigitalHumanErrorContext) => void

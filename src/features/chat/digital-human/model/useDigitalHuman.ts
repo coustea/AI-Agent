@@ -31,6 +31,7 @@ export interface IdleDisconnectState {
     state: DigitalHumanStateType
     isSpeaking: boolean
     isListening: boolean
+    isBusy?: boolean
 }
 
 type AvatarTransportState = 'disconnected' | 'connecting' | 'ready' | 'error'
@@ -146,8 +147,8 @@ export function enqueueBoundedAudioChunk<T>(queue: T[], chunk: T, maxSize = MAX_
 }
 
 // 判断是否应暂停空闲自动断开（正在交互中不自动断开）
-export function shouldPauseIdleDisconnect({ state, isSpeaking, isListening }: IdleDisconnectState): boolean {
-    if (isSpeaking || isListening) return true
+export function shouldPauseIdleDisconnect({ state, isSpeaking, isListening, isBusy = false }: IdleDisconnectState): boolean {
+    if (isSpeaking || isListening || isBusy) return true
     return state === 'avatar_connecting'
         || state === 'recognizing'
         || state === 'thinking'
@@ -254,6 +255,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
     // --- Idle auto-disconnect ---
     const IDLE_TIMEOUT_MS = 180_000 // 180 seconds
     const idleCountdown = ref(0) // seconds remaining until auto-disconnect
+    const externalActivityBusy = ref(false)
     let idleTimer: ReturnType<typeof setInterval> | null = null
 
     // --- Internal state (not reactive, not exposed) ---
@@ -305,6 +307,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
                 state: digitalHumanState.value,
                 isSpeaking: isSpeaking.value,
                 isListening: isListening.value,
+                isBusy: externalActivityBusy.value,
             })) {
                 idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
                 return
@@ -325,6 +328,15 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             idleTimer = null
         }
         idleCountdown.value = 0
+    }
+
+    // Long-running work such as video rendering is still an active avatar turn.
+    // Keep the transport alive even after the LLM stream itself has completed.
+    function setExternalActivityBusy(active: boolean): void {
+        externalActivityBusy.value = active
+        if (active && isConnected.value) {
+            idleCountdown.value = Math.floor(IDLE_TIMEOUT_MS / 1000)
+        }
     }
 
     // ==========================================
@@ -543,7 +555,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         // Apply this filter BEFORE handling digital_human_state to prevent old turn pollution
         const turnDependentTypes = [
             'assistant_chunk', 'assistant_complete',
-            'avatar_speaking', 'avatar_stopped', 'diagram', 'status',
+            'avatar_speaking', 'avatar_stopped', 'diagram', 'video', 'status',
             'digital_human_state', 'error'  // Add digital_human_state and error to turn-dependent types
         ]
         if (turnDependentTypes.includes(type) && !isTransportLifecycleMessage(data)) {
@@ -618,6 +630,8 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
             startAssistantReveal()
         } else if (type === 'diagram') {
             callbacks?.onDiagram?.(data.data, turn_id)
+        } else if (type === 'video') {
+            callbacks?.onVideo?.(data.data, turn_id)
         } else if (type === 'avatar_stopped') {
             const finish = () => finishAvatarStopped(turn_id)
             if (data.data?.fallback === true) waitForAvatarOutputSilence(finish)
@@ -1207,6 +1221,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
 
         const msg: Record<string, unknown> = { type: 'text_input', text: params.text }
         if (typeof params.need_diagram === 'boolean') msg.need_diagram = params.need_diagram
+        if (typeof params.need_video === 'boolean') msg.need_video = params.need_video
         if (params.session_id) msg.session_id = params.session_id
         if (params.attachments?.length) msg.attachments = params.attachments
         if (typeof params.enable_search === 'boolean') msg.enable_search = params.enable_search
@@ -1646,6 +1661,7 @@ export function useDigitalHuman(callbacks?: DigitalHumanCallbacks) {
         switchSession,
         setSpeechRate,
         setNeedDiagram,
+        setExternalActivityBusy,
         enableAudio,
         setPlayerContainer,
     }

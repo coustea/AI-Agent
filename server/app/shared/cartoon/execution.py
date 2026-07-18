@@ -297,6 +297,25 @@ class ExecutionCompiler:
 
         def show(item: ExecutionObject, status: str = "active") -> None:
             placement = placements[item.name]
+            if item.role is ExecutionObjectRole.POINTER and not placement.anchor_id:
+                preferred = (
+                    target
+                    if target is not None and target.role is not ExecutionObjectRole.POINTER
+                    else next(
+                        (
+                            candidate
+                            for candidate in object_by_name.values()
+                            if candidate.role is not ExecutionObjectRole.POINTER
+                            and placements[candidate.name].visible
+                        ),
+                        next(
+                            candidate
+                            for candidate in object_by_name.values()
+                            if candidate.role is not ExecutionObjectRole.POINTER
+                        ),
+                    )
+                )
+                placement.anchor_id = preferred.id
             placement.visible = True
             placement.status = status
 
@@ -309,6 +328,21 @@ class ExecutionCompiler:
             show(target)
             return [subject.name, target.name]
         if operation.verb is ExecutionVerb.MOVE:
+            if subject.role is ExecutionObjectRole.POINTER:
+                placement = placements[subject.name]
+                placement.container_id = ""
+                placement.slot = None
+                placement.anchor_id = target.id if target is not None else ""
+                placement.region = (
+                    placements[target.name].region
+                    if target is not None
+                    else operation.region or SemanticRegion.MAIN
+                )
+                show(subject)
+                if target is not None:
+                    show(target)
+                    return [subject.name, target.name]
+                return [subject.name]
             if target is not None:
                 if target.role is not ExecutionObjectRole.CONTAINER:
                     raise ValueError("move target must be a container")

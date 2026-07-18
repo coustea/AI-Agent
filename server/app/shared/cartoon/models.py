@@ -361,13 +361,15 @@ class TeachingScene(_Model):
         for entity in self.entities:
             placement = placements[entity.id]
             if placement.container_id:
-                if placement.container_id not in containers or placement.slot is None:
-                    raise ValueError("execution placement must use a valid container slot")
+                if placement.container_id not in containers:
+                    raise ValueError("execution placement must use a valid container")
                 if not placement.visible:
                     raise ValueError("occupied execution object must be visible")
                 container = containers[placement.container_id]
                 # Stateless containers (capacity=0) do not enforce slot capacity
                 if container.capacity and container.capacity > 0:
+                    if placement.slot is None:
+                        raise ValueError("stateful execution container requires a slot")
                     if placement.slot >= container.capacity:
                         raise ValueError("execution object exceeds container capacity")
                     if execution_by_id[entity.id].role is not ExecutionObjectRole.POINTER:
@@ -375,6 +377,8 @@ class TeachingScene(_Model):
                         if key in occupied_slots:
                             raise ValueError("execution trace cannot place two objects in one slot")
                         occupied_slots.add(key)
+                elif placement.slot is not None:
+                    raise ValueError("stateless execution container cannot use a slot")
             if entity.kind is EntityKind.POINTER and placement.visible and not placement.anchor_id:
                 raise ValueError("visible execution pointer must attach to an object")
 

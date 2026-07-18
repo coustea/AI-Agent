@@ -664,10 +664,9 @@ TCP 三次握手的核心是同步双方序列号，确保连接双方都具备�
 {
   "graph_type": "sequence",
   "title": "TCP 三次握手",
-  "visual_content": {
-    "actors": ["客户端", "服务器"],
-    "messages": []
-  },
+  "teaching_goal": "理解三次握手的交互顺序",
+  "difficulty": "beginner",
+  "mermaid_source": "sequenceDiagram\n  participant C as 客户端\n  participant S as 服务端\n  C->>S: 发送 SYN\n  S-->>C: 返回 SYN + ACK\n  C->>S: 确认 ACK",
   "teaching_content": {
     "core_explanation": "三次握手用于确认双方收发能力。",
     "key_points": [],
@@ -712,7 +711,7 @@ TCP 三次握手的核心是同步双方序列号，确保连接双方都具备�
   "teaching_goal": "教学目标",
   "course": "课程名称，可选",
   "difficulty": "beginner|intermediate|advanced",
-  "visual_content": {},
+  "mermaid_source": "flowchart TB\n  N1[\"开始\"] --> N2[\"结束\"]",
   "teaching_content": {
     "core_explanation": "核心解释",
     "key_points": ["要点1", "要点2"],
@@ -723,7 +722,7 @@ TCP 三次握手的核心是同步双方序列号，确保连接双方都具备�
 }
 ```
 
-各 `graph_type` 的 `visual_content` 结构规范详见 teaching_diagram.md 参考附录。输出图解时必须严格遵循该附录中对应 graph_type 的结构定义。
+`mermaid_source` 必须是可直接渲染的 Mermaid 源码，具体图型、排版和安全规范详见 teaching_diagram.md。必须由你根据本轮教学内容生成，不能输出占位节点。
 
 ---
 
@@ -788,7 +787,7 @@ TCP 三次握手的核心是同步双方序列号，确保连接双方都具备�
   "title": "示例图解",
   "teaching_goal": "帮助学生理解流程",
   "difficulty": "beginner",
-  "visual_content": { /* 结构由 graph_type 决定，详见 teaching_diagram.md */ },
+  "mermaid_source": "flowchart TB\n  N1[\"输入\"] --> N2[\"处理\"] --> N3[\"输出\"]",
   "teaching_content": {
     "core_explanation": "核心解释",
     "key_points": [],

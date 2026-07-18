@@ -283,7 +283,7 @@
             type="button"
             :disabled="examReviewing"
             :aria-busy="examReviewing"
-            @click="$emit('request-submit-exam')"
+            @click="scrollToSidebarSubmit"
           >
             {{ examReviewing ? examPendingLabel() : '交卷' }}
           </button>
@@ -306,15 +306,6 @@
           <div v-else class="progress-display">
             <div class="progress-value">{{ examAnsweredCount }} / {{ examPaper.length }}</div>
             <div class="progress-label">已作答</div>
-          </div>
-
-          <div v-if="!examSubmitted && !examReviewing && examSubmitNoticeVisible && examUnansweredCount > 0" class="submit-inline-notice">
-            <strong>还有 {{ examUnansweredCount }} 道题未作答</strong>
-            <p>可以继续完成未答题目，或直接提交当前试卷。</p>
-            <div class="submit-inline-actions">
-              <button class="btn-secondary" type="button" @click="$emit('cancel-submit-exam')">继续作答</button>
-              <button class="btn-primary" type="button" @click="$emit('request-submit-exam')">仍然交卷</button>
-            </div>
           </div>
 
           <div class="grid-sheet">
@@ -358,6 +349,7 @@
 
           <button
             v-if="!examSubmitted"
+            ref="sidebarSubmitButton"
             class="btn-primary full-width sidebar-submit"
             type="button"
             :disabled="examReviewing"
@@ -372,10 +364,28 @@
         </div>
       </aside>
     </main>
+
+    <div
+      v-if="!examSubmitted && !examReviewing && examSubmitNoticeVisible && examUnansweredCount > 0"
+      class="submit-confirm-backdrop"
+      role="presentation"
+      @click.self="$emit('cancel-submit-exam')"
+    >
+      <section class="submit-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="submit-confirm-title">
+        <span class="submit-confirm-kicker">提交确认</span>
+        <h2 id="submit-confirm-title">还有 {{ examUnansweredCount }} 道题未作答</h2>
+        <p>可以返回继续完成，也可以直接提交当前试卷。未作答题目将按 0 分处理。</p>
+        <div class="submit-confirm-actions">
+          <button class="btn-secondary" type="button" @click="$emit('cancel-submit-exam')">继续作答</button>
+          <button class="btn-primary" type="button" @click="$emit('request-submit-exam')">仍然交卷</button>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { requiresAiReview } from '@/features/question-bank/model/grading'
 
 type AnswerValue = string | string[] | undefined
@@ -440,6 +450,16 @@ defineEmits<{
   (e: 'back-workspace'): void
   (e: 'open-analysis-review', questionId: string): void
 }>()
+
+const sidebarSubmitButton = ref<HTMLButtonElement | null>(null)
+
+function scrollToSidebarSubmit() {
+  const button = sidebarSubmitButton.value
+  if (!button) return
+
+  button.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' })
+  window.setTimeout(() => button.focus({ preventScroll: true }), 350)
+}
 
 // 难度等级对应 CSS 类名
 function difficultyClass(diff: string | null | undefined) {
@@ -1223,6 +1243,11 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   margin-top: 22px;
 }
 
+.sidebar-submit:focus {
+  outline: 3px solid rgba(66, 201, 154, 0.32);
+  outline-offset: 3px;
+}
+
 .sidebar-submit:disabled {
   opacity: 0.58;
   box-shadow: none;
@@ -1799,32 +1824,52 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   line-height: 1.7;
 }
 
-.submit-inline-notice {
-  margin-bottom: 18px;
-  padding: 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(245, 158, 11, 0.22);
-  background: rgba(254, 249, 195, 0.62);
+.submit-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.38);
+  backdrop-filter: blur(5px);
 }
 
-.submit-inline-notice strong {
-  display: block;
-  color: #92400e;
-  font-size: 13px;
-  font-weight: 800;
+.submit-confirm-dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 28px;
+  border: 1px solid rgba(226, 232, 240, 0.96);
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22);
 }
 
-.submit-inline-notice p {
-  margin: 6px 0 0;
-  color: #a16207;
-  font-size: 13px;
-  line-height: 1.6;
+.submit-confirm-kicker {
+  color: #d97706;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
 }
 
-.submit-inline-actions {
+.submit-confirm-dialog h2 {
+  margin: 8px 0 0;
+  color: #172033;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.submit-confirm-dialog p {
+  margin: 12px 0 0;
+  color: #64748b;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.submit-confirm-actions {
   display: flex;
+  justify-content: flex-end;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 24px;
 }
 
 .exam-report-grid {
@@ -1936,7 +1981,7 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
     min-width: 64px;
   }
 
-  .submit-inline-actions {
+  .submit-confirm-actions {
     flex-direction: column;
   }
 

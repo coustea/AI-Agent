@@ -231,8 +231,8 @@ class CartoonComposer:
             f"""<div id="entity-{scene_id}-{html.escape(entity.id)}"
                  class="visual-entity kind-{entity.kind.value} tone-{('primary', 'secondary', 'accent', 'warning')[index % 4]}"
                  data-entity-id="{html.escape(entity.id)}" data-kind="{entity.kind.value}">
-              <span class="entity-label">{html.escape(entity.label)}</span>
-              <span class="entity-value"></span>
+              <span class="entity-label" data-layout-allow-occlusion>{html.escape(entity.label)}</span>
+              <span class="entity-value" data-layout-allow-occlusion></span>
             </div>"""
             for index, entity in enumerate(scene.entities)
         )
@@ -280,7 +280,7 @@ class CartoonComposer:
         racks = "".join(
             f'''<div class="execution-container-shell" data-container-id="{html.escape(item.id)}"
                      style="--execution-capacity:{item.capacity}">
-                  <span class="execution-container-label">{html.escape(item.label)}</span>
+                  <span class="execution-container-label" data-layout-allow-occlusion>{html.escape(item.label)}</span>
                   <div class="execution-cells">{
                       "".join(
                           f'<div class="execution-cell" data-slot="{slot}"><span>{slot}</span></div>'
@@ -290,7 +290,7 @@ class CartoonComposer:
                 </div>'''
             for item in containers
         )
-        return f"""<div class="execution-stage" aria-hidden="true">
+        return f"""<div class="execution-stage" aria-hidden="true" data-layout-allow-occlusion>
               <div class="execution-dock execution-input-dock"><span>输入</span></div>
               <div class="execution-rack">{racks}</div>
               <div class="execution-dock execution-output-dock"><span>输出</span></div>
