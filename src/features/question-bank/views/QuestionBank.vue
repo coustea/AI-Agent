@@ -402,16 +402,6 @@
             </template>
           </section>
 
-          <section class="right-card summary-card">
-            <div>
-              <span>当前题库</span>
-              <strong>{{ overallTotalQuestions }}</strong>
-            </div>
-            <div>
-              <span>错题待复习</span>
-              <strong>{{ wrongTotal }}</strong>
-            </div>
-          </section>
         </aside>
       </section>
       <ExamTab
@@ -3542,34 +3532,6 @@ function scrollQuestionBankViewportToTop() {
   border-color: rgba(66, 201, 154, 0.42);
   background: linear-gradient(135deg, rgba(209, 250, 229, 0.72), rgba(239, 246, 255, 0.78));
   color: #136f60;
-}
-
-.summary-card {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-.summary-card div {
-  padding: 12px;
-  border: 1px solid rgba(226, 232, 240, 0.78);
-  border-radius: 12px;
-  background: rgba(248, 250, 252, 0.96);
-}
-
-.summary-card span {
-  display: block;
-  color: #8a94a7;
-  font-size: 11px;
-  font-weight: 800;
-}
-
-.summary-card strong {
-  display: block;
-  margin-top: 4px;
-  color: #172033;
-  font-size: 22px;
-  font-weight: 900;
 }
 
 .get-question-btn {
