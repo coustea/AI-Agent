@@ -212,7 +212,7 @@ class SlideBrief(PPTModel):
     teaching_goal: str = Field(min_length=1)
     content_focus: str = Field(min_length=1)
     chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
-    logic_node_ids: list[str] = Field(default_factory=list, max_length=5)
+    logic_node_ids: list[str] = Field(default_factory=list, max_length=8)
     question: str = ""
     claim: str = ""
     bridge: str = ""
@@ -288,7 +288,7 @@ class PPTSlide(PPTModel):
     title: str = Field(min_length=1)
     subtitle: str = ""
     chapter_id: str | None = Field(default=None, pattern=r"^c[0-9]{2}$")
-    logic_node_ids: list[str] = Field(default_factory=list, max_length=5)
+    logic_node_ids: list[str] = Field(default_factory=list, max_length=8)
     question: str = ""
     claim: str = ""
     bridge: str = ""

@@ -312,7 +312,7 @@ CREATE TABLE IF NOT EXISTS learning_assessments (
     id                 SERIAL PRIMARY KEY,
     user_id            INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     trigger_source     VARCHAR(20) NOT NULL CHECK (trigger_source IN ('profile_update', 'manual')),
-    range_days         SMALLINT NOT NULL CHECK (range_days IN (3, 7, 14)),
+    range_days         SMALLINT NOT NULL DEFAULT 7,
     window_start       TIMESTAMPTZ NOT NULL,
     window_end         TIMESTAMPTZ NOT NULL,
     status             VARCHAR(16) NOT NULL CHECK (status IN ('generating', 'ready', 'failed')),
@@ -343,10 +343,19 @@ END $$;
 COMMENT ON TABLE learning_assessments IS '学习评估表，画像更新或手动触发时生成';
 COMMENT ON COLUMN learning_assessments.user_id IS '用户ID';
 COMMENT ON COLUMN learning_assessments.trigger_source IS '触发来源: profile_update / manual';
-COMMENT ON COLUMN learning_assessments.range_days IS '评估时间范围天数 (3, 7, 14)';
+COMMENT ON COLUMN learning_assessments.range_days IS '评估时间范围天数，默认 7';
 COMMENT ON COLUMN learning_assessments.window_start IS '评估时间窗口起点';
 COMMENT ON COLUMN learning_assessments.window_end IS '评估时间窗口终点';
 COMMENT ON COLUMN learning_assessments.status IS '评估生成状态：generating, ready, failed';
+
+-- 迁移：移除 range_days 的 IN (3,7,14) 约束，改为默认 7
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_assessments_range_days') THEN
+        ALTER TABLE learning_assessments DROP CONSTRAINT chk_assessments_range_days;
+        ALTER TABLE learning_assessments ALTER COLUMN range_days SET DEFAULT 7;
+    END IF;
+END $$;
 COMMENT ON COLUMN learning_assessments.assessment IS 'LLM 生成的学习评估文案';
 COMMENT ON COLUMN learning_assessments.failure_code IS '错误码，当 status = failed 时记录';
 

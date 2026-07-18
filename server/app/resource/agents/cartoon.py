@@ -47,15 +47,40 @@ class CartoonAgent(BaseResourceAgent):
             brief = self._brief(input_data)
             username = self._safe_username(input_data.username or input_data.user_id)
             resource_key = str(input_data.resource_id) if input_data.resource_id is not None else uuid4().hex
-            artifact = await self._pipeline.generate(
-                brief,
-                user_resource_cartoon_dir(username, resource_key),
+            output_dir = user_resource_cartoon_dir(username, resource_key)
+            logger.info(
+                "[CartoonAgent] 开始生成: learning_need=%s voice=%s depth=%s output_dir=%s",
+                brief.learning_need[:80],
+                brief.configuration.voice,
+                brief.configuration.lesson_depth.value,
+                output_dir,
+            )
+            artifact = await self._pipeline.generate(brief, output_dir)
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            logger.info(
+                "[CartoonAgent] 生成成功: title=%s duration_ms=%d scene_count=%d elapsed_ms=%d",
+                artifact.title,
+                artifact.duration_ms,
+                artifact.scene_count,
+                elapsed_ms,
             )
             return self._result(artifact, started)
         except CartoonGenerationError as exc:
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            logger.error(
+                "[CartoonAgent] 生成失败: stage=%s problems=%s elapsed_ms=%d",
+                exc.stage,
+                exc.problems,
+                elapsed_ms,
+            )
             return self._failure(input_data.learning_need, exc, started)
         except Exception as exc:
-            logger.exception("Resource cartoon generation failed")
+            elapsed_ms = round((time.perf_counter() - started) * 1000)
+            logger.exception(
+                "[CartoonAgent] 生成异常: elapsed_ms=%d error=%s",
+                elapsed_ms,
+                exc,
+            )
             wrapped = CartoonGenerationError(
                 f"动画资源生成异常: {exc}",
                 stage="resource-adapter",

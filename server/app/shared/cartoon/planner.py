@@ -52,9 +52,9 @@ class _Profile:
 
 def _profile(brief: CartoonBrief) -> _Profile:
     return {
-        LessonDepth.FOCUSED: _Profile(5, 3, 10, "聚焦讲解"),
-        LessonDepth.STANDARD: _Profile(5, 3, 10, "标准讲解"),
-        LessonDepth.DEEP: _Profile(6, 4, 10, "深入讲解"),
+        LessonDepth.FOCUSED: _Profile(4, 2, 10, "聚焦讲解"),
+        LessonDepth.STANDARD: _Profile(4, 3, 10, "标准讲解"),
+        LessonDepth.DEEP: _Profile(5, 3, 10, "深入讲解"),
     }[brief.configuration.lesson_depth]
 
 
@@ -104,7 +104,7 @@ class _StoryboardSceneDraft(_Draft):
 
 class _StoryboardDraft(_Draft):
     title: str = Field(min_length=1)
-    scenes: list[_StoryboardSceneDraft] = Field(min_length=5, max_length=6)
+    scenes: list[_StoryboardSceneDraft] = Field(min_length=3, max_length=6)
 
     @field_validator("title")
     @classmethod
@@ -117,9 +117,9 @@ class _StoryboardDraft(_Draft):
     @model_validator(mode="after")
     def validate_arc(self) -> "_StoryboardDraft":
         grammars = {scene.grammar for scene in self.scenes}
-        required = {VisualGrammar.CONCEPT, VisualGrammar.MODEL, VisualGrammar.TRACE, VisualGrammar.EVIDENCE}
-        if not required <= grammars:
-            raise ValueError("storyboard must use concept, model, trace, and evidence grammars")
+        # At least 3 distinct grammars; 4-scene lessons may not cover all four
+        if len(grammars) < 3:
+            raise ValueError("storyboard must use at least three distinct grammars")
         if self.scenes[0].grammar != VisualGrammar.CONCEPT:
             raise ValueError("storyboard must begin with a concept scene")
         if self.scenes[-1].grammar not in {VisualGrammar.CONCEPT, VisualGrammar.MODEL}:
@@ -169,7 +169,7 @@ class _EntityDraft(_Draft):
 
 class _SceneDraft(_Draft):
     entities: list[_EntityDraft] = Field(min_length=2, max_length=10)
-    beats: list[_BeatDraft] = Field(min_length=3, max_length=4)
+    beats: list[_BeatDraft] = Field(min_length=1, max_length=5)
 
     @field_validator("entities")
     @classmethod
@@ -290,13 +290,22 @@ class CartoonPlanner:
             temperature=0.1,
         )
         storyboard = response if isinstance(response, _StoryboardDraft) else _StoryboardDraft.model_validate(response)
-        if len(storyboard.scenes) != profile.scene_count:
+        scene_count = len(storyboard.scenes)
+        if not (profile.scene_count - 1 <= scene_count <= profile.scene_count + 1):
             logger.error(
-                "[CartoonPlanner] 分镜场景数不匹配: expected=%s got=%s",
+                "[CartoonPlanner] 分镜场景数偏差过大: expected=%s got=%s",
                 profile.scene_count,
-                len(storyboard.scenes),
+                scene_count,
             )
-            raise CartoonPlanningError(f"storyboard requires exactly {profile.scene_count} scenes")
+            raise CartoonPlanningError(
+                f"storyboard scene count {scene_count} too far from target {profile.scene_count}"
+            )
+        if scene_count != profile.scene_count:
+            logger.warning(
+                "[CartoonPlanner] 分镜场景数微调: expected=%s got=%s (继续执行)",
+                profile.scene_count,
+                scene_count,
+            )
         logger.info(
             "[CartoonPlanner] 分镜生成成功: title=%s scenes=%s",
             storyboard.title,
@@ -320,6 +329,7 @@ class CartoonPlanner:
             outline.title,
             outline.grammar.value,
         )
+        t0 = asyncio.get_event_loop().time()
         prompt = self._prompts["scene_compose.md"].render(
             {
                 "grammar": outline.grammar.value,
@@ -354,24 +364,27 @@ class CartoonPlanner:
                     value, grammar=outline.grammar, profile=profile
                 ),
             )
+        scene_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
         if outline.grammar is VisualGrammar.TRACE:
             draft = response if isinstance(response, ExecutionSceneDraft) else ExecutionSceneDraft.model_validate(response)
             self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
             logger.info(
-                "[CartoonPlanner] 场景 %d (trace) 生成完成: objects=%s beats=%s",
+                "[CartoonPlanner] 场景 %d (trace) 生成完成: objects=%s beats=%s elapsed_ms=%d",
                 scene_index,
                 len(draft.objects),
                 len(draft.beats),
+                scene_ms,
             )
             return self._materialize_execution_scene(outline, draft, scene_index)
         draft = response if isinstance(response, _SceneDraft) else _SceneDraft.model_validate(response)
         self._validate_scene_draft(draft, grammar=outline.grammar, profile=profile)
         logger.info(
-            "[CartoonPlanner] 场景 %d (%s) 生成完成: entities=%s beats=%s",
+            "[CartoonPlanner] 场景 %d (%s) 生成完成: entities=%s beats=%s elapsed_ms=%d",
             scene_index,
             outline.grammar.value,
             len(draft.entities),
             len(draft.beats),
+            scene_ms,
         )
         return self._materialize_scene(outline, draft, scene_index)
 
@@ -386,8 +399,11 @@ class CartoonPlanner:
         if grammar is VisualGrammar.TRACE:
             if not isinstance(value, ExecutionSceneDraft):
                 raise ValueError("trace payload must validate as ExecutionSceneDraft")
-            if len(value.beats) != profile.beats_per_scene:
-                raise ValueError(f"trace scene requires exactly {profile.beats_per_scene} beats")
+            beat_count = len(value.beats)
+            if not (profile.beats_per_scene - 1 <= beat_count <= profile.beats_per_scene + 1):
+                raise ValueError(
+                    f"trace scene beat count {beat_count} too far from target {profile.beats_per_scene}"
+                )
             if len(value.objects) > profile.entity_limit:
                 raise ValueError(f"trace scene exceeds object capacity {profile.entity_limit}")
             ExecutionCompiler.compile(value, scene_id="validation-scene")
@@ -396,8 +412,11 @@ class CartoonPlanner:
             raise ValueError("scene payload must validate as _SceneDraft")
         if len(value.entities) > profile.entity_limit:
             raise ValueError(f"scene exceeds entity capacity {profile.entity_limit}")
-        if len(value.beats) != profile.beats_per_scene:
-            raise ValueError(f"scene requires exactly {profile.beats_per_scene} beats")
+        beat_count = len(value.beats)
+        if not (profile.beats_per_scene - 1 <= beat_count <= profile.beats_per_scene + 1):
+            raise ValueError(
+                f"scene beat count {beat_count} too far from target {profile.beats_per_scene}"
+            )
 
     @staticmethod
     def _scene_contract(grammar: VisualGrammar) -> str:
@@ -422,10 +441,16 @@ class CartoonPlanner:
 ```json
 {
   "entities":[{"label":"稳定对象名称","detail":"对象的实际公式、值或条件"}],
-  "beats":[{"narration":"解释当前变化","visual":"画面上可见的知识表达","action":"reveal","targets":["稳定对象名称"]}]
+  "beats":[{"narration":"解释当前变化的原因和结果","visual":"画面上可见的具体知识表达","action":"reveal","targets":["稳定对象名称"]}]
 }
 ```
-不得输出 states、placements、relations、实体 ID、位置、容器、区域、颜色、样式或焦点字段。`targets` 必须精确引用已有实体。旁白不设字符上限；`visual` 必须是可静音理解的真实知识，不能只是“更新”或“执行”。"""
+规则：
+- 不得输出 states、placements、relations、实体 ID、位置、容器、区域、颜色、样式或焦点字段
+- `targets` 必须精确引用已有实体的 label
+- `narration` 控制在 80 字以内，解释因果而非罗列步骤
+- `visual` 必须包含具体公式、数值或结论，不能只是"更新"或"执行"
+- `action` 只能是：reveal（首次显示）、move（位置变化）、insert（加入新元素）、remove（移除元素）、update（值或状态更新）、connect（建立关联）、disconnect（解除关联）、execute（执行操作）、compare（对比）
+- 每个 beat 只推进一个可观察的变化，不要把多个步骤压缩在一个 beat 中"""
 
     @classmethod
     def _materialize_execution_scene(
@@ -694,12 +719,13 @@ class CartoonPlanner:
         temperature: float,
         validator: Callable[[BaseModel], None] | None = None,
     ) -> Any:
-        logger.debug(
-            "[CartoonPlanner] LLM 调用: schema=%s temperature=%.2f messages=%d",
+        logger.info(
+            "[CartoonPlanner] LLM 调用开始: schema=%s temperature=%.2f messages=%d",
             schema.__name__,
             temperature,
             len(messages),
         )
+        t0 = asyncio.get_event_loop().time()
         try:
             result = await get_llm().ainvoke_json(
                 schema,
@@ -707,12 +733,19 @@ class CartoonPlanner:
                 temperature=temperature,
                 validator=validator,
             )
-            logger.debug("[CartoonPlanner] LLM 返回: schema=%s", schema.__name__)
+            elapsed_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
+            logger.info(
+                "[CartoonPlanner] LLM 调用成功: schema=%s elapsed_ms=%d",
+                schema.__name__,
+                elapsed_ms,
+            )
             return result
         except Exception as exc:
+            elapsed_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
             logger.error(
-                "[CartoonPlanner] LLM 调用失败: schema=%s error=%s",
+                "[CartoonPlanner] LLM 调用失败: schema=%s elapsed_ms=%d error=%s",
                 schema.__name__,
+                elapsed_ms,
                 exc,
             )
             raise

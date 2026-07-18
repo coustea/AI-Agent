@@ -18,7 +18,6 @@ function makeEvent(
   return {
     id: 'event-1',
     step: 1,
-    domain: 'test',
     visualizerType,
     type: 'snapshot',
     state: { structure },

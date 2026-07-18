@@ -45,8 +45,10 @@ export function useAlgorithmRun() {
       }
     } catch (err: unknown) {
       const msg = getErrorMessage(err, '运行失败，请检查后端服务状态。')
+      // Extract errorType from backend response data if available
+      const responseData = (err as { response?: { data?: { data?: { errorType?: string } } } })?.response?.data?.data
       runError.value = {
-        errorType: 'RUNTIME_ERROR',
+        errorType: (responseData?.errorType as RunError['errorType']) || 'RUNTIME_ERROR',
         message: msg,
       }
     } finally {

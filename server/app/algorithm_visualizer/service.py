@@ -44,19 +44,19 @@ def run_official_visualization(
     try:
         spec = get_template_spec(algorithm)
     except TemplateNotFoundError as exc:
-        raise VisualizerRunError(str(exc), "TEMPLATE_NOT_FOUND") from exc
+        raise VisualizerRunError(str(exc), "MISSING_ALGORITHM") from exc
 
     # Validate input against the registered input_model.
     try:
         validated = spec.input_model.model_validate(input_data)
         input_data = validated.model_dump(mode="json")
     except Exception as exc:
-        raise VisualizerRunError(str(exc), "INVALID_TEMPLATE_INPUT") from exc
+        raise VisualizerRunError(str(exc), "INPUT_INVALID") from exc
 
     try:
         _validate_runtime_limits(spec.key, input_data)
     except InputValidationError as exc:
-        raise VisualizerRunError(str(exc), "INVALID_TEMPLATE_INPUT") from exc
+        raise VisualizerRunError(str(exc), "INPUT_INVALID") from exc
 
     try:
         execution = execute_official_template(spec, input_data)
@@ -67,7 +67,7 @@ def run_official_visualization(
             source_line_count=len(spec.source_code.splitlines()),
         )
     except (OfficialRuntimeError, InvalidTraceError, TypeError, ValueError) as exc:
-        raise VisualizerRunError(str(exc), "OFFICIAL_RUNTIME_ERROR") from exc
+        raise VisualizerRunError(str(exc), "RUNTIME_ERROR") from exc
 
     return {
         "domain": spec.domain,

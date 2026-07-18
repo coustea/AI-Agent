@@ -257,7 +257,7 @@ class TeachingScene(_Model):
     execution_program: ExecutionProgram | None = None
     entities: list[VisualEntity] = Field(min_length=2, max_length=16)
     states: list[VisualState] = Field(min_length=2, max_length=8)
-    beats: list[TeachingBeat] = Field(min_length=1, max_length=6)
+    beats: list[TeachingBeat] = Field(min_length=1, max_length=5)
 
     @model_validator(mode="after")
     def validate_scene_contract(self) -> "TeachingScene":
@@ -434,12 +434,12 @@ class TeachingScene(_Model):
 
 class Lesson(_Model):
     title: str = Field(min_length=1)
-    scenes: list[TeachingScene] = Field(min_length=5, max_length=6)
+    scenes: list[TeachingScene] = Field(min_length=3, max_length=6)
 
     @model_validator(mode="after")
     def validate_contract(self) -> "Lesson":
-        if len({scene.grammar for scene in self.scenes}) < 3:
-            raise ValueError("lesson requires at least three visual grammars")
+        if len({scene.grammar for scene in self.scenes}) < 2:
+            raise ValueError("lesson requires at least two visual grammars")
         scene_ids = [scene.id for scene in self.scenes]
         if len(scene_ids) != len(set(scene_ids)):
             raise ValueError("lesson contains duplicate scene ids")
@@ -510,14 +510,14 @@ class CartoonBundle(_Model):
     html_path: Path
     scene_data_path: Path
     caption_path: Path
-    scene_paths: list[Path] = Field(min_length=5, max_length=6)
+    scene_paths: list[Path] = Field(min_length=3, max_length=6)
 
 
 class CartoonArtifact(_Model):
     schema_version: Literal["cartoon/artifact-v8"] = "cartoon/artifact-v8"
     title: str
     duration_ms: int = Field(gt=0)
-    scene_count: int = Field(ge=5, le=6)
+    scene_count: int = Field(ge=3, le=6)
     has_audio: Literal[True] = True
     output_dir: Path
     html_path: Path
@@ -538,7 +538,7 @@ class CartoonResourceMetadata(_Model):
     preview_url: str = Field(min_length=1)
     captions_url: str = Field(min_length=1)
     duration_seconds: float = Field(gt=0)
-    scene_count: int = Field(ge=5, le=6)
+    scene_count: int = Field(ge=3, le=6)
 
     @model_validator(mode="after")
     def validate_urls(self) -> "CartoonResourceMetadata":

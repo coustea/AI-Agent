@@ -14,7 +14,6 @@ export type CodeLanguage = 'python'
 export interface TraceEvent {
   id: string
   step: number
-  domain: string
   visualizerType: VisualizerType
   type: string
   line?: number
@@ -137,27 +136,17 @@ export interface RunResult {
 // 运行错误 (来自 POST /run 失败)
 export interface RunError {
   errorType:
-    | 'MISSING_LANGUAGE'
     | 'MISSING_ALGORITHM'
     | 'MISSING_CODE'
-    | 'UNSUPPORTED_ALGORITHM'
     | 'UNSUPPORTED_LANGUAGE'
-    | 'VISUALIZER_TYPE_MISMATCH'
     | 'RUNTIME_ERROR'
-    | 'TIMEOUT'
-    | 'TRACE_FILE_MISSING'
-    | 'TRACE_JSON_INVALID'
-    | 'TRACE_EVENT_EMPTY'
-    | 'TRACE_EVENT_INVALID'
-    | 'TRACE_VISUALIZER_TYPE_INVALID'
-    | 'TRACER_SDK_MISSING'
-    | 'INSTRUMENTATION_FAILED'
     | 'CUSTOM_VISUALIZATION_ERROR'
     | 'CODE_TOO_LARGE'
     | 'MISSING_VISUALIZER_TYPE'
     | 'VISUALIZER_RUN_ERROR'
     | 'INPUT_INVALID'
     | 'CUSTOM_CONTRACT_INVALID'
+    | 'TRACE_EVENT_EMPTY'
   message: string
   details?: string
 }

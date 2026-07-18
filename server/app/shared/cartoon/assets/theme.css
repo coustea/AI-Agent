@@ -1,8 +1,8 @@
 :root {
   --paper: #f7f6f2;
   --ink: #15191d;
-  --muted: #59636c;
-  --line: #aeb8be;
+  --muted: #4a555e;
+  --line: #7b868d;
   /* Text and vector colors keep a material margin above WCAG AA after
      browser rasterisation. Decorative light colors never double as ink. */
   --teal: #006b63;

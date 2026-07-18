@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import html
 import json
 import shutil
@@ -40,11 +41,13 @@ class CartoonComposer:
             len(timeline.beats),
             timeline.duration_ms,
         )
+        t0 = asyncio.get_event_loop().time()
         output_dir.mkdir(parents=True, exist_ok=True)
         assets_dir = output_dir / "assets"
         assets_dir.mkdir(exist_ok=True)
         shutil.copy2(_ASSET_DIR / "runtime.js", assets_dir / "runtime.js")
         shutil.copy2(_ASSET_DIR / "theme.css", assets_dir / "theme.css")
+        logger.info("[CartoonComposer] 静态资源已复制: runtime.js + theme.css")
 
         scene_data_path = output_dir / "scene-data.json"
         caption_path = output_dir / "captions.vtt"
@@ -60,6 +63,7 @@ class CartoonComposer:
         ]
         for index, (scene, path) in enumerate(zip(lesson.scenes, scene_paths, strict=True), start=1):
             path.write_text(self._scene_document(index, scene), encoding="utf-8")
+            logger.debug("[CartoonComposer] 场景文件已写入: %s size=%d", path.name, path.stat().st_size)
         scene_data_path.write_text(
             json.dumps(payload, ensure_ascii=False, indent=2),
             encoding="utf-8",
@@ -69,11 +73,15 @@ class CartoonComposer:
             self._html(lesson, timeline, payload, scene_windows),
             encoding="utf-8",
         )
+        compose_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
+        html_size = html_path.stat().st_size
         logger.info(
-            "[CartoonComposer] 合成完成: html=%s scenes=%d captions=%d",
+            "[CartoonComposer] 合成完成: html=%s scenes=%d captions=%d html_size=%d elapsed_ms=%d",
             html_path.name,
             len(scene_paths),
             len(timeline.captions),
+            html_size,
+            compose_ms,
         )
         return CartoonBundle(
             output_dir=output_dir,

@@ -2,8 +2,8 @@
   <div class="phase-view omni-input-view">
     <div class="omni-container">
       <div class="omni-hero-header">
-        <h1 class="hero-title">AI 学习资源引擎</h1>
-        <p class="hero-subtitle">输入你的学习目标，自动构建专属的知识图谱、测试与课件</p>
+        <h1 class="hero-title">多智能体学习资源引擎</h1>
+        <p class="hero-subtitle">7 个专业智能体协作，依据你的学习需求生成多模态个性化资料</p>
       </div>
 
       <form
@@ -15,7 +15,7 @@
         <textarea
           :value="text"
           rows="2"
-          placeholder="输入学习需求，唤醒多智能体..."
+          placeholder="描述专业、课程、知识短板或学习需求，多智能体协作生成..."
           class="omni-textarea w-full px-4 py-3 outline-none resize-none border-none bg-transparent"
           @input="onInput"
           @focus="isInputFocused = true"
@@ -29,7 +29,7 @@
             回车键进入参数配置 ⏎
           </span>
           <span class="omni-hint" v-else>
-            描述考研、期末、或任意技术栈...
+            描述专业、课程、知识短板...
           </span>
           <button class="omni-submit-btn btn btn-primary"
             native-type="submit"
@@ -42,25 +42,25 @@
       </form>
 
       <div class="omni-inspiration-grid">
-        <div class="inspiration-card" @click="fillExample('复习《计算机网络》TCP三次握手，请多出几道难题')">
+        <div class="inspiration-card" @click="fillExample('计算机网络专业，学习《计算机网络》课程，TCP/IP协议栈掌握不牢，需要课程讲解文档、思维导图和练习题')">
           <div class="ins-icon" style="background: var(--cat-resource-soft); color: var(--cat-resource);"><StarFilledIcon class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
-            <h4>深度复习</h4>
-            <p>复习《计算机网络》TCP三次握手...</p>
+            <h4>计算机网络</h4>
+            <p>TCP/IP协议栈知识薄弱，多智能体协作生成讲解文档、思维导图与练习题</p>
           </div>
         </div>
-        <div class="inspiration-card" @click="fillExample('零基础学习 Python 多线程，需要底层原理 and 代码')">
+        <div class="inspiration-card" @click="fillExample('计算机科学专业，学习《操作系统》课程，进程同步与死锁理解困难，需要底层原理讲解、代码实操和动画视频')">
           <div class="ins-icon" style="background: #F0FDF4; color: #22C55E;"><CpuIcon class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
-            <h4>零基础入门</h4>
-            <p>零基础学习 Python 多线程原理...</p>
+            <h4>操作系统</h4>
+            <p>进程同步与死锁理解困难，多模态资料全方位辅助学习</p>
           </div>
         </div>
-        <div class="inspiration-card" @click="fillExample('考研冲刺《数据结构》二叉树，帮我精简思维导图，重点标注高频考点')">
+        <div class="inspiration-card" @click="fillExample('软件工程专业，学习《数据结构》课程，二叉树与图论是知识短板，考研冲刺需要讲解文档、思维导图、练习题和拓展阅读')">
           <div class="ins-icon" style="background: #FEF2F2; color: #EF4444;"><OdometerIcon class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
-            <h4>考研冲刺</h4>
-            <p>《数据结构》二叉树，精简思维导图...</p>
+            <h4>数据结构</h4>
+            <p>二叉树与图论知识短板，5+智能体协作生成针对性考研资料</p>
           </div>
         </div>
       </div>
