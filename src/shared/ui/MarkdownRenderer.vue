@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // Markdown 渲染器：通过 Worker 异步渲染 markdown，支持流式更新、主题切换和代码复制
 
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import {
   escapeHtml,
   renderMarkdown,
   type MarkdownTheme,
 } from '@/shared/markdown/markdown'
+import { appendStreamingCaret } from '@/shared/markdown/streamingCaret'
 
 const props = withDefaults(defineProps<{
   content?: string
@@ -18,6 +19,9 @@ const props = withDefaults(defineProps<{
 })
 
 const renderedHtml = ref('')
+const displayedHtml = computed(() => (
+  props.streaming ? appendStreamingCaret(renderedHtml.value) : renderedHtml.value
+))
 const degraded = ref(false)
 const theme = ref<MarkdownTheme>('light')
 const copyTimers = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
@@ -185,7 +189,6 @@ onBeforeUnmount(() => {
     :data-degraded="degraded ? 'true' : 'false'"
     @click="handleClick"
   >
-    <div class="model-content" v-html="renderedHtml" />
-    <span v-if="streaming" class="markdown-stream-caret" aria-hidden="true" />
+    <div class="model-content" v-html="displayedHtml" />
   </div>
 </template>

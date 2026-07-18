@@ -37,7 +37,7 @@ const props = defineProps<{
   text-rendering: optimizeLegibility;
 }
 
-.stream-markdown :deep(.stream-caret) {
+.stream-markdown :deep(.markdown-stream-caret) {
   display: inline-block;
   width: 2px;
   height: 1.05em;
@@ -249,7 +249,7 @@ const props = defineProps<{
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .stream-markdown :deep(.stream-caret) {
+  .stream-markdown :deep(.markdown-stream-caret) {
     animation: none;
   }
 }
