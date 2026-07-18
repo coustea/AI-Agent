@@ -301,6 +301,7 @@
                     :examSubmitted="examSubmitted"
                     :examReviewing="examReviewing"
                     :examSubmitNoticeVisible="examSubmitNoticeVisible"
+                    :examExitNoticeVisible="examExitNoticeVisible"
                     :currentExamIndex="currentExamIndex"
                     :formattedExamTime="formattedExamTime"
                     :examAnsweredCount="examAnsweredCount"
@@ -422,6 +423,7 @@
         :examSubmitted="examSubmitted"
         :examReviewing="examReviewing"
         :examSubmitNoticeVisible="examSubmitNoticeVisible"
+        :examExitNoticeVisible="examExitNoticeVisible"
         :currentExamIndex="currentExamIndex"
         :formattedExamTime="formattedExamTime"
         :examAnsweredCount="examAnsweredCount"
@@ -436,6 +438,8 @@
         @cancel-submit-exam="cancelSubmitExam"
         @scroll-to-question="scrollToQuestion"
         @exit-exam="handleExamExit"
+        @confirm-exit-exam="confirmExamExit"
+        @cancel-exit-exam="cancelExamExit"
         @back-workspace="backWorkspace"
         @open-analysis-review="openAnalysisReview"
       />
@@ -500,6 +504,7 @@ import {
   requiresAiReview,
   tryRuleGrade,
 } from '@/features/question-bank/model/grading'
+import { renderQuestionMarkdown } from '@/features/question-bank/model/questionText'
 
 type ViewMode = 'workspace' | 'exam' | 'analysis-review'
 type ModuleKey = 'portal' | 'daily' | 'search' | 'paper' | 'wrong' | 'history'
@@ -661,6 +666,7 @@ const examReview = ref<Record<string, QuizReviewResult | null>>({})
 const examSubmitted = ref(false)
 const examReviewing = ref(false)
 const examSubmitNoticeVisible = ref(false)
+const examExitNoticeVisible = ref(false)
 const currentExamIndex = ref(-1)
 const examTime = ref(0)
 const examCorrectCount = ref(0)
@@ -1584,6 +1590,7 @@ function startExam(paper: Question[], title: string) {
   examSubmitted.value = false
   examReviewing.value = false
   examSubmitNoticeVisible.value = false
+  examExitNoticeVisible.value = false
   examCorrectCount.value = 0
   currentExamIndex.value = -1
   activeAnalysisQuestionId.value = null
@@ -1612,7 +1619,7 @@ function stopExamTimer() {
   }
 }
 
-// 处理退出考试（已提交直接返回，未提交弹出确认）
+// 处理退出考试（已提交直接返回，未提交显示站内确认弹窗）
 function handleExamExit() {
   if (examReviewing.value) return
 
@@ -1621,9 +1628,17 @@ function handleExamExit() {
     return
   }
 
-  if (window.confirm('当前试卷尚未提交，退出考试会丢失本次作答进度，确定退出吗？')) {
-    backWorkspace()
-  }
+  examSubmitNoticeVisible.value = false
+  examExitNoticeVisible.value = true
+}
+
+function cancelExamExit() {
+  examExitNoticeVisible.value = false
+}
+
+function confirmExamExit() {
+  examExitNoticeVisible.value = false
+  backWorkspace()
 }
 
 // 请求交卷（先显示未答提示，确认后提交）
@@ -1924,6 +1939,8 @@ function showNextAnalysisReview() {
 function backWorkspace() {
   stopExamTimer()
   examReviewing.value = false
+  examSubmitNoticeVisible.value = false
+  examExitNoticeVisible.value = false
   activeAnalysisQuestionId.value = null
   viewMode.value = 'workspace'
   activeModule.value = 'daily'
@@ -2256,16 +2273,7 @@ function formatDuration(sec: number) {
 }
 
 function renderInline(text: string) {
-  if (!text) return ''
-  return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
-      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br>')
+  return renderQuestionMarkdown(text)
 }
 
 function formatDateKey(date: Date) {
@@ -3642,6 +3650,32 @@ function scrollQuestionBankViewportToTop() {
   color: #0f766e;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 0.92em;
+}
+
+:deep(.question-inline-code) {
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+}
+
+:deep(.question-code-block) {
+  display: block;
+  max-width: 100%;
+  margin: 12px 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 1px solid rgba(203, 213, 225, 0.9);
+  border-radius: 10px;
+  background: #f8fafc;
+  box-sizing: border-box;
+  white-space: pre;
+}
+
+:deep(.question-code-block code) {
+  padding: 0;
+  background: transparent;
+  color: #0f172a;
+  line-height: 1.65;
+  white-space: pre;
 }
 
 @media (max-width: 1240px) {

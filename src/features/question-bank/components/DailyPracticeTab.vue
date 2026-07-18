@@ -131,6 +131,7 @@
 
 <script setup lang="ts">
 import { pendingAnswerLabel, pendingAnswerMessage } from '@/features/question-bank/model/grading'
+import { renderQuestionMarkdown } from '@/features/question-bank/model/questionText'
 
 // 每日练习题目类型
 interface DailyQuestion {
@@ -229,16 +230,7 @@ function subjectiveScoreText(question: DailyQuestion) {
 }
 
 function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
+  return renderQuestionMarkdown(text)
 }
 </script>
 

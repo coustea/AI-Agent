@@ -217,6 +217,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { renderQuestionMarkdown } from '@/features/question-bank/model/questionText'
 
 type AnswerValue = string | string[] | undefined
 
@@ -337,16 +338,7 @@ function formatUserAnswer(answer: AnswerValue) {
 
 // 将纯文本中的 markdown 标记渲染为 HTML
 function renderInline(text: string) {
-  if (!text) return ''
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
+  return renderQuestionMarkdown(text)
 }
 </script>
 
