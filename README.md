@@ -99,6 +99,7 @@
 | **Ollama + bge-m3** | 用于混合检索（RAG）向量嵌入服务 | `config.yaml` -> `knowledge` |
 | **NVIDIA GPU + NVENC** | GPU 硬件加速动画视频编码（无则自动回退至 CPU 软件编码） | 系统自动检测 |
 
+
 ---
 
 ## 快速开始
@@ -370,7 +371,7 @@ uv run pytest -x
 | **后台服务启动报错 `asyncpg` 错误** | 确认 PostgreSQL 处于运行状态，并在 [server/config.yaml](file:///Users/apple/Code/software/server/config.yaml) 中核对 `database.url` 的用户名、密码及端口号；核对是否导入了 `init_schema.sql` 中的表结构。 |
 | **前端请求接口提示 500 / 跨域** | 检查 Vite 本地服务器的代理端口。`vite.config.ts` 中的 proxy 默认会将 `/api` 代理至 `http://127.0.0.1:9999`。若后端启动了其他端口，请修改 `VITE_API_PROXY_TARGET` 环境变量。 |
 | **聊天或资源生成进度假死/无反应** | 大模型调用超时导致。请检查国内大模型代理服务的网络联通性，并在 `config.yaml` 对应大模型下调大 `timeout` 限制或增加 `max_retries` 重试。 |
-| **视频/动画生成卡在 `rendering` 状态** | 确认系统里已全局安装了 `ffmpeg` 及 `ffprobe` 工具，且版本不低于 4.0；确认已在根目录执行过 `npm install` 完整下载了 HyperFrames 和 Puppeteer 所需的 Chromium 无头浏览器依赖。 |
+| **视频/动画生成卡在 `rendering` 状态** | 确认系统里已全局安装了 `ffmpeg` 及 `ffprobe` 工具，且版本不低于 4.0；确认已在 `server` 目录执行过 `npm ci` 完整下载了 HyperFrames 和无头浏览器依赖。各个操作系统的详细动画渲染配置步骤请参阅 `server/README.md`。 |
 | **大模型回答无法生成公式与图表** | 检查大模型输出流的格式。TutorAgent 依赖 Prompt 约束生成标准的 LaTeX (`$...$` 与 `$$...$$`) 及 Mermaid 代码块。可在 `server/app/infra/prompts/` 下微调提示词规范。 |
 
 ---

@@ -117,6 +117,11 @@ sudo apt install -y build-essential python3-dev libpq-dev libffi-dev libssl-dev 
 brew install ffmpeg pkg-config
 ```
 
+**Windows (winget):**
+```powershell
+winget install Gyan.FFmpeg
+```
+
 ### 2. 安装 Python 3.13 与 uv
 
 **Ubuntu:**
@@ -149,13 +154,29 @@ sudo apt install -y nodejs
 brew install node@22
 ```
 
-### 4. 安装项目依赖并预备 Playwright
+**Windows (winget):**
+```powershell
+winget install OpenJS.NodeJS.LTS
+```
+
+### 4. 安装项目依赖并预备渲染环境
 
 ```bash
 cd server
-uv sync            # 创建虚拟环境并安装 Python 依赖
-# 安装 Playwright 所需无头浏览器依赖
+
+# 1. 安装 Python 依赖
+uv sync
+
+# 2. 安装 Playwright 所需无头浏览器依赖
 uv run playwright install chromium
+
+# 3. 安装项目本地 Node 依赖 (HyperFrames)
+npm ci
+# (注：如果缺少依赖可执行 npm install --save-exact hyperframes@0.7.58)
+
+# 4. 下载 HyperFrames 渲染内核并验证
+npx --no-install hyperframes browser ensure
+npx --no-install hyperframes doctor
 ```
 
 ### 5. 初始化数据库
