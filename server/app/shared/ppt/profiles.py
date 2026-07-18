@@ -29,12 +29,11 @@ COURSE_PROFILES: Mapping[CourseDomain, CourseProfile] = MappingProxyType(
         CourseDomain.ALGORITHMS: CourseProfile(
             name_zh="算法与数据结构",
             planning_guidance=(
-                "优先呈现状态逐步变化、控制流程与复杂度证据；代码只在其行为本身"
-                "构成教学对象时使用。"
+                "优先呈现状态逐步变化、控制流程、复杂度证据和理论边界；"
+                "用状态帧、关系图和公式解释机制，不展示代码。"
             ),
             preferred_families=(
                 VisualFamily.ALGORITHM_FRAMES,
-                VisualFamily.CODE,
                 VisualFamily.QUANTITATIVE,
                 VisualFamily.HIERARCHY,
             ),
@@ -42,7 +41,7 @@ COURSE_PROFILES: Mapping[CourseDomain, CourseProfile] = MappingProxyType(
                 "算法状态帧",
                 "递归树",
                 "复杂度曲线",
-                "关键代码路径",
+                "正确性与复杂度公式",
             ),
         ),
         CourseDomain.OPERATING_SYSTEMS: CourseProfile(

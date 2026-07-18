@@ -520,47 +520,6 @@ class QuantitativeVisual(VisualIRModel):
     series: list[QuantitativeSeries] = Field(min_length=1, max_length=6)
 
 
-class CodeVisual(VisualIRModel):
-    """A display-budgeted source-code excerpt."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=False,
-        allow_inf_nan=False,
-    )
-
-    kind: Literal["code"]
-    language: TextContent
-    lines: list[str] = Field(
-        min_length=4,
-        max_length=18,
-    )
-    highlighted_line_indices: list[NonNegativeIndex] = Field(
-        default_factory=list,
-        max_length=18,
-    )
-
-    @field_validator("language")
-    @classmethod
-    def normalize_language(cls, value: str) -> str:
-        """Normalize and require a non-blank language name."""
-
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("code language must not be blank")
-        return normalized
-
-    @model_validator(mode="after")
-    def validate_line_references(self) -> "CodeVisual":
-        """Validate highlighted-line references required by the renderer."""
-        _require_highlight_indexes(
-            self.highlighted_line_indices,
-            len(self.lines),
-            "highlighted code line",
-        )
-        return self
-
-
 class FormulaStep(VisualIRModel):
     """One compact symbolic derivation step."""
 
@@ -596,7 +555,6 @@ LeafVisualModel = Annotated[
     | AlgorithmFramesVisual
     | CircuitVisual
     | QuantitativeVisual
-    | CodeVisual
     | FormulaVisual,
     Field(discriminator="kind"),
 ]
@@ -631,8 +589,6 @@ def count_semantic_marks(visual: LeafVisualModel) -> int:
         return len(visual.inputs) + len(visual.gates) + len(visual.outputs) + len(visual.wires)
     if isinstance(visual, QuantitativeVisual):
         return 2 + len(visual.series) + sum(len(series.points) for series in visual.series)
-    if isinstance(visual, CodeVisual):
-        return len(visual.lines)
     if isinstance(visual, FormulaVisual):
         return 1 + len(visual.steps) + len(visual.variables)
     raise TypeError(f"unsupported leaf visual type: {type(visual).__name__}")
@@ -666,7 +622,6 @@ VisualModel = Annotated[
     | AlgorithmFramesVisual
     | CircuitVisual
     | QuantitativeVisual
-    | CodeVisual
     | FormulaVisual
     | CompositeVisual,
     Field(discriminator="kind"),
@@ -677,7 +632,6 @@ __all__ = [
     "AlgorithmFramesVisual",
     "CellValue",
     "CircuitVisual",
-    "CodeVisual",
     "CompositeVisual",
     "DataFlowVisual",
     "FormulaVisual",

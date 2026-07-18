@@ -53,7 +53,6 @@ class VisualFamily(StrEnum):
     ALGORITHM_FRAMES = "algorithm_frames"
     CIRCUIT = "circuit"
     QUANTITATIVE = "quantitative"
-    CODE = "code"
     FORMULA = "formula"
     COMPOSITE = "composite"
 
@@ -148,7 +147,7 @@ LAYOUTS: dict[LayoutKind, LayoutSpec] = {
     ),
     LayoutKind.STUDIO: LayoutSpec(
         LayoutKind.STUDIO,
-        "实验台：代码、公式或结构主体占主要面积。",
+        "推导讲解：公式、状态或结构主体占主要面积。",
     ),
     LayoutKind.MOSAIC: LayoutSpec(
         LayoutKind.MOSAIC,
@@ -278,11 +277,6 @@ _VISUAL_LAYOUT_PREFERENCE: dict[VisualFamily, tuple[LayoutKind, ...]] = {
         LayoutKind.COMPARISON,
         LayoutKind.STATEMENT,
         LayoutKind.MOSAIC,
-    ),
-    VisualFamily.CODE: _layout_ranking(
-        LayoutKind.STUDIO,
-        LayoutKind.SEQUENCE,
-        LayoutKind.DIAGRAM,
     ),
     VisualFamily.FORMULA: _layout_ranking(
         LayoutKind.STUDIO,

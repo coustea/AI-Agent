@@ -114,6 +114,8 @@ class CartoonGenerationConfig(_Model):
     visual_density: Literal["moderate", "rich", "intensive"] = "rich"
     pace: Literal["fast", "balanced", "calm"] = "balanced"
     voice: Literal["teacher", "coach"] = "teacher"
+    # A planning hint, not a render-time cutoff: real narration is allowed to run long.
+    target_duration_seconds: int = Field(default=180, ge=60)
 
 
 class CartoonBrief(_Model):

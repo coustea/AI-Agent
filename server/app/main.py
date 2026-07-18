@@ -141,7 +141,7 @@ def main() -> None:
         "app.main:app",
         host=HOST,
         port=PORT,
-        reload=True,
+        reload=False,
         reload_dirs=["app"],
     )
 

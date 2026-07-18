@@ -46,7 +46,6 @@ from app.shared.ppt.visual_ir import (
     AlgorithmFramesVisual,
     CircuitVisual,
     QuantitativeVisual,
-    CodeVisual,
     FormulaVisual,
 )
 from app.shared.ppt.visual_planner import VisualPlanner
@@ -84,7 +83,7 @@ class SlideContentPayload(BaseModel):
     visual_kind: Literal[
         "hierarchy", "graph", "state_machine", "timeline", "memory_layout",
         "data_flow", "mapping", "table_matrix", "algorithm_frames", "circuit",
-        "quantitative", "code", "formula"
+        "quantitative", "formula"
     ]
     visual_data: dict[str, Any]
 
@@ -100,7 +99,6 @@ VISUAL_MODEL_MAPPING = {
     "algorithm_frames": AlgorithmFramesVisual,
     "circuit": CircuitVisual,
     "quantitative": QuantitativeVisual,
-    "code": CodeVisual,
     "formula": FormulaVisual,
 }
 
@@ -169,6 +167,7 @@ _MARKDOWN_LIST_ITEM = re.compile(r"^\s{0,3}(?:[-*+]\s+|\d+[.)、]\s+)(?P<item>.+
 _SENTENCE_BOUNDARY = re.compile(r"[。！？!?；;]+|\n+")
 _MARKDOWN_LINK = re.compile(r"\[([^\]]+)\]\([^)]*\)")
 _MARKDOWN_EMPHASIS = re.compile(r"[`*_~]")
+_INLINE_CODE = re.compile(r"`[^`]+`")
 _LEADING_LABEL = re.compile(r"^(?P<label>[^：:]{1,12})[：:]\s*(?P<body>.+)$")
 _GENERIC_HEADINGS = frozenset(
     {
@@ -322,12 +321,13 @@ class PPTContextAdapter:
         """Collect factual handoffs in an order suitable for a lesson compiler.
 
         The content handoff is prose-first and therefore the strongest source
-        for claims.  Code and mind-map handoffs follow as supporting material.
+        for claims. Mind-map, quiz, and reading handoffs follow as supporting
+        material; executable-code handoffs are intentionally excluded.
         Titles and one-sentence summaries are deliberately excluded: they are
         labels for another artifact, not evidence for a teaching slide.
         """
 
-        priority = {"content": 0, "code": 1, "mindmap": 2, "quiz": 3, "reading": 4}
+        priority = {"content": 0, "mindmap": 1, "quiz": 2, "reading": 3}
         ordered = sorted(
             artifacts,
             key=lambda source: (priority.get(source.agent_id, 9), source.agent_id),
@@ -335,6 +335,7 @@ class PPTContextAdapter:
         materials = [
             material
             for source in ordered
+            if source.agent_id != "code"
             for material in source.materials[:12]
             if material.strip()
         ]
@@ -462,8 +463,10 @@ class PPTGenerator:
         constraints_text = "\n".join(f"- {c}" for c in context.constraints) if context.constraints else "无"
         emphasis_text = "、".join(context.preferences.emphasis) if context.preferences.emphasis else "无"
         
-        prompt = f"""你是一个顶级的计算机科学教育专家与课程设计师。
+        prompt = f"""你是一个顶级的计算机科学理论教学专家与课程设计师。
 请根据以下输入，为课程主题“{context.topic}”设计一个严格、连通且无环的教学逻辑图模型（DeckLogicModel）。
+
+本 PPT 只讲理论知识、概念关系、机制、推导、复杂度和应用边界。禁止生成任何源代码、代码片段、可运行实现或代码展示；应用场景必须用自然语言说明。
 
 【课程基本信息】
 - 主题：{context.topic}
@@ -496,7 +499,7 @@ class PPTGenerator:
    - 必须构成一个**单一的、连通的、无环的有向图（DAG）**。不能有孤立节点，也不能有环。
    - 每条边包含 `source_id`、`target_id`。
    - 关系类型 `relation` 必须是：'prerequisite', 'decomposes', 'supports', 'derives', 'causes', 'contrasts', 'applies', 'verifies', 'summarizes'。
-   - 过渡桥梁 `bridge` 说明为什么从 source 到 target 推进（例如：“在掌握了顺序栈的物理表示后，接下来分析其关键操作入栈的代码实现。”），控制在 60 字内。
+   - 过渡桥梁 `bridge` 说明为什么从 source 到 target 推进（例如：“在掌握顺序栈的物理表示后，接下来分析它如何保证后进先出。”），控制在 60 字内。
 
 请输出符合 DeckLogicModel 结构的 JSON 对象。"""
         
@@ -704,8 +707,10 @@ class PPTGenerator:
                 node_details += f"  - {ev}\n"
             node_details += f"最终产出 (output): {node.output}\n\n"
             
-        prompt = f"""你是一个高级的计算机科学教学板面和视觉图解设计师。
+        prompt = f"""你是一个高级的计算机科学理论教学板面和视觉图解设计师。
 请为以下标有 `<---` 的幻灯片页面设计其详细的内容文案，并提供最符合该页教学点和语义的图解（Visual IR）。
+
+本页只呈现理论知识讲解。禁止输出源代码、代码块、伪代码、代码语法或运行结果；即使主题是算法，也只能用状态、关系、步骤、公式和自然语言解释。
 
 【整个 PPT 故事板大纲】
 {storyboard_overview}
@@ -734,12 +739,6 @@ class PPTGenerator:
    - **绝对不能提供与类型不相符的字段**，所有索引编号必须从 0 开始且在合法范围内。
 
 【可用的 Visual IR 列表与字段格式说明】
-- 'code'：代码块。格式：
-  {{
-    "language": "cpp",  // cpp, python, etc.
-    "lines": ["line 1", "line 2", ...],  // 4 到 18 行代码
-    "highlighted_line_indices": [1, 3]  // 0-indexed 行号列表，可以为空
-  }}
 - 'algorithm_frames'：算法/执行步骤序列帧。格式：
   {{
     "frames": [
@@ -1025,7 +1024,8 @@ class PPTGenerator:
 
     @staticmethod
     def _clean_source_text(value: str) -> str:
-        plain = _MARKDOWN_LINK.sub(r"\1", value)
+        plain = _INLINE_CODE.sub("", value)
+        plain = _MARKDOWN_LINK.sub(r"\1", plain)
         plain = _MARKDOWN_EMPHASIS.sub("", plain)
         return " ".join(plain.split()).strip("：:，,。；;！!？? ")
 

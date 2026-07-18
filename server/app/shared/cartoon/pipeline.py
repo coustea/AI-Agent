@@ -123,11 +123,27 @@ class CartoonPipeline:
             "passed": False,
             "stages": {},
         }
-        stage = "planning"
+        stage = "toolchain"
         pipeline_start = asyncio.get_event_loop().time()
+        stage_start = pipeline_start
         try:
+            preflight = getattr(self.media, "preflight", None)
+            if preflight is not None:
+                logger.info("[Cartoon] 阶段 toolchain: 校验 HyperFrames 质量门能力...")
+                t0 = asyncio.get_event_loop().time()
+                stage_start = t0
+                await preflight()
+                toolchain_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
+                audit["stages"]["toolchain"] = {
+                    "passed": True,
+                    "elapsed_ms": toolchain_ms,
+                }
+                logger.info("[Cartoon] 阶段 toolchain: 完成 elapsed_ms=%d", toolchain_ms)
+
+            stage = "planning"
             logger.info("[Cartoon] 阶段 planning: 开始生成分镜...")
             t0 = asyncio.get_event_loop().time()
+            stage_start = t0
             lesson = await self.planner.plan(brief)
             planning_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
             lesson_path = output_dir / "lesson.json"
@@ -153,6 +169,7 @@ class CartoonPipeline:
             stage = "speech"
             logger.info("[Cartoon] 阶段 speech: 开始旁白合成...")
             t0 = asyncio.get_event_loop().time()
+            stage_start = t0
             timeline = await self.speech.synthesize(
                 lesson,
                 output_dir,
@@ -170,6 +187,11 @@ class CartoonPipeline:
                 "beat_count": len(timeline.beats),
                 "caption_count": len(timeline.captions),
                 "duration_ms": timeline.duration_ms,
+                "target_duration_ms": brief.configuration.target_duration_seconds * 1_000,
+                "duration_over_target": (
+                    timeline.duration_ms
+                    > brief.configuration.target_duration_seconds * 1_000
+                ),
                 "elapsed_ms": speech_ms,
             }
             logger.info(
@@ -183,6 +205,7 @@ class CartoonPipeline:
             stage = "compose"
             logger.info("[Cartoon] 阶段 compose: 开始动画合成...")
             t0 = asyncio.get_event_loop().time()
+            stage_start = t0
             bundle = self.composer.write(lesson, timeline, output_dir)
             compose_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
             self.media.install_runtime(output_dir)
@@ -222,6 +245,7 @@ class CartoonPipeline:
             stage = "quality"
             logger.info("[Cartoon] 阶段 quality: 开始质量检查...")
             t0 = asyncio.get_event_loop().time()
+            stage_start = t0
             report = await self.media.check(output_dir)
             quality_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
             audit["stages"]["quality"] = {
@@ -245,6 +269,7 @@ class CartoonPipeline:
             stage = "render"
             logger.info("[Cartoon] 阶段 render: 开始视频渲染...")
             t0 = asyncio.get_event_loop().time()
+            stage_start = t0
             video_path = await self.media.render(output_dir)
             render_ms = round((asyncio.get_event_loop().time() - t0) * 1000)
             probe = await self.media.probe(
@@ -256,6 +281,12 @@ class CartoonPipeline:
                 "elapsed_ms": render_ms,
                 **probe.model_dump(mode="json"),
             }
+            render_profile = getattr(self.media, "render_profile", None)
+            if render_profile is not None:
+                profile_metadata = getattr(render_profile, "metadata", None)
+                audit["stages"]["render"]["profile"] = (
+                    profile_metadata() if callable(profile_metadata) else str(render_profile)
+                )
             audit["passed"] = True
             self._write_audit(audit_path, audit)
             total_ms = round((asyncio.get_event_loop().time() - pipeline_start) * 1000)
@@ -285,6 +316,7 @@ class CartoonPipeline:
                 audit_path=audit_path,
             )
         except CartoonGenerationError as exc:
+            self._record_stage_timing(audit, exc.stage, stage_start)
             self._record_failure(audit, audit_path, exc.stage, str(exc), exc.problems)
             raise
         except CartoonPlanningError as exc:
@@ -293,6 +325,7 @@ class CartoonPipeline:
                 stage="planning",
                 problems=[str(exc)],
             )
+            self._record_stage_timing(audit, wrapped.stage, stage_start)
             self._record_failure(audit, audit_path, wrapped.stage, str(wrapped), wrapped.problems)
             raise wrapped from exc
         except QualityGateError as exc:
@@ -301,6 +334,7 @@ class CartoonPipeline:
                 stage="quality",
                 problems=exc.problems,
             )
+            self._record_stage_timing(audit, wrapped.stage, stage_start)
             self._record_failure(audit, audit_path, wrapped.stage, str(wrapped), wrapped.problems)
             raise wrapped from exc
         except Exception as exc:
@@ -310,6 +344,7 @@ class CartoonPipeline:
                 stage=stage,
                 problems=[str(exc)],
             )
+            self._record_stage_timing(audit, wrapped.stage, stage_start)
             self._record_failure(audit, audit_path, wrapped.stage, str(wrapped), wrapped.problems)
             raise wrapped from exc
 
@@ -344,6 +379,17 @@ class CartoonPipeline:
                 if entry.users == 0 and _PUBLISH_LOCKS.get(key) is entry:
                     del _PUBLISH_LOCKS[key]
         logger.info("[Cartoon] 发布完成: output_dir=%s", output_dir)
+
+    @staticmethod
+    def _record_stage_timing(audit: dict[str, Any], stage: str, stage_start: float) -> None:
+        """Persist the failed-stage cost so real artifacts remain performance evidence."""
+
+        details = audit["stages"].setdefault(stage, {})
+        details.setdefault("passed", False)
+        details.setdefault(
+            "elapsed_ms",
+            round((asyncio.get_event_loop().time() - stage_start) * 1000),
+        )
 
     @staticmethod
     def _record_failure(

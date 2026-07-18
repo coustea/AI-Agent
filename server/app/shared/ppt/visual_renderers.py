@@ -1,4 +1,4 @@
-"""SVG/HTML renderer registry for all 14 visual IR types.
+"""SVG/HTML renderer registry for the theory-first visual IR types.
 
 Each renderer receives a validated VisualModel instance and a slide_id string,
 and returns an HTML/SVG fragment that fits inside a
@@ -12,15 +12,9 @@ import math
 from collections import defaultdict
 from typing import Callable
 
-from pygments import lex
-from pygments.lexers import TextLexer, get_lexer_by_name
-from pygments.token import Comment, Keyword, Name, Number, Operator, String
-from pygments.util import ClassNotFound
-
 from app.shared.ppt.visual_ir import (
     AlgorithmFramesVisual,
     CircuitVisual,
-    CodeVisual,
     CompositeVisual,
     DataFlowVisual,
     FormulaVisual,
@@ -954,91 +948,7 @@ register_renderer("quantitative", _render_quantitative)
 
 
 # ---------------------------------------------------------------------------
-# 12. code
-# ---------------------------------------------------------------------------
-
-
-def _code_token_class(token_type: object) -> str | None:
-    """Map Pygments token families to the compact deck colour palette."""
-    if token_type in Comment:
-        return "tok-comment"
-    if token_type in Keyword:
-        return "tok-keyword"
-    if token_type in String:
-        return "tok-string"
-    if token_type in Number:
-        return "tok-number"
-    if token_type in Operator:
-        return "tok-operator"
-    if token_type in Name.Function:
-        return "tok-function"
-    if token_type in Name.Class:
-        return "tok-class"
-    if token_type in Name.Builtin:
-        return "tok-builtin"
-    if token_type in Name.Decorator:
-        return "tok-decorator"
-    return None
-
-
-def _highlight_code_lines(lines: list[str], language: str) -> list[str]:
-    """Return escaped, syntax-coloured HTML for each source line.
-
-    The tokenisation happens while generating the deck, so exported HTML stays
-    self-contained and does not rely on a browser-side highlighting library.
-    """
-    source = "\n".join(lines)
-    try:
-        lexer = get_lexer_by_name(language, stripall=False)
-    except ClassNotFound:
-        lexer = TextLexer(stripall=False)
-
-    rendered: list[list[str]] = [[]]
-    for token_type, value in lex(source, lexer):
-        token_class = _code_token_class(token_type)
-        for fragment in value.splitlines(keepends=True):
-            text = fragment.rstrip("\r\n")
-            if text:
-                escaped = _escape(text)
-                rendered[-1].append(
-                    f'<span class="{token_class}">{escaped}</span>'
-                    if token_class
-                    else escaped
-                )
-            if fragment.endswith(("\n", "\r")):
-                rendered.append([])
-
-    # Pygments preserves the input line structure, but keep the renderer
-    # deterministic even if a lexer emits an unexpected trailing newline.
-    return ["".join(line) for line in rendered[: len(lines)]] + [
-        "" for _ in range(len(lines) - len(rendered))
-    ]
-
-
-def _render_code(visual: VisualModel, slide_id: str) -> str:
-    v = visual  # type: ignore[assignment]
-    assert isinstance(v, CodeVisual)
-    highlighted_lines = set(v.highlighted_line_indices)
-    panel_height = min(640, max(220, 86 + len(v.lines) * 31))
-    lines_html = "\n".join(
-        f'<span class="code-line{" highlighted" if index in highlighted_lines else ""}">'
-        f"{line}</span>"
-        for index, line in enumerate(_highlight_code_lines(v.lines, v.language))
-    )
-    return (
-        f'<section class="code-panel" style="--code-lines:{len(v.lines)};'
-        f'--code-panel-height:{panel_height}px">'
-        f'<div class="code-head"><i></i><i></i><i></i>'
-        f'<b>{_escape(v.language)}</b></div>'
-        f'<pre><code>{lines_html}</code></pre></section>'
-    )
-
-
-register_renderer("code", _render_code)
-
-
-# ---------------------------------------------------------------------------
-# 13. formula
+# 12. formula
 # ---------------------------------------------------------------------------
 
 

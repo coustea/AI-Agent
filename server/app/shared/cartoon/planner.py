@@ -31,6 +31,11 @@ from app.shared.cartoon.models import (
 logger = get_logger(__name__)
 _PROMPT_VARIABLE = re.compile(r"\{\{(?P<name>[a-z_][a-z0-9_]*)\}\}")
 _PROMPT_DIR = Path(__file__).parent
+_SCENE_GUIDANCE = 5
+_STEPS_PER_SCENE_GUIDANCE = 5
+_ACTIONS_PER_STEP_GUIDANCE = 2
+_TOTAL_NARRATION_GUIDANCE_CHARS = 720
+_DEFAULT_TARGET_DURATION_SECONDS = 180
 
 
 class CartoonPlanningError(RuntimeError):
@@ -174,10 +179,20 @@ class CartoonPlanner:
     async def plan(self, brief: CartoonBrief) -> Lesson:
         try:
             storyboard = await self._create_storyboard(brief)
+            scene_count = len(storyboard.scenes)
             semaphore = asyncio.Semaphore(self._parallelism)
             async with asyncio.TaskGroup() as group:
                 tasks = [
-                    group.create_task(self._compose_scene(brief, storyboard, outline, index, semaphore))
+                    group.create_task(
+                        self._compose_scene(
+                            brief,
+                            storyboard,
+                            outline,
+                            index,
+                            scene_count,
+                            semaphore,
+                        )
+                    )
                     for index, outline in enumerate(storyboard.scenes, start=1)
                 ]
             scenes = [task.result() for task in tasks]
@@ -200,6 +215,9 @@ class CartoonPlanner:
             "lesson_depth": _depth_label(brief),
             "density": brief.configuration.visual_density,
             "example_scenes": _storyboard_example_scenes(),
+            "scene_guidance": _SCENE_GUIDANCE,
+            "step_guidance": _STEPS_PER_SCENE_GUIDANCE,
+            "target_duration_seconds": brief.configuration.target_duration_seconds,
         })
         response = await get_llm().ainvoke_json(
             _StoryboardDraft,
@@ -230,6 +248,7 @@ class CartoonPlanner:
         storyboard: _StoryboardDraft,
         outline: _StoryboardSceneDraft,
         scene_index: int,
+        scene_count: int,
         semaphore: asyncio.Semaphore,
     ) -> TeachingScene:
         mode = self._scene_mode(outline.mode)
@@ -239,6 +258,14 @@ class CartoonPlanner:
             "topology": topology.value,
             "density": brief.configuration.visual_density,
             "example_steps": _scene_example_steps(),
+            "scene_count": scene_count,
+            "step_guidance": _STEPS_PER_SCENE_GUIDANCE,
+            "actions_per_step_guidance": _ACTIONS_PER_STEP_GUIDANCE,
+            "narration_guidance_chars": self._scene_narration_guidance(
+                scene_count,
+                brief.configuration.target_duration_seconds,
+            ),
+            "target_duration_seconds": brief.configuration.target_duration_seconds,
         })
         context = {
             "lesson_title": storyboard.title,
@@ -285,6 +312,21 @@ class CartoonPlanner:
         # The storyboard is guidance only.  The compiler owns the final scene
         # mode/topology and the payload is accepted even when the model drifts.
         SemanticCompiler.compile(value, scene_id="validation-scene", title="validation scene")
+
+    @staticmethod
+    def _scene_narration_guidance(
+        scene_count: int,
+        target_duration_seconds: int = _DEFAULT_TARGET_DURATION_SECONDS,
+    ) -> int:
+        total_budget = max(
+            1,
+            round(
+                _TOTAL_NARRATION_GUIDANCE_CHARS
+                * target_duration_seconds
+                / _DEFAULT_TARGET_DURATION_SECONDS
+            ),
+        )
+        return max(1, total_budget // max(1, scene_count))
 
     @staticmethod
     def _material_message(
