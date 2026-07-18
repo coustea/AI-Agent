@@ -82,8 +82,8 @@ const props = defineProps<{
   events: TraceEvent[]
   currentEvent: TraceEvent | null
   currentStepIndex: number
+  generating: boolean
   runVersion: number
-  executionMode?: 'official' | 'custom'
   onStepComplete?: () => void
 }>()
 

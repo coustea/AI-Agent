@@ -55,7 +55,7 @@ const handleExpand = () => {
 <style scoped>
 .diagram-image {
   position: relative;
-  width: 100%;
+  width: min(560px, 100%);
   margin: 0;
   overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--color-border) 84%, #26a69a);
@@ -64,6 +64,8 @@ const handleExpand = () => {
 }
 
 .diagram-image:not(.compact) {
+  width: min(100%, 880px);
+  margin: 0 auto;
   overflow: visible;
   border: 0;
   border-radius: 0;
@@ -87,14 +89,14 @@ const handleExpand = () => {
   display: block;
   width: 100%;
   height: auto;
-  max-height: 360px;
+  max-height: 300px;
   object-fit: contain;
   background: #fff;
 }
 
 .diagram-image:not(.compact) img {
   width: 100%;
-  max-height: none;
+  max-height: min(64vh, 560px);
   border-radius: 0;
 }
 
@@ -130,7 +132,7 @@ const handleExpand = () => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 16px 18px;
+  padding: 12px 14px;
   color: #f8fafc;
   background: linear-gradient(180deg, transparent, rgba(15, 23, 42, .74));
 }
@@ -138,7 +140,7 @@ const handleExpand = () => {
 .diagram-image-caption span {
   min-width: 0;
   overflow: hidden;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 760;
   text-overflow: ellipsis;
   white-space: nowrap;

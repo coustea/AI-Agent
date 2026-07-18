@@ -140,7 +140,7 @@ watch(
   },
 )
 
-// 监听 schema 结构发生变化（切换自定义入口函数或 official/custom 模式等）
+// 监听模板输入结构变化。
 watch(
   () => props.inputSchema,
   (newVal, oldVal) => {

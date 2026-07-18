@@ -168,8 +168,11 @@ const activePath = computed(() => {
   if (current.startsWith('/tutor')) {
     return '/tutor'
   }
-  if (current.startsWith('/question-bank') || current.startsWith('/assessment')) {
+  if (current.startsWith('/question-bank')) {
     return '/question-bank'
+  }
+  if (current.startsWith('/assessment')) {
+    return '/dashboard'
   }
   if (current.startsWith('/algorithm-visualizer')) {
     return '/algorithm-visualizer'

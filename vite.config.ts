@@ -6,7 +6,6 @@ import { fileURLToPath, URL } from 'node:url'
 
 // Handle CJS dual-default export from vite-plugin-monaco-editor
 const monacoEditorPlugin = (monacoEditorPluginModule as any).default || monacoEditorPluginModule
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:9999'

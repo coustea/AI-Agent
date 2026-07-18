@@ -84,7 +84,7 @@ describe('AlgorithmInputDataPanel', () => {
     await nextTick()
 
     // The validity event should capture invalid status (false)
-    expect(validityEvents.at(-1)).toBe(false)
+    expect(validityEvents[validityEvents.length - 1]).toBe(false)
     // The text in textarea should remain "1, 2," rather than reverting
     expect(textarea.value).toBe('1, 2,')
     // No update event should be fired (since it is invalid)
@@ -96,7 +96,7 @@ describe('AlgorithmInputDataPanel', () => {
     await nextTick()
 
     // The validity event should capture valid status (true)
-    expect(validityEvents.at(-1)).toBe(true)
+    expect(validityEvents[validityEvents.length - 1]).toBe(true)
     // The text should be "1, 2, 3"
     expect(textarea.value).toBe('1, 2, 3')
     // Update event should be fired with the parsed array

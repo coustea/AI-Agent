@@ -1063,7 +1063,7 @@ onMounted(async () => {
 }
 
 .assessment-page {
-  width: min(1180px, 100%);
+  width: min(var(--page-max-width, 1680px), 100%);
   margin: 0 auto;
   padding: 28px 28px 64px;
   color: var(--color-text-strong, #182235);
@@ -1386,32 +1386,32 @@ button {
 
 .report-history-bar {
   display: flex;
-  min-height: 64px;
+  min-height: 82px;
   align-items: center;
-  gap: 18px;
+  gap: 28px;
   margin-top: 20px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border, #dce3ea);
-  border-radius: 9px;
+  padding: 14px 18px;
+  border: 1px solid var(--color-border, #c8e4e3);
+  border-radius: 14px;
   background: #ffffff;
 }
 
 .current-report-mark {
   display: flex;
-  min-width: 190px;
+  min-width: 260px;
   align-items: center;
-  gap: 10px;
-  padding-right: 18px;
+  gap: 14px;
+  padding-right: 28px;
   border-right: 1px solid #e7ebef;
 }
 
 .history-icon-box {
   display: grid;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 34px;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: 13px;
   color: var(--color-primary, #287f78);
   background: #edf7f5;
 }
@@ -1425,14 +1425,14 @@ button {
 
 .current-report-mark span {
   color: #8a95a4;
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .current-report-mark strong {
   overflow: hidden;
   color: #26354a;
-  font-size: 12px;
+  font-size: 17px;
   font-weight: 800;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1442,7 +1442,7 @@ button {
   display: flex;
   min-width: 0;
   flex: 1;
-  gap: 6px;
+  gap: 10px;
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -1453,14 +1453,14 @@ button {
 
 .recent-report-list button {
   display: flex;
-  min-width: 74px;
-  height: 38px;
+  min-width: 108px;
+  height: 52px;
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  padding: 0 10px;
+  padding: 0 16px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 11px;
   color: #778396;
   background: #f6f8fa;
   cursor: pointer;
@@ -1478,27 +1478,27 @@ button {
 }
 
 .recent-report-list strong {
-  font-size: 10px;
+  font-size: 13px;
   font-weight: 800;
 }
 
 .recent-report-list span {
   margin-top: 2px;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .history-entry {
   display: inline-flex;
-  height: 36px;
+  height: 48px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 6px;
-  padding: 0 11px;
+  gap: 9px;
+  padding: 0 16px;
   border: 1px solid #dbe2e8;
-  border-radius: 7px;
+  border-radius: 11px;
   color: #5d6b7d;
   background: #ffffff;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 750;
   cursor: pointer;
 }
@@ -1510,13 +1510,13 @@ button {
 
 .history-entry span {
   display: grid;
-  min-width: 18px;
-  height: 18px;
+  min-width: 25px;
+  height: 25px;
   place-items: center;
-  border-radius: 9px;
+  border-radius: 50%;
   color: #748092;
   background: #f0f3f6;
-  font-size: 9px;
+  font-size: 12px;
 }
 
 .report-overview {

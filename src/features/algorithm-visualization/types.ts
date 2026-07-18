@@ -26,13 +26,13 @@ export interface TraceEvent {
 // TraceEvent 中的状态快照
 export interface TraceEventState {
   structure: Record<string, unknown>
-  variables?: Record<string, unknown>
   auxiliary?: Record<string, unknown>
 }
 
 export interface VisualEdge {
   to: string
   weight?: string | number
+  constructed?: boolean
 }
 
 export interface VisualNode {
@@ -100,33 +100,13 @@ export interface InputSchema {
   items?: InputSchema
 }
 
-export interface CustomParameterInfo {
-  name: string
-  kind: 'positional_or_keyword'
-  required: boolean
-  schema: InputSchema
-  defaultValue?: unknown
-}
-
-export interface CustomFunctionInfo {
-  name: string
-  parameters: CustomParameterInfo[]
-}
-
-export interface CustomCodeContract {
-  entryFunction: string
-  functions: CustomFunctionInfo[]
-  inputSchema: InputSchema
-  defaultInput: Record<string, unknown>
-}
-
 // 运行结果 (来自 POST /run 成功)
 export interface RunResult {
   domain: string
   algorithm: string
   visualizerType: VisualizerType
   language: CodeLanguage
-  executionMode: 'official' | 'custom'
+  executionMode: 'official'
   events: TraceEvent[]
   result: unknown
   summary: string
@@ -137,15 +117,10 @@ export interface RunResult {
 export interface RunError {
   errorType:
     | 'MISSING_ALGORITHM'
-    | 'MISSING_CODE'
     | 'UNSUPPORTED_LANGUAGE'
     | 'RUNTIME_ERROR'
-    | 'CUSTOM_VISUALIZATION_ERROR'
-    | 'CODE_TOO_LARGE'
-    | 'MISSING_VISUALIZER_TYPE'
     | 'VISUALIZER_RUN_ERROR'
     | 'INPUT_INVALID'
-    | 'CUSTOM_CONTRACT_INVALID'
     | 'TRACE_EVENT_EMPTY'
   message: string
   details?: string

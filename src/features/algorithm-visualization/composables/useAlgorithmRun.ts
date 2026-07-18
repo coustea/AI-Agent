@@ -17,15 +17,11 @@ export function useAlgorithmRun() {
   const generating = ref(false)
   const runVersion = ref(0)
 
-  // 提交代码到后端运行，获取可视化追踪事件
+  // 运行注册模板，获取可视化追踪事件
   async function run(params: {
-    mode: 'official' | 'custom'
-    algorithm?: string
+    algorithm: string
     language: CodeLanguage
     inputData?: Record<string, unknown>
-    code?: string
-    visualizerType?: string
-    entryFunction?: string
   }) {
     generating.value = true
     runError.value = null
@@ -44,12 +40,13 @@ export function useAlgorithmRun() {
         runVersion.value += 1
       }
     } catch (err: unknown) {
-      const msg = getErrorMessage(err, '运行失败，请检查后端服务状态。')
+      const msg = getErrorMessage(err, '运行失败，请检查代码或 Python 运行时。')
       // Extract errorType from backend response data if available
       const responseData = (err as { response?: { data?: { data?: { errorType?: string } } } })?.response?.data?.data
       runError.value = {
         errorType: (responseData?.errorType as RunError['errorType']) || 'RUNTIME_ERROR',
         message: msg,
+        details: (err as { details?: string })?.details,
       }
     } finally {
       generating.value = false

@@ -203,7 +203,7 @@
         <div class="chat-interaction-area">
           <div class="chat-viewport" ref="chatScroll">
             <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
-              <h2>你好，{{ userName }}。欢迎回到思辨书房。</h2>
+              <h2>你好，{{ userName }}。欢迎回到智能辅导。</h2>
             </div>
 
             <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
@@ -242,6 +242,7 @@
                   || msg.agentActivities?.length
                   || msg.teachingDiagramGenerating
                   || msg.teachingDiagram
+                  || msg.videoPreparing
                   || msg.video
                 "
                 :class="['message-row', msg.role]"
@@ -373,7 +374,11 @@
                     />
                   </div>
 
-                  <ChatVideoArtifact v-if="msg.video" :video="msg.video" />
+                  <ChatVideoArtifact
+                    v-if="msg.videoPreparing || msg.video"
+                    :video="msg.video"
+                    :preparing="msg.videoPreparing"
+                  />
                 </div>
               </div>
             </template>
@@ -2580,7 +2585,10 @@ const watchChatVideo = (
   if (keepAvatarConnected) setAvatarExternalActivityBusy(true)
   videoTasks.watch(sessionId, assistantMessageId, (video) => {
     const message = messages.value.find(item => item.id === assistantMessageId)
-    if (message) message.video = video
+    if (message) {
+      message.video = video
+      message.videoPreparing = false
+    }
     if (keepAvatarConnected && video.status !== 'queued' && video.status !== 'running') {
       setAvatarExternalActivityBusy(false)
     }
@@ -2726,6 +2734,7 @@ const handleSend = async () => {
     content: '',
     time: now(),
     agentActivities: [],
+    videoPreparing: shouldGenerateVideo,
     videoOnly: shouldGenerateVideo,
   })
   streamingMsgId.value = aiMsgId
@@ -2778,6 +2787,7 @@ const handleSend = async () => {
           if (shouldGenerateVideo) {
             aiMsg.content = ''
             aiMsg.videoOnly = true
+            aiMsg.videoPreparing = false
             aiMsg.teachingDiagram = null
             const video = data.video
             if (video && typeof video === 'object') {
@@ -2803,6 +2813,8 @@ const handleSend = async () => {
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
         if (aiMsg) {
           finalizeAssistantGeneration(aiMsg, 'failed')
+          aiMsg.videoPreparing = false
+          aiMsg.videoOnly = false
           if (!aiMsg.content) aiMsg.content = '连接中断，请刷新页面后重试。'
         }
         stopTeachingDiagramGeneratingForCurrentAi()
@@ -5760,18 +5772,23 @@ onBeforeUnmount(() => {
 
 .diagram-preview-body {
   gap: 0;
-  max-height: 84vh;
-  padding: 0;
+  max-height: calc(min(80vh, 780px) - 62px);
+  padding: 12px;
   background: #f5f7fa;
 }
 
 .preview-content {
-  min-height: 420px;
-  padding: 22px;
+  min-height: 0;
+  padding: 0;
   background: #f5f7fa;
   border: 0;
   border-radius: 0;
-  align-items: flex-start;
+  align-items: center;
+}
+
+.diagram-preview-dialog {
+  width: min(960px, calc(100vw - 40px));
+  max-height: min(80vh, 780px);
 }
 
 .preview-footer {

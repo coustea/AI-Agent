@@ -143,12 +143,13 @@ const traversalSequence = computed(() => {
     if (phase !== 'traversal') continue
 
     const targets = event.targets ?? []
-    const nodes = event.state?.structure?.nodes ?? []
+    const rawEventNodes = event.state?.structure?.nodes
+    const nodes = Array.isArray(rawEventNodes) ? rawEventNodes as VisualNode[] : []
     
     targets.forEach(targetId => {
       const targetIdStr = String(targetId)
       if (!seenNodeIds.has(targetIdStr)) {
-        const node = nodes.find((n: any) => String(n.id) === targetIdStr)
+        const node = nodes.find(item => String(item.id) === targetIdStr)
         if (node && node.label !== undefined) {
           seenNodeIds.add(targetIdStr)
           sequence.push(String(node.label))

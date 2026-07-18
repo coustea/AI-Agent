@@ -41,7 +41,6 @@ vi.mock('@/features/algorithm-visualization/api/algorithmVisualizer', () => ({
       },
     },
   })),
-  fetchCustomCodeContract: vi.fn(),
   runVisualization: vi.fn(),
 }))
 

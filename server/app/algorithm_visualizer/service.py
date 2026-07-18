@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.algorithm_visualizer.custom_instrumenter import CustomInstrumentationError, instrument_custom_code
-from app.algorithm_visualizer.custom_contract import CustomCodeContractError, inspect_custom_code
-from app.algorithm_visualizer.custom_runtime import CustomRuntimeError, run_custom_program
-from app.algorithm_visualizer.input_validation import InputValidationError, validate_input_data
+from app.algorithm_visualizer.input_validation import InputValidationError
 from app.algorithm_visualizer.official_runtime import OfficialRuntimeError, execute_official_template
 from app.algorithm_visualizer.template_registry import TemplateNotFoundError, get_template_spec
 from app.algorithm_visualizer.trace_validation import InvalidTraceError, validate_trace_events
@@ -78,62 +75,6 @@ def run_official_visualization(
         "events": dict_events,
         "result": execution.result,
         "summary": execution.summary,
-    }
-
-
-async def run_custom_visualization(
-    *,
-    code: str,
-    language: str,
-    visualizer_type: str | None,
-    input_data: dict[str, Any],
-    entry_function: str | None,
-) -> dict[str, Any]:
-    """Instrument user-owned Python code with LLM, then run it in a bounded worker."""
-    if language != "python":
-        raise VisualizerRunError("自定义代码当前仅支持 Python。", "UNSUPPORTED_LANGUAGE")
-    if not code.strip():
-        raise VisualizerRunError("请粘贴需要可视化的 Python 代码。", "MISSING_CODE")
-    if len(code) > 24_000:
-        raise VisualizerRunError("自定义代码不能超过 24000 个字符。", "CODE_TOO_LARGE")
-    if not visualizer_type:
-        raise VisualizerRunError("请选择与代码数据结构匹配的可视化类型。", "MISSING_VISUALIZER_TYPE")
-
-    try:
-        _validate_runtime_limits("custom", input_data)
-        contract = inspect_custom_code(code, entry_function)
-        validate_input_data(input_data, contract.input_schema)
-        instrumented = await instrument_custom_code(
-            source_code=code,
-            visualizer_type=visualizer_type,
-            entry_function=contract.entry_function,
-            input_schema=contract.input_schema,
-        )
-        execution = await run_custom_program(
-            instrumented_code=instrumented,
-            visualizer_type=visualizer_type,
-            input_data=input_data,
-        )
-        validate_trace_events(
-            execution.events,
-            visualizer_type,
-            # The editor displays the user's original source, so trace lines
-            # must be meaningful in that source rather than in the LLM rewrite.
-            source_line_count=len(code.splitlines()),
-        )
-    except (InputValidationError, CustomCodeContractError, CustomInstrumentationError, CustomRuntimeError, InvalidTraceError) as exc:
-        raise VisualizerRunError(str(exc), "CUSTOM_VISUALIZATION_ERROR") from exc
-
-    return {
-        "domain": "custom",
-        "algorithm": "custom_python",
-        "visualizerType": visualizer_type,
-        "language": "python",
-        "executionMode": "custom",
-        "events": execution.events,
-        "result": execution.result,
-        "stdout": execution.stdout or None,
-        "summary": f"AI 已完成插装并执行，共产生 {len(execution.events)} 步可视化操作。",
     }
 
 

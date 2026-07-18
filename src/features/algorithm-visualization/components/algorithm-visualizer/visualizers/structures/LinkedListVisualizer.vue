@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, watch } from 'vue'
 import type { TraceEvent, VisualNode, VisualPointer } from '@/features/algorithm-visualization/types'
 
 const props = defineProps<{ currentEvent: TraceEvent | null; currentStepIndex: number; events: TraceEvent[]; onStepComplete?: () => void }>()

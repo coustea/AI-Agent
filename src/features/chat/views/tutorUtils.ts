@@ -62,6 +62,7 @@ export interface ChatMsg {
   teachingDiagram?: TeachingDiagram | null
   teachingDiagramGenerating?: boolean
   video?: ChatVideoArtifact | null
+  videoPreparing?: boolean
   videoOnly?: boolean
   agentActivities?: AgentActivity[]
   sources?: KnowledgeSource[]  // 知识库来源
