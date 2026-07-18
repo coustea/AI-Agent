@@ -35,6 +35,10 @@ class PathCartoonAdapter:
             )
             artifact = await self._pipeline.generate(brief, target)
             duration_seconds = round(artifact.duration_ms / 1_000, 2)
+            logger.info(
+                "[PathCartoon] 动画生成成功: node_id=%s scenes=%s duration=%.1fs",
+                request.node_id, artifact.scene_count, duration_seconds,
+            )
             metadata = CartoonResourceMetadata(
                 video_url=static_url(artifact.video_path),
                 preview_url=static_url(artifact.html_path),
@@ -55,6 +59,7 @@ class PathCartoonAdapter:
                 metadata=metadata.model_dump(mode="json"),
             )
         except CartoonGenerationError as exc:
+            logger.warning("[PathCartoon] 动画生成失败: node_id=%s stage=%s", request.node_id, exc.stage)
             return self._failure(request.node_title, exc, started)
         except Exception as exc:
             logger.exception("Path cartoon generation failed: node_id=%s", request.node_id)

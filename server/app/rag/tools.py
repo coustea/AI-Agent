@@ -191,11 +191,12 @@ async def _search_knowledge_base_handler(
     top_k: int = 4,
 ) -> dict[str, Any]:
     """知识库搜索工具的实际处理函数。"""
+    logger.debug("[search_knowledge_base] query=%r course=%s top_k=%d", query, course_name, top_k)
     # 调用底层混合检索，异常降级为不可用
     try:
         result = await retrieve(query, course_name=course_name, top_k=top_k)
     except Exception as exc:
-        logger.warning("[search_knowledge_base] failed: %s", exc)
+        logger.warning("[search_knowledge_base] failed: query=%r error=%s", query, exc)
         return {
             "text": "本地知识库当前不可用，请基于已有知识回答。",
             "sources": [],

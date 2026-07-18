@@ -94,7 +94,10 @@ async def generate_assessment(
         )
     )
     if existing is not None:
+        logger.info("[EvalAPI] 评估生成冲突(已有进行中): user_id=%s", current_user.id)
         return HttpResponse.error(code=409, message="assessment_generation_in_progress")
+
+    logger.info("[EvalAPI] 触发评估生成: user_id=%s range_days=%d", current_user.id, payload.range_days)
 
     # 创建 generating 记录并立即返回
     now_utc = datetime.now(timezone.utc)
@@ -186,6 +189,7 @@ async def get_latest_assessment(
     session: AsyncSession = Depends(get_session),
 ):
     """获取最新的一条 ready 评估；无评估则返回 null/None。"""
+    logger.info("[EvalAPI] 查询最新评估: user_id=%s", current_user.id)
     assessment = (await session.exec(
         select(LearningAssessment)
         .where(
@@ -248,6 +252,7 @@ async def get_assessment_detail(
     session: AsyncSession = Depends(get_session),
 ):
     """获取单次评估详情。如果非本人拥有，返回 404，不泄露存在性。"""
+    logger.info("[EvalAPI] 查询评估详情: user_id=%s assessment_id=%s", current_user.id, assessment_id)
     assessment = await session.get(LearningAssessment, assessment_id)
     if assessment is None or assessment.user_id != current_user.id:
         return HttpResponse.error(code=404, message="assessment_not_found")
@@ -287,6 +292,7 @@ async def get_dashboard_data(
     session: AsyncSession = Depends(get_session),
 ):
     """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。"""
+    logger.info("[EvalAPI] 查询看板数据: user_id=%s range_days=%d", current_user.id, range_days)
     if range_days < 1 or range_days > 90:
         return HttpResponse.error(code=400, message="range_days must be between 1 and 90")
 

@@ -229,6 +229,7 @@ async def session_scope() -> AsyncGenerator[AsyncSession, None]:
     except Exception:
         if session.in_transaction():
             await session.rollback()
+            logger.warning("[Database] session_scope 回滚")
         raise
     finally:
         await session.close()

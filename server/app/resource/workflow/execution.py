@@ -142,6 +142,10 @@ async def _run_agent_lifecycle(
         validate_agent_result(agent_id, result, input_data)
     except Exception as exc:
         # 校验失败
+        logger.warning(
+            "Agent[%s] 结果校验失败: resource_id=%s error=%s",
+            agent_id, resource_id, exc,
+        )
         return await _record_failure(
             resource_id=resource_id,
             agent_id=agent_id,
@@ -218,6 +222,10 @@ async def execute_resource_agent(
     input_data: "ResourceInput",
 ) -> dict[str, Any]:
     """执行单个资源 Agent 的 generate_resource 入口。"""
+    logger.info(
+        "[Execution] 执行Agent: resource_id=%s agent_id=%s",
+        resource_id, agent_id,
+    )
     # 走多智能体资源流程（generate_resource）
     return await _run_agent_lifecycle(
         user_id=user_id,

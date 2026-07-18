@@ -184,6 +184,7 @@ async def run_visualization(
     """按显式模式运行官方模板或用户代码。"""
     algorithm = request_data.algorithm or ""
     language = request_data.language or ""
+    logger.info("[Visualizer] 运行请求: user_id=%s mode=%s algorithm=%s", current_user.id, request_data.mode, algorithm)
 
     try:
         if request_data.mode == "official":
@@ -203,6 +204,7 @@ async def run_visualization(
 
     # 插装或执行失败，记录失败事件并返回错误
     except VisualizerRunError as e:
+        logger.warning("[Visualizer] 运行失败: user_id=%s algorithm=%s error_type=%s", current_user.id, algorithm, e.error_type)
         await _safe_record_event(
             session,
             current_user.id,
@@ -244,6 +246,7 @@ async def run_visualization(
         success=True,
     )
 
+    logger.info("[Visualizer] 运行成功: user_id=%s algorithm=%s", current_user.id, result["algorithm"])
     # 使用 by_alias=False 确保序列化时使用字段名（camelCase）
     return HttpResponse.success(data=RunSuccessResponse(**result).model_dump(by_alias=False))
 

@@ -3,13 +3,14 @@ import type { ResourceEvent, ResourceEventName } from '@/features/resource/model
 // 获取当前用户 JWT token，用于 SSE 鉴权
 import { getAuthToken } from '@/shared/auth/token'
 
-// SSE 连接生命周期状态：空闲 → 连接中 → 运行中 / 重连中 → 完成 / 失败
+// SSE 连接生命周期状态：空闲 → 连接中 → 运行中 / 重连中 → 完成 / 部分完成 / 失败
 export type ResourceConnectionStatus =
   | 'idle'
   | 'connecting'
   | 'running'
   | 'reconnecting'
   | 'completed'
+  | 'partial'
   | 'failed'
 
 // 外部可注册的事件回调集合，按事件类型分别触发
@@ -114,7 +115,10 @@ export function useResourceEvents() {
       }
       // 生成完成：标记终态、触发回调并关闭连接
       if (event.event === 'generation.completed') {
-        connectionStatus.value = 'completed'
+        // 后端 PARTIAL 状态也映射为 generation.completed 事件，
+        // 通过 data.status 区分：partial 表示部分智能体失败
+        const isPartial = event.data?.status === 'partial'
+        connectionStatus.value = isPartial ? 'partial' : 'completed'
         handlers.onCompleted?.(event)
         close()
       } else if (event.event === 'generation.failed') {

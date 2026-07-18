@@ -12,6 +12,9 @@ from starlette.websockets import WebSocketDisconnect
 from app.auth.security import AuthError, _resolve_current_user_from_token
 from app.avatar.bridge.manager import avatar_bridge_manager
 from app.infra.database import session_scope
+from app.infra.logging import get_logger
+
+logger = get_logger(__name__)
 
 # 创建 WebSocket 路由实例
 router = APIRouter()
@@ -34,6 +37,7 @@ async def avatar_websocket(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token", "").strip()
     if not token:
         # 1008 = Policy Violation
+        logger.warning("[AvatarWS] WebSocket 连接缺少 token")
         await websocket.close(code=1008, reason="missing token")
         return
 
@@ -43,11 +47,13 @@ async def avatar_websocket(websocket: WebSocket) -> None:
             user = await _resolve_current_user_from_token(token, session)
     except AuthError:
         # Token 无效或已过期
+        logger.warning("[AvatarWS] WebSocket token 验证失败")
         await websocket.close(code=1008, reason="invalid token")
         return
 
     # 接受 WebSocket 连接
     await websocket.accept()
+    logger.info("[AvatarWS] WebSocket 连接建立: user_id=%s username=%s", user.id, user.username)
     # 获取或创建当前用户的数字人桥接实例
     bridge, owner = await avatar_bridge_manager.attach_frontend(
         user.id,
@@ -63,3 +69,4 @@ async def avatar_websocket(websocket: WebSocket) -> None:
     finally:
         # 清理桥接资源（音频流、连接池等）
         await avatar_bridge_manager.cleanup(user.id, bridge, owner)
+        logger.info("[AvatarWS] WebSocket 连接断开: user_id=%s", user.id)

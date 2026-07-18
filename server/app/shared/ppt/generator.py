@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -53,11 +52,12 @@ from app.shared.ppt.visual_ir import (
 from app.shared.ppt.visual_planner import VisualPlanner
 from app.shared.ppt.contract import layout_supports_relation, LayoutKind
 from app.infra.llm import get_llm
+from app.infra.logging import get_logger
 import asyncio
 from pydantic import BaseModel, Field
 from typing import Literal, Any
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 class SlideBriefPayload(BaseModel):
     kind: SlideKind

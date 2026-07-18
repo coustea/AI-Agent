@@ -170,6 +170,10 @@ class _ChatChannel:
         key = (self.user_id, self.session_id, self.user_message_id)
         async with _chat_lock:
             _chat_channels.pop(key, None)
+            logger.info(
+                "[ChatEmitter] 频道清理: user_id=%s session_id=%s user_message_id=%s",
+                self.user_id, self.session_id, self.user_message_id,
+            )
 
 
 # ===================== 公开 API =====================
@@ -210,6 +214,10 @@ class ChatEvents:
             if self._key in _chat_channels:
                 # 频道已存在，可能是重连场景
                 self._channel = _chat_channels[self._key]
+                logger.info(
+                    "[ChatEmitter] 频道已存在(重连): user_id=%s session_id=%s user_message_id=%s",
+                    self._user_id, self._session_id, self._user_message_id,
+                )
             else:
                 self._channel = _ChatChannel(
                     user_id=self._user_id,
@@ -220,6 +228,10 @@ class ChatEvents:
                     terminal_retention_seconds=self._terminal_retention_seconds,
                 )
                 _chat_channels[self._key] = self._channel
+                logger.info(
+                    "[ChatEmitter] 频道创建: user_id=%s session_id=%s user_message_id=%s",
+                    self._user_id, self._session_id, self._user_message_id,
+                )
 
     # 向频道发送事件（未 open 则抛异常）
     async def send(
@@ -437,10 +449,12 @@ class ChatRuntimeEventMapper:
                 message="教学图解已生成",
                 data=payload,
             )
+            logger.info("[ChatEmitter] 图解事件已发布: user_message_id=%s", events.user_message_id)
             return False
 
         # 错误事件 → 返回失败标记
         if event_name == "error":
+            logger.warning("[ChatEmitter] 收到错误事件: user_message_id=%s payload=%s", events.user_message_id, payload)
             return True
 
         # 工作流状态事件（answer_done 无需单独推送）

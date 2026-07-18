@@ -71,6 +71,10 @@ async def create_resource_task(
     )
 
     # 立即返回 resource_id，实际生成在后台进行
+    logger.info(
+        "[ResourceAPI] 后台生成任务已创建: user_id=%s resource_id=%s",
+        current_user.id, resource_id,
+    )
     return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
 
 
@@ -81,6 +85,7 @@ async def get_generation_status(
     session: AsyncSession = Depends(get_session),
 ):
     """查询后台生成任务的状态。"""
+    logger.debug("[ResourceAPI] 查询生成状态: user_id=%s resource_id=%s", current_user.id, resource_id)
     service = ResourceService(session)
     status_data = await service.get_generation_status(
         user_id=current_user.id,
@@ -101,6 +106,7 @@ async def get_resource_events(
     session: AsyncSession = Depends(get_session),
 ):
     """SSE 推送任务事件。"""
+    logger.debug("[ResourceAPI] SSE订阅: user_id=%s resource_id=%s after=%s", current_user.id, resource_id, after_sequence)
     # 验证资源所有权
     service = ResourceService(session)
     resource = await service.get_resource(
@@ -170,6 +176,7 @@ async def list_resources(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源列表。"""
+    logger.debug("[ResourceAPI] 查询资源列表: user_id=%s limit=%d offset=%d", current_user.id, limit, offset)
     service = ResourceService(session)
     resources = await service.list_resources(
         current_user.id,
@@ -205,6 +212,7 @@ async def get_resource(
     session: AsyncSession = Depends(get_session),
 ):
     """查询资源详情。"""
+    logger.debug("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
     service = ResourceService(session)
     bundle = await service.get_resource_bundle(
         current_user.id,

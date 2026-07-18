@@ -97,6 +97,8 @@ class PPTAgent(BaseResourceAgent):
         4. 调用 PPTService.generate() → PPTArtifact
         5. 填充 html_url，转换为 AgentResult
         """
+        import time as _time
+        started = _time.perf_counter()
         username = input_data.username
         resource_key = (
             str(input_data.resource_id)
@@ -106,6 +108,10 @@ class PPTAgent(BaseResourceAgent):
 
         # 1. 数据转换：upstream_handoffs → artifacts
         artifacts = _source_artifacts(input_data.upstream_handoffs)
+        logger.info(
+            "Agent[%s] 开始生成: learning_need=%s artifacts=%d",
+            self.agent_id, input_data.learning_need[:32], len(artifacts),
+        )
 
         # 2. 计划以 JSON-safe 快照跨越资源域与共享 PPT 引擎边界。禁止把
         # Pydantic 模型或拼接后的旧文本计划隐式传入另一个领域。
@@ -147,7 +153,11 @@ class PPTAgent(BaseResourceAgent):
                 progress=70,
             )
         except PPTGenerationError as exc:
-            logger.exception("PPT 生成失败")
+            elapsed_ms = int((_time.perf_counter() - started) * 1000)
+            logger.exception(
+                "Agent[%s] PPT生成失败: stage=%s elapsed_ms=%d",
+                self.agent_id, exc.stage, elapsed_ms,
+            )
             return AgentResult(
                 success=False,
                 title="PPT 生成失败",
@@ -161,6 +171,11 @@ class PPTAgent(BaseResourceAgent):
 
         # 5. 填充 html_url，转换为 AgentResult
         artifact.html_url = resource_ppt_url(username, resource_key)
+        elapsed_ms = int((_time.perf_counter() - started) * 1000)
+        logger.info(
+            "Agent[%s] 生成完成: slides=%d elapsed_ms=%d",
+            self.agent_id, artifact.slide_count, elapsed_ms,
+        )
         return self._artifact_to_result(artifact)
 
     def _artifact_to_result(self, artifact: object) -> AgentResult:

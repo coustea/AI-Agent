@@ -10,8 +10,11 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from app.auth.security import get_current_user
 from app.avatar.bridge.manager import avatar_bridge_manager
 from app.chat.service import get_avatar_chat_usecases, get_chat_usecases
+from app.infra.logging import get_logger
 from app.infra.models import User
 from app.infra.response import HttpResponse
+
+logger = get_logger(__name__)
 
 # 数字人模块路由，挂载在 /api/v1/ai/avatar/ 下
 router = APIRouter()
@@ -23,6 +26,7 @@ async def get_avatar_status(
 ):
     """获取数字人连接状态"""
     status = await avatar_bridge_manager.get_status(user.id)
+    logger.info("[AvatarAPI] 查询连接状态: user_id=%s connected=%s", user.id, status.get("connected"))
     return HttpResponse.success(data=status)
 
 
@@ -34,6 +38,7 @@ async def get_avatar_stream(
     stream_info = await avatar_bridge_manager.get_stream_info(user.id)
     # 流信息未就绪时返回 404
     if not stream_info:
+        logger.info("[AvatarAPI] 视频流未就绪: user_id=%s", user.id)
         return HttpResponse.error(message="数字人视频流未就绪", code=404)
     return HttpResponse.success(data=stream_info)
 
@@ -44,6 +49,7 @@ async def stop_avatar(
 ):
     """停止数字人说话"""
     await avatar_bridge_manager.stop(user.id)
+    logger.info("[AvatarAPI] 停止播报: user_id=%s", user.id)
     return HttpResponse.success(data={"status": "stopped"})
 
 
@@ -53,6 +59,7 @@ async def cleanup_avatar(
 ):
     """清理数字人连接资源"""
     await avatar_bridge_manager.cleanup(user.id)
+    logger.info("[AvatarAPI] 清理连接资源: user_id=%s", user.id)
     return HttpResponse.success()
 
 
@@ -79,6 +86,7 @@ async def clear_avatar_history(
         return HttpResponse.success(data={"session_id": "", "deleted_count": 0})
 
     deleted_count = await chat_uc.clear_history(user.id, target_session_id)
+    logger.info("[AvatarAPI] 清空会话历史: user_id=%s session_id=%s deleted=%s", user.id, target_session_id, deleted_count)
     return HttpResponse.success(data={"session_id": target_session_id, "deleted_count": deleted_count})
 
 
@@ -117,8 +125,11 @@ async def analyze_avatar_attachments(
             attachments=parsed_attachments,
         )
     except ValueError as exc:
+        logger.warning("[AvatarAPI] 附件分析参数错误: user_id=%s err=%s", user.id, exc)
         return HttpResponse.error(code=400, message=str(exc))
     except Exception as exc:
+        logger.error("[AvatarAPI] 附件分析失败: user_id=%s err=%s", user.id, exc)
         return HttpResponse.error(code=500, message=f"附件分析失败: {exc}")
 
+    logger.info("[AvatarAPI] 附件分析完成: user_id=%s file_count=%s", user.id, len(upload_payloads))
     return HttpResponse.success(data=payload)

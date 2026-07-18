@@ -71,10 +71,13 @@ async def lifespan(app: FastAPI):
         except Exception as exc:
             log.error("[KB] 索引检查失败: %s", exc, exc_info=True)
 
+    log.info("[Main] 应用启动完成，开始接受请求")
+
     # yield 将控制权交给 FastAPI 应用，开始处理请求
     yield
 
-    # 应用关闭时的清理逻辑（暂未实现）
+    # 应用关闭时的清理逻辑
+    log.info("[Main] 应用正在关闭，开始清理资源")
 
 
 # 创建并配置 FastAPI 应用实例：日志、CORS、异常处理器、静态目录与路由注册
@@ -138,7 +141,7 @@ def main() -> None:
         "app.main:app",
         host=HOST,
         port=PORT,
-        reload=False,
+        reload=True,
         reload_dirs=["app"],
     )
 

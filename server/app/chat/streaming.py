@@ -5,6 +5,10 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 
+from app.infra.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 # ResponseStreamer：将最终回答文本按固定大小切片，以带节奏延迟的方式流式输出 token
 class ResponseStreamer:
@@ -19,14 +23,20 @@ class ResponseStreamer:
     async def stream_answer(self, answer: str, *, skip_blank: bool = True) -> AsyncIterator[dict[str, str]]:
         # 空回答直接结束
         if not answer or (skip_blank and not answer.strip()):
+            logger.debug("[ChatStreaming] stream_answer 跳过空回答")
             return
 
+        logger.info("[ChatStreaming] stream_answer 开始: answer_len=%d chunk_size=%d", len(answer), self.chunk_size)
+        chunk_count = 0
         # 逐片生成 token，片间按 chunk_delay 节流
         for start in range(0, len(answer), self.chunk_size):
             chunk = answer[start : start + self.chunk_size]
             if not chunk:
                 continue
 
+            chunk_count += 1
             yield {"event": "token", "data": chunk}
             if self.chunk_delay and start + self.chunk_size < len(answer):
                 await asyncio.sleep(self.chunk_delay)
+
+        logger.info("[ChatStreaming] stream_answer 完成: chunks=%d", chunk_count)

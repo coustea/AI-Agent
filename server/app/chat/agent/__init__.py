@@ -48,6 +48,11 @@ class TutorAgent:
 
         ChatService 调用此方法，逐事件转发为 SSE。
         """
+        logger.info(
+            "[ChatAgent] chat 开始: user_id=%s session_id=%s user_message_id=%s question_len=%d",
+            input.user_id, input.session_id, input.user_message_id, len(input.question or ""),
+        )
+        start_time = time.time()
         event_queue: asyncio.Queue[TutorRuntimeEvent] = asyncio.Queue()
         initial_state: TutorAgentState = {
             "user_id": input.user_id,
@@ -99,6 +104,12 @@ class TutorAgent:
 
             # 图执行完成，获取最终状态并发送 final 事件
             final_state = await sentinel_task
+
+            final_answer = final_state.get("final_answer", "")
+            logger.info(
+                "[ChatAgent] chat 完成: user_id=%s session_id=%s answer_len=%d elapsed=%.2fs",
+                input.user_id, input.session_id, len(final_answer), time.time() - start_time,
+            )
 
             yield TutorRuntimeEvent(
                 type="final",

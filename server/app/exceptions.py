@@ -11,7 +11,10 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from app.auth.security import AuthError
+from app.infra.logging import get_logger
 from app.infra.response import HttpResponse
+
+logger = get_logger(__name__)
 
 
 # 处理认证错误，将 AuthError 转换为 HTTP 401 标准响应
@@ -20,6 +23,7 @@ async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
 
     当 JWT Token 无效、过期或用户不存在时触发。
     """
+    logger.warning("[Exception] AuthError: path=%s message=%s", request.url.path, exc.message)
     return HttpResponse.error(code=401, message=exc.message)
 
 
@@ -29,6 +33,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
     将 status_code 和 detail 映射到统一的错误响应格式。
     """
+    logger.warning("[Exception] HTTPException: path=%s status=%s detail=%s", request.url.path, exc.status_code, exc.detail)
     return HttpResponse.error(code=exc.status_code, message=str(exc.detail))
 
 

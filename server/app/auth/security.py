@@ -138,6 +138,7 @@ async def create_token(user_id: int, session: AsyncSession) -> str:
     session.add(ActiveToken(user_id=user_id, token=token, expires_at=expire))
     # 持久化 Token 记录到数据库
     await session.commit()
+    logger.info("[Auth] Token 签发成功: user_id=%s jti=%s", user_id, payload["jti"])
     # 返回签发的 Token 字符串
     # 返回签发的 Token
     return token
@@ -195,9 +196,11 @@ async def is_token_valid(token: str, session: AsyncSession) -> bool:
     active_token = (await session.exec(select(ActiveToken).where(ActiveToken.token == token))).first()
     if not active_token:
         # Token 不在白名单中（已登出或从未签发）
+        logger.debug("[Auth] Token 不在白名单中")
         return False
     if _is_expired(active_token.expires_at):
         # Token 已过期，清理过期记录
+        logger.debug("[Auth] Token 已过期，清理白名单记录: user_id=%s", active_token.user_id)
         await session.delete(active_token)
         await session.commit()
         return False
@@ -221,6 +224,7 @@ async def revoke_token(token: str, session: AsyncSession) -> None:
         # 删除白名单记录，Token 立即失效
         await session.delete(active_token)
         await session.commit()
+        logger.info("[Auth] Token 撤销成功: user_id=%s", active_token.user_id)
 
 
 # 内部方法：从 Token 解析当前用户（校验白名单 → 解码用户 ID → 查询用户记录）
@@ -243,12 +247,14 @@ async def _resolve_current_user_from_token(
     """
     # 检查 Token 是否在白名单中且未过期
     if not await is_token_valid(token, session):
+        logger.warning("[Auth] Token 验证失败：已失效或已登出")
         raise AuthError("Token 已失效或已退出登录")
     # 从 Token 中解码用户 ID
     user_id = decode_token(token)
     # 根据用户 ID 查询用户记录
     user = await session.get(User, user_id)
     if not user:
+        logger.warning("[Auth] Token 对应的用户不存在: user_id=%s", user_id)
         raise AuthError("用户不存在")
     # 刷新用户对象，确保所有字段已从数据库加载
     await session.refresh(user)

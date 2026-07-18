@@ -179,6 +179,7 @@ def route_workers_or_merge(state: ParentState) -> list[Send]:
     worker_ids = [aid for aid in selected_agents if aid in BASE_RESOURCE_AGENT_IDS]
     if not worker_ids:
         # 无 worker 时直接跳到 merge_workers
+        logger.debug("[ResourceNodes] 路由: 无基础worker，跳到merge resource_id=%s", state["resource_id"])
         return [Send("merge_workers", {
             "user_id": state["user_id"],
             "resource_id": state["resource_id"],
@@ -189,6 +190,7 @@ def route_workers_or_merge(state: ParentState) -> list[Send]:
         })]
     # Send 必须携带 worker_node 所需的全部数据，
     # 因为 LangGraph Send 创建独立 state，不继承父 state。
+    logger.info("[ResourceNodes] 路由: 并行分发worker resource_id=%s workers=%s", state["resource_id"], worker_ids)
     return [
         Send("worker_node", {
             "agent_id": agent_id,
@@ -337,6 +339,10 @@ async def _record_node_failure(
     exc: Exception,
 ) -> dict[str, Any]:
     message = str(exc)[:300] or type(exc).__name__
+    logger.error(
+        "[ResourceNodes] 节点失败: resource_id=%s agent_id=%s stage=%s error=%s",
+        resource_id, agent_id, stage, message,
+    )
     await ResourceEvents(user_id=user_id, resource_id=resource_id).send(
         agent_id,
         "failed",
@@ -357,7 +363,10 @@ async def aggregation_node(state: ParentState) -> dict[str, Any]:
     events = ResourceEvents(user_id=user_id, resource_id=resource_id)
     selected = [aid for aid in state.get("selected_agents", []) if aid in AGGREGATION_AGENT_IDS]
     if not selected:
+        logger.debug("[ResourceNodes] 聚合节点: 无聚合Agent，跳过 resource_id=%s", resource_id)
         return {}
+
+    logger.info("[ResourceNodes] 聚合节点开始: resource_id=%s agents=%s", resource_id, selected)
 
     # 聚合 Agent 以教学计划和已完成基础资源的 handoff 为输入；即使基础资源
     # 全部失败，仍会按已选集合逐个执行并各自记录真实结果。
@@ -378,6 +387,10 @@ async def aggregation_node(state: ParentState) -> dict[str, Any]:
         "聚合资源处理完成，开始组装资源包",
         90,
         data={"phase": "aggregation_ready", "success_count": len(merged_results), "fail_count": len(merged_failures)},
+    )
+    logger.info(
+        "[ResourceNodes] 聚合节点完成: resource_id=%s success=%d failed=%d",
+        resource_id, len(merged_results), len(merged_failures),
     )
     return {"results": merged_results, "failures": merged_failures}
 

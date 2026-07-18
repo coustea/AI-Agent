@@ -29,6 +29,7 @@ def register_agent(cls: type[BaseResourceAgent]) -> type[BaseResourceAgent]:
     """装饰器：将 Agent 类注册到全局注册表，按 agent_id 索引。"""
     # 以 agent_id 为键写入注册表，供路径/资源服务按 id 查找
     AGENT_REGISTRY[cls.agent_id] = cls
+    logger.info("[AgentRegistry] 注册Agent: agent_id=%s cls=%s", cls.agent_id, cls.__name__)
     return cls
 
 

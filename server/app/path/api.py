@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
@@ -14,6 +13,7 @@ from app.auth.security import (
 )
 from app.evaluation.schemas import LearningEventCreate
 from app.infra.database import get_session
+from app.infra.logging import get_logger
 from app.infra.models import LearningEvent, LearningPath, PathNode, PathNodeResource, User
 from app.infra.response import HttpResponse
 from app.path.event import PathEvents, encode_path_sse, get_path_channel
@@ -30,7 +30,7 @@ from app.path.service import (
 )
 from uuid import uuid4
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 router = APIRouter(prefix="/path-plan", tags=["AI Path Planning"])
@@ -57,6 +57,10 @@ async def create_path(
     service = PathService(session)
     path_id = await service.create_path(current_user.id, request)
     run_id = str(uuid4())
+    logger.info(
+        "[PathAPI] 创建路径任务: user_id=%s path_id=%s run_id=%s",
+        current_user.id, path_id, run_id,
+    )
     events = PathEvents(user_id=current_user.id, path_id=path_id, run_id=run_id)
     await events.open()
     # 路径规划是独立任务，不能依赖创建页面仍保持 HTTP 连接。
@@ -171,7 +175,9 @@ async def activate_history_path(
     try:
         result = await service.activate_history_path(current_user.id, path_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 激活路径失败: user_id=%s path_id=%s error=%s", current_user.id, path_id, exc)
         return HttpResponse.error(code=404, message=str(exc))
+    logger.info("[PathAPI] 路径已激活: user_id=%s path_id=%s", current_user.id, path_id)
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
@@ -189,6 +195,7 @@ async def get_node_workspace(
     try:
         result = await service.get_node_workspace(current_user.id, node_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 获取工作区失败: user_id=%s node_id=%s error=%s", current_user.id, node_id, exc)
         return HttpResponse.error(code=404, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
@@ -209,7 +216,9 @@ async def start_learning(
     try:
         result = await service.start_learning(current_user.id, node_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 开始学习失败: user_id=%s node_id=%s error=%s", current_user.id, node_id, exc)
         return HttpResponse.error(code=400, message=str(exc))
+    logger.info("[PathAPI] 开始学习: user_id=%s node_id=%s", current_user.id, node_id)
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
@@ -224,7 +233,9 @@ async def generate_tutorial(
     try:
         result = await service.generate_tutorial(current_user.id, node_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 生成教程失败: user_id=%s node_id=%s error=%s", current_user.id, node_id, exc)
         return HttpResponse.error(code=400, message=str(exc))
+    logger.info("[PathAPI] 教程生成完成: user_id=%s node_id=%s", current_user.id, node_id)
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
@@ -242,6 +253,7 @@ async def get_node_questions(
     try:
         result = await service.get_node_questions(current_user.id, node_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 获取测验题失败: user_id=%s node_id=%s error=%s", current_user.id, node_id, exc)
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
@@ -257,7 +269,9 @@ async def generate_node_questions(
     try:
         result = await service.generate_node_questions(current_user.id, node_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 生成测验题失败: user_id=%s node_id=%s error=%s", current_user.id, node_id, exc)
         return HttpResponse.error(code=400, message=str(exc))
+    logger.info("[PathAPI] 测验题生成完成: user_id=%s node_id=%s", current_user.id, node_id)
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
@@ -273,7 +287,9 @@ async def submit_node_quiz(
     try:
         result = await service.submit_node_quiz(current_user.id, node_id, payload)
     except ValueError as exc:
+        logger.warning("[PathAPI] 提交测验失败: user_id=%s node_id=%s error=%s", current_user.id, node_id, exc)
         return HttpResponse.error(code=400, message=str(exc))
+    logger.info("[PathAPI] 测验提交完成: user_id=%s node_id=%s", current_user.id, node_id)
     return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
@@ -343,11 +359,13 @@ async def get_node_resource(
 ):
     """获取节点辅助资源 — 支持类型：mindmap, code, ppt, reading, cartoon"""
     if resource_type not in RESOURCE_TYPES:
+        logger.warning("[PathAPI] 不支持的资源类型(查询): %s", resource_type)
         return HttpResponse.error(code=400, message=f"不支持的资源类型: {resource_type}")
     service = PathService(session)
     try:
         result = await service.get_node_resource_by_type(current_user.id, node_id, resource_type)
     except ValueError as exc:
+        logger.warning("[PathAPI] 获取节点资源失败: user_id=%s node_id=%s type=%s error=%s", current_user.id, node_id, resource_type, exc)
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
 
@@ -455,6 +473,7 @@ async def get_path_resource(
 ):
     resource = await session.get(PathNodeResource, resource_id)
     if resource is None or resource.user_id != current_user.id:
+        logger.debug("[PathAPI] 路径资源不存在或无权限: user_id=%s resource_id=%s", current_user.id, resource_id)
         return HttpResponse.error(code=404, message="路径资源不存在")
     return HttpResponse.success(data=LearningPathResourceDTO.from_model(resource).model_dump(mode="json"))
 
@@ -470,6 +489,7 @@ async def get_path_by_id(
     try:
         response = await service.get_path_by_id(current_user.id, path_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 获取路径详情失败: user_id=%s path_id=%s error=%s", current_user.id, path_id, exc)
         return HttpResponse.error(code=404, message=str(exc))
     return HttpResponse.success(data=response.model_dump(mode="json"))
 
@@ -489,6 +509,7 @@ async def record_path_learning_event(
     try:
         event_result = await service.record_learning_event(current_user.id, path_id, payload)
     except ValueError as exc:
+        logger.warning("[PathAPI] 记录学习事件失败: user_id=%s path_id=%s error=%s", current_user.id, path_id, exc)
         return HttpResponse.error(code=400, message=str(exc))
     if isinstance(event_result, tuple):
         event = event_result[0]
@@ -520,6 +541,7 @@ async def get_path_learning_evaluation(
     try:
         evaluation = await service.get_learning_evaluation(current_user.id, path_id)
     except ValueError as exc:
+        logger.warning("[PathAPI] 获取学习评估失败: user_id=%s path_id=%s error=%s", current_user.id, path_id, exc)
         return HttpResponse.error(code=400, message=str(exc))
     return HttpResponse.success(data=evaluation.model_dump(mode="json") if evaluation else None)
 
