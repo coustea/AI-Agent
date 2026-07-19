@@ -22,7 +22,7 @@ from app.shared.cartoon.models import Lesson
 logger = get_logger(__name__)
 
 
-FindingCategory = Literal["lint", "runtime", "layout", "motion", "contrast", "semantic", "unknown"]
+FindingCategory = Literal["runtime", "layout", "motion", "semantic", "unknown"]
 
 
 class QualityFinding(BaseModel):
@@ -54,7 +54,7 @@ class HyperFramesReport(BaseModel):
                 if isinstance(item, dict):
                     findings.append(cls._finding(item, str(item.get("category") or "unknown")))
 
-        for category in ("lint", "runtime", "layout", "motion", "contrast"):
+        for category in ("runtime", "layout", "motion"):
             section = payload.get(category)
             if not isinstance(section, dict):
                 continue
@@ -75,7 +75,7 @@ class HyperFramesReport(BaseModel):
     @staticmethod
     def _finding(payload: dict[str, Any], category: str) -> QualityFinding:
         normalized_category = category if category in {
-            "lint", "runtime", "layout", "motion", "contrast", "semantic"
+            "runtime", "layout", "motion", "semantic"
         } else "unknown"
         severity = str(payload.get("severity") or "error").lower()
         if severity not in {"error", "warning", "info"}:
@@ -98,10 +98,6 @@ class HyperFramesReport(BaseModel):
         return self.count("runtime")
 
     @property
-    def contrast_count(self) -> int:
-        return self.count("contrast")
-
-    @property
     def layout_count(self) -> int:
         return self.count("layout")
 
@@ -120,11 +116,9 @@ class QualityPolicy:
     """Publish only bundles that pass every strict HyperFrames error check."""
 
     _BLOCKING_CATEGORIES = (
-        "lint",
         "runtime",
         "layout",
         "motion",
-        "contrast",
         "semantic",
         "unknown",
     )
@@ -222,11 +216,10 @@ class CartoonMedia:
 
     # Unbounded tween boundaries can make HyperFrames' diagnostic navigation time out.
     _MAX_TRANSITION_SAMPLES = 64
-    # HyperFrames validate uses this value only for page settling, not page
-    # navigation.  Keeping it small avoids turning a visual smoke check into
-    # a minute-long delay for every bundle.
-    _VALIDATE_SETTLE_TIMEOUT_MS = 3_000
-    _QUALITY_COMMANDS = ("lint", "validate", "inspect")
+    # Composer owns the complete HTML/CSS surface, so static lint belongs to
+    # template CI rather than every generated lesson.  Runtime visibility
+    # below replaces validate's browser launch and checks every authored beat.
+    _QUALITY_COMMANDS = ("inspect",)
     _toolchain_cache: set[tuple[str, int, int]] = set()
 
     def __init__(
@@ -601,23 +594,6 @@ class CartoonMedia:
         executable = str(self.hyperframes_path())
         command_specs = (
             (
-                "lint",
-                [executable, "lint", ".", "--json"],
-                self._lint_findings,
-            ),
-            (
-                "validate",
-                [
-                    executable,
-                    "validate",
-                    ".",
-                    "--json",
-                    "--timeout",
-                    str(self._VALIDATE_SETTLE_TIMEOUT_MS),
-                ],
-                self._validate_findings,
-            ),
-            (
                 "inspect",
                 [
                     executable,
@@ -692,62 +668,6 @@ class CartoonMedia:
         return report
 
     @classmethod
-    def _lint_findings(
-        cls,
-        payload: Mapping[str, Any],
-        *,
-        exit_code: int,
-    ) -> list[QualityFinding]:
-        findings = cls._command_findings(payload, category="lint", source="lint")
-        return cls._command_failure_finding(
-            payload,
-            findings,
-            command_name="lint",
-            exit_code=exit_code,
-        )
-
-    @classmethod
-    def _validate_findings(
-        cls,
-        payload: Mapping[str, Any],
-        *,
-        exit_code: int,
-    ) -> list[QualityFinding]:
-        findings = cls._command_findings(
-            payload,
-            category="runtime",
-            source="errors",
-            severity="error",
-        )
-        findings.extend(
-            cls._command_findings(
-                payload,
-                category="runtime",
-                source="warnings",
-                severity="warning",
-            )
-        )
-        contrast_entries = payload.get("contrast", [])
-        if isinstance(contrast_entries, list):
-            for item in contrast_entries:
-                if not isinstance(item, Mapping) or item.get("wcagAA", True):
-                    continue
-                findings.append(
-                    QualityFinding(
-                        category="contrast",
-                        code="low_contrast",
-                        severity="warning",
-                        message=cls._finding_message(item),
-                    )
-                )
-        return cls._command_failure_finding(
-            payload,
-            findings,
-            command_name="validate",
-            exit_code=exit_code,
-        )
-
-    @classmethod
     def _inspect_findings(
         cls,
         payload: Mapping[str, Any],
@@ -774,40 +694,6 @@ class CartoonMedia:
             command_name="inspect",
             exit_code=exit_code,
         )
-
-    @classmethod
-    def _command_findings(
-        cls,
-        payload: Mapping[str, Any],
-        *,
-        category: FindingCategory,
-        source: str,
-        severity: Literal["error", "warning", "info"] | None = None,
-    ) -> list[QualityFinding]:
-        entries = payload.get(source, [])
-        if not isinstance(entries, list):
-            return []
-        findings: list[QualityFinding] = []
-        for item in entries:
-            if isinstance(item, Mapping):
-                findings.append(
-                    QualityFinding(
-                        category=category,
-                        code=str(item.get("code") or source),
-                        severity=severity or cls._severity(item.get("severity")),
-                        message=cls._finding_message(item),
-                    )
-                )
-            else:
-                findings.append(
-                    QualityFinding(
-                        category=category,
-                        code=source,
-                        severity=severity or "error",
-                        message=str(item),
-                    )
-                )
-        return findings
 
     @staticmethod
     def _severity(value: Any) -> Literal["error", "warning", "info"]:
@@ -987,6 +873,11 @@ class CartoonMedia:
                     if not isinstance(sampled_problems, list):
                         raise RuntimeError("runtime visibility probe returned an invalid result")
                     problems.extend(str(problem) for problem in sampled_problems)
+                    problems.extend(
+                        message
+                        for message in browser_messages
+                        if message.startswith("pageerror:") or message.startswith("console[error]:")
+                    )
                 finally:
                     await browser.close()
         except QualityGateError:

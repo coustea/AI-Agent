@@ -81,14 +81,36 @@
     return { x: anchor.x + Math.cos(angle) * ring, y: anchor.y + Math.sin(angle) * ring, w: size.w, h: size.h };
   }
 
-  function freeLayout(scene, state, objects) {
-    var layout = {};
-    var free = state.placements.filter(function (placement) {
-      var object = objects[placement.object_id];
-      var region = placement.region || "main";
-      return object && object.role !== "container" && object.role !== "pointer"
-        && !placement.container_id && !placement.anchor_id && (region === "main" || region === "input");
+  function isFreePlacement(placement, object) {
+    var region = placement.region || "main";
+    return object && object.role !== "container" && object.role !== "pointer"
+      && !placement.container_id && !placement.anchor_id
+      && (region === "main" || region === "input");
+  }
+
+  function stableFreePlacements(scene, objects) {
+    // A state is allowed to move an item into a container or attach it to an
+    // anchor.  That must not reflow its unrelated peers: reflow makes their
+    // tweens cross, which can temporarily put an opaque card over another
+    // card's label.  Reserve a slot by object identity from the complete
+    // semantic program, including objects currently hidden in this state.
+    var byObjectId = {};
+    scene.program.states.forEach(function (programState) {
+      programState.placements.forEach(function (placement) {
+        var object = objects[placement.object_id];
+        if (isFreePlacement(placement, object) && !byObjectId[placement.object_id]) {
+          byObjectId[placement.object_id] = placement;
+        }
+      });
     });
+    return scene.program.objects
+      .map(function (object) { return byObjectId[object.id]; })
+      .filter(Boolean);
+  }
+
+  function freeLayout(scene, objects) {
+    var layout = {};
+    var free = stableFreePlacements(scene, objects);
     var topology = scene.topology;
     var positions;
     var hasContainers = scene.program.objects.some(function (object) { return object.role === "container"; });
@@ -132,7 +154,7 @@
 
   function layout(scene, state) {
     var objects = mapById(scene.program.objects);
-    var result = freeLayout(scene, state, objects);
+    var result = freeLayout(scene, objects);
     var containers = scene.program.objects.filter(function (object) { return object.role === "container"; });
     var containerBoxes;
     if (containers.length <= 3) {
@@ -194,6 +216,19 @@
     // markers routinely covered one another or the object they described.
     var occupied = state.placements.reduce(function (boxes, placement) {
       var object = objects[placement.object_id];
+      if (placement.visible && object && object.role === "container" && result[object.id]) {
+        var container = result[object.id];
+        // Containers render their label in a dedicated header strip.  It is
+        // not part of the container's body, so attached tokens must not use
+        // it as free space while searching for an open placement.
+        var headerHeight = Math.min(8, Math.max(5, container.h * 0.16));
+        boxes.push({
+          x: container.x,
+          y: container.y - container.h / 2 + 2 + headerHeight / 2,
+          w: Math.max(8, container.w - 2),
+          h: headerHeight
+        });
+      }
       if (placement.visible && object && object.role !== "container" && result[object.id]) boxes.push(result[object.id]);
       return boxes;
     }, []);
@@ -319,18 +354,39 @@
       window.gsap.set(group, { autoAlpha: active.has(key) && shape ? 1 : 0 });
     });
   }
-  function tweenState(scene, beat, after, timeline, at, duration) {
+  function tweenState(scene, beat, before, after, timeline, at, duration) {
     var boxes = layout(scene, after); content(scene, after, boxes, timeline, at);
     var action = beat.actions[0];
+    var beforeByObjectId = mapById(before.placements);
     after.placements.forEach(function (placement) {
       var node = byId("entity-" + scene.id + "-" + placement.object_id); var box = boxes[placement.object_id]; if (!node || !box) return;
       var focused = action.subject_id === placement.object_id || action.target_id === placement.object_id;
-      var verb = focused ? action.verb : "settle";
+      var previous = beforeByObjectId[placement.object_id];
+      // One atomic action should not animate unrelated cards through the
+      // stage.  Their final geometry is still applied, but without a travel
+      // path that could cross readable text during a transition sample.
+      if (!focused) {
+        timeline.set(node, vars(box, placement, false), at);
+        return;
+      }
+      var verb = action.verb;
       var motion = vars(box, placement, focused);
       if (verb === "reveal") { motion.scale = focused ? 1.08 : 1; motion.duration = duration * 0.62; motion.ease = "back.out(1.7)"; }
       else if (verb === "traverse" || verb === "move" || verb === "place" || verb === "remove") { motion.duration = duration; motion.ease = "power3.inOut"; }
       else if (verb === "compare") { motion.duration = duration * 0.72; motion.ease = "elastic.out(1,0.55)"; }
       else { motion.duration = duration * 0.65; motion.ease = "power2.out"; }
+      if (!previous || !previous.visible) {
+        // A newly revealed object has no visible source.  Position it at its
+        // destination before fading in, instead of animating from a hidden
+        // staging slot across the container title or another card.
+        var concealed = vars(box, Object.assign({}, placement, { visible: false }), false);
+        concealed.scale = focused ? 0.88 : 0.94;
+        timeline.set(node, concealed, at);
+      }
+      if (!placement.visible) {
+        timeline.to(node, { autoAlpha: 0, scale: 0.94, duration: motion.duration, ease: motion.ease }, at);
+        return;
+      }
       timeline.to(node, motion, at);
       if (focused && (verb === "traverse" || verb === "compare" || verb === "focus")) timeline.to(node, { scale: 1.1, duration: duration * 0.3, yoyo: true, repeat: 1, ease: "sine.inOut" }, at + duration * 0.38);
     });
@@ -344,8 +400,9 @@
       var actionBeat = {
         actions: [beat.actions[index]]
       };
+      var previous = stateById(scene, index === 0 ? beat.before_state_id : states[index - 1]);
       var next = stateById(scene, stateId);
-      tweenState(scene, actionBeat, next, timeline, at + segment * index, segment);
+      tweenState(scene, actionBeat, previous, next, timeline, at + segment * index, segment);
     });
   }
 

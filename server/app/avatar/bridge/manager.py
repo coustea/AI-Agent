@@ -34,6 +34,7 @@ from app.chat.agent.nodes import (
 from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import chat, get_chat_usecases
+from app.chat.video import get_chat_video_service
 from app.config import ASR_VAD_EOS
 from app.infra.logging import get_logger
 
@@ -1363,6 +1364,43 @@ class RealtimeBridge:
         if user_message_id is None:
             raise RuntimeError("保存用户消息失败")
 
+        if video_requested:
+            video_service = get_chat_video_service()
+            assistant_message = await get_chat_memory_service().save_message(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                user_message_id=user_message_id,
+                role="assistant",
+                content=[],
+                usage_metadata={"response_mode": "video"},
+            )
+            if assistant_message.id is None:
+                raise RuntimeError("视频任务消息保存失败")
+            task = await video_service.create_task(
+                user_id=self.user_id,
+                session_id=self.session_id,
+                assistant_message_id=assistant_message.id,
+            )
+            self._spawn_background(
+                video_service.run_task(
+                    user_id=self.user_id,
+                    username=self.username or f"user_{self.user_id}",
+                    session_id=self.session_id,
+                    assistant_message_id=assistant_message.id,
+                ),
+                label=f"chat-video:{assistant_message.id}",
+            )
+            await self._send_event_with_turn_id(
+                "video",
+                data={
+                    "assistant_message_id": assistant_message.id,
+                    "session_id": self.session_id,
+                    "video": task["video"],
+                },
+            )
+            await self._send_event_with_turn_id("assistant_complete")
+            return
+
         # 发送 thinking 状态
         await self._send_digital_human_state("thinking", "Processing user input")
 
@@ -1437,7 +1475,6 @@ class RealtimeBridge:
                     diagram_mode="required" if diagram_requested else "auto",
                     enable_web_search=enable_search,
                     voice_mode=True,
-                    video_mode=video_requested,
                 )
                 try:
                     while True:

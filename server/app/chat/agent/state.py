@@ -35,7 +35,6 @@ class TutorAgentState(TypedDict, total=False):
     enable_web_search: bool
     diagram_mode: str
     voice_mode: bool
-    video_mode: bool
 
     # ── 上下文（无 reducer）──
     history_messages: list[AnyMessage]

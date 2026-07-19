@@ -10,11 +10,12 @@ ChatUseCases 保留会话管理、文件上传等辅助功能，对话核心逻�
 from __future__ import annotations
 
 import asyncio
-import json
 import re
 from pathlib import Path
 from typing import Any, AsyncIterator
 from uuid import uuid4
+
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.chat.agent import TutorAgent
 from app.chat.context_builder import ChatContextBuilder, build_user_content
@@ -26,9 +27,10 @@ from app.chat.memory.service import get_chat_memory_service
 from app.chat.schemas import DiagramMode, TutorAgentInput
 from app.chat.storage.file_store import LocalFileStore
 from app.chat.schemas import ChatMessageItem
-from app.chat.video import get_chat_video_service
+from app.chat.utils import normalize_message_content
 from app.config import MAX_UPLOAD_FILES_PER_REQUEST
 from app.infra.database import session_scope
+from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
@@ -47,6 +49,18 @@ _VOICE_GREETING_TEXTS = frozenset({
     "哈喽",
     "哈罗",
 })
+
+_COMPLEX_AGENT_REQUEST_RE = re.compile(
+    r"(?:图解|流程图|架构图|结构图|示意图|思维导图|时序图|可视化|mermaid|diagram|"
+    r"联网|上网|搜索|检索|查资料|最新|新闻|今天发生|"
+    r"知识库|学习画像|长期记忆|记住我|附件|文件|图片|pdf|文档)",
+    re.IGNORECASE,
+)
+
+_FAST_TEXT_SYSTEM_PROMPT = """你是 Mentorly，一位面向 CS/SE 学生的智能辅导导师。
+直接回答学生当前的问题：先给结论，再给必要的解释、例子或步骤。
+保持准确、清晰、自然；不展示思考过程，不调用工具，不输出 XML 标签或系统说明。
+除非学生明确要求，否则不要冗长铺陈。"""
 
 _RED_BLACK_TREE_VOICE_REPLY = (
     "红黑树是一种自平衡二叉搜索树，它有五条核心性质：每个节点非红即黑；根节点为黑色；所有空叶子节点为黑色；"
@@ -91,6 +105,24 @@ def _get_voice_quick_reply(text: str) -> str | None:
         return "你好！很高兴见到你。今天想学习什么？"
     return None
 
+
+def _should_use_fast_text_response(
+    *,
+    question: str,
+    attachments: list[str],
+    enable_web_search: bool,
+    diagram_mode: DiagramMode,
+    voice_mode: bool,
+) -> bool:
+    """Route ordinary text tutoring to the direct streaming path."""
+    return not (
+        voice_mode
+        or attachments
+        or enable_web_search
+        or diagram_mode == "required"
+        or _COMPLEX_AGENT_REQUEST_RE.search(question)
+    )
+
 # -----------------------------------------------------------------------
 # 核心函数：build_messages / chat helpers / chat
 # -----------------------------------------------------------------------
@@ -121,7 +153,6 @@ async def chat(
     enable_web_search: bool = False,
     diagram_mode: DiagramMode = "auto",
     voice_mode: bool = False,
-    video_mode: bool = False,
 ) -> AsyncIterator[dict[str, Any]]:
     """执行一次辅导对话，所有派生记录关联当前 UserMessage。"""
     uc = get_chat_usecases()
@@ -179,7 +210,6 @@ async def chat(
         _get_voice_quick_reply(current_message)
         if (
             voice_mode
-            and not video_mode
             and not merged_attachments
             and not enable_web_search
             and diagram_mode == "auto"
@@ -227,11 +257,77 @@ async def chat(
 
     # ── 2. 构建上下文 ──
     # 构建历史消息与会话摘要上下文
-    history_messages = await build_messages(
-        user_id, effective_session,
-        exclude_message_id=user_message_id,
+    history_messages, session_summary = await asyncio.gather(
+        build_messages(
+            user_id,
+            effective_session,
+            exclude_message_id=user_message_id,
+        ),
+        memory_svc.get_session_summary_context(
+            user_id=user_id,
+            session_id=effective_session,
+        ),
     )
-    session_summary = await memory_svc.get_session_summary_context(user_id=user_id, session_id=effective_session)
+
+    if _should_use_fast_text_response(
+        question=current_message,
+        attachments=merged_attachments,
+        enable_web_search=enable_web_search,
+        diagram_mode=diagram_mode,
+        voice_mode=voice_mode,
+    ):
+        fast_system_prompt = _FAST_TEXT_SYSTEM_PROMPT
+        if session_summary:
+            fast_system_prompt += f"\n\n已知会话摘要：\n{session_summary}"
+        full_answer = ""
+        try:
+            async for chunk in get_llm().astream(
+                [SystemMessage(content=fast_system_prompt), *history_messages, HumanMessage(content=current_message)],
+            ):
+                token = normalize_message_content(getattr(chunk, "content", ""))
+                if token:
+                    full_answer += token
+                    yield {"event": "token", "data": token}
+        except Exception as exc:
+            logger.exception("[chat] Mentorly 直接流式回答失败")
+            yield {"event": "error", "data": f"服务器出错: {exc}"}
+            yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+            return
+
+        if not full_answer.strip():
+            yield {"event": "error", "data": "模型未生成可用回答"}
+            yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
+            return
+
+        yield {"event": "status", "data": {"stage": "answer_done", "message": "回答已生成，正在保存..."}}
+        saved = await memory_svc.save_message(
+            user_id=user_id,
+            session_id=effective_session,
+            user_message_id=user_message_id,
+            role="assistant",
+            content=[{"type": "text", "text": full_answer}],
+            usage_metadata={"response_mode": "direct"},
+        )
+        yield {
+            "event": "done",
+            "data": {
+                "session_id": effective_session,
+                "saved_message_id": saved.id,
+                "full_response": full_answer,
+                "tool_calls": [],
+            },
+        }
+        uc._spawn_background(
+            run_background_memory_jobs(
+                uc._memory_service,
+                user_id=user_id,
+                session_id=effective_session,
+                user_message=current_message,
+                assistant_reply=full_answer,
+            ),
+            label="post_turn",
+        )
+        return
 
     # ── 3. 调用 TutorAgent ──
     # 组装 Agent 输入并创建 TutorAgent 实例
@@ -247,7 +343,6 @@ async def chat(
         enable_web_search=enable_web_search,
         diagram_mode=diagram_mode,
         voice_mode=voice_mode,
-        video_mode=video_mode,
     )
 
     agent = TutorAgent()
@@ -275,7 +370,7 @@ async def chat(
                 tool_invocations = sse_data.get("tool_invocations", [])
                 sources = sse_data.get("sources", [])
 
-                if diagram_result is not None and not video_mode:
+                if diagram_result is not None:
                     diagram_result = await ensure_teaching_diagram_png_payload(
                         diagram_result,
                         username=username,
@@ -313,16 +408,6 @@ async def chat(
 
     # ── 4. 持久化助手回复（含图解、来源等元数据） ──
     # 若正常产出（文字回答或图解），则保存助手消息并记录工具/来源/图解元数据
-    if video_mode and diagram_result is not None:
-        if not full_answer.strip():
-            full_answer = (
-                f"围绕用户问题“{current_message}”制作完整动画讲解。"
-                "可参考以下结构化教学素材："
-                + json.dumps(diagram_result, ensure_ascii=False, separators=(",", ":"))
-            )
-        diagram_result = None
-        logger.warning("[chat] 视频模式收到图解结果，已转换为纯视频脚本素材")
-
     has_output = bool(full_answer.strip()) or diagram_result is not None
     saved_message_id: int | None = None
     if not has_error and has_output:
@@ -336,9 +421,6 @@ async def chat(
             ]
         if diagram_result:
             usage_meta["diagram"] = diagram_result
-        if video_mode:
-            usage_meta["response_mode"] = "video"
-
         assistant_content = (
             [{"type": "text", "text": full_answer}] if full_answer.strip() else []
         )
@@ -357,36 +439,6 @@ async def chat(
         yield {"event": "error", "data": "模型未生成可用回答"}
         yield {"event": "done", "data": {"session_id": effective_session, "error": True}}
         return
-
-    video_task: dict[str, Any] | None = None
-    if video_mode and saved_message_id is not None:
-        video_service = get_chat_video_service()
-        try:
-            created = await video_service.create_task(
-                user_id=user_id,
-                session_id=effective_session,
-                assistant_message_id=saved_message_id,
-            )
-            raw_video = created.get("video")
-            if isinstance(raw_video, dict):
-                video_task = raw_video
-            uc._spawn_background(
-                video_service.run_task(
-                    user_id=user_id,
-                    username=username,
-                    session_id=effective_session,
-                    assistant_message_id=saved_message_id,
-                ),
-                label=f"chat_video:{saved_message_id}",
-            )
-        except Exception as exc:
-            logger.exception("[chat] 自动创建视频任务失败: message_id=%s", saved_message_id)
-            video_task = {
-                "task_id": f"chat-video-{saved_message_id}",
-                "status": "failed",
-                "topic": current_message,
-                "error": f"视频任务创建失败: {exc}",
-            }
 
     # ── 5. 最终内容校准：确保前端显示与数据库一致 ──
     # 用完整回答覆盖前端已流式显示的内容
@@ -410,8 +462,6 @@ async def chat(
         }
         if diagram_result is not None:
             completion_data["diagram"] = diagram_result
-        if video_task is not None:
-            completion_data["video"] = video_task
         yield {
             "event": "done",
             "data": completion_data,
@@ -452,7 +502,6 @@ async def run_chat_agent(
     attachments: list[str],
     enable_web_search: bool,
     diagram_mode: DiagramMode,
-    need_video: bool = False,
 ) -> None:
     """后台执行一次辅导，并通过 ChatEvents 推送运行状态。
 
@@ -493,12 +542,9 @@ async def run_chat_agent(
             attachments=attachments or None,
             enable_web_search=enable_web_search,
             diagram_mode=diagram_mode,
-            video_mode=need_video,
         ):
             if event.get("event") == "done" and isinstance(event.get("data"), dict):
                 completion_data = event["data"]
-            if need_video and event.get("event") in {"token", "content_replace", "diagram"}:
-                continue
             failed = await _publish_chat_runtime_event(events, event) or failed
         if failed:
             # 失败：持久化失败活动并发送 message.failed
@@ -510,11 +556,11 @@ async def run_chat_agent(
                     stage="failed",
                     activity_id="workflow:current",
                     title="回答未完成",
-                    message="智能辅导暂时无法完成本次回答",
+                    message="Mentorly 暂时无法完成本次回答",
                     status="failed",
                 ),
             )
-            await events.send(event="message.failed", message="回答失败", data={"error": "智能辅导暂时无法完成本次回答"})
+            await events.send(event="message.failed", message="回答失败", data={"error": "Mentorly 暂时无法完成本次回答"})
         else:
             # 成功：持久化完成活动并发送 message.completed
             await memory_svc.upsert_activity(
@@ -593,6 +639,42 @@ class ChatUseCases:
     def default_session_id(self, user_id: int) -> str:
         """生成与 PostgreSQL UUID 列一致的新会话 ID。"""
         return str(uuid4())
+
+    async def publish_video_task_accepted(
+        self,
+        *,
+        user_id: int,
+        session_id: str,
+        user_message_id: int,
+        assistant_message_id: int,
+        video: dict[str, Any],
+    ) -> None:
+        """Finish the chat turn as soon as an explicit video job is queued."""
+        events = ChatEvents(
+            user_id=user_id,
+            session_id=session_id,
+            user_message_id=user_message_id,
+        )
+        await events.open()
+        await events.send(
+            event="message.started",
+            message="Mentorly 正在准备动画讲解",
+            data=build_workflow_activity_payload(
+                stage="video_queued",
+                activity_id="workflow:current",
+                title="正在准备动画讲解",
+                message="正在规划动画分镜",
+            ),
+        )
+        await events.send(
+            event="message.completed",
+            message="动画讲解任务已创建",
+            data={
+                "session_id": session_id,
+                "saved_message_id": assistant_message_id,
+                "video": video,
+            },
+        )
 
     # 将文字与原始附件快照写入 UserMessage（带 URL 校验与文件类型识别）
     async def create_user_message(

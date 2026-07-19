@@ -31,8 +31,6 @@ from app.shared.cartoon.models import (
 logger = get_logger(__name__)
 _PROMPT_VARIABLE = re.compile(r"\{\{(?P<name>[a-z_][a-z0-9_]*)\}\}")
 _PROMPT_DIR = Path(__file__).parent
-_SCENE_GUIDANCE = 5
-_STEPS_PER_SCENE_GUIDANCE = 5
 _ACTIONS_PER_STEP_GUIDANCE = 2
 _TOTAL_NARRATION_GUIDANCE_CHARS = 720
 _DEFAULT_TARGET_DURATION_SECONDS = 180
@@ -42,12 +40,29 @@ class CartoonPlanningError(RuntimeError):
     pass
 
 
-def _depth_label(brief: CartoonBrief) -> str:
-    return {
-        LessonDepth.FOCUSED: "聚焦讲解",
-        LessonDepth.STANDARD: "标准讲解",
-        LessonDepth.DEEP: "深入讲解",
-    }[brief.configuration.lesson_depth]
+@dataclass(frozen=True)
+class _PlanningBudget:
+    """Soft prompt guidance derived from lesson intent, never a JSON cutoff."""
+
+    scene_guidance: int
+    step_guidance: int
+    actions_per_step_guidance: int
+    total_narration_guidance_chars: int
+
+    @classmethod
+    def for_brief(cls, brief: CartoonBrief) -> "_PlanningBudget":
+        base_scenes, base_steps = {
+            LessonDepth.FOCUSED: (3, 3),
+            LessonDepth.STANDARD: (4, 4),
+            LessonDepth.DEEP: (5, 5),
+        }[brief.configuration.lesson_depth]
+        duration_scale = brief.configuration.target_duration_seconds / _DEFAULT_TARGET_DURATION_SECONDS
+        return cls(
+            scene_guidance=max(1, round(base_scenes * duration_scale)),
+            step_guidance=max(2, round(base_steps * duration_scale)),
+            actions_per_step_guidance=_ACTIONS_PER_STEP_GUIDANCE,
+            total_narration_guidance_chars=max(1, round(_TOTAL_NARRATION_GUIDANCE_CHARS * duration_scale)),
+        )
 
 
 @dataclass(frozen=True)
@@ -78,21 +93,22 @@ class _Draft(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-class _StoryboardSceneDraft(_Draft):
+class _LessonOutlineScene(_Draft):
     title: str = ""
     teaching_goal: str = ""
+    material_focus: str = Field(default="", max_length=160)
     mode: SceneMode | str = SceneMode.CONCEPT
     topology: SceneTopology | str = SceneTopology.SPATIAL
 
-    @field_validator("title", "teaching_goal", mode="before")
+    @field_validator("title", "teaching_goal", "material_focus", mode="before")
     @classmethod
     def normalize_text(cls, value: Any) -> str:
         return str(value or "").strip()
 
 
-class _StoryboardDraft(_Draft):
+class _LessonOutline(_Draft):
     title: str = ""
-    scenes: list[_StoryboardSceneDraft] = Field(default_factory=list)
+    scenes: list[_LessonOutlineScene] = Field(default_factory=list)
 
     @field_validator("title", mode="before")
     @classmethod
@@ -130,40 +146,13 @@ def _scene_example_steps() -> str:
     return json.dumps(examples, ensure_ascii=False, indent=2)
 
 
-def _storyboard_example_scenes() -> str:
-    examples = [
-        {
-            "title": "核心问题与判断条件",
-            "teaching_goal": "用对象和值建立本课核心问题及成立条件。",
-            "mode": "concept",
-            "topology": "spatial",
-        },
-        {
-            "title": "组成结构与协作关系",
-            "teaching_goal": "展示关键部件、边界和连接关系。",
-            "mode": "mechanism",
-            "topology": "network",
-        },
-        {
-            "title": "状态推进过程",
-            "teaching_goal": "播放同一批对象随操作发生的状态变化。",
-            "mode": "execution",
-            "topology": "flow",
-        },
-        {
-            "title": "方案差异与适用条件",
-            "teaching_goal": "比较两种状态或策略并明确选择依据。",
-            "mode": "comparison",
-            "topology": "grid",
-        },
-        {
-            "title": "结论验证与迁移方法",
-            "teaching_goal": "用可观察结果验证结论并形成判断方法。",
-            "mode": "evidence",
-            "topology": "sequence",
-        },
-    ]
-    return json.dumps(examples, ensure_ascii=False, indent=2)
+_SCENE_BLUEPRINTS: tuple[tuple[SceneMode, SceneTopology, str, str], ...] = (
+    (SceneMode.CONCEPT, SceneTopology.SPATIAL, "核心概念", "建立关键对象、术语和成立条件。"),
+    (SceneMode.MECHANISM, SceneTopology.NETWORK, "组成机制", "展示组成部分、边界和协作关系。"),
+    (SceneMode.EXECUTION, SceneTopology.FLOW, "状态过程", "通过连续状态变化解释工作过程。"),
+    (SceneMode.COMPARISON, SceneTopology.GRID, "判断与差异", "比较条件、结果或策略并明确选择依据。"),
+    (SceneMode.EVIDENCE, SceneTopology.SEQUENCE, "结论验证", "用可观察结果验证结论并说明迁移方法。"),
+)
 
 
 class CartoonPlanner:
@@ -171,36 +160,54 @@ class CartoonPlanner:
 
     def __init__(self, *, max_parallel_scenes: int = 3) -> None:
         self._parallelism = max(1, max_parallel_scenes)
+        self.last_timing: dict[str, int] = {}
         self._prompts = {
             name: _PromptDocument.load(_PROMPT_DIR / name)
-            for name in ("storyboard.md", "scene_compose.md")
+            for name in ("scene_compose.md",)
         }
 
     async def plan(self, brief: CartoonBrief) -> Lesson:
         try:
-            storyboard = await self._create_storyboard(brief)
-            scene_count = len(storyboard.scenes)
+            started = asyncio.get_running_loop().time()
+            budget = _PlanningBudget.for_brief(brief)
+            outline_started = started
+            outline = self._create_outline(brief, budget)
+            outline_ms = round((asyncio.get_running_loop().time() - outline_started) * 1000)
+            scene_count = len(outline.scenes)
             semaphore = asyncio.Semaphore(self._parallelism)
+            scenes_started = asyncio.get_running_loop().time()
             async with asyncio.TaskGroup() as group:
                 tasks = [
                     group.create_task(
                         self._compose_scene(
                             brief,
-                            storyboard,
                             outline,
+                            budget,
+                            scene_outline,
                             index,
                             scene_count,
                             semaphore,
                         )
                     )
-                    for index, outline in enumerate(storyboard.scenes, start=1)
+                    for index, scene_outline in enumerate(outline.scenes, start=1)
                 ]
             scenes = [task.result() for task in tasks]
-            lesson = Lesson(title=storyboard.title, scenes=scenes)
+            scene_compose_ms = round((asyncio.get_running_loop().time() - scenes_started) * 1000)
+            lesson = Lesson(title=outline.title, scenes=scenes)
+            self.last_timing = {
+                "outline_ms": outline_ms,
+                "scene_compose_wall_ms": scene_compose_ms,
+                "total_ms": round((asyncio.get_running_loop().time() - started) * 1000),
+                "scene_count": scene_count,
+                "parallelism": self._parallelism,
+                "scene_guidance": budget.scene_guidance,
+                "step_guidance": budget.step_guidance,
+            }
             logger.info(
-                "[CartoonPlanner] 规划完成: title=%s scenes=%d beats=%d modes=%s",
+                "[CartoonPlanner] 规划完成: title=%s scenes=%d beats=%d modes=%s timings=%s",
                 lesson.title, len(scenes), sum(len(scene.program.beats) for scene in scenes),
                 sorted({scene.mode.value for scene in scenes}),
+                self.last_timing,
             )
             return lesson
         except Exception as exc:
@@ -210,47 +217,63 @@ class CartoonPlanner:
             logger.error("[CartoonPlanner] 规划失败: %s", " | ".join(details))
             raise CartoonPlanningError("无法生成可渲染的语义动画分镜: " + " | ".join(details)) from exc
 
-    async def _create_storyboard(self, brief: CartoonBrief) -> _StoryboardDraft:
-        prompt = self._prompts["storyboard.md"].render({
-            "lesson_depth": _depth_label(brief),
-            "density": brief.configuration.visual_density,
-            "example_scenes": _storyboard_example_scenes(),
-            "scene_guidance": _SCENE_GUIDANCE,
-            "step_guidance": _STEPS_PER_SCENE_GUIDANCE,
-            "target_duration_seconds": brief.configuration.target_duration_seconds,
-        })
-        response = await get_llm().ainvoke_json(
-            _StoryboardDraft,
-            [SystemMessage(content=prompt), self._material_message(brief, task="规划整套动画的教学推进顺序", limit=8_000)],
-            temperature=0.1,
-            include_schema_example=False,
-        )
-        if not isinstance(response, _StoryboardDraft):
-            raise TypeError("storyboard payload did not validate as _StoryboardDraft")
-        if not response.title.strip():
-            response = response.model_copy(update={"title": brief.learning_need.strip() or "动画讲解"})
-        if not response.scenes:
-            response = response.model_copy(
-                update={
-                    "scenes": [
-                        _StoryboardSceneDraft(
-                            title="核心概念",
-                            teaching_goal="展示学习主题的关键对象和基本关系。",
-                        )
-                    ]
-                }
+    @staticmethod
+    def _create_outline(
+        brief: CartoonBrief,
+        budget: _PlanningBudget,
+    ) -> _LessonOutline:
+        """Compile a stable JSON outline locally; only scene semantics need an LLM."""
+
+        topics = CartoonPlanner._outline_topics(brief)
+        scenes = []
+        for index in range(budget.scene_guidance):
+            mode, topology, role, goal = _SCENE_BLUEPRINTS[index % len(_SCENE_BLUEPRINTS)]
+            topic = topics[index % len(topics)]
+            scenes.append(
+                _LessonOutlineScene(
+                    title=f"{topic}：{role}",
+                    teaching_goal=f"围绕“{topic}”{goal}",
+                    material_focus=topic,
+                    mode=mode,
+                    topology=topology,
+                )
             )
-        return response
+        return _LessonOutline(
+            title=CartoonPlanner._lesson_title(brief),
+            scenes=scenes,
+        )
+
+    @staticmethod
+    def _outline_topics(brief: CartoonBrief) -> list[str]:
+        candidates = [*brief.knowledge_points, *brief.weak_knowledge_points, brief.learning_need]
+        topics: list[str] = []
+        seen: set[str] = set()
+        for value in candidates:
+            normalized = " ".join(str(value).split()).strip("。！？!?：:；;")
+            if not normalized:
+                continue
+            key = normalized.casefold()
+            if key not in seen:
+                seen.add(key)
+                topics.append(normalized[:80])
+        return topics or ["核心概念"]
+
+    @staticmethod
+    def _lesson_title(brief: CartoonBrief) -> str:
+        title = " ".join(brief.learning_need.split()).strip("。！？!?：:；;")
+        return title[:80] or "动画讲解"
 
     async def _compose_scene(
         self,
         brief: CartoonBrief,
-        storyboard: _StoryboardDraft,
-        outline: _StoryboardSceneDraft,
+        lesson_outline: _LessonOutline,
+        budget: _PlanningBudget,
+        outline: _LessonOutlineScene,
         scene_index: int,
         scene_count: int,
         semaphore: asyncio.Semaphore,
     ) -> TeachingScene:
+        started = asyncio.get_running_loop().time()
         mode = self._scene_mode(outline.mode)
         topology = self._scene_topology(outline.topology)
         prompt = self._prompts["scene_compose.md"].render({
@@ -259,16 +282,16 @@ class CartoonPlanner:
             "density": brief.configuration.visual_density,
             "example_steps": _scene_example_steps(),
             "scene_count": scene_count,
-            "step_guidance": _STEPS_PER_SCENE_GUIDANCE,
-            "actions_per_step_guidance": _ACTIONS_PER_STEP_GUIDANCE,
+            "step_guidance": budget.step_guidance,
+            "actions_per_step_guidance": budget.actions_per_step_guidance,
             "narration_guidance_chars": self._scene_narration_guidance(
                 scene_count,
-                brief.configuration.target_duration_seconds,
+                budget.total_narration_guidance_chars,
             ),
             "target_duration_seconds": brief.configuration.target_duration_seconds,
         })
         context = {
-            "lesson_title": storyboard.title,
+            "lesson_title": lesson_outline.title,
             "scene_title": outline.title,
             "teaching_goal": outline.teaching_goal,
             "mode": mode.value,
@@ -277,7 +300,7 @@ class CartoonPlanner:
         async with semaphore:
             response = await get_llm().ainvoke_json(
                 SemanticSceneDraft,
-                [SystemMessage(content=prompt), self._material_message(brief, task="只生成当前场景的对象与可播放状态操作", limit=5_000, context=context)],
+                [SystemMessage(content=prompt), self._scene_material_message(brief, outline, task="只生成当前场景的对象与可播放状态操作", limit=2_500, context=context)],
                 temperature=0.12,
                 validator=self._validate_scene_draft,
                 include_schema_example=False,
@@ -285,11 +308,20 @@ class CartoonPlanner:
         if not isinstance(response, SemanticSceneDraft):
             raise TypeError("scene payload did not validate as SemanticSceneDraft")
         response = response.model_copy(update={"mode": mode, "topology": topology})
-        return SemanticCompiler.compile(
+        scene = SemanticCompiler.compile(
             response,
             scene_id=f"scene-{scene_index:02d}",
             title=outline.title.strip() or f"场景 {scene_index}",
         )
+        logger.info(
+            "[CartoonPlanner] 场景完成: index=%d/%d mode=%s beats=%d elapsed_ms=%d",
+            scene_index,
+            scene_count,
+            mode.value,
+            len(scene.program.beats),
+            round((asyncio.get_running_loop().time() - started) * 1000),
+        )
+        return scene
 
     @staticmethod
     def _scene_mode(value: SceneMode | str) -> SceneMode:
@@ -309,37 +341,30 @@ class CartoonPlanner:
     def _validate_scene_draft(value: BaseModel) -> None:
         if not isinstance(value, SemanticSceneDraft):
             raise ValueError("scene payload must validate as SemanticSceneDraft")
-        # The storyboard is guidance only.  The compiler owns the final scene
+        # The local outline is guidance only.  The compiler owns the final scene
         # mode/topology and the payload is accepted even when the model drifts.
         SemanticCompiler.compile(value, scene_id="validation-scene", title="validation scene")
 
     @staticmethod
     def _scene_narration_guidance(
         scene_count: int,
-        target_duration_seconds: int = _DEFAULT_TARGET_DURATION_SECONDS,
+        total_narration_guidance_chars: int = _TOTAL_NARRATION_GUIDANCE_CHARS,
     ) -> int:
-        total_budget = max(
-            1,
-            round(
-                _TOTAL_NARRATION_GUIDANCE_CHARS
-                * target_duration_seconds
-                / _DEFAULT_TARGET_DURATION_SECONDS
-            ),
-        )
-        return max(1, total_budget // max(1, scene_count))
+        return max(1, total_narration_guidance_chars // max(1, scene_count))
 
-    @staticmethod
-    def _material_message(
+    def _scene_material_message(
+        self,
         brief: CartoonBrief,
+        outline: _LessonOutlineScene,
         *,
         task: str,
         limit: int,
-        context: dict[str, str] | None = None,
+        context: dict[str, str],
     ) -> HumanMessage:
-        material = CartoonPlanner._teaching_material(brief)
+        material = self._focused_teaching_material(brief, outline)
         payload = {
             "task": task,
-            "context": context or {},
+            "context": {**context, "material_focus": outline.material_focus},
             "teaching_material": material,
         }
         content = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
@@ -352,15 +377,39 @@ class CartoonPlanner:
         return HumanMessage(content=content)
 
     @staticmethod
-    def _teaching_material(brief: CartoonBrief) -> str:
-        sections = [
+    def _focused_teaching_material(
+        brief: CartoonBrief,
+        outline: _LessonOutlineScene,
+    ) -> str:
+        """Give each scene relevant source excerpts instead of the full lesson."""
+
+        focus = " ".join((outline.title, outline.teaching_goal, outline.material_focus))
+        terms = {
+            value.lower()
+            for value in re.findall(r"[A-Za-z0-9_]{2,}|[\u4e00-\u9fff]{2,6}", focus)
+        }
+        chunks: list[tuple[int, str]] = []
+        for source_index, source in enumerate(brief.source_materials):
+            for chunk_index, chunk in enumerate(re.split(r"\n{2,}|(?<=[。！？.!?])", source)):
+                normalized = " ".join(chunk.split())
+                if normalized:
+                    chunks.append((source_index * 10_000 + chunk_index, normalized))
+
+        ranked = sorted(
+            chunks,
+            key=lambda item: (
+                -sum(term in item[1].lower() for term in terms),
+                item[0],
+            ),
+        )
+        selected = [chunk for _, chunk in ranked[:6]]
+        base = [
             f"学习主题：{brief.learning_need}",
-            "教学上下文：" + json.dumps(brief.instruction_context, ensure_ascii=False),
             "知识点：" + "、".join(brief.knowledge_points),
-            "薄弱点：" + "、".join(brief.weak_knowledge_points),
-            *brief.source_materials,
+            "本幕焦点：" + focus,
+            *selected,
         ]
-        return "\n\n".join(value.strip() for value in sections if value.strip())
+        return "\n\n".join(value.strip() for value in base if value.strip())
 
     @staticmethod
     def _exception_details(exc: BaseException) -> list[str]:

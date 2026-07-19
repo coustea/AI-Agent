@@ -39,7 +39,6 @@ class TutorAgentInput(BaseModel):
     enable_web_search: bool = False
     diagram_mode: DiagramMode = "auto"
     voice_mode: bool = False
-    video_mode: bool = False
 
 
 # ── 流式事件类型（简化后）──

@@ -7,7 +7,7 @@
         <div class="sidebar-top-header">
           <div class="sidebar-brand" v-if="!sessionSidebarCollapsed">
             <ChatLineRound class="brand-icon" />
-            <span class="brand-text">智能辅导</span>
+            <span class="brand-text">Mentorly</span>
           </div>
           <button
               v-if="chatMode !== 'digital_human'"
@@ -203,7 +203,7 @@
         <div class="chat-interaction-area">
           <div class="chat-viewport" ref="chatScroll">
             <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
-              <h2>你好，{{ userName }}。欢迎回到智能辅导。</h2>
+              <h2>你好，{{ userName }}。欢迎回到 Mentorly。</h2>
             </div>
 
             <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
@@ -255,7 +255,7 @@
 
                 <div class="bubble-wrapper" @click="handleMessageClick">
                   <div class="msg-meta">
-                    <span class="sender">{{ msg.role === 'ai' ? 'AI 导师' : '我' }}</span>
+                    <span class="sender">{{ msg.role === 'ai' ? 'Mentorly' : '我' }}</span>
                     <span class="time">{{ msg.time }}</span>
                   </div>
 
@@ -438,8 +438,8 @@
                   ref="textareaRef"
                   v-model="userInput"
                   rows="1"
-                  aria-label="向 AI 导师提问"
-                  placeholder="向 AI 导师提问"
+                  aria-label="向 Mentorly 提问"
+                  placeholder="向 Mentorly 提问"
                   @compositionstart="isComposing = true"
                   @compositionend="isComposing = false"
                   @keydown.enter="handleEnter"
@@ -2733,7 +2733,17 @@ const handleSend = async () => {
     role: 'ai',
     content: '',
     time: now(),
-    agentActivities: [],
+    agentActivities: shouldGenerateVideo || shouldGenerateTeachingDiagram
+      ? []
+      : [{
+          activity_id: 'workflow:current',
+          kind: 'workflow',
+          stage: 'run_started',
+          status: 'running',
+          title: 'Mentorly 正在理解问题',
+          message: '正在准备回答',
+        }],
+    teachingDiagramGenerating: shouldGenerateTeachingDiagram,
     videoPreparing: shouldGenerateVideo,
     videoOnly: shouldGenerateVideo,
   })
@@ -2767,17 +2777,13 @@ const handleSend = async () => {
       message: text || '请分析这些附件',
       session_id: activeSessionId,
       attachments: messageAttachments.length ? messageAttachments : undefined,
-      need_teaching_diagram: shouldGenerateTeachingDiagram,
-      need_video: shouldGenerateVideo,
+      diagram_mode: shouldGenerateTeachingDiagram ? 'required' : 'auto',
+      video_mode: shouldGenerateVideo,
       enable_web_search: enableWebSearch.value,
     },
     {
       onChunk: (chunk) => {
-        const aiMsg = messages.value.find(message => message.id === aiMsgId)
         if (shouldGenerateVideo) return
-        if (aiMsg && shouldGenerateTeachingDiagram && !aiMsg.teachingDiagram) {
-          aiMsg.teachingDiagramGenerating = true
-        }
         enqueueStreamChunk(aiMsgId, chunk)
       },
       onDone: (data) => {

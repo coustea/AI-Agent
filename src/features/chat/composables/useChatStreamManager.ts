@@ -87,7 +87,7 @@ export function useChatStreamManager() {
         },
         onConnectionError: (_, willRetry) => {
           if (willRetry || state.status !== 'streaming') return
-          const error = new Error('智能辅导实时连接中断')
+          const error = new Error('Mentorly 实时连接中断')
           state.status = 'error'
           state.error = error
           state.callbacks.onError?.(error)
@@ -95,7 +95,7 @@ export function useChatStreamManager() {
         },
       })
     } catch (cause) {
-      const error = cause instanceof Error ? cause : new Error('智能辅导运行创建失败')
+      const error = cause instanceof Error ? cause : new Error('Mentorly 运行创建失败')
       state.status = 'error'
       state.error = error
       state.callbacks.onError?.(error)

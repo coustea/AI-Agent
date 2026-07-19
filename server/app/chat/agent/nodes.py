@@ -675,11 +675,10 @@ async def react_node(
     diagram_mode = state.get("diagram_mode", "auto")
     diagram_required = diagram_mode == "required"
     voice_mode = state.get("voice_mode", False)
-    video_mode = state.get("video_mode", False)
 
     logger.info(
-        "[react_node] 开始: user_id=%s session_id=%s question_len=%d history=%d diagram_mode=%s voice=%s video=%s",
-        user_id, session_id, len(question), len(history), diagram_mode, voice_mode, video_mode,
+        "[react_node] 开始: user_id=%s session_id=%s question_len=%d history=%d diagram_mode=%s voice=%s",
+        user_id, session_id, len(question), len(history), diagram_mode, voice_mode,
     )
     _react_start = time.time()
     fast_voice_response = _should_use_fast_voice_response(
@@ -730,8 +729,6 @@ async def react_node(
         research_event_handler=emit_research_status,
         diagram_context=attachment_context,
     )
-    if video_mode:
-        tools = [tool for tool in tools if tool.name != GENERATE_TEACHING_DIAGRAM_TOOL_NAME]
 
     # 工具调用状态事件发射器：转发工具运行时事件为 agent_status 事件
     async def emit_tool_status(event: ToolRuntimeEvent) -> None:
@@ -866,13 +863,6 @@ async def react_node(
             ),
             guidance_strategy_context=strategy_str,
         )
-    if video_mode:
-        system_prompt += """
-
-## 视频素材回答模式
-当前回答只用于后续动画视频合成。不要调用图解工具，不要输出 `<diagram>`，必须生成一份完整、准确、可独立理解的文字讲解作为视频脚本素材，并放入 `<answer>...</answer>`。
-"""
-
     if voice_mode and not fast_voice_response:
         system_prompt += """
 
@@ -1194,7 +1184,7 @@ async def react_node(
 
     # Deterministic fallback only in auto mode — required mode already handled
     # by the direct tool call above and should not silently produce a diagram.
-    if not video_mode and not diagram_required and node_diagram_result is None and full_answer.strip():
+    if not diagram_required and node_diagram_result is None and full_answer.strip():
         node_diagram_result = build_deterministic_fallback_diagram(question, full_answer)
         if node_diagram_result is not None:
             logger.warning(

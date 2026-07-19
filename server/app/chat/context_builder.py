@@ -83,15 +83,8 @@ def convert_stored_message(message: Any) -> AnyMessage | None:
     tool_calls = getattr(message, "tool_calls", None)
     tool_call_id = getattr(message, "tool_call_id", None)
 
-    # Legacy post-answer video actions are UI artifacts, not TutorAgent prompts.
-    # Video-only chat turns still contain a substantive assistant answer and must
-    # remain in context so later follow-up questions keep the conversation chain.
     metadata = getattr(message, "usage_metadata", None)
-    if (
-        isinstance(metadata, dict)
-        and isinstance(metadata.get("video"), dict)
-        and metadata.get("response_mode") != "video"
-    ):
+    if isinstance(metadata, dict) and metadata.get("response_mode") == "video":
         return None
 
     # 用户消息：将结构化 content 转为 HumanMessage（文本/图片/文件）
@@ -220,6 +213,23 @@ class ChatContextBuilder:
         if exclude_message_id is not None:
             raw_messages = [m for m in raw_messages if getattr(m, "id", None) != exclude_message_id]
             analyses_by_message_id.pop(exclude_message_id, None)
+
+        video_request_ids = {
+            int(message.user_message_id)
+            for message in raw_messages
+            if getattr(message, "role", "") == "assistant"
+            and isinstance(getattr(message, "usage_metadata", None), dict)
+            and message.usage_metadata.get("response_mode") == "video"
+            and getattr(message, "user_message_id", None) is not None
+        }
+        if video_request_ids:
+            raw_messages = [
+                message for message in raw_messages
+                if getattr(message, "id", None) not in video_request_ids
+                and getattr(message, "user_message_id", None) not in video_request_ids
+            ]
+            for message_id in video_request_ids:
+                analyses_by_message_id.pop(message_id, None)
 
         # 若历史不以用户消息开头，截断到首个用户消息
         if raw_messages and getattr(raw_messages[0], "role", "") != "user":

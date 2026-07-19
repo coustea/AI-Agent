@@ -77,12 +77,11 @@ export function createChatMessage(params: StreamChatParams) {
   if (params.attachments && params.attachments.length > 0) {
     formData.append('attachments', JSON.stringify(params.attachments))
   }
-  // 是否需要教学图解
-  if (params.need_teaching_diagram != null) {
-    formData.append('need_teaching_diagram', String(Boolean(params.need_teaching_diagram))) // 是否需要教学图
+  if (params.diagram_mode) {
+    formData.append('diagram_mode', params.diagram_mode)
   }
-  if (params.need_video != null) {
-    formData.append('need_video', String(Boolean(params.need_video)))
+  if (params.video_mode != null) {
+    formData.append('video_mode', String(Boolean(params.video_mode)))
   }
   // 是否启用网络搜索增强
   if (params.enable_web_search != null) {
@@ -102,19 +101,6 @@ export function retryDiagramImage(messageId: number) {
   return http.post<ApiResponse<{ diagram: TeachingDiagramImage }>>(
     `/ai/chat/messages/${messageId}/diagram-image/retry`,
   )
-}
-
-export function createChatVideo(assistantMessageId: number, sessionId?: string) {
-  const formData = new FormData()
-  formData.append('assistant_message_id', String(assistantMessageId))
-  if (sessionId) formData.append('session_id', sessionId)
-  return http.post<ApiResponse<{
-    assistant_message_id: number
-    session_id: string
-    video: ChatVideoArtifact
-  }>>('/ai/chat/videos', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-  })
 }
 
 export function getChatVideo(sessionId: string, assistantMessageId: number) {

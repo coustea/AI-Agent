@@ -1,29 +1,20 @@
-"""Explicit, answer-grounded chat video tasks.
-
-Video rendering is deliberately outside TutorAgent's tool loop: a learner first
-receives an answer and explicitly asks to turn that answer into a video.  The
-background task then derives a compact teaching brief from the persisted turn
-and hands it to the Cartoon pipeline through the project's ToolExcute boundary.
-"""
+"""Explicit chat-video tasks executed outside the TutorAgent loop."""
 
 from __future__ import annotations
 
-import json
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlmodel import select
 
 from app.chat.memory.types import extract_content_text
+from app.chat.utils.files import analyze_documents
+from app.chat.utils.vision import VisionService
 from app.config import static_url, user_chat_video_dir
 from app.infra.database import session_scope
-from app.infra.llm import get_llm
 from app.infra.logging import get_logger
-from app.infra.models import ChatAttachmentAnalysis, ChatMessage, ChatSession
-from app.infra.prompts import prompts
-from app.infra.tool_excute import Tool, ToolExcute
+from app.infra.models import ChatMessage, ChatSession
 from app.profile.service import get_profile_service
 from app.shared.cartoon import (
     CartoonBrief,
@@ -35,57 +26,17 @@ from app.shared.cartoon.models import LessonDepth
 logger = get_logger(__name__)
 
 
-class GenerateChatVideoArgs(BaseModel):
-    """Arguments accepted by the explicit video execution tool."""
-
-    assistant_message_id: int = Field(gt=0)
-
-
-class ChatVideoBriefDraft(BaseModel):
-    """Small LLM-facing contract; visual planning remains Cartoon-owned."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    title: str
-    learning_need: str
-    knowledge_points: list[str] = Field(max_length=30)
-
-    @field_validator("title", "learning_need")
-    @classmethod
-    def require_text(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("brief text must not be blank")
-        return normalized
-
-    @field_validator("knowledge_points")
-    @classmethod
-    def normalize_points(cls, value: list[str]) -> list[str]:
-        points: list[str] = []
-        for item in value:
-            normalized = item.strip()
-            if normalized and normalized not in points:
-                points.append(normalized)
-        return points
-
-    @model_validator(mode="after")
-    def require_points(self) -> "ChatVideoBriefDraft":
-        if not self.knowledge_points:
-            raise ValueError("knowledge_points must contain at least one point")
-        return self
-
-
 @dataclass(frozen=True)
 class _VideoSource:
     assistant_message_id: int
     user_message_id: int
     question: str
-    answer: str
-    attachment_analyses: tuple[str, ...]
+    image_urls: tuple[str, ...]
+    document_urls: tuple[str, ...]
 
 
 class ChatVideoService:
-    """Persist and execute a video task anchored to a completed assistant answer."""
+    """Persist and execute an explicit video task anchored to a user request."""
 
     def __init__(self, *, pipeline: CartoonPipeline | None = None) -> None:
         self._pipeline = pipeline or CartoonPipeline()
@@ -138,9 +89,10 @@ class ChatVideoService:
             video={"task_id": task_id, "status": "running"},
         )
 
-        async def generate_chat_video(assistant_message_id: int) -> dict[str, Any]:
+        try:
             brief = await self._build_cartoon_brief(
                 user_id=user_id,
+                username=username,
                 session_id=session_id,
                 assistant_message_id=assistant_message_id,
             )
@@ -170,7 +122,7 @@ class ChatVideoService:
                 ),
                 user_chat_video_dir(username, session_id, assistant_message_id),
             )
-            return {
+            result = {
                 "title": artifact.title,
                 "video_url": static_url(artifact.video_path),
                 "preview_url": static_url(artifact.html_path),
@@ -179,21 +131,6 @@ class ChatVideoService:
                 "scene_count": artifact.scene_count,
                 "brief": brief.model_dump(),
             }
-
-        executor = ToolExcute(tools=[
-            Tool(
-                name="generate_chat_video",
-                description="Generate an educational cartoon video after an explicit user request.",
-                args_model=GenerateChatVideoArgs,
-                handler=generate_chat_video,
-            ),
-        ])
-        try:
-            result = await executor.execute({
-                "id": task_id,
-                "name": "generate_chat_video",
-                "args": {"assistant_message_id": assistant_message_id},
-            })
         except Exception:
             logger.exception("[ChatVideo] 生成失败: assistant_message_id=%s", assistant_message_id)
             await self._set_video_state(
@@ -238,6 +175,7 @@ class ChatVideoService:
         self,
         *,
         user_id: int,
+        username: str,
         session_id: str,
         assistant_message_id: int,
     ) -> "_ResolvedVideoBrief":
@@ -246,26 +184,20 @@ class ChatVideoService:
             session_id=session_id,
             assistant_message_id=assistant_message_id,
         )
-        profile_markdown = await self._load_profile_markdown(user_id)
-        payload = {
-            "student_question": source.question,
-            "tutor_answer": source.answer,
-            "attachment_analyses": list(source.attachment_analyses),
-            "learner_profile": profile_markdown or None,
-        }
-        draft = await get_llm().ainvoke_json(
-            ChatVideoBriefDraft,
-            [
-                SystemMessage(content=prompts.get("chat").get("video_brief")),
-                HumanMessage(content=json.dumps(payload, ensure_ascii=False)),
-            ],
-            temperature=0.2,
+        profile_markdown, attachment_materials = await asyncio.gather(
+            self._load_profile_markdown(user_id),
+            self._load_attachment_materials(source, username),
         )
+        learning_need = source.question.strip()[:500]
         return _ResolvedVideoBrief(
-            title=draft.title,
-            learning_need=draft.learning_need,
-            knowledge_points=draft.knowledge_points,
-            source_materials=tuple(self._source_materials(source, profile_markdown)),
+            title=self._title_from_question(learning_need),
+            learning_need=learning_need,
+            knowledge_points=[learning_need],
+            source_materials=tuple(self._source_materials(
+                source,
+                profile_markdown,
+                attachment_materials,
+            )),
         )
 
     async def _load_source(
@@ -298,26 +230,27 @@ class ChatVideoService:
                 raise ValueError("原始用户问题不存在")
 
             question = extract_content_text(question_message.content).strip()
-            answer = extract_content_text(assistant.content).strip()
-            if not question or not answer:
-                raise ValueError("只有完整问答才能生成讲解视频")
+            if not question or (assistant.usage_metadata or {}).get("response_mode") != "video":
+                raise ValueError("视频任务来源无效")
 
-            analyses = list((await db.exec(
-                select(ChatAttachmentAnalysis).where(
-                    ChatAttachmentAnalysis.user_message_id == question_message.id,
-                    ChatAttachmentAnalysis.status == "completed",
-                ).order_by(ChatAttachmentAnalysis.created_at.asc())
-            )).all())
+            image_urls: list[str] = []
+            document_urls: list[str] = []
+            for part in question_message.content if isinstance(question_message.content, list) else []:
+                if not isinstance(part, dict):
+                    continue
+                url = str(part.get("url") or "").strip()
+                if not url:
+                    continue
+                if part.get("type") == "image_url":
+                    image_urls.append(url)
+                elif part.get("type") == "file":
+                    document_urls.append(url)
             return _VideoSource(
                 assistant_message_id=assistant_message_id,
                 user_message_id=question_message.id,
                 question=question,
-                answer=answer,
-                attachment_analyses=tuple(
-                    str(item.content or "").strip()
-                    for item in analyses
-                    if str(item.content or "").strip()
-                ),
+                image_urls=tuple(image_urls),
+                document_urls=tuple(document_urls),
             )
 
     async def _set_video_state(
@@ -373,17 +306,59 @@ class ChatVideoService:
             logger.warning("[ChatVideo] 读取学习者画像失败: %s", exc)
             return ""
 
+    async def _load_attachment_materials(
+        self,
+        source: _VideoSource,
+        username: str,
+    ) -> list[str]:
+        """Read this request's attachments without routing video through TutorAgent."""
+        materials: list[str] = []
+        if source.document_urls:
+            try:
+                documents = await analyze_documents(
+                    current_username=username,
+                    file_urls=list(source.document_urls[:5]),
+                    question=source.question,
+                )
+                analysis_text = str(documents.get("analysis_text") or "").strip()
+                if documents.get("success") and analysis_text:
+                    materials.append(f"附件文档：\n{analysis_text}")
+            except Exception as exc:
+                logger.warning("[ChatVideo] 文档附件读取失败: %s", exc)
+
+        if source.image_urls:
+            try:
+                vision = await VisionService().analyze_images(
+                    list(source.image_urls[:5]),
+                    f"请提取这些图片中与用户视频需求相关的文字、图表和知识点：{source.question}",
+                )
+                analysis_text = str(vision.get("analysis_text") or "").strip()
+                if analysis_text:
+                    materials.append(f"图片附件：\n{analysis_text}")
+            except Exception as exc:
+                logger.warning("[ChatVideo] 图片附件分析失败: %s", exc)
+        return materials
+
     @staticmethod
-    def _source_materials(source: _VideoSource, profile_markdown: str) -> list[str]:
+    def _source_materials(
+        source: _VideoSource,
+        profile_markdown: str,
+        attachment_materials: list[str],
+    ) -> list[str]:
         materials = [
             f"学生问题：\n{source.question}",
-            f"导师回答：\n{source.answer}",
         ]
-        if source.attachment_analyses:
-            materials.append("附件分析：\n" + "\n\n".join(source.attachment_analyses))
+        materials.extend(attachment_materials)
         if profile_markdown:
             materials.append(f"学习者画像（仅用于调整教学表达）：\n{profile_markdown}")
         return materials
+
+    @staticmethod
+    def _title_from_question(question: str) -> str:
+        normalized = " ".join(question.split()).strip("？?。！! ")
+        if not normalized:
+            return "动画讲解"
+        return normalized[:56] + ("…" if len(normalized) > 56 else "")
 
     @staticmethod
     def _task_id(assistant_message_id: int) -> str:

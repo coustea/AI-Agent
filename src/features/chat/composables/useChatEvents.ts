@@ -132,7 +132,7 @@ export function useChatEvents() {
         close()
       } else if (event.event === 'message.failed') {
         connectionStatus.value = 'failed'
-        error.value = new Error(event.message || '智能辅导运行失败')
+        error.value = new Error(event.message || 'Mentorly 运行失败')
         handlers.onFailed?.(error.value, event)
         close()
       } else {
@@ -151,7 +151,7 @@ export function useChatEvents() {
       ) {
         connectionStatus.value = willRetry ? 'reconnecting' : 'failed'
         if (!willRetry) {
-          error.value = new Error('智能辅导实时连接中断')
+          error.value = new Error('Mentorly 实时连接中断')
         }
       }
       handlers.onConnectionError?.(connectionEvent, willRetry)

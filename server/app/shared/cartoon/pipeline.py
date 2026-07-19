@@ -158,6 +158,9 @@ class CartoonPipeline:
                 "modes": sorted({scene.mode.value for scene in lesson.scenes}),
                 "elapsed_ms": planning_ms,
             }
+            planner_timing = getattr(self.planner, "last_timing", None)
+            if isinstance(planner_timing, dict):
+                audit["stages"]["planning"]["substeps"] = planner_timing
             logger.info(
                 "[Cartoon] 阶段 planning: 完成 scenes=%s beats=%s modes=%s elapsed_ms=%d",
                 len(lesson.scenes),
@@ -254,7 +257,7 @@ class CartoonPipeline:
                 "exit_code": report.exit_code,
                 "finding_counts": {
                     category: report.count(category)
-                    for category in ("lint", "runtime", "layout", "motion", "contrast", "semantic", "unknown")
+                    for category in ("runtime", "layout", "motion", "semantic", "unknown")
                 },
                 "findings": [item.model_dump(mode="json") for item in report.findings],
                 "elapsed_ms": quality_ms,
@@ -262,7 +265,7 @@ class CartoonPipeline:
             logger.info(
                 "[Cartoon] 阶段 quality: 完成 ok=%s findings=%s elapsed_ms=%d",
                 report.ok,
-                {cat: report.count(cat) for cat in ("lint", "runtime", "layout", "motion", "contrast", "semantic", "unknown")},
+                {cat: report.count(cat) for cat in ("runtime", "layout", "motion", "semantic", "unknown")},
                 quality_ms,
             )
 

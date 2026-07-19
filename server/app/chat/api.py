@@ -21,10 +21,10 @@ from app.chat.emitter import (
     has_active_chat_channel,
 )
 from app.chat.memory.service import get_chat_memory_service
-from app.chat.video import get_chat_video_service
 from app.chat.diagram_image_renderer import render_teaching_diagram_png
 from app.chat.schemas import DiagramMode
 from app.chat.service import get_chat_usecases, run_chat_agent
+from app.chat.video import get_chat_video_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, School, User
@@ -34,52 +34,6 @@ logger = get_logger(__name__)
 
 # 聊天路由集合，统一挂载在 /api/v1/ai/chat/ 下
 router = APIRouter()
-
-
-def resolve_diagram_mode(
-    *,
-    diagram_mode: DiagramMode | None,
-    need_teaching_diagram: bool | None,
-) -> DiagramMode:
-    """Resolve the canonical mode while preserving the legacy form field."""
-    if diagram_mode is not None:
-        return diagram_mode
-    return "required" if need_teaching_diagram is True else "auto"
-
-
-@router.post("/chat/videos")
-async def create_chat_video(
-    background_tasks: BackgroundTasks,
-    assistant_message_id: int = Form(...),
-    session_id: str | None = Form(default=None),
-    current_user: User = Depends(get_current_user_flexible),
-):
-    """Create a video from one completed tutor answer after an explicit action."""
-
-    effective_session = session_id or get_chat_usecases().default_session_id(current_user.id)
-    service = get_chat_video_service()
-    try:
-        task = await service.create_task(
-            user_id=current_user.id,
-            session_id=effective_session,
-            assistant_message_id=assistant_message_id,
-        )
-    except (ValueError, PermissionError) as exc:
-        logger.warning("[ChatAPI] 创建视频任务参数错误: user_id=%s err=%s", current_user.id, exc)
-        return HttpResponse.error(code=400, message=str(exc))
-    except Exception:
-        logger.exception("[ChatAPI] 创建视频任务失败")
-        return HttpResponse.error(code=500, message="视频任务创建失败，请稍后重试")
-
-    background_tasks.add_task(
-        service.run_task,
-        user_id=current_user.id,
-        username=current_user.username,
-        session_id=effective_session,
-        assistant_message_id=task["assistant_message_id"],
-    )
-    logger.info("[ChatAPI] 视频任务已创建: user_id=%s assistant_message_id=%s", current_user.id, assistant_message_id)
-    return HttpResponse.success(data=task, status_code=202)
 
 
 @router.get("/chat/sessions/{session_id}/videos/{assistant_message_id}")
@@ -165,9 +119,8 @@ async def create_mentor_chat_message(
     user_input: str = Form(default=""),
     session_id: str | None = Form(default=None),
     attachments: str | None = Form(default=None),
-    diagram_mode: DiagramMode | None = Form(default=None),
-    need_teaching_diagram: bool | None = Form(default=None),
-    need_video: bool = Form(default=False),
+    diagram_mode: DiagramMode = Form(default="auto"),
+    video_mode: bool = Form(default=False),
     enable_web_search: bool = Form(default=False),
     current_user: User = Depends(get_current_user_flexible),
 ):
@@ -236,23 +189,60 @@ async def create_mentor_chat_message(
     )
     await events.open()
 
-    # 将对话 Agent 处理作为后台任务调度
-    background_tasks.add_task(
-        run_chat_agent,
-        user_message_id=user_message_id,
-        user_id=current_user.id,
-        username=current_user.username,
-        session_id=effective_session,
-        user_input=effective_message,
-        attachments=[str(item.get("url") or "") for item in parsed_attachments],
-        enable_web_search=enable_web_search,
-        diagram_mode=(
-            "auto"
-            if need_video
-            else resolve_diagram_mode(diagram_mode=diagram_mode, need_teaching_diagram=need_teaching_diagram)
-        ),
-        need_video=need_video,
-    )
+    if video_mode:
+        video_service = get_chat_video_service()
+        try:
+            assistant_message = await memory_svc.save_message(
+                user_id=current_user.id,
+                session_id=effective_session,
+                user_message_id=user_message_id,
+                role="assistant",
+                content=[],
+                usage_metadata={"response_mode": "video"},
+            )
+            if assistant_message.id is None:
+                raise RuntimeError("视频任务消息保存失败")
+            task = await video_service.create_task(
+                user_id=current_user.id,
+                session_id=effective_session,
+                assistant_message_id=assistant_message.id,
+            )
+        except Exception:
+            logger.exception("[ChatAPI] 创建视频任务失败: user_message_id=%s", user_message_id)
+            await events.send(
+                event="message.failed",
+                message="视频任务创建失败",
+                data={"error": "视频任务创建失败，请稍后重试"},
+            )
+            return HttpResponse.error(code=500, message="视频任务创建失败，请稍后重试")
+
+        background_tasks.add_task(
+            get_chat_usecases().publish_video_task_accepted,
+            user_id=current_user.id,
+            session_id=effective_session,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message.id,
+            video=task["video"],
+        )
+        background_tasks.add_task(
+            video_service.run_task,
+            user_id=current_user.id,
+            username=current_user.username,
+            session_id=effective_session,
+            assistant_message_id=assistant_message.id,
+        )
+    else:
+        background_tasks.add_task(
+            run_chat_agent,
+            user_message_id=user_message_id,
+            user_id=current_user.id,
+            username=current_user.username,
+            session_id=effective_session,
+            user_input=effective_message,
+            attachments=[str(item.get("url") or "") for item in parsed_attachments],
+            enable_web_search=enable_web_search,
+            diagram_mode=diagram_mode,
+        )
 
     logger.info(
         "[ChatAPI] 开始处理用户消息: user_message_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
