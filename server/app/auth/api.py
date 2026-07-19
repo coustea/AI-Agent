@@ -48,7 +48,7 @@ async def create_user(
             message=result.error_message,
             data={"field": result.error_field},
         )
-    logger.info("[AuthAPI] 注册成功: username=%s user_id=%s", data.username, result.data.get("user", {}).get("id") if result.data else None)
+    logger.info("[AuthAPI] 注册成功: username=%s user_id=%s", data.username, result.data["user"].id if result.data else None)
     return HttpResponse.success(data=result.data, status_code=201)
 
 

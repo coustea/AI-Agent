@@ -245,18 +245,47 @@ class CartoonPlanner:
 
     @staticmethod
     def _outline_topics(brief: CartoonBrief) -> list[str]:
-        candidates = [*brief.knowledge_points, *brief.weak_knowledge_points, brief.learning_need]
-        topics: list[str] = []
-        seen: set[str] = set()
-        for value in candidates:
-            normalized = " ".join(str(value).split()).strip("。！？!?：:；;")
-            if not normalized:
+        # Explicit knowledge points are already short; use them directly.
+        explicit = [*brief.knowledge_points, *brief.weak_knowledge_points]
+        if explicit:
+            topics: list[str] = []
+            seen: set[str] = set()
+            for value in explicit:
+                normalized = " ".join(str(value).split()).strip("。！？!?：:；;")
+                if not normalized:
+                    continue
+                key = normalized.casefold()
+                if key not in seen:
+                    seen.add(key)
+                    topics.append(normalized[:80])
+            return topics or ["核心概念"]
+
+        # No explicit knowledge points — extract short sub-topics from the
+        # learning need so that scene titles stay concise.  A full-sentence
+        # learning need (e.g. "软件工程专业，学习《数据结构》课程，二叉树
+        # 与图论是知识短板") must not become a scene title verbatim.
+        need = " ".join(brief.learning_need.split()).strip("。！？!?：:；;")
+        if not need:
+            return ["核心概念"]
+
+        # Split on Chinese/English delimiters that typically separate
+        # sub-topics within a single learning-need sentence.
+        fragments = re.split(r"[，,；;、及与和以及]+", need)
+        topics = []
+        seen = set()
+        for fragment in fragments:
+            # Strip trailing predicate clauses ("是…短板", "需要…阅读")
+            # so the topic stays a noun phrase, not a full sentence.
+            # Only strip when the predicate tail is long enough (≥4 chars)
+            # to avoid removing short verb-noun pairs like "需要掌握变量".
+            fragment = re.sub(r"[是为需得会可以能].{4,}$", "", fragment).strip()
+            if not fragment or len(fragment) < 2:
                 continue
-            key = normalized.casefold()
+            key = fragment.casefold()
             if key not in seen:
                 seen.add(key)
-                topics.append(normalized[:80])
-        return topics or ["核心概念"]
+                topics.append(fragment[:20])
+        return topics or [need[:20]]
 
     @staticmethod
     def _lesson_title(brief: CartoonBrief) -> str:

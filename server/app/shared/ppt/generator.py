@@ -53,7 +53,7 @@ from app.shared.ppt.contract import layout_supports_relation, LayoutKind
 from app.infra.llm import get_llm
 from app.infra.logging import get_logger
 import asyncio
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Any
 
 logger = get_logger(__name__)
@@ -70,6 +70,23 @@ class SlideBriefPayload(BaseModel):
     bridge: str | None = None
     logic_relation: LogicRelation | None = None
     layout: LayoutKind
+
+    @model_validator(mode="before")
+    @classmethod
+    def coerce_empty_strings_to_none(cls, data: Any) -> Any:
+        """LLM sometimes returns '' for optional fields instead of null.
+
+        Coerce empty strings to None so that downstream pattern / enum
+        validators (SlideBrief.chapter_id pattern, LogicRelation enum)
+        never receive an invalid empty-string value.  This also lets
+        ainvoke_json's automatic retry catch the problem early rather
+        than failing later at SlideBrief construction time.
+        """
+        if isinstance(data, dict):
+            for key in ("chapter_id", "question", "claim", "bridge", "logic_relation"):
+                if data.get(key) == "":
+                    data[key] = None
+        return data
 
 class StoryboardPayload(BaseModel):
     title: str
@@ -568,13 +585,13 @@ class PPTGenerator:
                 relation = item.logic_relation or LogicRelation.SUPPORTS
                 if not layout_supports_relation(layout, relation):
                     layout = select_provisional_layout(item.kind, relation)
-                
+
                 # Auto-fill missing fields from associated logic nodes to guarantee validation stability
                 question = (item.question or "").strip()
                 claim = (item.claim or "").strip()
                 bridge = (item.bridge or "").strip()
                 chapter_id = item.chapter_id
-                
+
                 nodes_by_id = {node.id: node for node in logic_model.nodes}
                 if item.logic_node_ids:
                     first_node = nodes_by_id.get(item.logic_node_ids[0])
@@ -585,7 +602,7 @@ class PPTGenerator:
                             claim = first_node.claim
                         if not chapter_id:
                             chapter_id = first_node.chapter_id
-                            
+
                 if not question:
                     question = "如何理解本页的核心教学点？"
                 if not claim:
@@ -604,7 +621,8 @@ class PPTGenerator:
                 question = item.question or ""
                 claim = item.claim or ""
                 bridge = item.bridge or ""
-                chapter_id = item.chapter_id
+                chapter_id = item.chapter_id  # already None (not "") thanks to SlideBriefPayload validator
+                relation = None  # meta slides have no logic relation
 
             slides.append(
                 SlideBrief(
@@ -618,7 +636,7 @@ class PPTGenerator:
                     question=question,
                     claim=claim,
                     bridge=bridge,
-                    logic_relation=item.logic_relation,
+                    logic_relation=relation,
                     layout=layout,
                     density=context.preferences.density,
                 )
