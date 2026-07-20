@@ -2,7 +2,6 @@ import { ref } from 'vue'
 import { getErrorMessage } from '@/shared/api/http'
 import { runVisualization } from '@/features/algorithm-visualization/api/algorithmVisualizer'
 import type {
-  CodeLanguage,
   RunError,
   RunResult,
   TraceEvent,
@@ -20,7 +19,6 @@ export function useAlgorithmRun() {
   // 运行注册模板，获取可视化追踪事件
   async function run(params: {
     algorithm: string
-    language: CodeLanguage
     inputData?: Record<string, unknown>
   }) {
     generating.value = true
@@ -28,7 +26,7 @@ export function useAlgorithmRun() {
     runResult.value = null
     events.value = []
     try {
-      const resp = await runVisualization(params)
+      const resp = await runVisualization(params.algorithm, { inputData: params.inputData })
       runResult.value = resp.data.data
       events.value = runResult.value?.events ?? []
       if (events.value.length === 0) {

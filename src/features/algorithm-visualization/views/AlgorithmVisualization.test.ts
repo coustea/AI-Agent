@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import AlgorithmVisualization from './AlgorithmVisualization.vue'
 
 const apiMocks = vi.hoisted(() => ({
-  fetchLanguages: vi.fn(),
   fetchAlgorithms: vi.fn(),
   fetchTemplate: vi.fn(),
   runVisualization: vi.fn(),
@@ -29,13 +28,11 @@ vi.mock('@/features/algorithm-visualization/components/algorithm-visualizer/Algo
   default: defineComponent({
     name: 'AlgorithmCodeEditorPanelStub',
     props: { modelValue: { type: String, default: '' } },
-    emits: ['update:modelValue'],
-    setup(props, { emit, expose }) {
+    setup(props, { expose }) {
       expose({ highlightLine: vi.fn() })
       return () => h('textarea', {
         'data-testid': 'code-editor',
         value: props.modelValue,
-        onInput: (event: Event) => emit('update:modelValue', (event.target as HTMLTextAreaElement).value),
       })
     },
   }),
@@ -71,10 +68,9 @@ function successResponse<T>(data: T) {
 function createTraceResult(algorithm: string) {
   return successResponse({
     domain: 'searching',
-    algorithm,
+    templateKey: algorithm,
+    templateVersion: 'sha256:test',
     visualizerType: 'array',
-    language: 'python',
-    executionMode: 'official',
     events: [
       {
         id: 'evt-0',
@@ -103,16 +99,13 @@ async function mountPage() {
   app.mount(target)
   mountedApps.push(app)
   await vi.waitFor(() => {
-    expect(apiMocks.fetchTemplate).toHaveBeenCalledWith('bubble_sort', 'python')
+    expect(apiMocks.fetchTemplate).toHaveBeenCalledWith('bubble_sort')
   })
   await nextTick()
   return target
 }
 
 beforeEach(() => {
-  apiMocks.fetchLanguages.mockResolvedValue(successResponse([
-    { key: 'python', label: 'Python', extension: 'py' },
-  ]))
   apiMocks.fetchAlgorithms.mockResolvedValue(successResponse([
     {
       key: 'bubble_sort',
@@ -120,7 +113,6 @@ beforeEach(() => {
       domain: 'sorting',
       visualizerType: 'array',
       difficulty: 'easy',
-      supportedLanguages: ['python'],
     },
     {
       key: 'binary_search',
@@ -128,21 +120,20 @@ beforeEach(() => {
       domain: 'searching',
       visualizerType: 'array',
       difficulty: 'easy',
-      supportedLanguages: ['python'],
     },
   ]))
   apiMocks.fetchTemplate.mockImplementation(async (algorithm: string) => {
     const binarySearch = algorithm === 'binary_search'
     return successResponse({
       domain: binarySearch ? 'searching' : 'sorting',
-      algorithm,
+      key: algorithm,
+      name: algorithm,
       visualizerType: 'array',
-      language: 'python',
+      difficulty: 'easy',
+      version: 'sha256:test',
       templateCode: binarySearch
         ? 'def binary_search(arr, target):\n  return arr.index(target)'
         : 'def bubble_sort(arr):\n  return sorted(arr)',
-      requiredEvents: [],
-      supportedLanguages: ['python'],
       defaultInput: binarySearch
         ? { arr: [1, 2, 3, 5], target: 5 }
         : { arr: [3, 1, 2] },
@@ -180,16 +171,14 @@ describe('AlgorithmVisualization run flows', () => {
 
     target.querySelector<HTMLButtonElement>('[data-testid="select-binary-search"]')!.click()
     await vi.waitFor(() => {
-      expect(apiMocks.fetchTemplate).toHaveBeenCalledWith('binary_search', 'python')
+      expect(apiMocks.fetchTemplate).toHaveBeenCalledWith('binary_search')
     })
     await nextTick()
 
     target.querySelector<HTMLButtonElement>('.control-btn.primary')!.click()
 
     await vi.waitFor(() => {
-      expect(apiMocks.runVisualization).toHaveBeenCalledWith({
-        algorithm: 'binary_search',
-        language: 'python',
+      expect(apiMocks.runVisualization).toHaveBeenCalledWith('binary_search', {
         inputData: { arr: [1, 2, 3, 5], target: 5 },
       })
     })

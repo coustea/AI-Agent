@@ -1,4 +1,4 @@
-import type { AlgorithmInfo, CodeLanguage, VisualizerType } from '@/features/algorithm-visualization/types'
+import type { AlgorithmInfo, VisualizerType } from '@/features/algorithm-visualization/types'
 
 // 算法分类分组
 export interface AlgorithmCategoryGroup {
@@ -43,11 +43,6 @@ export const VISUALIZER_CATEGORIES: VisualizerCategoryGroup[] = [
   { domain: 'dynamic_programming', label: '动态规划', visualizerTypes: ['dp-table'] },
 ]
 
-// 代码语言的中文标签映射（未来扩展时添加 java, cpp, javascript 等）
-export const LANGUAGE_LABELS: Record<CodeLanguage, string> = {
-  python: 'Python',
-}
-
 const DOMAIN_ORDER = Object.keys(DOMAIN_LABELS)
 
 // 获取领域标签，未匹配时自动转换
@@ -70,14 +65,6 @@ export function getVisualizerLabel(type?: VisualizerType | string) {
 // 生成算法模板的描述文本
 export function getAlgorithmDescription(categoryLabel: string, algorithmName: string) {
   return `${categoryLabel}模板，用于生成${algorithmName}的可视化执行过程。`
-}
-
-// 获取支持语言的可读标签
-export function getLanguageLabel(languages?: CodeLanguage[] | string[]) {
-  if (!languages || languages.length === 0) return '所有语言'
-  return languages
-    .map((lang) => LANGUAGE_LABELS[lang as CodeLanguage] ?? lang)
-    .join(' / ')
 }
 
 // 按领域分类对算法列表进行分组并排序

@@ -23,11 +23,8 @@ from typing import Any
 from pydantic import JsonValue
 
 from app.algorithm_visualizer.official_adapters import get_adapter
-from app.algorithm_visualizer.official_adapters.structures import (
-    LinkedListAdapter,
-    TreeAdapter,
-)
-from app.algorithm_visualizer.template_registry import TemplateSpec, get_template_spec
+from app.algorithm_visualizer.official_adapters.structures import LinkedListAdapter
+from app.algorithm_visualizer.template_registry import TemplateSpec
 from app.algorithm_visualizer.trace_builder import TraceBuilder, TraceEvent
 
 
@@ -74,7 +71,8 @@ def execute_official_template(
         max_events=spec.max_events,
     )
 
-    # Pre-register linked-list and tree structures for identity tracking.
+    # Pre-register linked-list identities. Tree nodes are instead captured
+    # from the executing frame, including their actual left/right references.
     _pre_register_structures(adapter, module, input_data)
 
     first_line = max(1, entry.__code__.co_firstlineno)
@@ -184,15 +182,6 @@ def execute_official_template(
     )
 
 
-def run_official_template(
-    algorithm_key: str,
-    input_data: dict[str, Any],
-) -> OfficialExecution:
-    """Convenience wrapper: look up a spec by key and execute it."""
-    spec = get_template_spec(algorithm_key)
-    return execute_official_template(spec, input_data)
-
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -215,21 +204,16 @@ def _pre_register_structures(
     module: ModuleType,
     input_data: dict[str, Any],
 ) -> None:
-    """Pre-build linked-list and tree structures for identity tracking.
+    """Pre-build linked-list nodes for identity tracking.
 
-    For linked-list and tree templates, the entry function constructs
-    ListNode/TreeNode objects internally.  We need to track these by
-    object identity, so we build them from the same input data using
-    the same helper functions defined in the template source.
+    The entry function constructs ListNode objects internally. We build the
+    same initial list so the first rendered state is visible before the first
+    traced frame; the runtime list replaces it as soon as execution begins.
     """
     if isinstance(adapter, LinkedListAdapter):
         head = _build_linked_list_from_module(module, input_data.get("arr", []))
         if head is not None:
             adapter.set_head(head)
-    elif isinstance(adapter, TreeAdapter):
-        root = _build_tree_from_module(module, input_data.get("arr", []))
-        if root is not None:
-            adapter.set_root(root)
 
 
 def _build_linked_list_from_module(
@@ -253,35 +237,6 @@ def _build_linked_list_from_module(
         current.next = node_class(value)
         current = current.next
     return head
-
-
-def _build_tree_from_module(
-    module: ModuleType,
-    values: object,
-) -> object | None:
-    """Build a binary tree using the template's own TreeNode class."""
-    if not isinstance(values, list) or not values:
-        return None
-    # Use the template's _build_tree helper if available.
-    builder = getattr(module, "_build_tree", None)
-    if callable(builder):
-        return builder(values)
-    # Fallback: construct manually using the template's TreeNode.
-    node_class = getattr(module, "TreeNode", None) or getattr(module, "Node", None)
-    if node_class is None:
-        return None
-    nodes = [node_class(value) if value is not None else None for value in values]
-    child_index = 1
-    for node in nodes:
-        if node is None:
-            continue
-        if child_index < len(nodes):
-            node.left = nodes[child_index]
-            child_index += 1
-        if child_index < len(nodes):
-            node.right = nodes[child_index]
-            child_index += 1
-    return nodes[0]
 
 
 def _initial_event_type(

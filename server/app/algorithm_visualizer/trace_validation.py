@@ -22,9 +22,6 @@ class InvalidTraceError(ValueError):
     """Raised when a trace cannot be rendered by the selected visualizer."""
 
 
-# Legacy alias for backward compatibility with service.py.
-TraceValidationError = InvalidTraceError
-
 _INITIAL_EVENTS = {
     "array": {"init_array"},
     "stack-queue": {"init_stack", "init_queue"},
@@ -37,34 +34,13 @@ _INITIAL_EVENTS = {
 _MAX_SERIALIZED_BYTES = 4 * 1024 * 1024  # 4 MiB
 
 
-def validate_trace(
-    events: list[dict[str, Any]],
-    visualizer_type: str,
-) -> None:
-    """Validate a trace with full semantic invariant checks.
-
-    This is the primary entry point for the new runtime.  It does not
-    require ``source_line_count`` because the official runtime already
-    validates line numbers during construction.
-
-    Raises:
-        InvalidTraceError: when any invariant is violated.
-    """
-    _validate_core(events, visualizer_type, source_line_count=None)
-    _validate_semantic_invariants(events, visualizer_type)
-
-
 def validate_trace_events(
     events: list[dict[str, Any]],
     visualizer_type: str,
     *,
     source_line_count: int,
 ) -> None:
-    """Legacy entry point used by service.py.
-
-    Validates core structure plus semantic invariants.  The
-    ``source_line_count`` parameter is kept for backward compatibility.
-    """
+    """Validate core trace structure and visualizer-specific invariants."""
     _validate_core(events, visualizer_type, source_line_count=source_line_count)
     _validate_semantic_invariants(events, visualizer_type)
 

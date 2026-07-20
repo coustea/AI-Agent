@@ -86,11 +86,7 @@ function mountEditor(modelValue = '') {
     setup() {
       return () => h(AlgorithmCodeEditorPanel, {
         modelValue: value.value,
-        language: 'python',
-        languages: [{ key: 'python', label: 'Python', extension: 'py' }],
-        readonly: true,
         title: '官方模板代码',
-        'onUpdate:modelValue': () => {},
       })
     },
   })

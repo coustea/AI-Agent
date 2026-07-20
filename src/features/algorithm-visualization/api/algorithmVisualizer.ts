@@ -2,36 +2,23 @@ import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
 import type {
   AlgorithmInfo,
-  CodeLanguage,
-  LanguageInfo,
   RunResult,
   TemplateData,
 } from '@/features/algorithm-visualization/types'
 
-// 获取支持语言列表
-export function fetchLanguages() {
-  return http.get<ApiResponse<LanguageInfo[]>>('/ai/algorithm-visualizer/languages')
+// 获取受信、可视化的算法模板目录。
+export function fetchAlgorithms() {
+  return http.get<ApiResponse<AlgorithmInfo[]>>('/ai/algorithm-visualizer/templates')
 }
 
-// 获取算法列表，domain 默认 all；language 可选
-export function fetchAlgorithms(domain = 'all', language?: CodeLanguage) {
-  return http.get<ApiResponse<AlgorithmInfo[]>>('/ai/algorithm-visualizer/algorithms', {
-    params: { domain, ...(language ? { language } : {}) },
-  })
+// 获取一个模板的真实源码和输入契约。
+export function fetchTemplate(templateKey: string) {
+  return http.get<ApiResponse<TemplateData>>(`/ai/algorithm-visualizer/templates/${templateKey}`)
 }
 
-// 获取代码模板
-export function fetchTemplate(algorithm: string, language: CodeLanguage) {
-  return http.get<ApiResponse<TemplateData>>('/ai/algorithm-visualizer/templates', {
-    params: { algorithm, language },
-  })
-}
-
-// 运行注册的官方模板。
-export function runVisualization(data: {
-  algorithm: string
-  language: CodeLanguage
+// 运行注册模板。客户端只能提交该模板声明的输入。
+export function runVisualization(templateKey: string, data: {
   inputData?: Record<string, unknown>
 }) {
-  return http.post<ApiResponse<RunResult>>('/ai/algorithm-visualizer/run', data)
+  return http.post<ApiResponse<RunResult>>(`/ai/algorithm-visualizer/templates/${templateKey}/runs`, data)
 }

@@ -7,9 +7,6 @@ export type VisualizerType =
   | 'graph'
   | 'dp-table'
 
-// 支持的代码语言
-export type CodeLanguage = 'python'
-
 // TraceEvent 事件协议 — 所有语言统一输出
 export interface TraceEvent {
   id: string
@@ -70,25 +67,17 @@ export interface AlgorithmInfo {
   domain: string
   visualizerType: VisualizerType
   difficulty: 'easy' | 'medium' | 'hard'
-  supportedLanguages: CodeLanguage[]
 }
 
-// 语言信息 (来自 GET /languages)
-export interface LanguageInfo {
-  key: CodeLanguage
-  label: string
-  extension: string
-}
-
-// 模板数据 (来自 GET /templates)
+// 模板数据 (来自 GET /templates/{templateKey})
 export interface TemplateData {
+  key: string
+  name: string
   domain: string
-  algorithm: string
   visualizerType: VisualizerType
-  language: CodeLanguage
+  difficulty: AlgorithmInfo['difficulty']
+  version: string
   templateCode: string
-  requiredEvents: string[]
-  supportedLanguages: CodeLanguage[]
   defaultInput: Record<string, unknown>
   inputSchema: InputSchema
 }
@@ -100,13 +89,11 @@ export interface InputSchema {
   items?: InputSchema
 }
 
-// 运行结果 (来自 POST /run 成功)
+// 运行结果 (来自 POST /templates/{templateKey}/runs 成功)
 export interface RunResult {
-  domain: string
-  algorithm: string
+  templateKey: string
+  templateVersion: string
   visualizerType: VisualizerType
-  language: CodeLanguage
-  executionMode: 'official'
   events: TraceEvent[]
   result: unknown
   summary: string
@@ -117,7 +104,6 @@ export interface RunResult {
 export interface RunError {
   errorType:
     | 'MISSING_ALGORITHM'
-    | 'UNSUPPORTED_LANGUAGE'
     | 'RUNTIME_ERROR'
     | 'VISUALIZER_RUN_ERROR'
     | 'INPUT_INVALID'

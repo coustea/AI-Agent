@@ -1,10 +1,9 @@
 """算法可视化模块 API 路由。
 
-当前设计：
-  GET  /algorithm-visualizer/languages   — 公开
-  GET  /algorithm-visualizer/algorithms  — 公开
-  GET  /algorithm-visualizer/templates   — 需认证，返回官方模板源码与默认输入
-  POST /algorithm-visualizer/run         — 需认证，运行官方模板
+当前设计只支持已注册的 Python 算法模板：
+  GET  /algorithm-visualizer/templates                    — 公开目录
+  GET  /algorithm-visualizer/templates/{template_key}     — 需认证详情
+  POST /algorithm-visualizer/templates/{template_key}/runs — 需认证运行
 """
 
 from __future__ import annotations
@@ -14,11 +13,10 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.algorithm_visualizer.events import record_visualizer_run_event
 from app.algorithm_visualizer.schemas import (
-    AlgorithmResponse,
-    LanguageResponse,
     RunRequest,
     RunSuccessResponse,
-    TemplateResponse,
+    TemplateDetailResponse,
+    TemplateSummaryResponse,
 )
 from app.algorithm_visualizer.service import (
     VisualizerRunError,
@@ -40,68 +38,43 @@ router = APIRouter()
 logger = get_logger(__name__)
 
 
-# 公开接口：返回所有支持的可视化编程语言列表
-@router.get("/algorithm-visualizer/languages")
-async def get_languages():
-    return HttpResponse.success(data=[LanguageResponse(key="python", label="Python", extension="py")])
-
-
-# 公开接口：按 domain / language 过滤并列出算法模板
-@router.get("/algorithm-visualizer/algorithms")
-async def get_algorithms(domain: str = "all", language: str | None = None):
-    """获取算法模板列表。
-
-    domain 默认 all。
-    language 可选，用于前端在已选语言后过滤算法。
-    """
+# 公开接口：列出受信、可视化的算法模板。
+@router.get("/algorithm-visualizer/templates")
+async def get_templates():
+    """Return the authoritative official-template catalogue."""
     try:
-        specs = get_all_template_specs()
-        algorithms = []
-        for spec in specs:
-            if domain != "all" and spec.domain != domain:
-                continue
-            # Only Python is supported now.
-            if language and language != "python":
-                continue
-
-            alg_response = AlgorithmResponse(
+        templates = [
+            TemplateSummaryResponse(
                 key=spec.key,
                 name=spec.name,
                 domain=spec.domain,
                 visualizer_type=spec.visualizer_type,
                 difficulty=spec.difficulty,
-                supported_languages=["python"],
-            )
-            algorithms.append(alg_response.model_dump(by_alias=False))
-
-        return HttpResponse.success(data=algorithms)
+            ).model_dump(by_alias=False)
+            for spec in get_all_template_specs()
+        ]
+        return HttpResponse.success(data=templates)
 
     except Exception as e:
         return HttpResponse.error(code=400, message=str(e))
 
 
-# 需认证接口：返回官方模板源码及前端默认输入数据
-@router.get("/algorithm-visualizer/templates")
-async def get_templates(
-    algorithm: str,
-    language: str,
+# 需认证接口：返回一个模板的真实源码及输入契约。
+@router.get("/algorithm-visualizer/templates/{template_key}")
+async def get_template(
+    template_key: str,
     current_user: User = Depends(get_current_user),
 ):
     """获取官方算法模板源码和其输入契约。"""
     try:
-        spec = get_template_spec(algorithm)
-
-        if language != "python":
-            return HttpResponse.error(
-                code=400,
-                message=f"算法 {algorithm} 不支持语言 {language}",
-            )
-
-        payload = TemplateResponse(
-            algorithm=algorithm,
+        spec = get_template_spec(template_key)
+        payload = TemplateDetailResponse(
+            key=spec.key,
+            name=spec.name,
             domain=spec.domain,
             visualizer_type=spec.visualizer_type,
-            language="python",
+            difficulty=spec.difficulty,
+            version=spec.version,
             template_code=spec.source_code,
             default_data=spec.default_input,
             input_schema=spec.input_schema,
@@ -115,33 +88,30 @@ async def get_templates(
         return HttpResponse.error(code=400, message=f"加载模板失败: {str(e)}")
 
 
-# 需认证接口：运行注册算法模板
-@router.post("/algorithm-visualizer/run")
+# 需认证接口：运行一个注册模板。
+@router.post("/algorithm-visualizer/templates/{template_key}/runs")
 async def run_visualization(
+    template_key: str,
     request_data: RunRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """运行注册的官方模板。"""
-    algorithm = request_data.algorithm
-    language = request_data.language
-    logger.info("[Visualizer] 运行官方模板: user_id=%s algorithm=%s", current_user.id, algorithm)
+    logger.info("[Visualizer] 运行官方模板: user_id=%s template=%s", current_user.id, template_key)
 
     try:
         result = run_official_visualization(
-            algorithm=algorithm,
-            language=language,
+            template_key=template_key,
             input_data=request_data.inputData,
         )
 
     # 插装或执行失败，记录失败事件并返回错误
     except VisualizerRunError as e:
-        logger.warning("[Visualizer] 运行失败: user_id=%s algorithm=%s error_type=%s", current_user.id, algorithm, e.error_type)
+        logger.warning("[Visualizer] 运行失败: user_id=%s template=%s error_type=%s", current_user.id, template_key, e.error_type)
         await _safe_record_event(
             session,
             current_user.id,
-            algorithm,
-            language,
+            template_key,
             success=False,
             error_message=f"{e.error_type}: {e.message}",
         )
@@ -157,8 +127,7 @@ async def run_visualization(
         await _safe_record_event(
             session,
             current_user.id,
-            algorithm,
-            language,
+            template_key,
             success=False,
             error_message=str(e),
         )
@@ -173,12 +142,11 @@ async def run_visualization(
     await _safe_record_event(
         session,
         current_user.id,
-        result["algorithm"],
-        result["language"],
+        result["templateKey"],
         success=True,
     )
 
-    logger.info("[Visualizer] 运行成功: user_id=%s algorithm=%s", current_user.id, result["algorithm"])
+    logger.info("[Visualizer] 运行成功: user_id=%s template=%s", current_user.id, result["templateKey"])
     # 使用 by_alias=False 确保序列化时使用字段名（camelCase）
     return HttpResponse.success(data=RunSuccessResponse(**result).model_dump(by_alias=False))
 
@@ -187,8 +155,7 @@ async def run_visualization(
 async def _safe_record_event(
     session: AsyncSession,
     user_id: int,
-    algorithm: str,
-    language: str,
+    template_key: str,
     *,
     success: bool,
     error_message: str | None = None,
@@ -197,15 +164,14 @@ async def _safe_record_event(
         await record_visualizer_run_event(
             session,
             user_id=user_id,
-            algorithm=algorithm,
-            language=language,
+            template_key=template_key,
             success=success,
             error_message=error_message,
         )
     except Exception as event_exc:
         logger.warning(
-            "[Visualizer] event record failed: user_id=%s algorithm=%s err=%s",
+            "[Visualizer] event record failed: user_id=%s template=%s err=%s",
             user_id,
-            algorithm,
+            template_key,
             event_exc,
         )

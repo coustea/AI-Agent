@@ -54,7 +54,7 @@
           v-model="searchQuery"
           class="template-search-input"
           type="text"
-          placeholder="搜索算法、分类、语言或可视化类型"
+          placeholder="搜索算法、分类或可视化类型"
           autofocus
         />
       </div>
@@ -114,7 +114,6 @@
                     {{ difficultyLabel[item.difficulty] }}
                   </span>
                   <span>{{ getVisualizerLabel(item.visualizerType) }}</span>
-                  <span>{{ getLanguageLabel(item.supportedLanguages) }}</span>
                 </span>
               </button>
             </template>
@@ -140,7 +139,6 @@ import type { AlgorithmCategoryGroup } from '@/features/algorithm-visualization/
 import {
   getAlgorithmDescription,
   getVisualizerLabel,
-  getLanguageLabel,
 } from '@/features/algorithm-visualization/data/visualizerMetadata'
 
 const props = defineProps<{
@@ -205,7 +203,6 @@ const filteredCategories = computed(() => {
           item.key,
           category.label,
           getVisualizerLabel(item.visualizerType),
-          item.supportedLanguages.join(' '),
         ].join(' ').toLowerCase().includes(query)
       })
 

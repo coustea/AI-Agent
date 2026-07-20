@@ -37,10 +37,6 @@
           <span>{{ primaryLabel }}</span>
         </button>
 
-        <Button variant="outline" class="reset-btn" :disabled="generating || loading" @click="handleReset">
-          <RotateCcw class="btn-icon" />
-          恢复模板代码
-        </Button>
       </div>
     </header>
 
@@ -84,10 +80,6 @@
             v-show="activeEditorTab === 'code'"
             :model-value="code"
             title="官方模板代码"
-            :language="language"
-            :languages="supportedEditorLanguages"
-            :disabled="generating || loading"
-            :readonly="true"
             :active-line="currentEvent?.line"
             :current-step-message="currentEvent?.message"
             :current-step-index="currentStepIndex"
@@ -117,8 +109,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Code2, RotateCcw, Settings, Loader2, Pause, Play } from 'lucide-vue-next'
-import { Button } from '@/components/ui/button'
+import { Code2, Settings, Loader2, Pause, Play } from 'lucide-vue-next'
 import type { RunError } from '@/features/algorithm-visualization/types'
 import AlgorithmTemplatePicker from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmTemplatePicker.vue'
 import AlgorithmVisualizerStage from '@/features/algorithm-visualization/components/algorithm-visualizer/AlgorithmVisualizerStage.vue'
@@ -138,20 +129,17 @@ defineOptions({
   name: 'AlgorithmVisualization',
 })
 
-// 算法模板状态（语言、算法 key、代码、算法信息等）
+// 算法模板状态（算法 key、执行源码与输入契约）。
 const {
-  language,
   algorithm,
   code,
   loading,
-  languages,
   algorithms,
   metaLoading,
   currentAlgorithm,
   templateData,
   loadMeta,
   loadTemplate,
-  resetTemplate,
   setAlgorithm,
   getCurrentVisualizerType,
 } = useAlgorithmTemplate()
@@ -196,16 +184,6 @@ const selectedCategoryLabel = computed(() => {
 })
 const selectedVisualLabel = computed(() => {
   return getVisualizerLabel(currentAlgorithm.value?.visualizerType)
-})
-
-// 编辑器支持的语言列表（过滤掉当前算法不支持的语言）
-const supportedEditorLanguages = computed(() => {
-  const selected = currentAlgorithm.value
-  if (!selected?.supportedLanguages.length) {
-    return languages.value
-  }
-  const filtered = languages.value.filter((item) => selected.supportedLanguages.includes(item.key))
-  return filtered.length > 0 ? filtered : languages.value
 })
 
 // 当前可视化器类型（优先取事件中指定，其次算法默认）
@@ -285,11 +263,6 @@ function setEditorTab(tab: 'code' | 'input') {
   activeEditorTab.value = tab
 }
 
-function handleReset() {
-  discardVisualization()
-  void resetTemplate()
-}
-
 // 唯一主操作：首次运行，之后控制播放。
 async function handlePrimaryAction() {
   if (generating.value) return
@@ -322,7 +295,6 @@ async function handleRun() {
   }
   await runAlgorithm({
     algorithm: algorithm.value,
-    language: language.value,
     inputData: inputDataJson.value,
   })
   // 运行完成后重置编排器并自动播放

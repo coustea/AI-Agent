@@ -10,9 +10,6 @@ no explicit relation.
 
 from __future__ import annotations
 
-import copy
-from typing import Any
-
 from app.algorithm_visualizer.official_adapters._base import BaseAdapter
 
 
@@ -91,73 +88,31 @@ class TreeAdapter(BaseAdapter):
 
     def __init__(self, input_data: dict[str, object]) -> None:
         super().__init__(input_data)
-        self._root_node: object | None = None
         self._object_ids: dict[int, str] = {}
-        self._discovered: bool = False
-        self._execution_started: bool = False
-
-    def set_root(self, root: object) -> None:
-        """Register the tree root for identity tracking."""
-        self._root_node = root
-        _, self._object_ids = _tree_nodes(root)
-        self._discovered = True
 
     def _build_initial_structure(self) -> dict[str, object]:
-        nodes = _fallback_tree_nodes(self._input_data)
-        for node in nodes:
-            node["left_constructed"] = False
-            node["right_constructed"] = False
-        return {"nodes": nodes, "phase": "construction"}
+        # Node links must come from the executing `_build_tree` frame.  An
+        # empty initial state is preferable to inferring links from input.
+        return {"nodes": [], "phase": "construction"}
 
     def _do_capture(
         self,
         local_values: dict[str, object],
         result: object | None,
     ) -> tuple[dict[str, object], list[object]]:
-        # Always use the fallback tree layout to keep positions stable and prevent jumping
-        nodes = _fallback_tree_nodes(self._input_data)
-
         is_building = self.current_func_name in {"_build_tree", "__init__"}
         phase = "construction" if is_building else "traversal"
 
         if is_building:
-            self._execution_started = False
-            # During construction: build a map of all node objects by their
-            # position-index (from the local `nodes` list in _build_tree).
-            # Start all edges as unconstructed, then set True for each node
-            # whose .left / .right attribute is already non-None.
             nodes_list = local_values.get("nodes")
-            node_objects: dict[str, object] = {}
-            if isinstance(nodes_list, list):
-                for index, obj in enumerate(nodes_list):
-                    if obj is not None:
-                        nid = f"node-{index}"
-                        self._object_ids[id(obj)] = nid
-                        node_objects[nid] = obj
-
-            for node in nodes:
-                nid = node["id"]
-                obj = node_objects.get(nid)
-                if obj is not None:
-                    node["left_constructed"] = (
-                        hasattr(obj, "left") and getattr(obj, "left") is not None
-                    )
-                    node["right_constructed"] = (
-                        hasattr(obj, "right") and getattr(obj, "right") is not None
-                    )
-                else:
-                    # Object not yet in nodes list → definitely not constructed
-                    node["left_constructed"] = False
-                    node["right_constructed"] = False
+            nodes = _tree_nodes_from_execution_list(nodes_list, self._object_ids)
 
             targets: list[str] = []
-            # Highlight the parent node currently being wired (loop variable `node`)
             loop_node = local_values.get("node")
             loop_id = self._object_ids.get(id(loop_node))
             if loop_id is not None:
                 targets.append(loop_id)
 
-            # Highlight the child node currently being connected
             child_index = local_values.get("child_index")
             if isinstance(child_index, int) and isinstance(nodes_list, list) and 0 <= child_index < len(nodes_list):
                 child_node = nodes_list[child_index]
@@ -166,17 +121,15 @@ class TreeAdapter(BaseAdapter):
                     targets.append(child_id)
 
         else:
-            # Traversal phase: all links are fully constructed.
-            # Auto-discover root on first traversal frame.
-            if not self._execution_started:
-                root = _find_tree_root(local_values)
-                if root is not None:
-                    self.set_root(root)
-                    self._execution_started = True
+            root = _find_tree_root(local_values)
+            if root is not None:
+                nodes, self._object_ids = _tree_nodes(root, self._object_ids)
+            else:
+                nodes = list(self._last_structure.get("nodes", []))
 
             for node in nodes:
-                node["left_constructed"] = "left" in node
-                node["right_constructed"] = "right" in node
+                node["left_constructed"] = node.get("left") is not None
+                node["right_constructed"] = node.get("right") is not None
 
             # Highlight the active node being visited
             targets = []
@@ -258,15 +211,22 @@ def _fallback_linked_nodes(data: dict[str, object]) -> list[dict[str, object]]:
     return nodes
 
 
-def _tree_nodes(root: object) -> tuple[list[dict[str, object]], dict[int, str]]:
+def _tree_nodes(
+    root: object,
+    object_ids: dict[int, str] | None = None,
+) -> tuple[list[dict[str, object]], dict[int, str]]:
     """Walk a binary tree and collect nodes with actual left/right references."""
     nodes: list[dict[str, object]] = []
-    object_ids: dict[int, str] = {}
+    object_ids = dict(object_ids or {})
+    visited: set[int] = set()
 
     def visit(node: object) -> str | None:
-        if node is None or id(node) in object_ids:
+        if node is None:
+            return None
+        if id(node) in visited:
             return object_ids.get(id(node))
-        node_id = f"node-{len(object_ids)}"
+        visited.add(id(node))
+        node_id = object_ids.get(id(node), f"node-{len(object_ids)}")
         object_ids[id(node)] = node_id
         item: dict[str, object] = {
             "id": node_id,
@@ -295,25 +255,33 @@ def _find_tree_root(local_values: dict[str, object]) -> object | None:
     return None
 
 
-def _fallback_tree_nodes(data: dict[str, object]) -> list[dict[str, object]]:
-    """Build tree nodes from an input array when no root object is available."""
-    arr = data.get("arr")
-    if not isinstance(arr, list) or not arr:
+def _tree_nodes_from_execution_list(
+    nodes_list: object,
+    object_ids: dict[int, str],
+) -> list[dict[str, object]]:
+    """Serialize the actual nodes created by the template's builder frame."""
+    if not isinstance(nodes_list, list):
         return []
-    nodes: list[dict[str, object]] = []
-    for index, value in enumerate(arr):
-        if value is None:
-            continue
-        node: dict[str, object] = {
-            "id": f"node-{index}",
-            "label": str(value),
+
+    runtime_nodes = [node for node in nodes_list if node is not None]
+    for index, node in enumerate(nodes_list):
+        if node is not None:
+            object_ids[id(node)] = f"node-{index}"
+
+    result: list[dict[str, object]] = []
+    for node in runtime_nodes:
+        item: dict[str, object] = {
+            "id": object_ids[id(node)],
+            "label": str(getattr(node, "val", getattr(node, "value", "?"))),
             "tone": "default",
+            "left_constructed": getattr(node, "left", None) is not None,
+            "right_constructed": getattr(node, "right", None) is not None,
         }
-        left_index = 2 * index + 1
-        right_index = 2 * index + 2
-        if left_index < len(arr) and arr[left_index] is not None:
-            node["left"] = f"node-{left_index}"
-        if right_index < len(arr) and arr[right_index] is not None:
-            node["right"] = f"node-{right_index}"
-        nodes.append(node)
-    return nodes
+        left = getattr(node, "left", None)
+        right = getattr(node, "right", None)
+        if left is not None and id(left) in object_ids:
+            item["left"] = object_ids[id(left)]
+        if right is not None and id(right) in object_ids:
+            item["right"] = object_ids[id(right)]
+        result.append(item)
+    return result

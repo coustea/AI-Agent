@@ -52,7 +52,6 @@ class TemplateSpec:
     entry_point: str
     input_model: type[StrictTemplateInput]
     default_input: dict[str, JsonValue]
-    adapter_key: str
     max_events: int = 600
 
     @property
@@ -94,7 +93,6 @@ def _template(
         entry_point=entry_point,
         input_model=input_model,
         default_input=validated_default,
-        adapter_key=key,
     )
 
 

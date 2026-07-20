@@ -50,27 +50,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import * as monaco from 'monaco-editor'
-import type {
-  CodeLanguage,
-  LanguageInfo,
-} from '@/features/algorithm-visualization/types'
-
 const props = defineProps<{
   modelValue: string
-  language: CodeLanguage
-  languages: LanguageInfo[]
-  disabled?: boolean
-  readonly?: boolean
   title?: string
   activeLine?: number
   currentStepMessage?: string
   currentStepIndex?: number
   eventCount?: number
   generating?: boolean
-}>()
-
-const emit = defineEmits<{
-  'update:modelValue': [code: string]
 }>()
 
 // Monaco 编辑器实例引用与状态
@@ -81,14 +68,8 @@ const editorCursorColumn = ref(1)
 let editor: monaco.editor.IStandaloneCodeEditor | null = null
 let decorationsCollection: monaco.editor.IEditorDecorationsCollection | null = null
 
-// 语言显示标签、文件扩展名
-const editorLanguageLabel = computed(() => {
-  return getLanguageLabel(props.language)
-})
-
-const editorExtension = computed(() => {
-  return props.languages.find((item) => item.key === props.language)?.extension ?? mapCodeLanguage(props.language)
-})
+const editorLanguageLabel = 'Python'
+const editorExtension = 'py'
 
 // 行数和字符数统计
 const editorLineCount = computed(() => {
@@ -134,24 +115,6 @@ watch(
   },
 )
 
-// 编辑器语言切换
-watch(
-  () => props.language,
-  (newLanguage) => {
-    const model = editor?.getModel()
-    if (!model) return
-    monaco.editor.setModelLanguage(model, mapCodeLanguage(newLanguage))
-  },
-)
-
-// 运行中禁用编辑
-watch(
-  () => props.disabled,
-  (loading) => {
-    editor?.updateOptions({ readOnly: Boolean(loading) || Boolean(props.readonly) })
-  },
-)
-
 // 高亮当前执行行 — 由编排器在步骤切换时命令式调用
 
 // 暴露命令式方法供编排器同步调用
@@ -169,9 +132,9 @@ function createEditor() {
 
   editor = monaco.editor.create(editorContainer.value, {
     value: props.modelValue,
-    language: mapCodeLanguage(props.language),
+    language: 'python',
     theme: 'algorithm-sunlit',
-    readOnly: Boolean(props.disabled) || Boolean(props.readonly),
+    readOnly: true,
     automaticLayout: true,
 
     fontSize: 14,
@@ -233,11 +196,6 @@ function createEditor() {
 
   decorationsCollection = editor.createDecorationsCollection()
 
-  editor.onDidChangeModelContent(() => {
-    if (!editor) return
-    emit('update:modelValue', editor.getValue())
-  })
-
   editor.onDidChangeCursorPosition((event) => {
     editorCursorLine.value = event.position.lineNumber
     editorCursorColumn.value = event.position.column
@@ -284,28 +242,6 @@ function defineMonacoThemes() {
       'scrollbarSlider.activeBackground': '#58747a99',
     },
   })
-}
-
-// 将后端语言标识映射到 Monaco 编辑器语言 ID
-function mapCodeLanguage(value: CodeLanguage): string {
-  const map: Partial<Record<CodeLanguage, string>> = {
-    python: 'python',
-  }
-
-  return map[value] ?? 'plaintext'
-}
-
-// 获取语言显示标签（带降级映射）
-function getLanguageLabel(value: CodeLanguage | string) {
-  const matched = props.languages.find((item) => item.key === value)
-
-  if (matched?.label) return matched.label
-
-  const fallbackMap: Record<string, string> = {
-    python: 'Python',
-  }
-
-  return fallbackMap[String(value)] ?? String(value)
 }
 
 // 更新编辑器中的代码行高亮（当前执行的步骤行）

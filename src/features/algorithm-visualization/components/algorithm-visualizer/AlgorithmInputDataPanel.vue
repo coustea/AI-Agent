@@ -56,7 +56,7 @@
       <div v-if="fields.length === 0" class="empty-fields-placeholder">
         <Settings class="placeholder-icon" />
         <p>暂无输入参数</p>
-        <span>请先在“代码”页签编写合法的 Python 代码，我们将自动解析函数参数并在此处生成输入表单。</span>
+        <span>该算法模板不需要额外输入。</span>
       </div>
     </div>
   </div>

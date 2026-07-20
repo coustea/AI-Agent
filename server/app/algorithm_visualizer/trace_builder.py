@@ -13,9 +13,6 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-from pydantic import JsonValue
-
-
 class TraceLimitExceeded(RuntimeError):
     """Raised when a trace exceeds the configured event or size limits."""
 
@@ -105,35 +102,3 @@ class TraceBuilder:
 
         self._events.append(event)
         return event
-
-    def build(self) -> list[dict[str, JsonValue]]:
-        """Return the event list as JSON-compatible dicts for the API layer."""
-        result: list[dict[str, JsonValue]] = []
-        for event in self._events:
-            entry: dict[str, JsonValue] = {
-                "id": event.id,
-                "step": event.step,
-                "type": event.type,
-                "visualizerType": event.visualizer_type,
-                "state": {"structure": _to_jsonable(event.state)},
-                "targets": _to_jsonable(event.targets),
-            }
-            if event.line is not None:
-                entry["line"] = event.line
-            if event.message is not None:
-                entry["message"] = event.message
-            result.append(entry)
-        return result
-
-
-def _to_jsonable(value: Any) -> Any:
-    """Recursively convert a value to a JSON-compatible representation."""
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, dict):
-        return {str(key): _to_jsonable(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_to_jsonable(item) for item in value]
-    if hasattr(value, "val"):
-        return getattr(value, "val")
-    return str(value)
