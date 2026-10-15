@@ -125,13 +125,13 @@ func (c *Config) SwitchProvider(p Provider) {
 	if pcfg.BaseURL != "" {
 		c.BaseURL = pcfg.BaseURL
 	} else {
-		c.BaseURL = GetDefaultBaseURLForProvider(p)
+		c.BaseURL = DefaultBaseURL(p)
 	}
 
 	if pcfg.ModelName != "" {
 		c.ModelName = pcfg.ModelName
 	} else {
-		c.ModelName = GetDefaultModelForProvider(p)
+		c.ModelName = DefaultModel(p)
 	}
 
 	if pcfg.APIKey != "" {
@@ -256,14 +256,14 @@ func LoadConfig(path string) (*Config, error) {
 		if activePcfg.ModelName != "" {
 			cfg.ModelName = activePcfg.ModelName
 		} else {
-			cfg.ModelName = GetDefaultModelForProvider(cfg.Provider)
+			cfg.ModelName = DefaultModel(cfg.Provider)
 		}
 	}
 	if cfg.BaseURL == "" {
 		if activePcfg.BaseURL != "" {
 			cfg.BaseURL = activePcfg.BaseURL
 		} else {
-			cfg.BaseURL = GetDefaultBaseURLForProvider(cfg.Provider)
+			cfg.BaseURL = DefaultBaseURL(cfg.Provider)
 		}
 	}
 
@@ -313,8 +313,8 @@ func SaveConfig(path string, cfg *Config) error {
 	return os.WriteFile(resolvedPath, data, 0o600)
 }
 
-// GetDefaultModelForProvider 根据厂商返回最新默认模型名称
-func GetDefaultModelForProvider(p Provider) string {
+// DefaultModel 根据厂商返回最新默认模型名称
+func DefaultModel(p Provider) string {
 	switch strings.ToLower(string(p)) {
 	case "gemini", "google":
 		return DefaultGeminiModel
@@ -327,8 +327,8 @@ func GetDefaultModelForProvider(p Provider) string {
 	}
 }
 
-// GetDefaultBaseURLForProvider 根据厂商返回默认服务端点
-func GetDefaultBaseURLForProvider(p Provider) string {
+// DefaultBaseURL 根据厂商返回默认服务端点
+func DefaultBaseURL(p Provider) string {
 	switch strings.ToLower(string(p)) {
 	case "gemini", "google":
 		return GeminiBaseURL

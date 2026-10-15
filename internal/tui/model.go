@@ -122,7 +122,7 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if nameVal == "" {
 				nameVal = m.config.ModelName
 				if nameVal == "" {
-					nameVal = config.GetDefaultModelForProvider(m.config.Provider)
+					nameVal = config.DefaultModel(m.config.Provider)
 				}
 			}
 			m.config.ModelName = nameVal
@@ -232,7 +232,7 @@ func (m Model) viewInputModel() string {
 	provider := string(m.config.Provider)
 	defaultModel := m.config.ModelName
 	if defaultModel == "" {
-		defaultModel = config.GetDefaultModelForProvider(m.config.Provider)
+		defaultModel = config.DefaultModel(m.config.Provider)
 	}
 
 	s.WriteString(titleStyle.Render(fmt.Sprintf("╭─ coustea • 配置 %s 模型名称 ────────────────────────────────────────╮", provider)) + "\n")

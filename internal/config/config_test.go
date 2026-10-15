@@ -6,24 +6,24 @@ import (
 )
 
 func TestConfig_Defaults(t *testing.T) {
-	if GetDefaultModelForProvider(ProviderGemini) != DefaultGeminiModel {
-		t.Errorf("expected %s, got %s", DefaultGeminiModel, GetDefaultModelForProvider(ProviderGemini))
+	if DefaultModel(ProviderGemini) != DefaultGeminiModel {
+		t.Errorf("expected %s, got %s", DefaultGeminiModel, DefaultModel(ProviderGemini))
 	}
-	if GetDefaultModelForProvider(ProviderDeepSeek) != DefaultDeepSeekModel {
-		t.Errorf("expected %s, got %s", DefaultDeepSeekModel, GetDefaultModelForProvider(ProviderDeepSeek))
+	if DefaultModel(ProviderDeepSeek) != DefaultDeepSeekModel {
+		t.Errorf("expected %s, got %s", DefaultDeepSeekModel, DefaultModel(ProviderDeepSeek))
 	}
-	if GetDefaultModelForProvider(ProviderLlamaCpp) != DefaultLlamaCppModel {
-		t.Errorf("expected %s, got %s", DefaultLlamaCppModel, GetDefaultModelForProvider(ProviderLlamaCpp))
+	if DefaultModel(ProviderLlamaCpp) != DefaultLlamaCppModel {
+		t.Errorf("expected %s, got %s", DefaultLlamaCppModel, DefaultModel(ProviderLlamaCpp))
 	}
 
-	if GetDefaultBaseURLForProvider(ProviderGemini) != GeminiBaseURL {
-		t.Errorf("expected %s, got %s", GeminiBaseURL, GetDefaultBaseURLForProvider(ProviderGemini))
+	if DefaultBaseURL(ProviderGemini) != GeminiBaseURL {
+		t.Errorf("expected %s, got %s", GeminiBaseURL, DefaultBaseURL(ProviderGemini))
 	}
-	if GetDefaultBaseURLForProvider(ProviderDeepSeek) != DeepSeekBaseURL {
-		t.Errorf("expected %s, got %s", DeepSeekBaseURL, GetDefaultBaseURLForProvider(ProviderDeepSeek))
+	if DefaultBaseURL(ProviderDeepSeek) != DeepSeekBaseURL {
+		t.Errorf("expected %s, got %s", DeepSeekBaseURL, DefaultBaseURL(ProviderDeepSeek))
 	}
-	if GetDefaultBaseURLForProvider(ProviderLlamaCpp) != DefaultLlamaCppBaseURL {
-		t.Errorf("expected %s, got %s", DefaultLlamaCppBaseURL, GetDefaultBaseURLForProvider(ProviderLlamaCpp))
+	if DefaultBaseURL(ProviderLlamaCpp) != DefaultLlamaCppBaseURL {
+		t.Errorf("expected %s, got %s", DefaultLlamaCppBaseURL, DefaultBaseURL(ProviderLlamaCpp))
 	}
 
 	if !IsLocalProvider(ProviderLlamaCpp) {

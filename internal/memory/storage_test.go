@@ -8,7 +8,7 @@ import (
 )
 
 func TestStorage_Dirs(t *testing.T) {
-	globalDir := GlobalMemoryDir()
+	globalDir := GlobalDir()
 	if !filepath.IsAbs(globalDir) {
 		t.Errorf("expected globalDir to be absolute, got %s", globalDir)
 	}
@@ -17,7 +17,7 @@ func TestStorage_Dirs(t *testing.T) {
 	}
 
 	workDir := "/Users/test/workspace"
-	projDir := ProjectMemoryDir(workDir)
+	projDir := ProjectDir(workDir)
 	expectedProj := filepath.Join(workDir, ".coustea", "memory")
 	if projDir != expectedProj {
 		t.Errorf("expected %s, got %s", expectedProj, projDir)
@@ -29,7 +29,7 @@ func TestStorage_LoadAndFormatBundle(t *testing.T) {
 	customGlobalDir := filepath.Join(tmpDir, "global_mem")
 
 	// 1. 测试空工作区时的默认说明
-	emptyBundle := LoadMemoryBundle(tmpDir, customGlobalDir)
+	emptyBundle := LoadBundle(tmpDir, customGlobalDir)
 	if emptyBundle.HasContent() {
 		t.Errorf("expected empty bundle to have no content")
 	}
@@ -60,7 +60,7 @@ func TestStorage_LoadAndFormatBundle(t *testing.T) {
 	}
 
 	// 重新加载 bundle
-	bundle := LoadMemoryBundle(tmpDir, customGlobalDir)
+	bundle := LoadBundle(tmpDir, customGlobalDir)
 	if !bundle.HasContent() {
 		t.Errorf("expected bundle to have content")
 	}
@@ -77,22 +77,22 @@ func TestStorage_LoadAndFormatBundle(t *testing.T) {
 	}
 }
 
-func TestStorage_EnsureMemoryDirsAndTemplates(t *testing.T) {
+func TestStorage_EnsureDirsAndTemplates(t *testing.T) {
 	tmpDir := t.TempDir()
 	customGlobalDir := filepath.Join(tmpDir, "global_mem")
 
-	if err := EnsureMemoryDirs(tmpDir, customGlobalDir); err != nil {
-		t.Fatalf("EnsureMemoryDirs failed: %v", err)
+	if err := EnsureDirs(tmpDir, customGlobalDir); err != nil {
+		t.Fatalf("EnsureDirs failed: %v", err)
 	}
 
-	projMemDir := ProjectMemoryDir(tmpDir)
+	projMemDir := ProjectDir(tmpDir)
 	if fi, err := os.Stat(projMemDir); err != nil || !fi.IsDir() {
 		t.Errorf("expected project memory dir to exist as a directory: %v", err)
 	}
 
 	// 测试初始化模板
-	if err := InitDefaultMemoryTemplates(tmpDir, customGlobalDir); err != nil {
-		t.Fatalf("InitDefaultMemoryTemplates failed: %v", err)
+	if err := InitTemplates(tmpDir, customGlobalDir); err != nil {
+		t.Fatalf("InitTemplates failed: %v", err)
 	}
 
 	projFile := filepath.Join(projMemDir, FileProject)

@@ -14,8 +14,8 @@ const (
 	FileLearnings   = "learnings.md"   // 经验总结与知识沉淀（已解决问题、用户反馈、备忘笔记）
 )
 
-// GlobalMemoryDir 返回用户主目录下的全局记忆存储目录 (~/.coustea/memory)
-func GlobalMemoryDir() string {
+// GlobalDir 返回用户主目录下的全局记忆存储目录 (~/.coustea/memory)
+func GlobalDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return filepath.Join(".", ".coustea", "memory")
@@ -23,8 +23,8 @@ func GlobalMemoryDir() string {
 	return filepath.Join(home, ".coustea", "memory")
 }
 
-// ProjectMemoryDir 返回指定项目工作区下的项目记忆目录 (<workDir>/.coustea/memory)
-func ProjectMemoryDir(workDir string) string {
+// ProjectDir 返回指定项目工作区下的项目记忆目录 (<workDir>/.coustea/memory)
+func ProjectDir(workDir string) string {
 	workDir = strings.TrimSpace(workDir)
 	if workDir == "" {
 		if wd, err := os.Getwd(); err == nil {
@@ -36,25 +36,25 @@ func ProjectMemoryDir(workDir string) string {
 	return filepath.Join(workDir, ".coustea", "memory")
 }
 
-// MemoryFile 表示单个已读取的记忆文件快照
-type MemoryFile struct {
+// File 表示单个已读取的记忆文件快照
+type File struct {
 	Scope    string // "global" 或 "project"
 	FileName string // "preferences.md", "project.md", "learnings.md"
 	Path     string // 文件所在绝对路径
 	Content  string // 文件文本内容
 }
 
-// MemoryBundle 汇集全局与项目两层的模块化记忆
-type MemoryBundle struct {
+// Bundle 汇集全局与项目两层的模块化记忆
+type Bundle struct {
 	WorkDir      string
 	GlobalDir    string
 	ProjectDir   string
-	GlobalFiles  []MemoryFile
-	ProjectFiles []MemoryFile
+	GlobalFiles  []File
+	ProjectFiles []File
 }
 
 // HasContent 检查是否有任何非空的记忆内容
-func (b *MemoryBundle) HasContent() bool {
+func (b *Bundle) HasContent() bool {
 	if b == nil {
 		return false
 	}
@@ -72,7 +72,7 @@ func (b *MemoryBundle) HasContent() bool {
 }
 
 // FormatForPrompt 将记忆体系格式化为适合注入系统提示词的 Markdown 结构
-func (b *MemoryBundle) FormatForPrompt() string {
+func (b *Bundle) FormatForPrompt() string {
 	if b == nil {
 		return ""
 	}
@@ -112,15 +112,15 @@ func (b *MemoryBundle) FormatForPrompt() string {
 	return sb.String()
 }
 
-// LoadMemoryBundle 从磁盘加载指定工作区的全局与项目记忆文件，支持传入可选的 customGlobalDir 用于测试隔离
-func LoadMemoryBundle(workDir string, customGlobalDir ...string) *MemoryBundle {
-	globalDir := GlobalMemoryDir()
+// LoadBundle 从磁盘加载指定工作区的全局与项目记忆文件，支持传入可选的 customGlobalDir 用于测试隔离
+func LoadBundle(workDir string, customGlobalDir ...string) *Bundle {
+	globalDir := GlobalDir()
 	if len(customGlobalDir) > 0 && strings.TrimSpace(customGlobalDir[0]) != "" {
 		globalDir = strings.TrimSpace(customGlobalDir[0])
 	}
-	projectDir := ProjectMemoryDir(workDir)
+	projectDir := ProjectDir(workDir)
 
-	bundle := &MemoryBundle{
+	bundle := &Bundle{
 		WorkDir:    workDir,
 		GlobalDir:  globalDir,
 		ProjectDir: projectDir,
@@ -133,7 +133,7 @@ func LoadMemoryBundle(workDir string, customGlobalDir ...string) *MemoryBundle {
 		if data, err := os.ReadFile(p); err == nil {
 			content := string(data)
 			if strings.TrimSpace(content) != "" {
-				bundle.GlobalFiles = append(bundle.GlobalFiles, MemoryFile{
+				bundle.GlobalFiles = append(bundle.GlobalFiles, File{
 					Scope:    "global",
 					FileName: name,
 					Path:     p,
@@ -150,7 +150,7 @@ func LoadMemoryBundle(workDir string, customGlobalDir ...string) *MemoryBundle {
 		if data, err := os.ReadFile(p); err == nil {
 			content := string(data)
 			if strings.TrimSpace(content) != "" {
-				bundle.ProjectFiles = append(bundle.ProjectFiles, MemoryFile{
+				bundle.ProjectFiles = append(bundle.ProjectFiles, File{
 					Scope:    "project",
 					FileName: name,
 					Path:     p,
@@ -163,9 +163,9 @@ func LoadMemoryBundle(workDir string, customGlobalDir ...string) *MemoryBundle {
 	return bundle
 }
 
-// EnsureMemoryDirs 创建全局与项目的记忆文件夹
-func EnsureMemoryDirs(workDir string, customGlobalDir ...string) error {
-	globalDir := GlobalMemoryDir()
+// EnsureDirs 创建全局与项目的记忆文件夹
+func EnsureDirs(workDir string, customGlobalDir ...string) error {
+	globalDir := GlobalDir()
 	if len(customGlobalDir) > 0 && strings.TrimSpace(customGlobalDir[0]) != "" {
 		globalDir = strings.TrimSpace(customGlobalDir[0])
 	}
@@ -173,7 +173,7 @@ func EnsureMemoryDirs(workDir string, customGlobalDir ...string) error {
 		return fmt.Errorf("failed to create global memory dir %s: %w", globalDir, err)
 	}
 
-	projectDir := ProjectMemoryDir(workDir)
+	projectDir := ProjectDir(workDir)
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create project memory dir %s: %w", projectDir, err)
 	}
@@ -181,17 +181,17 @@ func EnsureMemoryDirs(workDir string, customGlobalDir ...string) error {
 	return nil
 }
 
-// InitDefaultMemoryTemplates 初始化记忆模板文件（仅在文件不存在时创建，不覆盖已有内容）
-func InitDefaultMemoryTemplates(workDir string, customGlobalDir ...string) error {
-	if err := EnsureMemoryDirs(workDir, customGlobalDir...); err != nil {
+// InitTemplates 初始化记忆模板文件（仅在文件不存在时创建，不覆盖已有内容）
+func InitTemplates(workDir string, customGlobalDir ...string) error {
+	if err := EnsureDirs(workDir, customGlobalDir...); err != nil {
 		return err
 	}
 
-	globalDir := GlobalMemoryDir()
+	globalDir := GlobalDir()
 	if len(customGlobalDir) > 0 && strings.TrimSpace(customGlobalDir[0]) != "" {
 		globalDir = strings.TrimSpace(customGlobalDir[0])
 	}
-	projectDir := ProjectMemoryDir(workDir)
+	projectDir := ProjectDir(workDir)
 
 	initFileIfNotExists(filepath.Join(globalDir, FilePreferences), `# 个人偏好与习惯 (Global Preferences)
 - 交流语言: 优先使用中文交流，逻辑严谨、条理清晰

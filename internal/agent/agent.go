@@ -30,7 +30,7 @@ func BuildDefaultSystemPrompt(workDir string) string {
 		}
 	}
 
-	bundle := memory.LoadMemoryBundle(workDir)
+	bundle := memory.LoadBundle(workDir)
 	memoryPrompt := bundle.FormatForPrompt()
 
 	var sb strings.Builder
@@ -123,7 +123,7 @@ func WithWorkDir(dir string) Option {
 		cleanDir := strings.TrimSpace(dir)
 		if cleanDir != "" {
 			a.workDir = cleanDir
-			_ = memory.EnsureMemoryDirs(a.workDir)
+			_ = memory.EnsureDirs(a.workDir)
 			a.systemPrompt = BuildDefaultSystemPrompt(a.workDir)
 		}
 	}
@@ -171,7 +171,7 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 	}
 
 	wd, _ := os.Getwd()
-	_ = memory.EnsureMemoryDirs(wd)
+	_ = memory.EnsureDirs(wd)
 
 	a := &CoreAgent{
 		gw:           gw,
