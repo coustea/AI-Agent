@@ -1,0 +1,25 @@
+# 编译二进制文件
+/coustea
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# 测试临时文件
+*.test
+*.out
+test_config.json
+test_*_config.json
+
+# 本地机密配置文件
+config.json
+*.local.json
+
+# 系统与 IDE 缓存
+.DS_Store
+.vscode/
+.idea/
+.agents/
+.workbuddy-ai/
+skills-lock.json
