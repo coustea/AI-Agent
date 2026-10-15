@@ -30,7 +30,7 @@ func (t *GlobTool) Name() string {
 }
 
 func (t *GlobTool) Description() string {
-	return "Find files matching a glob pattern; ** matches recursively."
+	return "Find files matching a glob pattern across the workspace (supports recursive **). Use this to explore repository structure or locate files when exact paths are unknown."
 }
 
 func (t *GlobTool) Schema() json.RawMessage {

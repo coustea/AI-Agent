@@ -27,7 +27,7 @@ func (t *ReadFileTool) Name() string {
 }
 
 func (t *ReadFileTool) Description() string {
-	return "Read file contents from the workspace."
+	return "Read file contents from the workspace. Use this to inspect source code, configuration files, documentation, or data files before modifying them or answering questions."
 }
 
 func (t *ReadFileTool) Schema() json.RawMessage {

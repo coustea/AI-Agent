@@ -30,7 +30,7 @@ func (t *BashTool) Name() string {
 }
 
 func (t *BashTool) Description() string {
-	return "Run a shell command."
+	return "Execute a non-interactive shell command on the host system. Use this to run CLI utilities, system diagnostics, code builds/tests, git operations, and query remote APIs or public web services (e.g. via curl)."
 }
 
 func (t *BashTool) Schema() json.RawMessage {

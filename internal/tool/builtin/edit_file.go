@@ -26,7 +26,7 @@ func (t *EditFileTool) Name() string {
 }
 
 func (t *EditFileTool) Description() string {
-	return "Replace exact text in a file once."
+	return "Perform a precise, single-occurrence text replacement in an existing file. Ensures surgical modifications without overwriting or destroying surrounding code."
 }
 
 func (t *EditFileTool) Schema() json.RawMessage {

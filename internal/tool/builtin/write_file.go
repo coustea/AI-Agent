@@ -26,7 +26,7 @@ func (t *WriteFileTool) Name() string {
 }
 
 func (t *WriteFileTool) Description() string {
-	return "Write content to a file."
+	return "Write complete content to a file in the workspace. Automatically creates any missing parent directories. Best for creating new files or completely rewriting existing files."
 }
 
 func (t *WriteFileTool) Schema() json.RawMessage {
