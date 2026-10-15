@@ -1,30 +1,55 @@
+<div align="center">
+
 # coustea
 
-> 一个运行在本地终端的通用 AI 个人助手：ReAct 循环 + Harness 可插拔接缝 + 多模型网关 + 三道闸门权限。
+**一个运行在本地终端的通用 AI 个人助手**
+
+ReAct 循环 · Harness 可插拔接缝 · 多模型网关 · 三道闸门权限
+
+[![Go Version](https://img.shields.io/badge/Go-1.26.2+-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#环境要求)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./README.md#贡献指南)
+
+[项目简介](#项目简介) · [快速开始](#快速开始) · [配置说明](#配置说明) · [使用示例](#使用示例) · [架构总览](#架构总览) · [贡献指南](#贡献指南)
+
+</div>
+
+---
+
+## 项目简介
 
 coustea 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进代码，而是遵循 Harness 设计哲学——
 **给模型提供工具、知识、上下文管理与权限边界，然后让开**。模型负责决策，代码只负责提供接缝。
 
-- 运行形态：单机终端 TUI（[Bubble Tea](https://github.com/charmbracelet/bubbletea)），面向本地单用户
-- 模型协议：所有厂商统一走 **OpenAI Chat Completions** 协议，无需为每家 SDK 单独适配
-- 交互方式：流式打字输出、深度思考链折叠展示、结构化工具调用卡片、Token 用量统计
+| 维度 | 说明 |
+|---|---|
+| 运行形态 | 单机终端 TUI（[Bubble Tea](https://github.com/charmbracelet/bubbletea)），面向本地单用户 |
+| 模型协议 | 所有厂商统一走 **OpenAI Chat Completions** 协议，无需为每家 SDK 单独适配 |
+| 交互体验 | 流式打字输出、深度思考链折叠展示、结构化工具调用卡片、Token 用量统计 |
+| 安全模型 | 工作区沙箱 + 三道闸门权限管线，危险操作永不静默执行 |
 
 ---
 
 ## 目录
 
+- [项目简介](#项目简介)
 - [核心特性](#核心特性)
-- [架构总览](#架构总览)
+- [快速开始](#快速开始)
 - [环境要求](#环境要求)
 - [安装步骤](#安装步骤)
 - [配置说明](#配置说明)
 - [使用示例](#使用示例)
+- [架构总览](#架构总览)
 - [内置工具](#内置工具)
 - [长期记忆](#长期记忆)
 - [权限模型](#权限模型)
+- [常见问题](#常见问题)
 - [开发与测试](#开发与测试)
 - [贡献指南](#贡献指南)
 - [安全说明](#安全说明)
+- [相关文档](#相关文档)
+- [许可证](#许可证)
 
 ---
 
@@ -42,43 +67,26 @@ coustea 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码�
 
 ---
 
-## 架构总览
+## 快速开始
 
-调用链自底向上：**LLM → Gateway → Agent → TUI**。
+```bash
+# 1. 克隆仓库（SSH）
+git clone git@github.com:coustea/AI-Agent.git
+# 或使用 HTTPS
+# git clone https://github.com/coustea/AI-Agent.git
 
-```mermaid
-flowchart TD
-    U[用户输入] --> TUI[TUI / Bubble Tea<br/>internal/tui]
-    TUI -->|AgentBridge 流式契约| AG[CoreAgent<br/>internal/agent]
-    AG -->|每轮重算| MEM[Memory<br/>滑动窗口 + 长期记忆]
-    AG -->|ChatStream| RT[Router<br/>internal/gateway]
-    RT --> DS[DeepSeek]
-    RT --> GM[Gemini]
-    RT --> LC[LlamaCpp 本地]
-    AG -->|工具调用| PERM[Permission<br/>三道闸门]
-    PERM --> REG[Tool Registry<br/>internal/tool]
-    REG --> B1[bash]
-    REG --> B2[read_file]
-    REG --> B3[write_file]
-    REG --> B4[edit_file]
-    REG --> B5[glob]
-    REG -->|Observation 回灌| AG
+cd AI-Agent
+
+# 2. 拉取依赖并编译
+go mod download
+make build
+
+# 3. 启动
+./coustea
 ```
 
-### 分层职责
-
-| 包 | 职责 |
-|---|---|
-| `internal/config` | 配置加载与持久化，全局/本地配置发现，环境变量自动补全，多厂商配置历史 |
-| `internal/gateway` | 统一网关接口与 OpenAI 协议 wire 层，Router 模型路由，三家 Provider 实现 |
-| `internal/agent` | Harness 核心：ReAct 循环、系统提示词合成、流式事件分发、工具流水线 |
-| `internal/tool` | 工具接口、线程安全注册表、执行前钩子（`PreToolUse`）、参数校验 |
-| `internal/tool/builtin` | 五个内置工具实现与 `SafePath` 沙箱 |
-| `internal/permission` | 三道闸门权限管线与审批回调 |
-| `internal/memory` | 会话滑动窗口记忆 + 两级长期记忆文件系统 |
-| `internal/tui` | Bubble Tea 终端界面、状态机、流式渲染 |
-
-> 设计文档位于 [`outputs/`](./outputs)：`HARNESS_ARCHITECTURE.md`（Harness 架构）、`OPTIMIZATION_PLAN.md`（优化方案）、`P2_BASH_HARDENING.md`（权限接缝）。
+首次启动后，在输入框输入 `/model` 打开配置向导，三步完成：**选择平台 → 输入 API Key → 确认模型名**。
+若已有 `DEEPSEEK_API_KEY` 或 `GEMINI_API_KEY` 环境变量，也可跳过向导直接对话。
 
 ---
 
@@ -86,12 +94,12 @@ flowchart TD
 
 | 依赖 | 版本 |
 |---|---|
-| Go | **1.26.2 或更高**（见 `go.mod`） |
+| Go | **1.26.2 或更高**（见 [`go.mod`](./go.mod)） |
 | 终端 | 支持 ANSI 转义的现代终端（iTerm2 / Windows Terminal / Alacritty 等） |
 | 操作系统 | macOS / Linux / Windows |
 | 模型服务 | 本地 `llama-server`，或 DeepSeek / Gemini 的 API Key（三选一） |
 
-第三方依赖仅三个直接依赖：`bubbles`、`bubbletea`、`lipgloss`，其余为间接依赖。
+第三方依赖仅三个直接依赖：`bubbles`、`bubbletea`、`lipgloss`，其余均为间接依赖。
 
 ---
 
@@ -100,8 +108,11 @@ flowchart TD
 ### 1. 克隆仓库
 
 ```bash
-git clone <repository-url> my-agent
-cd my-agent
+git clone git@github.com:coustea/AI-Agent.git   # SSH
+# 或
+git clone https://github.com/coustea/AI-Agent.git  # HTTPS
+
+cd AI-Agent
 ```
 
 ### 2. 拉取依赖
@@ -284,6 +295,65 @@ WithMaxSteps 选项覆盖。设置上限的目的是……
 
 ---
 
+## 架构总览
+
+调用链自底向上：**LLM → Gateway → Agent → TUI**。
+
+```mermaid
+flowchart TD
+    U[用户输入] --> TUI[TUI / Bubble Tea<br/>internal/tui]
+    TUI -->|AgentBridge 流式契约| AG[CoreAgent<br/>internal/agent]
+    AG -->|每轮重算| MEM[Memory<br/>滑动窗口 + 长期记忆]
+    AG -->|ChatStream| RT[Router<br/>internal/gateway]
+    RT --> DS[DeepSeek]
+    RT --> GM[Gemini]
+    RT --> LC[LlamaCpp 本地]
+    AG -->|工具调用| PERM[Permission<br/>三道闸门]
+    PERM --> REG[Tool Registry<br/>internal/tool]
+    REG --> B1[bash]
+    REG --> B2[read_file]
+    REG --> B3[write_file]
+    REG --> B4[edit_file]
+    REG --> B5[glob]
+    REG -->|Observation 回灌| AG
+```
+
+### 分层职责
+
+| 包 | 职责 |
+|---|---|
+| `internal/config` | 配置加载与持久化，全局/本地配置发现，环境变量自动补全，多厂商配置历史 |
+| `internal/gateway` | 统一网关接口与 OpenAI 协议 wire 层，Router 模型路由，三家 Provider 实现 |
+| `internal/agent` | Harness 核心：ReAct 循环、系统提示词合成、流式事件分发、工具流水线 |
+| `internal/tool` | 工具接口、线程安全注册表、执行前钩子（`PreToolUse`）、参数校验 |
+| `internal/tool/builtin` | 五个内置工具实现与 `SafePath` 沙箱 |
+| `internal/permission` | 三道闸门权限管线与审批回调 |
+| `internal/memory` | 会话滑动窗口记忆 + 两级长期记忆文件系统 |
+| `internal/tui` | Bubble Tea 终端界面、状态机、流式渲染 |
+
+### 项目结构
+
+```text
+AI-Agent/
+├── cmd/coustea/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
+├── main.go                    # 根级入口（与 cmd 版本等价）
+├── internal/
+│   ├── agent/                 # Harness 核心：ReAct 循环与事件分发
+│   ├── config/                # 配置加载、持久化与环境变量补全
+│   ├── gateway/               # 统一网关、OpenAI wire 层、Router、三家 Provider
+│   ├── memory/                # 滑动窗口记忆与两级长期记忆
+│   ├── permission/            # 三道闸门权限管线
+│   ├── tool/                  # 工具接口、注册表、执行前钩子
+│   │   └── builtin/           # 内置工具与 SafePath 沙箱
+│   └── tui/                   # Bubble Tea 终端界面
+├── outputs/                   # 设计文档
+├── Makefile
+├── LICENSE
+└── go.mod
+```
+
+---
+
 ## 内置工具
 
 模型可自主调用的五个内置工具（全部受权限管线约束）：
@@ -347,6 +417,52 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 ---
 
+## 常见问题
+
+<details>
+<summary><b>启动后提示「未配置可用模型」怎么办？</b></summary>
+
+输入 `/model` 打开配置向导完成配置；或设置 `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` 环境变量后重启。
+若使用本地模型，请确认 `llama-server` 已在 `http://127.0.0.1:8080` 运行。
+</details>
+
+<details>
+<summary><b>为什么每次执行 Shell 命令都要确认？</b></summary>
+
+这是安全默认值（`alwaysAskBash = true`）。可按 `a` 在本会话内对相同命令始终放行。
+自动化场景下可通过 `WithAutoApprove(true)` 关闭交互审批——请确保仅在可信环境中使用。
+</details>
+
+<details>
+<summary><b>切换模型平台后，之前的对话上下文会丢失吗？</b></summary>
+
+不会。配置向导保存后会通过 `SetGateway` 热切换网关，**完整保留当前记忆与已注册工具**。
+若需清空上下文，请显式执行 `/clear`。
+</details>
+
+<details>
+<summary><b>配置文件应该放在哪里？会被提交到仓库吗？</b></summary>
+
+项目级配置放在工作目录的 `config.json`（优先级更高），全局配置放在 `~/.coustea/config.json`。
+两者以及 `*.local.json` 均已在 `.gitignore` 中排除，不会被提交。
+</details>
+
+<details>
+<summary><b>如何在不消耗 API 额度的情况下跑测试？</b></summary>
+
+所有测试均使用 `httptest` 服务器或轻量 fake 模拟 Provider 行为，**不需要真实凭据**。
+直接执行 `make test` 或 `go test ./...` 即可。
+</details>
+
+<details>
+<summary><b>支持哪些模型？能接入其他 OpenAI 兼容服务吗？</b></summary>
+
+原生支持 `llamacpp` / `deepseek` / `gemini`。由于所有 Provider 统一走 OpenAI Chat Completions 协议，
+接入其他兼容服务只需在 `internal/gateway` 中新增一个 Provider 实现并在 `initProviderGateway` 中注册。
+</details>
+
+---
+
 ## 开发与测试
 
 ### 常用命令
@@ -377,29 +493,11 @@ ok  	my-agent/internal/tui	4.088s
 
 测试原则：优先使用 `httptest` 服务器或轻量 fake 模拟 Provider 与 Agent 行为，**不依赖真实凭据**。
 
-### 项目结构
-
-```text
-my-agent/
-├── cmd/coustea/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
-├── main.go                    # 根级入口（与 cmd 版本等价）
-├── internal/
-│   ├── agent/                 # Harness 核心：ReAct 循环与事件分发
-│   ├── config/                # 配置加载、持久化与环境变量补全
-│   ├── gateway/               # 统一网关、OpenAI wire 层、Router、三家 Provider
-│   ├── memory/                # 滑动窗口记忆与两级长期记忆
-│   ├── permission/            # 三道闸门权限管线
-│   ├── tool/                  # 工具接口、注册表、执行前钩子
-│   │   └── builtin/           # 内置工具与 SafePath 沙箱
-│   └── tui/                   # Bubble Tea 终端界面
-├── outputs/                   # 设计文档
-├── Makefile
-└── go.mod
-```
-
 ---
 
 ## 贡献指南
+
+欢迎通过 [Issue](https://github.com/coustea/AI-Agent/issues) 与 Pull Request 参与共建。
 
 ### 前置约定（重要）
 
@@ -454,6 +552,8 @@ Refactor permission gate into hook chain
 - **命令执行**：`bash` 工具默认对每条命令要求人工确认，硬拒绝表中的危险指令永不执行。
 - **记忆文件**：长期记忆为明文 Markdown，请避免在其中写入敏感信息。
 
+如发现安全问题，请通过 [Issue](https://github.com/coustea/AI-Agent/issues) 私下联系维护者，勿直接公开披露。
+
 ---
 
 ## 相关文档
@@ -469,4 +569,10 @@ Refactor permission gate into hook chain
 
 ## 许可证
 
-本项目尚未指定开源许可证。如需在组织内外分发，请先补充 `LICENSE` 文件并明确授权范围。
+本项目基于 [MIT License](./LICENSE) 开源，Copyright (c) 2026 coustea。
+
+<div align="center">
+
+**[⬆ 回到顶部](#coustea)**
+
+</div>
