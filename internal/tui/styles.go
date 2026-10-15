@@ -82,6 +82,10 @@ var (
 				Foreground(lipgloss.Color("#BFB4D6")).
 				Italic(true)
 
+	reasoningTextStyle = lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#BFB4D6")).
+				Italic(true)
+
 	reasoningTitleStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(colorPurple)
@@ -139,6 +143,10 @@ var (
 
 	footerStyle = lipgloss.NewStyle().
 			Foreground(colorDim)
+
+	keycapStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorCoralLight)
 
 	scrollIndicatorStyle = lipgloss.NewStyle().
 				Foreground(colorDim).

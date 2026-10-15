@@ -256,9 +256,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chatInput.Width = max(40, msg.Width-10)
 
 		headerHeight := 4
-		footerHeight := 6
+		footerHeight := 8
 		if m.pendingPrompt != nil {
-			footerHeight += 5
+			footerHeight += 8
 		}
 		vpHeight := max(6, msg.Height-headerHeight-footerHeight)
 		m.viewport.Width = max(40, msg.Width-2)
