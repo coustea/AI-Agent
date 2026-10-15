@@ -197,7 +197,7 @@ func (m Model) viewSelectModel() string {
 		s.WriteString(fmt.Sprintf("  %s [%s] %s%s%s\n", cursor, checked, choice, savedTag, desc))
 	}
 
-	s.WriteString("\n" + footerStyle.Render("操作说明: [↑/k] 向上移动  [↓/j] 向下移动  [Enter/空格] 选中并配置  [Esc/q] 取消并返回对话") + "\n")
+	s.WriteString("\n" + footerStyle.Render("操作说明: [↑/k] 向上移动  [↓/j] 向下移动  [Enter/空格] 选中并配置  [Esc/q] 取消并返回对话  [Ctrl+C] 退出") + "\n")
 	s.WriteString(titleStyle.Render("╰───────────────────────────────────────────────────────────────────╯") + "\n")
 
 	return s.String()

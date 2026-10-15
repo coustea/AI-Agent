@@ -53,7 +53,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.bridge.Reset()
 				}
 				return m, nil
-			case "/exit", "/quit":
+			case "/exit", "/quit", "/q":
 				return m, tea.Quit
 			}
 
@@ -70,7 +70,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				Content: "",
 			})
 			m.isGenerating = true
-			m.chatInput.Placeholder = "coustea 正在思考生成中..."
+			m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 
 			// 3. 如果注入了 Agent 内核接口，开启流式会话；若未注入尝试按配置动态连接
 			if m.bridge == nil && (m.config.APIKey != "" || config.IsLocalProvider(m.config.Provider)) {
@@ -82,8 +82,11 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if m.bridge != nil {
-				ch, err := m.bridge.StreamRun(context.Background(), text)
+				ctx, cancel := context.WithCancel(context.Background())
+				m.cancel = cancel
+				ch, err := m.bridge.StreamRun(ctx, text)
 				if err != nil {
+					m.cancel = nil
 					m.messages[len(m.messages)-1].Content = fmt.Sprintf("[请求失败: %v]", err)
 					m.isGenerating = false
 					m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"

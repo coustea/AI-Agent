@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -63,7 +64,8 @@ type Model struct {
 	// 状态 4: 聊天输入框与消息列表（在 chat.go 中处理）
 	chatInput    textinput.Model
 	messages     []ChatMessage
-	isGenerating bool // 是否正在流式生成中
+	isGenerating bool               // 是否正在流式生成中
+	cancel       context.CancelFunc // 当前流式会话的中断回调
 
 	// 终端宽高适配
 	width  int
@@ -157,6 +159,49 @@ func (m Model) Init() tea.Cmd {
 // Update 事件分发总入口
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyCtrlC:
+			// 若当前正在流式生成，按下 Ctrl+C 优先中断当前会话生成，不退出应用
+			if m.isGenerating {
+				if m.cancel != nil {
+					m.cancel()
+					m.cancel = nil
+				}
+				m.isGenerating = false
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				m.chatInput.Focus()
+				if len(m.messages) > 0 {
+					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
+				}
+				return m, nil
+			}
+			// 非生成状态下，Ctrl+C 全局立即退出应用
+			return m, tea.Quit
+
+		case tea.KeyCtrlD:
+			// 在选单页面或聊天输入框为空时，Ctrl+D 触发退出
+			if m.state != stateChat || m.chatInput.Value() == "" {
+				return m, tea.Quit
+			}
+
+		case tea.KeyEsc:
+			// 若在生成中按 Esc，同样支持快速中断当前生成
+			if m.isGenerating {
+				if m.cancel != nil {
+					m.cancel()
+					m.cancel = nil
+				}
+				m.isGenerating = false
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				m.chatInput.Focus()
+				if len(m.messages) > 0 {
+					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
+				}
+				return m, nil
+			}
+		}
+
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height

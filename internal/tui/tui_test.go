@@ -394,3 +394,71 @@ func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 		t.Fatalf("expected deepseek with preserved key, got %+v", m.config)
 	}
 }
+
+// 测试键盘按键操作：退出 (Ctrl+C, Ctrl+D, /exit, /quit, /q) 以及生成中断 (Ctrl+C, Esc)
+func TestTUI_KeyOperations_ExitAndInterrupt(t *testing.T) {
+	m := NewModel(nil)
+
+	// 1. 空闲聊天状态下按 Ctrl+C 直接退出
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatalf("expected tea.Quit command on Ctrl+C, got nil")
+	}
+
+	// 2. 空闲聊天状态且输入框为空时按 Ctrl+D 退出
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if cmd == nil {
+		t.Fatalf("expected tea.Quit command on Ctrl+D, got nil")
+	}
+
+	// 3. 输入快捷命令 /exit, /quit, /q 退出
+	for _, cmdStr := range []string{"/exit", "/quit", "/q"} {
+		m.chatInput.SetValue(cmdStr)
+		_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+		if cmd == nil {
+			t.Fatalf("expected tea.Quit command on command %s, got nil", cmdStr)
+		}
+	}
+
+	// 4. 在模型配置向导页面中按 Ctrl+C 退出
+	m.state = stateSelectModel
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatalf("expected tea.Quit on Ctrl+C in stateSelectModel, got nil")
+	}
+
+	m.state = stateInputAPIKey
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatalf("expected tea.Quit on Ctrl+C in stateInputAPIKey, got nil")
+	}
+
+	m.state = stateInputModel
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd == nil {
+		t.Fatalf("expected tea.Quit on Ctrl+C in stateInputModel, got nil")
+	}
+
+	// 5. 流式生成中按 Ctrl+C 或 Esc 触发中断当前生成而非直接退出应用
+	m.state = stateChat
+	m.isGenerating = true
+	var cancelled bool
+	m.cancel = func() { cancelled = true }
+	m.messages = []ChatMessage{{Sender: "coustea", Content: "Thinking"}}
+
+	mIntf, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m = mIntf.(Model)
+
+	if !cancelled {
+		t.Errorf("expected cancel func to be executed on Ctrl+C while generating")
+	}
+	if m.isGenerating {
+		t.Errorf("expected isGenerating to be false after interruption")
+	}
+	if cmd != nil {
+		t.Errorf("expected no tea.Quit command during interruption, got: %v", cmd)
+	}
+	if !strings.Contains(m.messages[len(m.messages)-1].Content, "中断") {
+		t.Errorf("expected interruption note in message, got: %s", m.messages[len(m.messages)-1].Content)
+	}
+}
