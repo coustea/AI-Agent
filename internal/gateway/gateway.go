@@ -7,9 +7,8 @@ import (
 )
 
 var (
-	ErrNotImplemented = errors.New("gateway: provider not implemented yet")
-	ErrEmptyAPIKey    = errors.New("gateway: api key cannot be empty")
-	ErrEmptyMessages  = errors.New("gateway: messages cannot be empty")
+	ErrEmptyAPIKey   = errors.New("gateway: api key cannot be empty")
+	ErrEmptyMessages = errors.New("gateway: messages cannot be empty")
 )
 
 // Role 统一角色类型
