@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"sync"
@@ -626,5 +629,91 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 	}
 	if agCustomPrompt.SystemPrompt() != "Explicit custom prompt" {
 		t.Errorf("expected explicit prompt, got: %s", agCustomPrompt.SystemPrompt())
+	}
+}
+
+// 测试整个系统通过 Agent 经过 Gateway 网关分配并正常调用具体模型的完整端到端链路
+func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
+	// 1. 模拟 Google Gemini 官方端点
+	geminiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("x-goog-api-key") != "gemini-secret" {
+			http.Error(w, "invalid google key", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Hello from Gemini\"}}]}\n\n")
+		flusher.Flush()
+		_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer geminiServer.Close()
+
+	// 2. 模拟 DeepSeek 端点 (支持深度思考链)
+	dsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer ds-secret" {
+			http.Error(w, "invalid ds key", http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"DeepSeek thinking...\"}}]}\n\n")
+		flusher.Flush()
+		_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":\"Hello from DeepSeek\"}}]}\n\n")
+		flusher.Flush()
+		_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer dsServer.Close()
+
+	// 3. 构建独立提供商网关实例并装入网关路由器
+	geminiGW, err := gateway.NewGemini(geminiServer.URL, "gemini-secret", "gemini-2.5-flash", geminiServer.Client())
+	if err != nil {
+		t.Fatalf("failed to create gemini gateway: %v", err)
+	}
+	dsGW, err := gateway.NewDeepSeek(dsServer.URL, "ds-secret", "deepseek-flash", dsServer.Client())
+	if err != nil {
+		t.Fatalf("failed to create deepseek gateway: %v", err)
+	}
+
+	router := gateway.NewRouter("gemini")
+	router.Register("gemini", geminiGW)
+	router.Register("deepseek", dsGW)
+
+	// 4. 将网关注入 Agent 内核并挂载工具
+	ag, err := NewAgent(router, WithDefaultTools())
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	// 场景 A: 默认路由到 Gemini 模型调用
+	streamA, err := ag.StreamRun(context.Background(), "Hello")
+	if err != nil {
+		t.Fatalf("StreamRun to Gemini failed: %v", err)
+	}
+	var replyA strings.Builder
+	for ev := range streamA {
+		if ev.Delta != "" {
+			replyA.WriteString(ev.Delta)
+		}
+	}
+	if replyA.String() != "Hello from Gemini" {
+		t.Errorf("expected 'Hello from Gemini', got %q", replyA.String())
+	}
+
+	// 场景 B: 运行时切换网关默认分配为 DeepSeek，验证深度思考与回答
+	router.SetActive("deepseek")
+	streamB, err := ag.StreamRun(context.Background(), "Think carefully")
+	if err != nil {
+		t.Fatalf("StreamRun to DeepSeek failed: %v", err)
+	}
+	var replyB strings.Builder
+	for ev := range streamB {
+		if ev.Delta != "" {
+			replyB.WriteString(ev.Delta)
+		}
+	}
+	if replyB.String() != "Hello from DeepSeek" {
+		t.Errorf("expected 'Hello from DeepSeek', got %q", replyB.String())
 	}
 }

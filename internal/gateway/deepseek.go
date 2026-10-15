@@ -28,6 +28,10 @@ func NewDeepSeek(baseURL, apiKey, model string, client *http.Client) (*DeepSeek,
 	if baseURL == "" {
 		baseURL = config.DeepSeekBaseURL
 	}
+	apiKey = strings.TrimSpace(apiKey)
+	if apiKey == "" {
+		return nil, ErrEmptyAPIKey
+	}
 	if strings.TrimSpace(model) == "" {
 		model = config.DefaultDeepSeekModel
 	}
@@ -36,7 +40,7 @@ func NewDeepSeek(baseURL, apiKey, model string, client *http.Client) (*DeepSeek,
 	}
 	return &DeepSeek{
 		baseURL:    strings.TrimRight(baseURL, "/"),
-		apiKey:     strings.TrimSpace(apiKey),
+		apiKey:     apiKey,
 		model:      strings.TrimSpace(model),
 		httpClient: client,
 	}, nil

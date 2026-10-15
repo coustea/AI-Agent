@@ -163,7 +163,7 @@ func buildHTTPRequest(ctx context.Context, url string, model string, req *ChatRe
 		return nil, ErrEmptyMessages
 	}
 
-	if strings.TrimSpace(model) == "" && strings.TrimSpace(req.Model) != "" {
+	if strings.TrimSpace(req.Model) != "" {
 		model = strings.TrimSpace(req.Model)
 	}
 

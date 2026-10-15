@@ -138,13 +138,9 @@ func NewGatewayFromConfig(cfg *config.Config) (Gateway, error) {
 	// 2. 确保当前激活的提供商一定初始化并注册
 	activeGW, err := initProviderGateway(cfg.Provider, cfg.BaseURL, cfg.APIKey, cfg.ModelName)
 	if err != nil {
-		// 若当前配置有错且没有其它任何可用提供商，则报错
-		if len(router.providers) == 0 {
-			return nil, err
-		}
-	} else {
-		router.Register(activeName, activeGW)
+		return nil, err
 	}
+	router.Register(activeName, activeGW)
 
 	return router, nil
 }
