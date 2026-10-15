@@ -45,6 +45,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "y", "Y":
 				m.pendingPrompt.Respond(permission.DecisionAllowOnce)
 				m.pendingPrompt = nil
+				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -53,6 +54,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "a", "A":
 				m.pendingPrompt.Respond(permission.DecisionAllowSession)
 				m.pendingPrompt = nil
+				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -61,6 +63,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "n", "N":
 				m.pendingPrompt.Respond(permission.DecisionDeny)
 				m.pendingPrompt = nil
+				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -71,6 +74,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Type == tea.KeyEsc {
 				m.pendingPrompt.Respond(permission.DecisionDeny)
 				m.pendingPrompt = nil
+				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -354,7 +358,7 @@ func (m Model) renderChatMessages() string {
 
 			title := userPrefixStyle.Render("❯ You")
 			card := fmt.Sprintf("%s\n%s", title, msg.Content)
-			sb.WriteString(userBox.Render(card) + "\n\n")
+			sb.WriteString(userBox.Render(card) + "\n")
 
 		case "System":
 			sysBox := lipgloss.NewStyle().
@@ -365,7 +369,7 @@ func (m Model) renderChatMessages() string {
 
 			title := systemPrefixStyle.Render("ℹ System")
 			card := fmt.Sprintf("%s\n%s", title, dimStyle.Render(msg.Content))
-			sb.WriteString(sysBox.Render(card) + "\n\n")
+			sb.WriteString(sysBox.Render(card) + "\n")
 
 		case "coustea":
 			// 1. 若有深度思考链，独立渲染高雅紫调思考气泡卡片
@@ -378,7 +382,7 @@ func (m Model) renderChatMessages() string {
 
 				title := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process)")
 				card := fmt.Sprintf("%s\n%s", title, reasoningTextStyle.Render(msg.ReasoningContent))
-				sb.WriteString(thoughtBox.Render(card) + "\n\n")
+				sb.WriteString(thoughtBox.Render(card) + "\n")
 			}
 
 			// 2. 若有工具调用，按彩色结构化状态卡片渲染
@@ -421,10 +425,10 @@ func (m Model) renderChatMessages() string {
 					Padding(0, 1).
 					Width(cardWidth)
 
-				sb.WriteString(tcBox.Render(body.String()) + "\n\n")
+				sb.WriteString(tcBox.Render(body.String()) + "\n")
 			}
 
-			// 3. 最终回复文本气泡卡片
+			// 3. 最终回复文本气泡卡片：流式输出时打字光标实时闪烁，完成后渲染富文本 Markdown
 			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1 && len(msg.ToolCalls) == 0 && msg.ReasoningContent == "") {
 				asstBox := lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
@@ -435,7 +439,13 @@ func (m Model) renderChatMessages() string {
 				header := assistantPrefixStyle.Render("● coustea")
 				var bodyText string
 				if msg.Content != "" {
-					bodyText = msg.Content
+					if m.isGenerating && i == len(m.messages)-1 {
+						// 实时流式生成中：文本增量 + 显式珊瑚色打字块光标
+						bodyText = msg.Content + lipgloss.NewStyle().Foreground(colorCoral).Render(" ▊")
+					} else {
+						// 已生成完毕：Glamour 富文本 Markdown 排版（高亮代码块、标题色彩、列表缩进）
+						bodyText = renderMarkdown(msg.Content, cardWidth-4)
+					}
 				} else {
 					bodyText = m.spinner.View() + dimStyle.Render(" 正在思考中...")
 				}
@@ -448,7 +458,7 @@ func (m Model) renderChatMessages() string {
 				}
 
 				card := fmt.Sprintf("%s\n%s", header, bodyText)
-				sb.WriteString(asstBox.Render(card) + "\n\n")
+				sb.WriteString(asstBox.Render(card) + "\n")
 			}
 
 		default:

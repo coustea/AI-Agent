@@ -312,6 +312,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if msg.event.Type == agent.EventToolPermissionRequest && msg.event.PermissionPrompt != nil {
 			m.pendingPrompt = msg.event.PermissionPrompt
+			m.chatInput.Placeholder = "[等待权限决策] 请直接按 y (允许) / a (信任) / n (拒绝)"
 			if m.viewportReady {
 				m.viewport.SetContent(m.renderChatMessages())
 				m.viewport.GotoBottom()

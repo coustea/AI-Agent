@@ -13,6 +13,7 @@ import (
 	"my-agent/internal/permission"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestTUIFlow(t *testing.T) {
@@ -245,10 +246,10 @@ func TestTUI_EndToEnd_MultiTurn_Chat(t *testing.T) {
 		t.Errorf("turn 2 unexpected assistant reply: %+v", lastMsg)
 	}
 
-	// 验证 View 渲染出两轮对话
-	view := m.View()
-	if !strings.Contains(view, "My name is Alice") || !strings.Contains(view, "Your name is Alice") {
-		t.Errorf("view missing expected conversation content:\n%s", view)
+	// 验证 View 渲染出两轮对话 (去除 ANSI 控制码后验证语义内容)
+	strippedView := ansi.Strip(m.View())
+	if !strings.Contains(strippedView, "My name is Alice") || !strings.Contains(strippedView, "Your name is Alice") {
+		t.Errorf("view missing expected conversation content:\n%s", strippedView)
 	}
 }
 
