@@ -40,8 +40,9 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// 处理快捷命令
 			switch text {
 			case "/model", "/config":
-				// 切换到模型配置向导页面
+				// 切换到模型配置向导页面，光标对准当前激活的模型
 				m.state = stateSelectModel
+				m.cursor = m.selected
 				m.chatInput.Reset()
 				return m, nil
 			case "/clear":

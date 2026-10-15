@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"my-agent/internal/agent"
 	"my-agent/internal/config"
@@ -120,6 +121,13 @@ func NewModel(bridge AgentBridge) Model {
 	// 检查是否有现有配置或可用环境配置
 	if err == nil && existingCfg != nil && (existingCfg.APIKey != "" || config.IsLocalProvider(existingCfg.Provider)) {
 		m.config = *existingCfg
+		for i, c := range m.choices {
+			if strings.EqualFold(c, string(m.config.Provider)) {
+				m.selected = i
+				m.cursor = i
+				break
+			}
+		}
 		if m.bridge == nil {
 			if gw, gwErr := gateway.NewGatewayFromConfig(existingCfg); gwErr == nil {
 				if ag, agErr := agent.NewAgent(gw, agent.WithDefaultTools()); agErr == nil {

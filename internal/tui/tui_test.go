@@ -17,6 +17,10 @@ func TestTUIFlow(t *testing.T) {
 	testCfgPath := "test_config.json"
 	defer os.Remove(testCfgPath)
 
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+
 	m := NewModel(nil)
 	m.cfgPath = testCfgPath
 
@@ -246,6 +250,10 @@ func TestTUIFlow_Gemini(t *testing.T) {
 	testCfgPath := "test_gemini_config.json"
 	defer os.Remove(testCfgPath)
 
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+
 	m := NewModel(nil)
 	m.cfgPath = testCfgPath
 
@@ -301,5 +309,88 @@ func TestTUIFlow_Gemini(t *testing.T) {
 	}
 	if savedCfg.Provider != config.ProviderGemini || savedCfg.ModelName != config.DefaultGeminiModel || savedCfg.APIKey != "sk-gemini-test-secret" {
 		t.Fatalf("saved config mismatch: %+v", savedCfg)
+	}
+}
+
+// 测试模型切换时无需重新输入已保存的密钥
+func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
+	testCfgPath := "test_switch_config.json"
+	defer os.Remove(testCfgPath)
+
+	// 初始状态配置好 DeepSeek
+	initialCfg := &config.Config{
+		Provider:  config.ProviderDeepSeek,
+		BaseURL:   config.DeepSeekBaseURL,
+		ModelName: config.DefaultDeepSeekModel,
+		APIKey:    "sk-deepseek-preserved-key",
+	}
+	if err := config.SaveConfig(testCfgPath, initialCfg); err != nil {
+		t.Fatalf("failed to setup initial config: %v", err)
+	}
+
+	m := NewModel(nil)
+	m.cfgPath = testCfgPath
+	m.config = *initialCfg
+	for i, c := range m.choices {
+		if strings.EqualFold(c, string(m.config.Provider)) {
+			m.selected = i
+			m.cursor = i
+			break
+		}
+	}
+
+	// 1. 切换到 Gemini 并配置
+	m.chatInput.SetValue("/model")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	// 当前在 DeepSeek (索引 1)，下移一次选择 Gemini (索引 2)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mIntf.(Model)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	// 输入 Gemini Key 并保存
+	m.apiKeyInput.SetValue("sk-gemini-preserved-key")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.config.Provider != config.ProviderGemini {
+		t.Fatalf("expected switched to gemini")
+	}
+
+	// 2. 再次通过 /model 切回 DeepSeek
+	m.chatInput.SetValue("/model")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	// 当前在 Gemini (索引 2)，上移一次选中 DeepSeek (索引 1)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m = mIntf.(Model)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	// 此时应该检测到已保存的 DeepSeek key，无需重新输入，直接回车！
+	if m.apiKeyInput.Value() != "sk-deepseek-preserved-key" {
+		t.Errorf("expected apiKeyInput to be prefilled with preserved key, got %s", m.apiKeyInput.Value())
+	}
+
+	// 直接按 Enter 保留已有 key
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	// 直接按 Enter 保留默认模型
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateChat {
+		t.Fatalf("expected return to stateChat, got %v", m.state)
+	}
+
+	// 验证最终切回的配置完美保持原 key
+	if m.config.Provider != config.ProviderDeepSeek || m.config.APIKey != "sk-deepseek-preserved-key" {
+		t.Fatalf("expected deepseek with preserved key, got %+v", m.config)
 	}
 }

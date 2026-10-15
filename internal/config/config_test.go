@@ -106,3 +106,63 @@ func TestConfig_AutoDiscovery_Env(t *testing.T) {
 		t.Errorf("expected deepseek env discovery, got %+v", cfgDS)
 	}
 }
+
+func TestConfig_ProviderSwitchingAndPersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "coustea_config.json")
+
+	cfg := &Config{
+		Provider:  ProviderDeepSeek,
+		BaseURL:   DeepSeekBaseURL,
+		ModelName: DefaultDeepSeekModel,
+		APIKey:    "sk-deepseek-initial",
+	}
+
+	// 1. 保存 DeepSeek 配置
+	if err := SaveConfig(cfgPath, cfg); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	// 2. 切换到 Gemini 并配置保存
+	cfg.SwitchProvider(ProviderGemini)
+	cfg.APIKey = "sk-gemini-initial"
+	cfg.ModelName = DefaultGeminiModel
+	if err := SaveConfig(cfgPath, cfg); err != nil {
+		t.Fatalf("failed to save gemini config: %v", err)
+	}
+
+	// 3. 重新加载，验证 Gemini 为当前激活，且 DeepSeek 的配置历史被妥善保留在 Providers 中
+	loaded, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("failed to reload config: %v", err)
+	}
+	if loaded.Provider != ProviderGemini || loaded.APIKey != "sk-gemini-initial" {
+		t.Errorf("expected current provider to be gemini, got %+v", loaded)
+	}
+
+	dsSaved := loaded.GetProviderConfig(ProviderDeepSeek)
+	if dsSaved.APIKey != "sk-deepseek-initial" || dsSaved.ModelName != DefaultDeepSeekModel {
+		t.Errorf("expected preserved deepseek config, got %+v", dsSaved)
+	}
+
+	// 4. 切回 DeepSeek，无需重复输入 APIKey
+	loaded.SwitchProvider(ProviderDeepSeek)
+	if loaded.APIKey != "sk-deepseek-initial" {
+		t.Errorf("expected switched api key to be sk-deepseek-initial, got %s", loaded.APIKey)
+	}
+	if loaded.ModelName != DefaultDeepSeekModel {
+		t.Errorf("expected switched model name to be %s, got %s", DefaultDeepSeekModel, loaded.ModelName)
+	}
+}
+
+func TestConfig_ResolveConfigPath(t *testing.T) {
+	explicit := "/custom/path/config.json"
+	if ResolveConfigPath(explicit) != explicit {
+		t.Errorf("expected %s, got %s", explicit, ResolveConfigPath(explicit))
+	}
+
+	globalPath := GlobalConfigPath()
+	if !filepath.IsAbs(globalPath) {
+		t.Errorf("expected global path to be absolute, got %s", globalPath)
+	}
+}
