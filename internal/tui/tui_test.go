@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"my-agent/internal/agent"
 	"my-agent/internal/config"
 	"my-agent/internal/gateway"
+	"my-agent/internal/permission"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -460,5 +462,73 @@ func TestTUI_KeyOperations_ExitAndInterrupt(t *testing.T) {
 	}
 	if !strings.Contains(m.messages[len(m.messages)-1].Content, "中断") {
 		t.Errorf("expected interruption note in message, got: %s", m.messages[len(m.messages)-1].Content)
+	}
+}
+
+// 测试 TUI 界面对 Harness EventToolPermissionRequest 的交互响应与审批反馈
+func TestTUI_PermissionApproval_InteractiveFlow(t *testing.T) {
+	m := NewModel(nil)
+	m.messages = []ChatMessage{{Sender: "coustea", Content: ""}}
+	m.isGenerating = true
+
+	var userDecision permission.Decision
+	decisionChan := make(chan permission.Decision, 1)
+
+	prompt := &agent.PermissionPrompt{
+		Request: permission.Request{
+			ToolCallID: "tc-test",
+			ToolName:   "bash",
+			Arguments:  json.RawMessage(`{"command":"rm -rf ./tmp"}`),
+			Reason:     "potentially destructive shell command: rm -rf ./tmp",
+		},
+		Respond: func(d permission.Decision) {
+			userDecision = d
+			decisionChan <- d
+		},
+	}
+
+	// 1. 模拟收到来自 Agent Harness 的流式权限审批请求
+	eventMsg := agentStreamEventMsg{
+		event: agent.AgentEvent{
+			Type:             agent.EventToolPermissionRequest,
+			PermissionPrompt: prompt,
+		},
+		ch: make(<-chan agent.AgentEvent),
+	}
+
+	mIntf, _ := m.Update(eventMsg)
+	m = mIntf.(Model)
+
+	if m.pendingPrompt == nil {
+		t.Fatalf("expected pendingPrompt to be set upon EventToolPermissionRequest")
+	}
+
+	// 2. 验证界面视图中正确渲染出权限卡片
+	viewText := m.View()
+	if !strings.Contains(viewText, "权限审批 Gate 3") {
+		t.Errorf("expected view to contain '权限审批 Gate 3', got:\n%s", viewText)
+	}
+	if !strings.Contains(viewText, "rm -rf ./tmp") {
+		t.Errorf("expected view to contain command details, got:\n%s", viewText)
+	}
+
+	// 3. 用户在终端按下 'y' 键允许本次调用
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m = mIntf.(Model)
+
+	if m.pendingPrompt != nil {
+		t.Errorf("expected pendingPrompt to be cleared after user approval")
+	}
+
+	select {
+	case d := <-decisionChan:
+		if d != permission.DecisionAllowOnce {
+			t.Errorf("expected DecisionAllowOnce, got %v", d)
+		}
+	default:
+		t.Errorf("expected Respond callback to be invoked with user decision")
+	}
+	if userDecision != permission.DecisionAllowOnce {
+		t.Errorf("expected userDecision to be DecisionAllowOnce, got %v", userDecision)
 	}
 }

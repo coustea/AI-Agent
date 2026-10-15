@@ -67,6 +67,9 @@ type Model struct {
 	isGenerating bool               // 是否正在流式生成中
 	cancel       context.CancelFunc // 当前流式会话的中断回调
 
+	// 权限门禁待审批请求（基于 Harness Gate 3 交互）
+	pendingPrompt *agent.PermissionPrompt
+
 	// 终端宽高适配
 	width  int
 	height int
@@ -225,6 +228,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.event.Type == agent.EventToolCallStart && msg.event.ToolCall != nil {
 			m.messages[lastIdx].Content += fmt.Sprintf("\n⚡ %s\n",
 				toolCallStyle.Render(fmt.Sprintf("[调用工具: %s] 参数: %s", msg.event.ToolCall.Name, string(msg.event.ToolCall.Arguments))))
+		}
+
+		if msg.event.Type == agent.EventToolPermissionRequest && msg.event.PermissionPrompt != nil {
+			m.pendingPrompt = msg.event.PermissionPrompt
+			m.messages[lastIdx].Content += fmt.Sprintf("\n⚠ %s\n",
+				permissionWarnStyle.Render(fmt.Sprintf("[权限请求] 工具: %s | 原因: %s",
+					msg.event.PermissionPrompt.Request.ToolName, msg.event.PermissionPrompt.Request.Reason)))
+			return m, waitForAgentEvent(msg.ch)
 		}
 
 		if msg.event.Type == agent.EventToolCallResult && msg.event.ToolResult != nil {

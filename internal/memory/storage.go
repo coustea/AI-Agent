@@ -82,7 +82,8 @@ func (b *Bundle) FormatForPrompt() string {
 	sb.WriteString("coustea 具备本地持久化记忆系统，分为两个层级的 Markdown 文件：\n")
 	sb.WriteString(fmt.Sprintf("- 全局通用记忆: %s\n", b.GlobalDir))
 	sb.WriteString(fmt.Sprintf("- 当前项目记忆: %s\n", b.ProjectDir))
-	sb.WriteString("你可以通过内置的 read_file、write_file、edit_file 工具随时读取或沉淀新的关键信息到上述对应目录中。\n\n")
+	sb.WriteString("你可以通过内置的 read_file、write_file、edit_file 工具随时读取或沉淀新的关键信息到上述对应目录中。\n")
+	sb.WriteString("注意：长期记忆是过往沉淀的背景知识与偏好参考，并非不可更改的硬性指令。若记忆内容与用户当前最新提出的明确要求存在冲突，请始终以用户当前最新要求为准。\n\n")
 
 	if !b.HasContent() {
 		sb.WriteString("当前尚未记录长期记忆。在会话过程中，若识别到用户的个人偏好习惯、关键任务决策或核心经验沉淀，请及时记录。\n")

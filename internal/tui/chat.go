@@ -9,6 +9,7 @@ import (
 	"my-agent/internal/agent"
 	"my-agent/internal/config"
 	"my-agent/internal/gateway"
+	"my-agent/internal/permission"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,6 +26,33 @@ type ChatMessage struct {
 func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// 若当前存在挂起的权限审批请求，优先处理审批交互
+		if m.pendingPrompt != nil {
+			switch msg.String() {
+			case "y", "Y":
+				m.pendingPrompt.Respond(permission.DecisionAllowOnce)
+				m.pendingPrompt = nil
+				return m, nil
+			case "a", "A":
+				m.pendingPrompt.Respond(permission.DecisionAllowSession)
+				m.pendingPrompt = nil
+				return m, nil
+			case "n", "N":
+				m.pendingPrompt.Respond(permission.DecisionDeny)
+				m.pendingPrompt = nil
+				return m, nil
+			}
+
+			if msg.Type == tea.KeyEsc {
+				m.pendingPrompt.Respond(permission.DecisionDeny)
+				m.pendingPrompt = nil
+				return m, nil
+			}
+
+			// 处于权限审批等待状态时，屏蔽其他输入
+			return m, nil
+		}
+
 		switch msg.Type {
 		case tea.KeyEnter:
 			// 如果正在流式生成中，避免重复触发
@@ -161,11 +189,23 @@ func (m Model) viewChat() string {
 		}
 	}
 
-	// 3. 底部输入框（Claude Code 质感输入）
+	// 3. 若有挂起的权限审批，高亮呈现权限提示卡片
+	if m.pendingPrompt != nil {
+		req := m.pendingPrompt.Request
+		permCard := fmt.Sprintf("⚠ [权限审批 Gate 3] 工具 [%s] 尝试执行\n参数: %s\n原因: %s\n\n操作: [y] 允许本次  [a] 本会话始终允许  [n/Esc] 拒绝本次",
+			req.ToolName, string(req.Arguments), req.Reason)
+		s.WriteString(permissionBoxStyle.Render(permCard) + "\n\n")
+	}
+
+	// 4. 底部输入框（Claude Code 质感输入）
 	s.WriteString(m.chatInput.View() + "\n\n")
 
-	// 4. 底部快捷栏提示
-	s.WriteString(footerStyle.Render("快捷操作: [Enter] 发送  [/model] 更换模型  [/clear] 清屏  [Ctrl+C] 退出") + "\n")
+	// 5. 底部快捷栏提示
+	if m.pendingPrompt != nil {
+		s.WriteString(permissionWarnStyle.Render("等待权限审批: 按 [y] 允许本次  [a] 本会话始终允许  [n/Esc] 拒绝本次  [Ctrl+C] 退出") + "\n")
+	} else {
+		s.WriteString(footerStyle.Render("快捷操作: [Enter] 发送  [/model] 更换模型  [/clear] 清屏  [Ctrl+C] 退出") + "\n")
+	}
 
 	return s.String()
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"my-agent/internal/gateway"
@@ -108,5 +109,124 @@ func TestRegistry_Execute(t *testing.T) {
 	res, err = reg.Execute(ctx, gateway.ToolCall{ID: "5", Name: "search", Arguments: json.RawMessage(`{"query": "hello"}`)})
 	if err != nil || res.IsError || res.Content != "found: hello" {
 		t.Errorf("expected success, got res=%+v, err=%v", res, err)
+	}
+}
+
+// querySchema 要求必须提供字符串型 query，用于构造可预期的参数校验失败。
+const querySchema = `{
+	"type": "object",
+	"properties": {"query": {"type": "string"}},
+	"required": ["query"]
+}`
+
+// TestRegistry_PreToolUse_OrderAndShortCircuit 验证钩子按挂载顺序执行，且任一返回错误即短路。
+func TestRegistry_PreToolUse_OrderAndShortCircuit(t *testing.T) {
+	var calls []string
+
+	inner := &mockTool{
+		name:   "search",
+		desc:   "search tool",
+		schema: json.RawMessage(querySchema),
+		runFn: func(ctx context.Context, args json.RawMessage) (string, error) {
+			calls = append(calls, "tool")
+			return "executed", nil
+		},
+	}
+
+	reg := NewRegistry(inner)
+	reg.UsePreToolUse(nil) // 空钩子应被忽略，且不得 panic
+
+	reg.UsePreToolUse(func(ctx context.Context, call gateway.ToolCall) error {
+		calls = append(calls, "hook1")
+		return nil
+	})
+	reg.UsePreToolUse(func(ctx context.Context, call gateway.ToolCall) error {
+		calls = append(calls, "hook2")
+		return errors.New("blocked by hook2")
+	})
+	reg.UsePreToolUse(func(ctx context.Context, call gateway.ToolCall) error {
+		calls = append(calls, "hook3")
+		return nil
+	})
+
+	res, err := reg.Execute(context.Background(), gateway.ToolCall{
+		ID: "1", Name: "search", Arguments: json.RawMessage(`{"query": "hi"}`),
+	})
+	if err == nil {
+		t.Fatal("expected error from the blocking hook")
+	}
+	if !res.IsError || res.Content != "blocked by hook2" {
+		t.Errorf("expected blocked ToolResult carrying the hook error, got %+v", res)
+	}
+	if want := []string{"hook1", "hook2"}; !reflect.DeepEqual(calls, want) {
+		t.Errorf("expected hooks to run in order and short-circuit, got %v", calls)
+	}
+}
+
+// TestRegistry_PreToolUse_AllowThenExecute 验证钩子放行时工具正常执行。
+func TestRegistry_PreToolUse_AllowThenExecute(t *testing.T) {
+	ran := false
+	inner := &mockTool{
+		name:   "search",
+		schema: json.RawMessage(querySchema),
+		runFn: func(ctx context.Context, args json.RawMessage) (string, error) {
+			ran = true
+			return "ok", nil
+		},
+	}
+
+	reg := NewRegistry(inner)
+	reg.UsePreToolUse(func(ctx context.Context, call gateway.ToolCall) error { return nil })
+
+	res, err := reg.Execute(context.Background(), gateway.ToolCall{
+		ID: "1", Name: "search", Arguments: json.RawMessage(`{"query": "hi"}`),
+	})
+	if err != nil || res.IsError || res.Content != "ok" {
+		t.Errorf("expected successful execution, got res=%+v err=%v", res, err)
+	}
+	if !ran {
+		t.Error("expected the tool to be executed when hooks allow it")
+	}
+}
+
+// TestRegistry_PreToolUse_SeesRawCallBeforeValidation 验证钩子先于参数校验，
+// 看到的是未经校验的原始调用。
+func TestRegistry_PreToolUse_SeesRawCallBeforeValidation(t *testing.T) {
+	var seen gateway.ToolCall
+	inner := &mockTool{name: "search", schema: json.RawMessage(querySchema)}
+
+	reg := NewRegistry(inner)
+	reg.UsePreToolUse(func(ctx context.Context, call gateway.ToolCall) error {
+		seen = call
+		return nil
+	})
+
+	call := gateway.ToolCall{ID: "1", Name: "search", Arguments: json.RawMessage(`{"query": 123}`)}
+	if _, err := reg.Execute(context.Background(), call); err == nil {
+		t.Fatal("expected a validation error for the wrong argument type")
+	}
+	if seen.ID != call.ID || string(seen.Arguments) != string(call.Arguments) {
+		t.Errorf("hook did not observe the raw call before validation, got %+v", seen)
+	}
+}
+
+// TestRegistry_PreToolUse_NoHooks_Regression 回归保护：未挂载钩子时行为与改动前一致。
+func TestRegistry_PreToolUse_NoHooks_Regression(t *testing.T) {
+	ran := false
+	inner := &mockTool{
+		name:   "search",
+		schema: json.RawMessage(querySchema),
+		runFn: func(ctx context.Context, args json.RawMessage) (string, error) {
+			ran = true
+			return "ok", nil
+		},
+	}
+
+	reg := NewRegistry(inner)
+	res, err := reg.Execute(context.Background(), gateway.ToolCall{
+		ID: "1", Name: "search", Arguments: json.RawMessage(`{"query": "hi"}`),
+	})
+	if err != nil || res.IsError || res.Content != "ok" || !ran {
+		t.Errorf("behavior changed without hooks: res=%+v err=%v ran=%v", res, err, ran)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
+	"my-agent/internal/permission"
 	"my-agent/internal/tool"
 	"my-agent/internal/tool/builtin"
 )
@@ -21,17 +22,15 @@ var (
 	ErrMaxSteps      = errors.New("agent: exceeded maximum ReAct steps")
 )
 
-// BuildDefaultSystemPrompt 基于工作目录与本地长效记忆库构建 coustea 通用个人智能助手的系统提示词
-func BuildDefaultSystemPrompt(workDir string) string {
+// defaultPersona 构建 coustea 的静态身份与行为准则（不含长期记忆）。
+// 长期记忆由 composeSystemPrompt 在每轮对话开始时动态注入，保证运行期沉淀即时生效。
+func defaultPersona(workDir string) string {
 	workDir = strings.TrimSpace(workDir)
 	if workDir == "" {
 		if wd, err := os.Getwd(); err == nil {
 			workDir = wd
 		}
 	}
-
-	bundle := memory.LoadBundle(workDir)
-	memoryPrompt := bundle.FormatForPrompt()
 
 	var sb strings.Builder
 	sb.WriteString("You are coustea, an intelligent and versatile general-purpose local AI personal assistant.\n")
@@ -44,34 +43,49 @@ func BuildDefaultSystemPrompt(workDir string) string {
 	sb.WriteString("- Understand user requests thoughtfully, thinking step-by-step when appropriate.\n")
 	sb.WriteString("- Proactively use available tools (read_file, write_file, edit_file, glob, bash) whenever you need to explore files, run commands, or gather local context.\n")
 	sb.WriteString("- Communicate clearly, concisely, and directly, using Chinese by default unless requested otherwise.\n")
-
-	if memoryPrompt != "" {
-		sb.WriteString("\n" + memoryPrompt + "\n")
-	}
+	sb.WriteString("- Destructive or workspace-escaping operations require approval from the user via the permission pipeline.\n")
 
 	return sb.String()
+}
+
+// composeSystemPrompt 将静态 persona 与实时读取的长期记忆合成为最终系统提示词。
+// 记忆在每轮对话开始时重新读取，因此模型上一轮通过 write_file 沉淀的内容会在下一轮立即生效。
+func composeSystemPrompt(persona, workDir string) string {
+	memoryBlock := memory.LoadBundle(workDir).FormatForPrompt()
+	if memoryBlock == "" {
+		return persona
+	}
+	return persona + "\n\n" + memoryBlock
 }
 
 // EventType 定义 Agent 发送给调用方的流式事件类型
 type EventType string
 
 const (
-	EventTextDelta      EventType = "text_delta"
-	EventToolCallStart  EventType = "tool_call_start"
-	EventToolCallResult EventType = "tool_call_result"
-	EventDone           EventType = "done"
-	EventError          EventType = "error"
+	EventTextDelta             EventType = "text_delta"
+	EventToolCallStart         EventType = "tool_call_start"
+	EventToolPermissionRequest EventType = "tool_permission_request"
+	EventToolCallResult        EventType = "tool_call_result"
+	EventDone                  EventType = "done"
+	EventError                 EventType = "error"
 )
+
+// PermissionPrompt 包含待审批的工具调用请求与用户决策回调
+type PermissionPrompt struct {
+	Request permission.Request
+	Respond func(permission.Decision)
+}
 
 // AgentEvent 是 Agent 向调用方发送的流式事件
 type AgentEvent struct {
-	Type       EventType
-	Delta      string              // 文本流式增量
-	ToolCall   *gateway.ToolCall   // 工具开始调用时携带
-	ToolResult *gateway.ToolResult // 工具执行结束时携带
-	Usage      *gateway.Usage      // 本轮 Token 消耗汇总
-	Done       bool                // 对话是否完成
-	Err        error               // 遇到的错误
+	Type             EventType
+	Delta            string              // 文本流式增量
+	ToolCall         *gateway.ToolCall   // 工具开始调用时携带
+	PermissionPrompt *PermissionPrompt   // 遇到高危工具需要权限确认时携带
+	ToolResult       *gateway.ToolResult // 工具执行结束时携带
+	Usage            *gateway.Usage      // 本轮 Token 消耗汇总
+	Done             bool                // 对话是否完成
+	Err              error               // 遇到的错误
 }
 
 // Agent 定义智能体调用的对外核心契约
@@ -87,16 +101,17 @@ type Agent interface {
 // Option 定义 Agent 的函数式拼装算子
 type Option func(*CoreAgent)
 
-// CoreAgent 是驱动 ReAct 循环的状态机核心
+// CoreAgent 是基于 Harness 思想驱动 ReAct 循环与状态机管理的运行核心
 type CoreAgent struct {
-	mu           sync.RWMutex
-	gw           gateway.Gateway
-	workDir      string
-	memory       memory.Memory
-	tools        *tool.Registry
-	systemPrompt string
-	maxSteps     int
-	running      bool
+	mu         sync.RWMutex
+	gw         gateway.Gateway
+	workDir    string
+	memory     memory.Memory
+	tools      *tool.Registry
+	permission *permission.Manager
+	persona    string
+	maxSteps   int
+	running    bool
 }
 
 // WithMemory 配置自定义记忆管理器
@@ -117,14 +132,44 @@ func WithTools(reg *tool.Registry) Option {
 	}
 }
 
-// WithWorkDir 配置工作目录并自动更新系统提示词
+// WithPermission 配置三道闸门权限管理器
+func WithPermission(perm *permission.Manager) Option {
+	return func(a *CoreAgent) {
+		if perm != nil {
+			a.permission = perm
+		}
+	}
+}
+
+// WithApprover 配置用户审批回调
+func WithApprover(approver permission.Approver) Option {
+	return func(a *CoreAgent) {
+		if a.permission != nil {
+			a.permission.SetApprover(approver)
+		}
+	}
+}
+
+// WithAutoApprove 配置是否自动放行非硬拒绝操作 (自动化测试或非交互模式使用)
+func WithAutoApprove(auto bool) Option {
+	return func(a *CoreAgent) {
+		if a.permission != nil {
+			a.permission.SetAutoApprove(auto)
+		}
+	}
+}
+
+// WithWorkDir 配置工作目录，并播种该工作区的记忆模板与刷新静态 persona
 func WithWorkDir(dir string) Option {
 	return func(a *CoreAgent) {
 		cleanDir := strings.TrimSpace(dir)
 		if cleanDir != "" {
 			a.workDir = cleanDir
-			_ = memory.EnsureDirs(a.workDir)
-			a.systemPrompt = BuildDefaultSystemPrompt(a.workDir)
+			_ = memory.InitTemplates(a.workDir)
+			a.persona = defaultPersona(a.workDir)
+			if a.permission != nil {
+				a.permission = permission.NewManager(a.workDir, permission.WithApprover(a.permission.Approver()))
+			}
 		}
 	}
 }
@@ -146,11 +191,12 @@ func WithDefaultTools(workDir ...string) Option {
 	}
 }
 
-// WithSystemPrompt 配置自定义系统提示词
+// WithSystemPrompt 配置自定义 persona（静态身份与准则部分）。
+// 长期记忆块不受其影响，仍会在每轮对话开始时动态追加。
 func WithSystemPrompt(prompt string) Option {
 	return func(a *CoreAgent) {
 		if strings.TrimSpace(prompt) != "" {
-			a.systemPrompt = strings.TrimSpace(prompt)
+			a.persona = strings.TrimSpace(prompt)
 		}
 	}
 }
@@ -171,15 +217,16 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 	}
 
 	wd, _ := os.Getwd()
-	_ = memory.EnsureDirs(wd)
+	_ = memory.InitTemplates(wd)
 
 	a := &CoreAgent{
-		gw:           gw,
-		workDir:      wd,
-		memory:       memory.NewSlidingWindowMemory(40),
-		tools:        tool.NewRegistry(),
-		systemPrompt: BuildDefaultSystemPrompt(wd),
-		maxSteps:     10,
+		gw:         gw,
+		workDir:    wd,
+		memory:     memory.NewSlidingWindowMemory(40),
+		tools:      tool.NewRegistry(),
+		permission: permission.NewManager(wd),
+		persona:    defaultPersona(wd),
+		maxSteps:   10,
 	}
 
 	for _, opt := range opts {
@@ -212,11 +259,11 @@ func (a *CoreAgent) History() []gateway.Message {
 	return a.memory.History()
 }
 
-// SystemPrompt 获取当前生效的系统提示词
+// SystemPrompt 获取当前由 persona 与长期记忆合成的完整系统提示词
 func (a *CoreAgent) SystemPrompt() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return a.systemPrompt
+	return composeSystemPrompt(a.persona, a.workDir)
 }
 
 // WorkDir 获取当前绑定的工作目录
@@ -226,6 +273,13 @@ func (a *CoreAgent) WorkDir() string {
 	return a.workDir
 }
 
+// Permission 获取权限管理器实例
+func (a *CoreAgent) Permission() *permission.Manager {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.permission
+}
+
 // RegisterTools 动态增加工具
 func (a *CoreAgent) RegisterTools(ts ...tool.Tool) {
 	a.mu.Lock()
@@ -233,7 +287,12 @@ func (a *CoreAgent) RegisterTools(ts ...tool.Tool) {
 	a.tools.Register(ts...)
 }
 
-// StreamRun 驱动标准的 ReAct 状态循环，支持多轮交互、工具调用、错误自愈与流式打字输出
+// StreamRun 驱动 Harness 核心 ReAct 状态循环：
+// 1. 记忆安全检索与组装
+// 2. 网关流式推理与打字输出
+// 3. 轮次收敛判断与工具调用检测
+// 4. 三道闸门权限管线审批
+// 5. 工具安全执行与观察结果 (Observation) 回传
 func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentEvent, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
@@ -266,9 +325,15 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 		userMsg := gateway.Message{Role: gateway.RoleUser, Content: prompt}
 		_ = a.memory.Append(ctx, userMsg)
 
+		// 2. 每用户轮次开始时动态合成系统提示词（静态 persona + 实时长期记忆）
+		a.mu.RLock()
+		sysPrompt := composeSystemPrompt(a.persona, a.workDir)
+		permMgr := a.permission
+		a.mu.RUnlock()
+
 		var totalTurnUsage gateway.Usage
 
-		// 2. 驱动 ReAct 循环 (最多迭代 maxSteps 步)
+		// 3. 驱动 Harness 循环 (最多迭代 maxSteps 步)
 		for step := 0; step < a.maxSteps; step++ {
 			select {
 			case <-ctx.Done():
@@ -280,7 +345,6 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 			a.mu.RLock()
 			gw := a.gw
 			toolDefs := a.tools.Definitions()
-			sysPrompt := a.systemPrompt
 			a.mu.RUnlock()
 
 			// 基于记忆状态机安全构建当前上下文 (保证 Turn Atomicity 轮次原子性)
@@ -342,7 +406,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 				ToolCalls:        toolCalls,
 			})
 
-			// 3. 收敛退出判断：若无工具调用，说明已得出最终回答，结束本轮交互
+			// 4. 收敛退出判断：若无工具调用，说明已得出最终回答，结束本轮交互
 			if len(toolCalls) == 0 {
 				sendAgentEvent(ctx, outCh, AgentEvent{
 					Type:  EventDone,
@@ -352,21 +416,82 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 				return
 			}
 
-			// 4. 执行工具调用并回传观察结果（错误自愈原则：Error as Observation）
+			// 5. 执行工具调用流水线 (Gate 1/2/3 权限审查 -> 工具执行 -> 错误自愈 Error as Observation)
 			for _, tc := range toolCalls {
 				sendAgentEvent(ctx, outCh, AgentEvent{Type: EventToolCallStart, ToolCall: &tc})
 
-				a.mu.RLock()
-				tools := a.tools
-				a.mu.RUnlock()
+				// 权限门禁审查
+				var allowed bool
+				var denyReason string
 
-				res, execErr := tools.Execute(ctx, tc)
-				if execErr != nil {
+				if permMgr != nil {
+					// 若未配置外部审批器，动态桥接流式通道通知调用方进行审批
+					origApprover := permMgr.Approver()
+					if origApprover == nil {
+						permMgr.SetApprover(permission.ApproverFunc(func(pCtx context.Context, req permission.Request) (permission.Decision, error) {
+							respCh := make(chan permission.Decision, 1)
+							prompt := &PermissionPrompt{
+								Request: req,
+								Respond: func(d permission.Decision) {
+									select {
+									case respCh <- d:
+									default:
+									}
+								},
+							}
+							if !sendAgentEvent(pCtx, outCh, AgentEvent{
+								Type:             EventToolPermissionRequest,
+								PermissionPrompt: prompt,
+							}) {
+								return permission.DecisionDeny, pCtx.Err()
+							}
+							select {
+							case d := <-respCh:
+								return d, nil
+							case <-pCtx.Done():
+								return permission.DecisionDeny, pCtx.Err()
+							}
+						}))
+					}
+
+					var evalErr error
+					allowed, denyReason, evalErr = permMgr.Evaluate(ctx, tc)
+					if origApprover == nil {
+						permMgr.SetApprover(nil) // 恢复状态
+					}
+					if evalErr != nil {
+						allowed = false
+						denyReason = "permission evaluation error: " + evalErr.Error()
+					}
+				} else {
+					allowed = true
+				}
+
+				var res gateway.ToolResult
+
+				if !allowed {
+					// 权限未放行：以工具结果形式回传给模型（Error as Observation）
 					res = gateway.ToolResult{
 						ToolCallID: tc.ID,
 						Name:       tc.Name,
-						Content:    "Tool execution error: " + execErr.Error(),
+						Content:    denyReason,
 						IsError:    true,
+					}
+				} else {
+					// 权限放行：分发给 Tool Registry 执行
+					a.mu.RLock()
+					tools := a.tools
+					a.mu.RUnlock()
+
+					var execErr error
+					res, execErr = tools.Execute(ctx, tc)
+					if execErr != nil && strings.TrimSpace(res.Content) == "" {
+						res = gateway.ToolResult{
+							ToolCallID: tc.ID,
+							Name:       tc.Name,
+							Content:    "Tool execution error: " + execErr.Error(),
+							IsError:    true,
+						}
 					}
 				}
 

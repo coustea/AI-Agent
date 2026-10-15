@@ -252,11 +252,15 @@ func TestBashTool(t *testing.T) {
 		t.Errorf("unexpected output: %q", out)
 	}
 
-	// 2. 拦截高危指令
-	argsDanger, _ := json.Marshal(BashInput{Command: "rm -rf /"})
-	_, err = tool.Execute(context.Background(), argsDanger)
-	if err == nil {
-		t.Errorf("expected dangerous command to be blocked")
+	// 2. 纯执行器：工具内不再包含任何安全策略
+	//    （命令是否放行由 Harness 权限管线决定，见 internal/permission）
+	argsPolicyFree, _ := json.Marshal(BashInput{Command: "echo sudo shutdown"})
+	outPolicyFree, err := tool.Execute(context.Background(), argsPolicyFree)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if outPolicyFree != "sudo shutdown" {
+		t.Errorf("bash tool should execute policy-free commands verbatim, got %q", outPolicyFree)
 	}
 
 	// 3. 执行报错

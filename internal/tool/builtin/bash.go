@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-// BashTool 执行系统 Shell 命令，学习自 learn-claude-code 中的 run_bash
+// BashTool 执行系统 Shell 命令，学习自 learn-claude-code 中的 run_bash。
+//
+// 本工具是纯执行器：不含任何安全策略。命令是否允许执行由
+// 三道闸门权限管线统一裁决（见 internal/permission）。
 type BashTool struct {
 	workDir string
 }
@@ -58,14 +61,6 @@ func (t *BashTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	command := strings.TrimSpace(input.Command)
 	if command == "" {
 		return "", fmt.Errorf("command cannot be empty")
-	}
-
-	// 拦截高危指令（对齐 learn-claude-code）
-	dangerous := []string{"rm -rf /", "sudo", "shutdown", "reboot", "> /dev/"}
-	for _, d := range dangerous {
-		if strings.Contains(command, d) {
-			return "", fmt.Errorf("dangerous command blocked: %s", d)
-		}
 	}
 
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)

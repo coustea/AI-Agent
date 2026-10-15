@@ -19,8 +19,9 @@ type Tool interface {
 
 // Registry 是线程安全的工具注册表
 type Registry struct {
-	mu    sync.RWMutex
-	tools map[string]Tool
+	mu       sync.RWMutex
+	tools    map[string]Tool
+	preHooks []PreToolUse
 }
 
 // NewRegistry 创建工具注册表并可选地预先注册一批工具
@@ -41,6 +42,17 @@ func (r *Registry) Register(ts ...Tool) {
 			r.tools[t.Name()] = t
 		}
 	}
+}
+
+// UsePreToolUse 挂载一个执行前钩子。钩子按挂载顺序依次执行，任一返回错误即短路。
+// Registry 只负责按序调用，不感知任何具体策略。
+func (r *Registry) UsePreToolUse(h PreToolUse) {
+	if h == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.preHooks = append(r.preHooks, h)
 }
 
 // Get 根据名称获取工具
@@ -67,10 +79,16 @@ func (r *Registry) Definitions() []gateway.ToolDefinition {
 	return defs
 }
 
-// Execute 校验参数并安全执行对应的工具
+// Execute 校验参数并安全执行对应的工具。
+//
+// 执行流水线为：查找工具 → 执行前钩子链 → 参数校验 → 工具执行。
+// 钩子先于参数校验，看到的是未经校验的原始调用；钩子若无法解析参数应放行，
+// 交由参数校验拒绝，避免重复报错。
 func (r *Registry) Execute(ctx context.Context, call gateway.ToolCall) (gateway.ToolResult, error) {
 	r.mu.RLock()
 	t, ok := r.tools[call.Name]
+	// 快照钩子链后立即释放锁：钩子是外部注入的任意代码，不在持锁期间执行。
+	hooks := r.preHooks
 	r.mu.RUnlock()
 
 	if !ok {
@@ -80,6 +98,18 @@ func (r *Registry) Execute(ctx context.Context, call gateway.ToolCall) (gateway.
 			Content:    fmt.Sprintf("tool %q not found", call.Name),
 			IsError:    true,
 		}, fmt.Errorf("tool %q not found", call.Name)
+	}
+
+	// 执行前钩子链：权限等策略在此挂载，Registry 自身不含任何规则
+	for _, h := range hooks {
+		if err := h(ctx, call); err != nil {
+			return gateway.ToolResult{
+				ToolCallID: call.ID,
+				Name:       call.Name,
+				Content:    err.Error(),
+				IsError:    true,
+			}, err
+		}
 	}
 
 	// 校验参数格式

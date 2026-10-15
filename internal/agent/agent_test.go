@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -15,6 +16,7 @@ import (
 
 	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
+	"my-agent/internal/permission"
 	"my-agent/internal/tool"
 )
 
@@ -622,13 +624,133 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 		t.Errorf("expected custom system prompt to contain %s, got: %s", customDir, agCustomDir.SystemPrompt())
 	}
 
-	// 3. 显式覆盖 WithSystemPrompt
+	// 3. 显式覆盖 WithSystemPrompt：自定义 persona 生效，长期记忆块仍动态追加
 	agCustomPrompt, err := NewAgent(gw, WithSystemPrompt("Explicit custom prompt"))
 	if err != nil {
 		t.Fatalf("failed to create agent with custom prompt: %v", err)
 	}
-	if agCustomPrompt.SystemPrompt() != "Explicit custom prompt" {
-		t.Errorf("expected explicit prompt, got: %s", agCustomPrompt.SystemPrompt())
+	customPrompt := agCustomPrompt.SystemPrompt()
+	if !strings.HasPrefix(customPrompt, "Explicit custom prompt") {
+		t.Errorf("expected custom persona prefix, got: %s", customPrompt)
+	}
+	if strings.Contains(customPrompt, "general-purpose local AI personal assistant") {
+		t.Errorf("expected default persona to be replaced, got: %s", customPrompt)
+	}
+	if !strings.Contains(customPrompt, "Long-Term Memory") {
+		t.Errorf("expected long-term memory block to still be appended, got: %s", customPrompt)
+	}
+}
+
+// 测试 P1：运行期沉淀的长期记忆在下一轮对话开始时即时注入系统提示词（每轮刷新）
+func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
+	workDir := t.TempDir()
+	gw := newMockGateway("reply one", "reply two")
+
+	ag, err := NewAgent(gw, WithWorkDir(workDir))
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// 第一轮：记忆库此时尚无该内容
+	stream1, err := ag.StreamRun(ctx, "first turn")
+	if err != nil {
+		t.Fatalf("turn 1 StreamRun failed: %v", err)
+	}
+	for range stream1 {
+	}
+
+	// 模拟模型在会话期间通过 write_file 沉淀长期记忆
+	memFile := filepath.Join(workDir, ".coustea", "memory", memory.FileLearnings)
+	if err := os.WriteFile(memFile, []byte("MAGIC_LONG_TERM_MEMORY_TOKEN"), 0o644); err != nil {
+		t.Fatalf("failed to write memory file: %v", err)
+	}
+
+	// 第二轮：新沉淀的记忆应已出现在本轮系统提示词中
+	stream2, err := ag.StreamRun(ctx, "second turn")
+	if err != nil {
+		t.Fatalf("turn 2 StreamRun failed: %v", err)
+	}
+	for range stream2 {
+	}
+
+	gw.mu.Lock()
+	reqs := append([]*gateway.ChatRequest(nil), gw.requests...)
+	gw.mu.Unlock()
+
+	if len(reqs) != 2 {
+		t.Fatalf("expected 2 gateway requests, got %d", len(reqs))
+	}
+
+	turn1System := reqs[0].Messages[0]
+	if turn1System.Role != gateway.RoleSystem {
+		t.Fatalf("expected first message to be system, got %s", turn1System.Role)
+	}
+	if strings.Contains(turn1System.Content, "MAGIC_LONG_TERM_MEMORY_TOKEN") {
+		t.Errorf("turn 1 system prompt should not contain memory written afterwards")
+	}
+
+	turn2System := reqs[1].Messages[0]
+	if turn2System.Role != gateway.RoleSystem {
+		t.Fatalf("expected first message to be system, got %s", turn2System.Role)
+	}
+	if !strings.Contains(turn2System.Content, "MAGIC_LONG_TERM_MEMORY_TOKEN") {
+		t.Errorf("turn 2 system prompt should contain memory written in the previous turn, got: %s", turn2System.Content)
+	}
+}
+
+// 测试权限策略确实作为执行前钩子在装配期挂载到了工具执行流水线上：
+// 破坏性 bash 命令被拦截、不会真正执行，且拒绝文案原样回灌给模型。
+func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
+	gw := &toolCallStepGateway{
+		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+			// Step 1: 模型请求执行破坏性命令
+			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+				return []gateway.StreamChunk{
+					{
+						ToolCalls: []gateway.ToolCall{
+							{ID: "call_1", Name: "bash", Arguments: json.RawMessage(`{"command": "rm -rf /"}`)},
+						},
+						Done: true,
+					},
+				}
+			},
+			// Step 2: 断言模型收到的是策略拒绝的精确文案，而非被泛化的「执行错误」
+			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+				if len(req.Messages) == 0 {
+					t.Errorf("expected a non-empty message history")
+					return []gateway.StreamChunk{{Delta: "blocked"}, {Done: true}}
+				}
+				last := req.Messages[len(req.Messages)-1]
+				if last.Role != gateway.RoleTool || last.ToolResult == nil {
+					t.Errorf("expected a RoleTool message, got %+v", last)
+					return []gateway.StreamChunk{{Delta: "blocked"}, {Done: true}}
+				}
+				if !last.ToolResult.IsError {
+					t.Errorf("expected the blocked command to be reported as an error")
+				}
+				if !strings.Contains(last.ToolResult.Content, "blocked by Gate 1 (Hard Deny)") {
+					t.Errorf("expected the precise Gate 1 hard deny message to reach the model, got %q", last.ToolResult.Content)
+				}
+				if strings.Contains(last.ToolResult.Content, "Tool execution error") {
+					t.Errorf("policy message was overwritten by the generic error text: %q", last.ToolResult.Content)
+				}
+				return []gateway.StreamChunk{{Delta: "Blocked."}, {Done: true}}
+			},
+		},
+	}
+
+	ag, err := NewAgent(gw, WithDefaultTools())
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	stream, err := ag.StreamRun(context.Background(), "please clean up the disk")
+	if err != nil {
+		t.Fatalf("StreamRun failed: %v", err)
+	}
+	for range stream {
 	}
 }
 
@@ -715,5 +837,121 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 	}
 	if replyB.String() != "Hello from DeepSeek" {
 		t.Errorf("expected 'Hello from DeepSeek', got %q", replyB.String())
+	}
+}
+
+// 测试基于 Harness 思想的流式三道闸门交互审批流程 (Gate 3 用户审批与拒绝自愈)
+func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. 测试允许流程 (AllowOnce)
+	gwAllow := &toolCallStepGateway{
+		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+			// Step 1: 模型发起命令调用
+			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+				return []gateway.StreamChunk{
+					{
+						ToolCalls: []gateway.ToolCall{
+							{ID: "call_bash_1", Name: "bash", Arguments: json.RawMessage(`{"command": "echo 'harness_approval_test'"}`)},
+						},
+						Done: true,
+					},
+				}
+			},
+			// Step 2: 模型接收到工具执行输出并生成最终回复
+			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+				last := req.Messages[len(req.Messages)-1]
+				if last.Role != gateway.RoleTool || last.ToolResult == nil {
+					t.Fatalf("expected RoleTool message, got: %+v", last)
+				}
+				if last.ToolResult.IsError {
+					t.Fatalf("expected tool call to succeed, got error: %s", last.ToolResult.Content)
+				}
+				if !strings.Contains(last.ToolResult.Content, "harness_approval_test") {
+					t.Errorf("expected tool output to contain 'harness_approval_test', got: %s", last.ToolResult.Content)
+				}
+				return []gateway.StreamChunk{{Delta: "Done executed."}, {Done: true}}
+			},
+		},
+	}
+
+	agAllow, err := NewAgent(gwAllow, WithWorkDir(tmpDir), WithDefaultTools())
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	streamAllow, err := agAllow.StreamRun(context.Background(), "Run test command")
+	if err != nil {
+		t.Fatalf("StreamRun failed: %v", err)
+	}
+
+	permissionPromptReceived := false
+	for ev := range streamAllow {
+		if ev.Type == EventToolPermissionRequest && ev.PermissionPrompt != nil {
+			permissionPromptReceived = true
+			if ev.PermissionPrompt.Request.ToolName != "bash" {
+				t.Errorf("expected permission tool name 'bash', got %s", ev.PermissionPrompt.Request.ToolName)
+			}
+			// 模拟用户在终端同意执行
+			ev.PermissionPrompt.Respond(permission.DecisionAllowOnce)
+		}
+	}
+
+	if !permissionPromptReceived {
+		t.Errorf("expected to receive EventToolPermissionRequest in stream")
+	}
+
+	// 2. 测试拒绝流程 (User Deny -> Error as Observation)
+	gwDeny := &toolCallStepGateway{
+		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+			// Step 1: 模型发起命令调用
+			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+				return []gateway.StreamChunk{
+					{
+						ToolCalls: []gateway.ToolCall{
+							{ID: "call_bash_2", Name: "bash", Arguments: json.RawMessage(`{"command": "echo 'will_be_denied'"}`)},
+						},
+						Done: true,
+					},
+				}
+			},
+			// Step 2: 模型接收到人类拒绝的观察结果，完成自愈回复
+			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+				last := req.Messages[len(req.Messages)-1]
+				if last.Role != gateway.RoleTool || last.ToolResult == nil {
+					t.Fatalf("expected RoleTool message, got: %+v", last)
+				}
+				if !last.ToolResult.IsError {
+					t.Fatalf("expected tool result to be error due to user denial")
+				}
+				if !strings.Contains(last.ToolResult.Content, "permission denied by user") {
+					t.Errorf("expected content to mention permission denied by user, got: %s", last.ToolResult.Content)
+				}
+				return []gateway.StreamChunk{{Delta: "Understood, command was cancelled by user."}, {Done: true}}
+			},
+		},
+	}
+
+	agDeny, err := NewAgent(gwDeny, WithWorkDir(tmpDir), WithDefaultTools())
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	streamDeny, err := agDeny.StreamRun(context.Background(), "Run command to deny")
+	if err != nil {
+		t.Fatalf("StreamRun failed: %v", err)
+	}
+
+	permissionDenyReceived := false
+	for ev := range streamDeny {
+		if ev.Type == EventToolPermissionRequest && ev.PermissionPrompt != nil {
+			permissionDenyReceived = true
+			// 模拟用户在终端拒绝执行
+			ev.PermissionPrompt.Respond(permission.DecisionDeny)
+		}
+	}
+
+	if !permissionDenyReceived {
+		t.Errorf("expected to receive EventToolPermissionRequest in deny stream")
 	}
 }

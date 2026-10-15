@@ -59,4 +59,13 @@ var (
 
 	toolResultErrorStyle = lipgloss.NewStyle().
 				Foreground(lipgloss.Color("#FF5555"))
+
+	permissionBoxStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(lipgloss.Color("#FFB86C")).
+				Padding(0, 1)
+
+	permissionWarnStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(lipgloss.Color("#FFB86C"))
 )
