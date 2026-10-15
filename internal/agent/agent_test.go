@@ -593,8 +593,11 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "coustea") {
 		t.Errorf("expected system prompt to contain 'coustea', got: %s", prompt)
 	}
-	if !strings.Contains(prompt, "personal AI assistant") {
-		t.Errorf("expected system prompt to contain 'personal AI assistant', got: %s", prompt)
+	if !strings.Contains(prompt, "general-purpose local AI personal assistant") {
+		t.Errorf("expected system prompt to state general-purpose assistant, got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "Long-Term Memory") {
+		t.Errorf("expected system prompt to contain Long-Term Memory section, got: %s", prompt)
 	}
 
 	currentWd, _ := os.Getwd()

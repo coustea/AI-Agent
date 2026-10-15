@@ -38,10 +38,23 @@ func SafePath(workDir, p string) (string, error) {
 		return "", fmt.Errorf("failed to resolve target path: %w", err)
 	}
 
-	rel, err := filepath.Rel(workDirAbs, targetAbs)
-	if err != nil || strings.HasPrefix(rel, "..") || rel == ".." {
-		return "", fmt.Errorf("path escapes workspace: %s", cleanP)
+	// 1. 检查是否在当前工作区内部
+	relWork, errWork := filepath.Rel(workDirAbs, targetAbs)
+	if errWork == nil && !strings.HasPrefix(relWork, "..") && relWork != ".." {
+		return targetAbs, nil
 	}
 
-	return targetAbs, nil
+	// 2. 检查是否在用户全局 ~/.coustea 目录内部（允许读取与沉淀全局记忆及配置）
+	home, errHome := os.UserHomeDir()
+	if errHome == nil && home != "" {
+		globalCousteaAbs, errGlobal := filepath.Abs(filepath.Join(home, ".coustea"))
+		if errGlobal == nil {
+			relGlobal, errRelGlobal := filepath.Rel(globalCousteaAbs, targetAbs)
+			if errRelGlobal == nil && !strings.HasPrefix(relGlobal, "..") && relGlobal != ".." {
+				return targetAbs, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("path escapes workspace: %s", cleanP)
 }

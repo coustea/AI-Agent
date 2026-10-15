@@ -44,6 +44,19 @@ func TestSafePath(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected error for empty path, got nil")
 	}
+
+	// 5. 允许访问全局记忆与配置目录 (~/.coustea)
+	home, _ := os.UserHomeDir()
+	if home != "" {
+		globalCousteaPath := filepath.Join(home, ".coustea", "memory", "preferences.md")
+		p, err := SafePath(tmpDir, globalCousteaPath)
+		if err != nil {
+			t.Errorf("expected access to ~/.coustea to be allowed, got error: %v", err)
+		}
+		if p != globalCousteaPath {
+			t.Errorf("expected %s, got %s", globalCousteaPath, p)
+		}
+	}
 }
 
 func TestReadFileTool(t *testing.T) {

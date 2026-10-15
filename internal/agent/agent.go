@@ -21,7 +21,7 @@ var (
 	ErrMaxSteps      = errors.New("agent: exceeded maximum ReAct steps")
 )
 
-// BuildDefaultSystemPrompt 基于工作目录构建 coustea 个人智能体的默认系统提示词
+// BuildDefaultSystemPrompt 基于工作目录与本地长效记忆库构建 coustea 通用个人智能助手的系统提示词
 func BuildDefaultSystemPrompt(workDir string) string {
 	workDir = strings.TrimSpace(workDir)
 	if workDir == "" {
@@ -30,11 +30,26 @@ func BuildDefaultSystemPrompt(workDir string) string {
 		}
 	}
 
+	bundle := memory.LoadMemoryBundle(workDir)
+	memoryPrompt := bundle.FormatForPrompt()
+
+	var sb strings.Builder
+	sb.WriteString("You are coustea, an intelligent and versatile general-purpose local AI personal assistant.\n")
+	sb.WriteString("You run directly on the user's local machine, helping with a wide range of tasks including reasoning, analysis, research, file management, system operations, writing, and daily workflows.\n")
 	if workDir != "" {
-		return fmt.Sprintf("You are coustea, an intelligent personal AI assistant and software engineer. You are currently working in the directory: %s. Think carefully, use tools when needed to inspect or operate on files in your workspace, and provide clean, concise, and well-structured answers.", workDir)
+		sb.WriteString(fmt.Sprintf("Working Directory: %s\n", workDir))
 	}
 
-	return "You are coustea, an intelligent personal AI assistant and software engineer. Think carefully, use tools when needed to inspect or operate on files in your workspace, and provide clean, concise, and well-structured answers."
+	sb.WriteString("\nCore Guidelines:\n")
+	sb.WriteString("- Understand user requests thoughtfully, thinking step-by-step when appropriate.\n")
+	sb.WriteString("- Proactively use available tools (read_file, write_file, edit_file, glob, bash) whenever you need to explore files, run commands, or gather local context.\n")
+	sb.WriteString("- Communicate clearly, concisely, and directly, using Chinese by default unless requested otherwise.\n")
+
+	if memoryPrompt != "" {
+		sb.WriteString("\n" + memoryPrompt + "\n")
+	}
+
+	return sb.String()
 }
 
 // EventType 定义 Agent 发送给调用方的流式事件类型
@@ -108,6 +123,7 @@ func WithWorkDir(dir string) Option {
 		cleanDir := strings.TrimSpace(dir)
 		if cleanDir != "" {
 			a.workDir = cleanDir
+			_ = memory.EnsureMemoryDirs(a.workDir)
 			a.systemPrompt = BuildDefaultSystemPrompt(a.workDir)
 		}
 	}
@@ -155,6 +171,7 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 	}
 
 	wd, _ := os.Getwd()
+	_ = memory.EnsureMemoryDirs(wd)
 
 	a := &CoreAgent{
 		gw:           gw,
