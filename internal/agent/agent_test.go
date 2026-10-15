@@ -72,7 +72,7 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) 
 	return ch, nil
 }
 
-func (m *mockGateway) GetTotalUsage() gateway.Usage {
+func (m *mockGateway) TotalUsage() gateway.Usage {
 	return gateway.Usage{TotalTokens: 15}
 }
 
@@ -125,7 +125,7 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 	}
 
 	// 验证第一轮后历史记忆包含 2 条消息
-	history1 := ag.GetHistory()
+	history1 := ag.History()
 	if len(history1) != 2 {
 		t.Fatalf("expected 2 history messages after turn 1, got %d", len(history1))
 	}
@@ -179,7 +179,7 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 	}
 
 	// 验证第二轮后总历史共有 4 条消息
-	history2 := ag.GetHistory()
+	history2 := ag.History()
 	if len(history2) != 4 {
 		t.Fatalf("expected 4 history messages after turn 2, got %d", len(history2))
 	}
@@ -193,13 +193,13 @@ func TestCoreAgent_Reset(t *testing.T) {
 	stream, _ := ag.StreamRun(context.Background(), "Msg")
 	for range stream {
 	}
-	if len(ag.GetHistory()) == 0 {
+	if len(ag.History()) == 0 {
 		t.Fatalf("expected history to have messages")
 	}
 
 	ag.Reset()
-	if len(ag.GetHistory()) != 0 {
-		t.Errorf("expected empty history after reset, got %d", len(ag.GetHistory()))
+	if len(ag.History()) != 0 {
+		t.Errorf("expected empty history after reset, got %d", len(ag.History()))
 	}
 }
 
@@ -211,8 +211,8 @@ func TestCoreAgent_SetGateway(t *testing.T) {
 	stream1, _ := ag.StreamRun(context.Background(), "Question 1")
 	for range stream1 {
 	}
-	if len(ag.GetHistory()) != 2 {
-		t.Fatalf("expected 2 messages in history, got %d", len(ag.GetHistory()))
+	if len(ag.History()) != 2 {
+		t.Fatalf("expected 2 messages in history, got %d", len(ag.History()))
 	}
 
 	// 热切换为网关 2
@@ -220,8 +220,8 @@ func TestCoreAgent_SetGateway(t *testing.T) {
 	ag.SetGateway(mockGW2)
 
 	// 记忆未丢失
-	if len(ag.GetHistory()) != 2 {
-		t.Errorf("expected history to be preserved after SetGateway, got %d", len(ag.GetHistory()))
+	if len(ag.History()) != 2 {
+		t.Errorf("expected history to be preserved after SetGateway, got %d", len(ag.History()))
 	}
 
 	// 运行新对话由新网关承接
@@ -296,7 +296,7 @@ func (b *blockingGateway) ChatStream(ctx context.Context, req *gateway.ChatReque
 	return ch, nil
 }
 
-func (b *blockingGateway) GetTotalUsage() gateway.Usage {
+func (b *blockingGateway) TotalUsage() gateway.Usage {
 	return gateway.Usage{}
 }
 
@@ -343,7 +343,7 @@ func (m *toolCallStepGateway) ChatStream(ctx context.Context, req *gateway.ChatR
 	return ch, nil
 }
 
-func (m *toolCallStepGateway) GetTotalUsage() gateway.Usage {
+func (m *toolCallStepGateway) TotalUsage() gateway.Usage {
 	return gateway.Usage{}
 }
 
@@ -589,7 +589,7 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 		t.Fatalf("failed to create agent: %v", err)
 	}
 
-	prompt := agDefault.GetSystemPrompt()
+	prompt := agDefault.SystemPrompt()
 	if !strings.Contains(prompt, "coustea") {
 		t.Errorf("expected system prompt to contain 'coustea', got: %s", prompt)
 	}
@@ -612,11 +612,11 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 		t.Fatalf("failed to create agent with custom workdir: %v", err)
 	}
 
-	if agCustomDir.GetWorkDir() != customDir {
-		t.Errorf("expected workdir %s, got %s", customDir, agCustomDir.GetWorkDir())
+	if agCustomDir.WorkDir() != customDir {
+		t.Errorf("expected workdir %s, got %s", customDir, agCustomDir.WorkDir())
 	}
-	if !strings.Contains(agCustomDir.GetSystemPrompt(), customDir) {
-		t.Errorf("expected custom system prompt to contain %s, got: %s", customDir, agCustomDir.GetSystemPrompt())
+	if !strings.Contains(agCustomDir.SystemPrompt(), customDir) {
+		t.Errorf("expected custom system prompt to contain %s, got: %s", customDir, agCustomDir.SystemPrompt())
 	}
 
 	// 3. 显式覆盖 WithSystemPrompt
@@ -624,7 +624,7 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create agent with custom prompt: %v", err)
 	}
-	if agCustomPrompt.GetSystemPrompt() != "Explicit custom prompt" {
-		t.Errorf("expected explicit prompt, got: %s", agCustomPrompt.GetSystemPrompt())
+	if agCustomPrompt.SystemPrompt() != "Explicit custom prompt" {
+		t.Errorf("expected explicit prompt, got: %s", agCustomPrompt.SystemPrompt())
 	}
 }

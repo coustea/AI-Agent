@@ -140,7 +140,7 @@ func TestConfig_ProviderSwitchingAndPersistence(t *testing.T) {
 		t.Errorf("expected current provider to be gemini, got %+v", loaded)
 	}
 
-	dsSaved := loaded.GetProviderConfig(ProviderDeepSeek)
+	dsSaved := loaded.ProviderConfig(ProviderDeepSeek)
 	if dsSaved.APIKey != "sk-deepseek-initial" || dsSaved.ModelName != DefaultDeepSeekModel {
 		t.Errorf("expected preserved deepseek config, got %+v", dsSaved)
 	}

@@ -79,9 +79,9 @@ type Agent interface {
 	StreamRun(ctx context.Context, prompt string) (<-chan AgentEvent, error)
 	Reset()
 	SetGateway(gw gateway.Gateway)
-	GetHistory() []gateway.Message
-	GetSystemPrompt() string
-	GetWorkDir() string
+	History() []gateway.Message
+	SystemPrompt() string
+	WorkDir() string
 }
 
 // Option 定义 Agent 的函数式拼装算子
@@ -205,22 +205,22 @@ func (a *CoreAgent) Reset() {
 	a.memory.Clear()
 }
 
-// GetHistory 获取历史消息快照
-func (a *CoreAgent) GetHistory() []gateway.Message {
+// History 获取历史消息快照
+func (a *CoreAgent) History() []gateway.Message {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.memory.History()
 }
 
-// GetSystemPrompt 获取当前生效的系统提示词
-func (a *CoreAgent) GetSystemPrompt() string {
+// SystemPrompt 获取当前生效的系统提示词
+func (a *CoreAgent) SystemPrompt() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.systemPrompt
 }
 
-// GetWorkDir 获取当前绑定的工作目录
-func (a *CoreAgent) GetWorkDir() string {
+// WorkDir 获取当前绑定的工作目录
+func (a *CoreAgent) WorkDir() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.workDir

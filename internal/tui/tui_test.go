@@ -184,7 +184,7 @@ func (m *mockTuiGateway) ChatStream(ctx context.Context, req *gateway.ChatReques
 	return ch, nil
 }
 
-func (m *mockTuiGateway) GetTotalUsage() gateway.Usage {
+func (m *mockTuiGateway) TotalUsage() gateway.Usage {
 	return gateway.Usage{}
 }
 

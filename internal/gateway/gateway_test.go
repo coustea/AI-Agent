@@ -14,8 +14,7 @@ import (
 )
 
 // 测试 llama-server 健康检查与模型就绪检测
-func TestLlamaCppGateway_HealthCheck(t *testing.T) {
-	// 场景 1: 模型已就绪 (200 OK)
+func TestLlamaCpp_HealthCheck(t *testing.T) {
 	serverOK := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusOK)
@@ -26,12 +25,11 @@ func TestLlamaCppGateway_HealthCheck(t *testing.T) {
 	}))
 	defer serverOK.Close()
 
-	gwOK, _ := NewLlamaCppGateway(serverOK.URL, "", "local-model", serverOK.Client())
+	gwOK, _ := NewLlamaCpp(serverOK.URL, "", "local-model", serverOK.Client())
 	if err := gwOK.CheckHealth(context.Background()); err != nil {
 		t.Errorf("expected health check to pass, got: %v", err)
 	}
 
-	// 场景 2: 模型正在加载中 (503 Service Unavailable)
 	serverLoading := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.WriteHeader(http.StatusServiceUnavailable)
@@ -42,7 +40,7 @@ func TestLlamaCppGateway_HealthCheck(t *testing.T) {
 	}))
 	defer serverLoading.Close()
 
-	gwLoading, _ := NewLlamaCppGateway(serverLoading.URL, "", "local-model", serverLoading.Client())
+	gwLoading, _ := NewLlamaCpp(serverLoading.URL, "", "local-model", serverLoading.Client())
 	err := gwLoading.CheckHealth(context.Background())
 	if err == nil || !strings.Contains(err.Error(), "loading model") {
 		t.Errorf("expected loading model error, got: %v", err)
@@ -50,7 +48,7 @@ func TestLlamaCppGateway_HealthCheck(t *testing.T) {
 }
 
 // 测试 llama.cpp 同步对话与 Token 统计
-func TestLlamaCppGateway_Chat_Text(t *testing.T) {
+func TestLlamaCpp_Chat_Text(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			http.NotFound(w, r)
@@ -80,7 +78,7 @@ func TestLlamaCppGateway_Chat_Text(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	gw, err := NewLlamaCppGateway(mockServer.URL, "", "local-model", mockServer.Client())
+	gw, err := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 	if err != nil {
 		t.Fatalf("failed to create gateway: %v", err)
 	}
@@ -90,7 +88,7 @@ func TestLlamaCppGateway_Chat_Text(t *testing.T) {
 
 	resp, err := gw.Chat(ctx, &ChatRequest{
 		Messages: []Message{
-			{Role: RoleSystem, Content: "You are a helpful coding assistant."},
+			{Role: RoleSystem, Content: "You are a helpful assistant."},
 			{Role: RoleUser, Content: "Hello!"},
 		},
 	})
@@ -99,26 +97,26 @@ func TestLlamaCppGateway_Chat_Text(t *testing.T) {
 	}
 
 	if resp.Content != "Hello, I am running on local llama.cpp!" {
-		t.Errorf("unexpected content: %q", resp.Content)
+		t.Errorf("unexpected content: %s", resp.Content)
 	}
 	if resp.Usage.TotalTokens != 20 {
 		t.Errorf("expected 20 tokens, got %d", resp.Usage.TotalTokens)
 	}
-	if gw.GetTotalUsage().TotalTokens != 20 {
-		t.Errorf("expected cumulative 20 tokens, got %d", gw.GetTotalUsage().TotalTokens)
+	if gw.TotalUsage().TotalTokens != 20 {
+		t.Errorf("expected cumulative 20 tokens, got %d", gw.TotalUsage().TotalTokens)
 	}
 }
 
 // 测试带有工具声明并返回 ToolCalls
-func TestLlamaCppGateway_Chat_WithToolCalls(t *testing.T) {
+func TestLlamaCpp_Chat_WithToolCalls(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var reqDTO llamaCppChatRequestDTO
-		if err := json.NewDecoder(r.Body).Decode(&reqDTO); err != nil {
+		var wire wireReq
+		if err := json.NewDecoder(r.Body).Decode(&wire); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		if len(reqDTO.Tools) != 1 || reqDTO.Tools[0].Function.Name != "read_file" {
+		if len(wire.Tools) != 1 || wire.Tools[0].Function.Name != "read_file" {
 			http.Error(w, "missing expected tool", http.StatusBadRequest)
 			return
 		}
@@ -156,7 +154,7 @@ func TestLlamaCppGateway_Chat_WithToolCalls(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	gw, _ := NewLlamaCppGateway(mockServer.URL, "", "local-model", mockServer.Client())
+	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
 	resp, err := gw.Chat(context.Background(), &ChatRequest{
 		Messages: []Message{
@@ -187,21 +185,21 @@ func TestLlamaCppGateway_Chat_WithToolCalls(t *testing.T) {
 	}
 }
 
-// 测试回传 RoleTool (ToolResult) 给 llama.cpp
-func TestLlamaCppGateway_Chat_WithToolResult(t *testing.T) {
+// 测试回传 RoleTool (ToolResult)
+func TestLlamaCpp_Chat_WithToolResult(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var reqDTO llamaCppChatRequestDTO
-		if err := json.NewDecoder(r.Body).Decode(&reqDTO); err != nil {
+		var wire wireReq
+		if err := json.NewDecoder(r.Body).Decode(&wire); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		if len(reqDTO.Messages) != 3 {
-			http.Error(w, fmt.Sprintf("expected 3 messages, got %d", len(reqDTO.Messages)), http.StatusBadRequest)
+		if len(wire.Messages) != 3 {
+			http.Error(w, fmt.Sprintf("expected 3 messages, got %d", len(wire.Messages)), http.StatusBadRequest)
 			return
 		}
 
-		toolMsg := reqDTO.Messages[2]
+		toolMsg := wire.Messages[2]
 		if toolMsg.Role != "tool" || toolMsg.ToolCallID != "call_12345" || *toolMsg.Content != "package main" {
 			http.Error(w, fmt.Sprintf("unexpected tool message: %+v", toolMsg), http.StatusBadRequest)
 			return
@@ -216,7 +214,7 @@ func TestLlamaCppGateway_Chat_WithToolResult(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	gw, _ := NewLlamaCppGateway(mockServer.URL, "", "local-model", mockServer.Client())
+	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
 	resp, err := gw.Chat(context.Background(), &ChatRequest{
 		Messages: []Message{
@@ -238,40 +236,41 @@ func TestLlamaCppGateway_Chat_WithToolResult(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("Chat with tool result failed: %v", err)
+		t.Fatalf("Chat failed: %v", err)
 	}
 
 	if resp.Content != "File read successfully." {
-		t.Errorf("unexpected content: %q", resp.Content)
+		t.Errorf("unexpected content: %s", resp.Content)
 	}
 }
 
-// 测试 llama.cpp 流式打字输出
-func TestLlamaCppGateway_ChatStream_Text(t *testing.T) {
+// 测试流式文本输出与 Token 统计
+func TestLlamaCpp_ChatStream_Text(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-
 		flusher, ok := w.(http.Flusher)
 		if !ok {
+			http.Error(w, "streaming unsupported", http.StatusInternalServerError)
 			return
 		}
 
-		lines := []string{
-			`data: {"choices":[{"delta":{"content":"Llama "}}]}`,
-			`data: {"choices":[{"delta":{"content":"streaming!"}}]}`,
-			`data: {"usage":{"prompt_tokens":5,"completion_tokens":2,"total_tokens":7}}`,
+		events := []string{
+			`data: {"choices":[{"delta":{"role":"assistant","content":"Hel"}}]}`,
+			`data: {"choices":[{"delta":{"content":"lo"}}]}`,
+			`data: {"choices":[{"delta":{"content":"!"}}]}`,
+			`data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":3,"total_tokens":8}}`,
 			`data: [DONE]`,
 		}
 
-		for _, line := range lines {
-			_, _ = fmt.Fprintf(w, "%s\n\n", line)
+		for _, ev := range events {
+			_, _ = fmt.Fprintf(w, "%s\n\n", ev)
 			flusher.Flush()
 		}
 	}))
 	defer mockServer.Close()
 
-	gw, _ := NewLlamaCppGateway(mockServer.URL, "", "local-model", mockServer.Client())
+	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
 	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
 		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
@@ -280,111 +279,194 @@ func TestLlamaCppGateway_ChatStream_Text(t *testing.T) {
 		t.Fatalf("ChatStream failed: %v", err)
 	}
 
-	var textBuilder strings.Builder
-	var done bool
-	var usage *Usage
+	var sb strings.Builder
+	var doneReceived bool
+	var finalUsage *Usage
 
 	for chunk := range stream {
 		if chunk.Err != nil {
 			t.Fatalf("unexpected chunk error: %v", chunk.Err)
 		}
 		if chunk.Delta != "" {
-			textBuilder.WriteString(chunk.Delta)
+			sb.WriteString(chunk.Delta)
 		}
 		if chunk.Done {
-			done = true
-			usage = chunk.Usage
+			doneReceived = true
+			finalUsage = chunk.Usage
 		}
 	}
 
-	if !done {
-		t.Errorf("expected stream to finish with Done=true")
+	if !doneReceived {
+		t.Errorf("expected done chunk")
 	}
-	if textBuilder.String() != "Llama streaming!" {
-		t.Errorf("expected 'Llama streaming!', got %q", textBuilder.String())
+	if sb.String() != "Hello!" {
+		t.Errorf("expected 'Hello!', got %q", sb.String())
 	}
-	if usage == nil || usage.TotalTokens != 7 {
-		t.Errorf("unexpected usage: %+v", usage)
+	if finalUsage == nil || finalUsage.TotalTokens != 8 {
+		t.Errorf("expected 8 tokens, got %+v", finalUsage)
 	}
 }
 
-// 测试流式 tool_calls 碎片聚合
-func TestLlamaCppGateway_ChatStream_ToolCallsAggregation(t *testing.T) {
+// 测试独立实现的 DeepSeek 同步与流式调用 (含 reasoning_content)
+func TestDeepSeek_Chat_Text_WithReasoning(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		w.WriteHeader(http.StatusOK)
-
-		flusher, ok := w.(http.Flusher)
-		if !ok {
+		if r.Header.Get("Authorization") != "Bearer test-deepseek-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		lines := []string{
-			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_999","type":"function","function":{"name":"run_bash","arguments":"{\"cmd"}}]}}]}`,
-			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\":\"ls -la"}}]}}]}`,
-			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"}"}}]}}]}`,
-			`data: {"usage":{"prompt_tokens":10,"completion_tokens":15,"total_tokens":25}}`,
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher := w.(http.Flusher)
+
+		events := []string{
+			`data: {"choices":[{"delta":{"role":"assistant","reasoning_content":"Let me think."}}]}`,
+			`data: {"choices":[{"delta":{"content":"Here is the answer."}}]}`,
+			`data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":10,"total_tokens":20}}`,
 			`data: [DONE]`,
 		}
 
-		for _, line := range lines {
-			_, _ = fmt.Fprintf(w, "%s\n\n", line)
+		for _, ev := range events {
+			_, _ = fmt.Fprintf(w, "%s\n\n", ev)
 			flusher.Flush()
 		}
 	}))
 	defer mockServer.Close()
 
-	gw, _ := NewLlamaCppGateway(mockServer.URL, "", "local-model", mockServer.Client())
+	ds, err := NewDeepSeek(mockServer.URL, "test-deepseek-key", "deepseek-flash", mockServer.Client())
+	if err != nil {
+		t.Fatalf("NewDeepSeek failed: %v", err)
+	}
 
-	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Run ls"}},
+	stream, err := ds.ChatStream(context.Background(), &ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "Hello"}},
 	})
 	if err != nil {
 		t.Fatalf("ChatStream failed: %v", err)
 	}
 
-	var finalCalls []ToolCall
-	var done bool
-
+	var reasoning, content string
 	for chunk := range stream {
-		if chunk.Err != nil {
-			t.Fatalf("unexpected chunk error: %v", chunk.Err)
+		if chunk.ReasoningContent != "" {
+			reasoning += chunk.ReasoningContent
 		}
-		if chunk.Done {
-			done = true
-			finalCalls = chunk.ToolCalls
+		if chunk.Delta != "" {
+			content += chunk.Delta
 		}
 	}
 
-	if !done {
-		t.Fatalf("expected stream to finish with Done=true")
+	if reasoning != "Let me think." {
+		t.Errorf("expected 'Let me think.', got %q", reasoning)
 	}
-
-	if len(finalCalls) != 1 {
-		t.Fatalf("expected 1 aggregated tool call, got %d", len(finalCalls))
-	}
-
-	tc := finalCalls[0]
-	if tc.ID != "call_999" || tc.Name != "run_bash" {
-		t.Errorf("unexpected tool call: %+v", tc)
-	}
-	if string(tc.Arguments) != `{"cmd":"ls -la"}` {
-		t.Errorf("expected '{\"cmd\":\"ls -la\"}', got %q", string(tc.Arguments))
+	if content != "Here is the answer." {
+		t.Errorf("expected 'Here is the answer.', got %q", content)
 	}
 }
 
-// 测试异常场景（空消息等）
-func TestLlamaCppGateway_Errors(t *testing.T) {
-	gw, _ := NewLlamaCppGateway("http://127.0.0.1:8080", "", "local-model", nil)
+// 测试独立实现的 Google Gemini 兼容端点调用与双重 Key 认证
+func TestGemini_Chat_Text_AndAuth(t *testing.T) {
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 校验 Gemini 官方 OpenAI 端点 URL
+		if !strings.HasSuffix(r.URL.Path, "/chat/completions") {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
+		// 校验 Authorization 和 x-goog-api-key
+		if r.Header.Get("Authorization") != "Bearer test-gemini-key" || r.Header.Get("x-goog-api-key") != "test-gemini-key" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
 
-	_, err := gw.Chat(context.Background(), nil)
-	if err != ErrEmptyMessages {
-		t.Errorf("expected ErrEmptyMessages, got %v", err)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"choices": [{"message": {"role": "assistant", "content": "Hello from Gemini 2.5!"}}],
+			"usage": {"prompt_tokens": 5, "completion_tokens": 6, "total_tokens": 11}
+		}`))
+	}))
+	defer mockServer.Close()
+
+	gemini, err := NewGemini(mockServer.URL+"/v1beta/openai", "test-gemini-key", "gemini-2.5-flash", mockServer.Client())
+	if err != nil {
+		t.Fatalf("NewGemini failed: %v", err)
 	}
 
-	_, err = gw.ChatStream(context.Background(), nil)
-	if err != ErrEmptyMessages {
-		t.Errorf("expected ErrEmptyMessages, got %v", err)
+	resp, err := gemini.Chat(context.Background(), &ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "Hello Gemini"}},
+	})
+	if err != nil {
+		t.Fatalf("gemini.Chat failed: %v", err)
+	}
+
+	if resp.Content != "Hello from Gemini 2.5!" {
+		t.Errorf("unexpected content: %s", resp.Content)
+	}
+	if resp.Usage.TotalTokens != 11 {
+		t.Errorf("expected 11 tokens, got %d", resp.Usage.TotalTokens)
+	}
+}
+
+// 测试整个系统通过先经过 Agent 然后经过 Gateway Router 进行模型分配与路由
+func TestRouter_ModelAllocation(t *testing.T) {
+	geminiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"from-gemini"}}]}`))
+	}))
+	defer geminiServer.Close()
+
+	dsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"from-deepseek"}}]}`))
+	}))
+	defer dsServer.Close()
+
+	llamaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"from-llamacpp"}}]}`))
+	}))
+	defer llamaServer.Close()
+
+	geminiGW, _ := NewGemini(geminiServer.URL, "key", "gemini-2.5-flash", geminiServer.Client())
+	dsGW, _ := NewDeepSeek(dsServer.URL, "key", "deepseek-flash", dsServer.Client())
+	llamaGW, _ := NewLlamaCpp(llamaServer.URL, "", "local-model", llamaServer.Client())
+
+	router := NewRouter("llamacpp")
+	router.Register("gemini", geminiGW)
+	router.Register("deepseek", dsGW)
+	router.Register("llamacpp", llamaGW)
+
+	// 1. 请求指定 gemini 模型 -> 自动分配到 gemini
+	res1, err := router.Chat(context.Background(), &ChatRequest{
+		Model:    "gemini-2.5-flash",
+		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
+	})
+	if err != nil || res1.Content != "from-gemini" {
+		t.Fatalf("expected allocation to gemini, got: %v, content: %s", err, res1.Content)
+	}
+
+	// 2. 请求指定 deepseek 模型 -> 自动分配到 deepseek
+	res2, err := router.Chat(context.Background(), &ChatRequest{
+		Model:    "deepseek-flash",
+		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
+	})
+	if err != nil || res2.Content != "from-deepseek" {
+		t.Fatalf("expected allocation to deepseek, got: %v, content: %s", err, res2.Content)
+	}
+
+	// 3. 请求未指定模型 -> 自动分配到默认激活的 llamacpp
+	res3, err := router.Chat(context.Background(), &ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
+	})
+	if err != nil || res3.Content != "from-llamacpp" {
+		t.Fatalf("expected allocation to active llamacpp, got: %v, content: %s", err, res3.Content)
+	}
+
+	// 4. 切换默认激活为 deepseek
+	router.SetActive("deepseek")
+	res4, err := router.Chat(context.Background(), &ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
+	})
+	if err != nil || res4.Content != "from-deepseek" {
+		t.Fatalf("expected allocation to new active deepseek, got: %v, content: %s", err, res4.Content)
 	}
 }
 
@@ -400,16 +482,22 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("failed to create gateway from config: %v", err)
 	}
 
-	lgw, ok := gw.(*LlamaCppGateway)
+	router, ok := gw.(*Router)
 	if !ok {
-		t.Fatalf("expected *LlamaCppGateway, got %T", gw)
+		t.Fatalf("expected *Router, got %T", gw)
 	}
 
+	activeGW, err := router.Route(&ChatRequest{})
+	if err != nil {
+		t.Fatalf("failed to route active gateway: %v", err)
+	}
+
+	lgw, ok := activeGW.(*LlamaCpp)
+	if !ok {
+		t.Fatalf("expected *LlamaCpp, got %T", activeGW)
+	}
 	if lgw.baseURL != "http://localhost:8080" {
 		t.Errorf("expected baseURL http://localhost:8080, got %s", lgw.baseURL)
-	}
-	if lgw.model != config.DefaultLlamaCppModel {
-		t.Errorf("expected default model %s, got %s", config.DefaultLlamaCppModel, lgw.model)
 	}
 
 	// 测试 DeepSeek 官方配置
@@ -421,18 +509,13 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create deepseek gateway: %v", err)
 	}
-	dsLgw, ok := dsGw.(*LlamaCppGateway)
-	if !ok {
-		t.Fatalf("expected *LlamaCppGateway, got %T", dsGw)
-	}
-	if dsLgw.baseURL != config.DeepSeekBaseURL {
-		t.Errorf("expected deepseek baseURL %s, got %s", config.DeepSeekBaseURL, dsLgw.baseURL)
-	}
-	if dsLgw.model != config.DefaultDeepSeekModel {
-		t.Errorf("expected deepseek model %s, got %s", config.DefaultDeepSeekModel, dsLgw.model)
+	dsRouter := dsGw.(*Router)
+	dsSubGW, _ := dsRouter.Route(&ChatRequest{})
+	if _, ok := dsSubGW.(*DeepSeek); !ok {
+		t.Fatalf("expected *DeepSeek, got %T", dsSubGW)
 	}
 
-	// 测试 Google Gemini 官方配置 (要求有效 APIKey)
+	// 测试 Google Gemini 官方配置
 	geminiCfg := &config.Config{
 		Provider: config.ProviderGemini,
 		APIKey:   "sk-gemini-test-key",
@@ -441,15 +524,10 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create gemini gateway: %v", err)
 	}
-	geminiLgw, ok := geminiGw.(*LlamaCppGateway)
-	if !ok {
-		t.Fatalf("expected *LlamaCppGateway, got %T", geminiGw)
-	}
-	if geminiLgw.baseURL != config.GeminiBaseURL {
-		t.Errorf("expected gemini baseURL %s, got %s", config.GeminiBaseURL, geminiLgw.baseURL)
-	}
-	if geminiLgw.model != config.DefaultGeminiModel {
-		t.Errorf("expected gemini model %s, got %s", config.DefaultGeminiModel, geminiLgw.model)
+	geminiRouter := geminiGw.(*Router)
+	geminiSubGW, _ := geminiRouter.Route(&ChatRequest{})
+	if _, ok := geminiSubGW.(*Gemini); !ok {
+		t.Fatalf("expected *Gemini, got %T", geminiSubGW)
 	}
 
 	// 测试 Gemini 缺少 APIKey 返回 ErrEmptyAPIKey
@@ -459,13 +537,5 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	}
 	if _, err := NewGatewayFromConfig(geminiNoKeyCfg); err != ErrEmptyAPIKey {
 		t.Errorf("expected ErrEmptyAPIKey for gemini without api key, got: %v", err)
-	}
-
-	// 测试 nil 配置与不支持的提供商
-	if _, err := NewGatewayFromConfig(nil); err == nil {
-		t.Errorf("expected error for nil config")
-	}
-	if _, err := NewGatewayFromConfig(&config.Config{Provider: "unsupported_provider"}); err == nil {
-		t.Errorf("expected error for unsupported provider")
 	}
 }

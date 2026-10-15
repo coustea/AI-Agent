@@ -101,9 +101,9 @@ func normalizeProviderKey(p Provider) string {
 	}
 }
 
-// GetProviderConfig 获取指定厂商已保存的配置
-func (c *Config) GetProviderConfig(p Provider) ProviderConfig {
-	if c == nil || c.Providers == nil {
+// ProviderConfig 获取指定厂商已保存的配置
+func (c Config) ProviderConfig(p Provider) ProviderConfig {
+	if c.Providers == nil {
 		return ProviderConfig{}
 	}
 	return c.Providers[normalizeProviderKey(p)]
@@ -120,7 +120,7 @@ func (c *Config) SetProviderConfig(p Provider, pcfg ProviderConfig) {
 // SwitchProvider 切换当前激活的厂商，并自动载入该厂商已保存的配置历史
 func (c *Config) SwitchProvider(p Provider) {
 	c.Provider = p
-	pcfg := c.GetProviderConfig(p)
+	pcfg := c.ProviderConfig(p)
 
 	if pcfg.BaseURL != "" {
 		c.BaseURL = pcfg.BaseURL
@@ -179,9 +179,9 @@ func LoadConfig(path string) (*Config, error) {
 			})
 
 			// 默认激活提供商选择
-			if cfg.GetProviderConfig(ProviderDeepSeek).APIKey != "" {
+			if cfg.ProviderConfig(ProviderDeepSeek).APIKey != "" {
 				cfg.SwitchProvider(ProviderDeepSeek)
-			} else if cfg.GetProviderConfig(ProviderGemini).APIKey != "" {
+			} else if cfg.ProviderConfig(ProviderGemini).APIKey != "" {
 				cfg.SwitchProvider(ProviderGemini)
 			} else {
 				cfg.SwitchProvider(ProviderLlamaCpp)
@@ -203,7 +203,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// 保证顶层当前配置已落入 providers
 	if cfg.Provider != "" {
-		pcfg := cfg.GetProviderConfig(cfg.Provider)
+		pcfg := cfg.ProviderConfig(cfg.Provider)
 		if pcfg.APIKey == "" && cfg.APIKey != "" {
 			pcfg.APIKey = cfg.APIKey
 		}
@@ -218,7 +218,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// 环境变量补充
 	if dsKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); dsKey != "" {
-		pcfg := cfg.GetProviderConfig(ProviderDeepSeek)
+		pcfg := cfg.ProviderConfig(ProviderDeepSeek)
 		if pcfg.APIKey == "" {
 			pcfg.APIKey = dsKey
 			if pcfg.ModelName == "" {
@@ -231,7 +231,7 @@ func LoadConfig(path string) (*Config, error) {
 		}
 	}
 	if geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY")); geminiKey != "" {
-		pcfg := cfg.GetProviderConfig(ProviderGemini)
+		pcfg := cfg.ProviderConfig(ProviderGemini)
 		if pcfg.APIKey == "" {
 			pcfg.APIKey = geminiKey
 			if pcfg.ModelName == "" {
@@ -248,7 +248,7 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Provider == "" {
 		cfg.Provider = ProviderLlamaCpp
 	}
-	activePcfg := cfg.GetProviderConfig(cfg.Provider)
+	activePcfg := cfg.ProviderConfig(cfg.Provider)
 	if cfg.APIKey == "" && activePcfg.APIKey != "" {
 		cfg.APIKey = activePcfg.APIKey
 	}

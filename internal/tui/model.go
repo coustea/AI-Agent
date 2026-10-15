@@ -178,7 +178,7 @@ func (m Model) viewSelectModel() string {
 		}
 
 		p := config.Provider(choice)
-		savedPcfg := m.config.GetProviderConfig(p)
+		savedPcfg := m.config.ProviderConfig(p)
 		savedTag := ""
 		if savedPcfg.APIKey != "" || config.IsLocalProvider(p) {
 			savedTag = " [✔ 已配置]"
