@@ -3,6 +3,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -19,7 +21,21 @@ var (
 	ErrMaxSteps      = errors.New("agent: exceeded maximum ReAct steps")
 )
 
-const defaultSystemPrompt = "You are coustea, an intelligent terminal AI coding assistant. Think carefully, use tools when needed, and provide clean and well-structured answers."
+// BuildDefaultSystemPrompt 基于工作目录构建 coustea 个人智能体的默认系统提示词
+func BuildDefaultSystemPrompt(workDir string) string {
+	workDir = strings.TrimSpace(workDir)
+	if workDir == "" {
+		if wd, err := os.Getwd(); err == nil {
+			workDir = wd
+		}
+	}
+
+	if workDir != "" {
+		return fmt.Sprintf("You are coustea, an intelligent personal AI assistant and software engineer. You are currently working in the directory: %s. Think carefully, use tools when needed to inspect or operate on files in your workspace, and provide clean, concise, and well-structured answers.", workDir)
+	}
+
+	return "You are coustea, an intelligent personal AI assistant and software engineer. Think carefully, use tools when needed to inspect or operate on files in your workspace, and provide clean, concise, and well-structured answers."
+}
 
 // EventType 定义 Agent 发送给调用方的流式事件类型
 type EventType string
@@ -49,6 +65,8 @@ type Agent interface {
 	Reset()
 	SetGateway(gw gateway.Gateway)
 	GetHistory() []gateway.Message
+	GetSystemPrompt() string
+	GetWorkDir() string
 }
 
 // Option 定义 Agent 的函数式拼装算子
@@ -58,6 +76,7 @@ type Option func(*CoreAgent)
 type CoreAgent struct {
 	mu           sync.RWMutex
 	gw           gateway.Gateway
+	workDir      string
 	memory       memory.Memory
 	tools        *tool.Registry
 	systemPrompt string
@@ -83,20 +102,35 @@ func WithTools(reg *tool.Registry) Option {
 	}
 }
 
-// WithDefaultTools 注册内置核心工具集，学习自 learn-claude-code (read_file, write_file, edit_file, glob, bash)
-func WithDefaultTools() Option {
+// WithWorkDir 配置工作目录并自动更新系统提示词
+func WithWorkDir(dir string) Option {
 	return func(a *CoreAgent) {
+		cleanDir := strings.TrimSpace(dir)
+		if cleanDir != "" {
+			a.workDir = cleanDir
+			a.systemPrompt = BuildDefaultSystemPrompt(a.workDir)
+		}
+	}
+}
+
+// WithDefaultTools 注册内置核心工具集，学习自 learn-claude-code (read_file, write_file, edit_file, glob, bash)
+func WithDefaultTools(workDir ...string) Option {
+	return func(a *CoreAgent) {
+		wd := a.workDir
+		if len(workDir) > 0 && strings.TrimSpace(workDir[0]) != "" {
+			wd = strings.TrimSpace(workDir[0])
+		}
 		a.tools.Register(
-			builtin.NewReadFileTool(),
-			builtin.NewWriteFileTool(),
-			builtin.NewEditFileTool(),
-			builtin.NewGlobTool(),
-			builtin.NewBashTool(),
+			builtin.NewReadFileTool(wd),
+			builtin.NewWriteFileTool(wd),
+			builtin.NewEditFileTool(wd),
+			builtin.NewGlobTool(wd),
+			builtin.NewBashTool(wd),
 		)
 	}
 }
 
-// WithSystemPrompt 配置系统提示词
+// WithSystemPrompt 配置自定义系统提示词
 func WithSystemPrompt(prompt string) Option {
 	return func(a *CoreAgent) {
 		if strings.TrimSpace(prompt) != "" {
@@ -120,11 +154,14 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 		return nil, ErrNilGateway
 	}
 
+	wd, _ := os.Getwd()
+
 	a := &CoreAgent{
 		gw:           gw,
+		workDir:      wd,
 		memory:       memory.NewSlidingWindowMemory(40),
 		tools:        tool.NewRegistry(),
-		systemPrompt: defaultSystemPrompt,
+		systemPrompt: BuildDefaultSystemPrompt(wd),
 		maxSteps:     10,
 	}
 
@@ -156,6 +193,20 @@ func (a *CoreAgent) GetHistory() []gateway.Message {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.memory.History()
+}
+
+// GetSystemPrompt 获取当前生效的系统提示词
+func (a *CoreAgent) GetSystemPrompt() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.systemPrompt
+}
+
+// GetWorkDir 获取当前绑定的工作目录
+func (a *CoreAgent) GetWorkDir() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.workDir
 }
 
 // RegisterTools 动态增加工具

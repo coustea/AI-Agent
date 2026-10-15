@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -575,5 +576,52 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 
 	if !maxStepsErrSeen {
 		t.Errorf("expected ErrMaxSteps error event")
+	}
+}
+
+// 测试 coustea 个人智能体名称与工作目录自动注入系统提示词
+func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
+	gw := &mockGateway{}
+
+	// 1. 默认构建：系统提示词自动注入当前工作目录并表明身份
+	agDefault, err := NewAgent(gw)
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	prompt := agDefault.GetSystemPrompt()
+	if !strings.Contains(prompt, "coustea") {
+		t.Errorf("expected system prompt to contain 'coustea', got: %s", prompt)
+	}
+	if !strings.Contains(prompt, "personal AI assistant") {
+		t.Errorf("expected system prompt to contain 'personal AI assistant', got: %s", prompt)
+	}
+
+	currentWd, _ := os.Getwd()
+	if !strings.Contains(prompt, currentWd) {
+		t.Errorf("expected system prompt to contain current workdir %q, got: %s", currentWd, prompt)
+	}
+
+	// 2. 指定 WithWorkDir：工作目录与系统提示词同步更新
+	customDir := "/Users/test/my-workspace"
+	agCustomDir, err := NewAgent(gw, WithWorkDir(customDir))
+	if err != nil {
+		t.Fatalf("failed to create agent with custom workdir: %v", err)
+	}
+
+	if agCustomDir.GetWorkDir() != customDir {
+		t.Errorf("expected workdir %s, got %s", customDir, agCustomDir.GetWorkDir())
+	}
+	if !strings.Contains(agCustomDir.GetSystemPrompt(), customDir) {
+		t.Errorf("expected custom system prompt to contain %s, got: %s", customDir, agCustomDir.GetSystemPrompt())
+	}
+
+	// 3. 显式覆盖 WithSystemPrompt
+	agCustomPrompt, err := NewAgent(gw, WithSystemPrompt("Explicit custom prompt"))
+	if err != nil {
+		t.Fatalf("failed to create agent with custom prompt: %v", err)
+	}
+	if agCustomPrompt.GetSystemPrompt() != "Explicit custom prompt" {
+		t.Errorf("expected explicit prompt, got: %s", agCustomPrompt.GetSystemPrompt())
 	}
 }
