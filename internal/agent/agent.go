@@ -63,6 +63,7 @@ type EventType string
 
 const (
 	EventTextDelta             EventType = "text_delta"
+	EventReasoningDelta        EventType = "reasoning_delta"
 	EventToolCallStart         EventType = "tool_call_start"
 	EventToolPermissionRequest EventType = "tool_permission_request"
 	EventToolCallResult        EventType = "tool_call_result"
@@ -80,6 +81,7 @@ type PermissionPrompt struct {
 type AgentEvent struct {
 	Type             EventType
 	Delta            string              // 文本流式增量
+	ReasoningDelta   string              // 深度思考链流式增量 (DeepSeek 等)
 	ToolCall         *gateway.ToolCall   // 工具开始调用时携带
 	PermissionPrompt *PermissionPrompt   // 遇到高危工具需要权限确认时携带
 	ToolResult       *gateway.ToolResult // 工具执行结束时携带
@@ -376,6 +378,10 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 				}
 				if chunk.ReasoningContent != "" {
 					reasoningBuilder.WriteString(chunk.ReasoningContent)
+					sendAgentEvent(ctx, outCh, AgentEvent{
+						Type:           EventReasoningDelta,
+						ReasoningDelta: chunk.ReasoningContent,
+					})
 				}
 				if chunk.Delta != "" {
 					replyBuilder.WriteString(chunk.Delta)

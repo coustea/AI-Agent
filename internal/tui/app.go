@@ -9,8 +9,11 @@ import (
 	"my-agent/internal/config"
 	"my-agent/internal/gateway"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // sessionState 界面状态枚举
@@ -70,6 +73,12 @@ type Model struct {
 	// 权限门禁待审批请求（基于 Harness Gate 3 交互）
 	pendingPrompt *agent.PermissionPrompt
 
+	// 视口与动态指示器
+	viewport       viewport.Model
+	viewportReady  bool
+	spinner        spinner.Model
+	activeToolName string
+
 	// 终端宽高适配
 	width  int
 	height int
@@ -104,6 +113,14 @@ func NewModel(bridge AgentBridge) Model {
 	chatInput.CharLimit = 2000
 	chatInput.Width = 70
 
+	// 4. 微动态加载指示器 (Spinner)
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = lipgloss.NewStyle().Foreground(colorYellow)
+
+	// 5. 消息滚动视口 (Viewport)
+	vp := viewport.New(80, 20)
+
 	m := Model{
 		cfgPath: cfgPath,
 		choices: []string{
@@ -117,6 +134,8 @@ func NewModel(bridge AgentBridge) Model {
 		chatInput:   chatInput,
 		messages:    []ChatMessage{},
 		bridge:      bridge,
+		spinner:     sp,
+		viewport:    vp,
 	}
 
 	// 主线永远是聊天对话页面（输入框交互）
@@ -151,17 +170,33 @@ func NewModel(bridge AgentBridge) Model {
 		})
 	}
 
+	m.viewport.SetContent(m.renderChatMessages())
+
 	return m
 }
 
 // Init 实现 tea.Model 接口
 func (m Model) Init() tea.Cmd {
-	return textinput.Blink
+	return tea.Batch(textinput.Blink, m.spinner.Tick)
 }
 
 // Update 事件分发总入口
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case spinner.TickMsg:
+		if m.isGenerating {
+			var cmd tea.Cmd
+			m.spinner, cmd = m.spinner.Update(msg)
+			return m, cmd
+		}
+
+	case tea.MouseMsg:
+		if m.state == stateChat && m.viewportReady {
+			var cmd tea.Cmd
+			m.viewport, cmd = m.viewport.Update(msg)
+			return m, cmd
+		}
+
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyCtrlC:
@@ -172,10 +207,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cancel = nil
 				}
 				m.isGenerating = false
+				m.activeToolName = ""
 				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
 				m.chatInput.Focus()
 				if len(m.messages) > 0 {
 					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
+				}
+				if m.viewportReady {
+					m.viewport.SetContent(m.renderChatMessages())
+					m.viewport.GotoBottom()
 				}
 				return m, nil
 			}
@@ -196,10 +236,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.cancel = nil
 				}
 				m.isGenerating = false
+				m.activeToolName = ""
 				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
 				m.chatInput.Focus()
 				if len(m.messages) > 0 {
 					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
+				}
+				if m.viewportReady {
+					m.viewport.SetContent(m.renderChatMessages())
+					m.viewport.GotoBottom()
 				}
 				return m, nil
 			}
@@ -209,6 +254,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.chatInput.Width = max(40, msg.Width-10)
+
+		headerHeight := 4
+		footerHeight := 6
+		if m.pendingPrompt != nil {
+			footerHeight += 5
+		}
+		vpHeight := max(6, msg.Height-headerHeight-footerHeight)
+		m.viewport.Width = max(40, msg.Width-2)
+		m.viewport.Height = vpHeight
+		m.viewportReady = true
+		m.viewport.SetContent(m.renderChatMessages())
+		m.viewport.GotoBottom()
 		return m, nil
 
 	case agentStreamEventMsg:
@@ -220,48 +277,95 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.event.Err != nil {
 			m.messages[lastIdx].Content += fmt.Sprintf("\n[出错: %v]", msg.event.Err)
 			m.isGenerating = false
+			m.activeToolName = ""
 			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
 			return m, nil
 		}
 
+		if msg.event.Type == agent.EventReasoningDelta {
+			m.messages[lastIdx].ReasoningContent += msg.event.ReasoningDelta
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
+			return m, waitForAgentEvent(msg.ch)
+		}
+
 		if msg.event.Type == agent.EventToolCallStart && msg.event.ToolCall != nil {
-			m.messages[lastIdx].Content += fmt.Sprintf("\n⚡ %s\n",
-				toolCallStyle.Render(fmt.Sprintf("[调用工具: %s] 参数: %s", msg.event.ToolCall.Name, string(msg.event.ToolCall.Arguments))))
+			m.activeToolName = msg.event.ToolCall.Name
+			m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
+				ID:        msg.event.ToolCall.ID,
+				Name:      msg.event.ToolCall.Name,
+				Arguments: string(msg.event.ToolCall.Arguments),
+				Running:   true,
+			})
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
 		}
 
 		if msg.event.Type == agent.EventToolPermissionRequest && msg.event.PermissionPrompt != nil {
 			m.pendingPrompt = msg.event.PermissionPrompt
-			m.messages[lastIdx].Content += fmt.Sprintf("\n⚠ %s\n",
-				permissionWarnStyle.Render(fmt.Sprintf("[权限请求] 工具: %s | 原因: %s",
-					msg.event.PermissionPrompt.Request.ToolName, msg.event.PermissionPrompt.Request.Reason)))
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
 			return m, waitForAgentEvent(msg.ch)
 		}
 
 		if msg.event.Type == agent.EventToolCallResult && msg.event.ToolResult != nil {
-			if msg.event.ToolResult.IsError {
-				m.messages[lastIdx].Content += fmt.Sprintf("⚠️ %s\n",
-					toolResultErrorStyle.Render(fmt.Sprintf("[工具报错] %s", msg.event.ToolResult.Content)))
-			} else {
-				snippet := msg.event.ToolResult.Content
-				if len(snippet) > 300 {
-					snippet = snippet[:300] + "... (已截断)"
+			m.activeToolName = ""
+			tcs := m.messages[lastIdx].ToolCalls
+			found := false
+			for i := len(tcs) - 1; i >= 0; i-- {
+				if tcs[i].ID == msg.event.ToolResult.ToolCallID || tcs[i].Name == msg.event.ToolResult.Name {
+					tcs[i].Running = false
+					tcs[i].Result = msg.event.ToolResult.Content
+					tcs[i].IsError = msg.event.ToolResult.IsError
+					found = true
+					break
 				}
-				m.messages[lastIdx].Content += fmt.Sprintf("✔ %s\n",
-					toolResultSuccessStyle.Render(fmt.Sprintf("[工具结果] %s", snippet)))
+			}
+			if !found {
+				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
+					ID:      msg.event.ToolResult.ToolCallID,
+					Name:    msg.event.ToolResult.Name,
+					Result:  msg.event.ToolResult.Content,
+					IsError: msg.event.ToolResult.IsError,
+					Running: false,
+				})
+			}
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
 			}
 		}
 
 		if msg.event.Delta != "" {
 			m.messages[lastIdx].Content += msg.event.Delta
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
 		}
 
 		if msg.event.Done {
 			m.isGenerating = false
+			m.activeToolName = ""
 			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
 			if msg.event.Usage != nil && msg.event.Usage.TotalTokens > 0 {
 				m.messages[lastIdx].Usage = msg.event.Usage
+			}
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
 			}
 			return m, nil
 		}

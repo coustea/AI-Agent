@@ -19,6 +19,7 @@ func TestTUIFlow(t *testing.T) {
 	testCfgPath := "test_config.json"
 	defer os.Remove(testCfgPath)
 
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")
@@ -130,9 +131,9 @@ func TestTUIToolEventRendering(t *testing.T) {
 	})
 	m = mIntf.(Model)
 
-	lastContent := m.messages[len(m.messages)-1].Content
-	if !strings.Contains(lastContent, "read_file") || !strings.Contains(lastContent, "sample.go") {
-		t.Errorf("expected tool call to be rendered in content, got: %s", lastContent)
+	lastMsg := m.messages[len(m.messages)-1]
+	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Name != "read_file" {
+		t.Fatalf("expected tool call to be recorded in ToolCalls, got: %+v", lastMsg.ToolCalls)
 	}
 
 	// 2. 模拟收到 EventToolCallResult
@@ -149,15 +150,18 @@ func TestTUIToolEventRendering(t *testing.T) {
 	})
 	m = mIntf.(Model)
 
-	lastContent = m.messages[len(m.messages)-1].Content
-	if !strings.Contains(lastContent, "package main") {
-		t.Errorf("expected tool result to be rendered in content, got: %s", lastContent)
+	lastMsg = m.messages[len(m.messages)-1]
+	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Running || !strings.Contains(lastMsg.ToolCalls[0].Result, "package main") {
+		t.Fatalf("expected tool result to be recorded, got: %+v", lastMsg.ToolCalls)
 	}
 
 	// 3. 验证 View 渲染正常不崩溃
 	rendered := m.View()
 	if !strings.Contains(rendered, "read_file") {
 		t.Errorf("rendered view missing tool info: %s", rendered)
+	}
+	if !strings.Contains(rendered, "package main") {
+		t.Errorf("rendered view missing tool result: %s", rendered)
 	}
 }
 
