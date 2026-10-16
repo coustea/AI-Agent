@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"my-agent/internal/config"
 	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
 	"my-agent/internal/protocol"
@@ -953,5 +954,88 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 
 	if !permissionDenyReceived {
 		t.Errorf("expected to receive EventToolPermissionRequest in deny stream")
+	}
+}
+
+func TestAgent_ConfigAndModelSwitching(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "test_config.json")
+
+	cfg := &config.Config{
+		Provider:  config.ProviderLlamaCpp,
+		ModelName: config.DefaultLlamaCppModel,
+		BaseURL:   config.DefaultLlamaCppBaseURL,
+		Providers: make(map[string]config.ProviderConfig),
+	}
+
+	ag, err := NewFromConfig(cfg, WithConfig(cfg, cfgPath), WithWorkDir(tmpDir))
+	if err != nil {
+		t.Fatalf("failed to create agent from config: %v", err)
+	}
+
+	// 1. 验证 Config() 包含结构化 Providers 与推荐模型
+	cv := ag.Config()
+	if len(cv.Providers) < 4 {
+		t.Fatalf("expected at least 4 providers in ConfigView, got %d", len(cv.Providers))
+	}
+	var llamaP, geminiP, dsP *protocol.ProviderInfo
+	for i := range cv.Providers {
+		p := &cv.Providers[i]
+		if p.ID == "llamacpp" {
+			llamaP = p
+		} else if p.ID == "gemini" {
+			geminiP = p
+		} else if p.ID == "deepseek" {
+			dsP = p
+		}
+	}
+	if llamaP == nil || !llamaP.IsLocal || !llamaP.IsConfigured {
+		t.Errorf("unexpected llamaP info: %+v", llamaP)
+	}
+	if geminiP == nil || geminiP.IsConfigured {
+		t.Errorf("expected geminiP initially not configured, got: %+v", geminiP)
+	}
+	if len(geminiP.RecommendedModels) < 2 {
+		t.Errorf("expected recommended models for gemini, got: %+v", geminiP.RecommendedModels)
+	}
+	if dsP == nil || dsP.IsConfigured || len(dsP.RecommendedModels) < 3 {
+		t.Errorf("unexpected dsP info: %+v", dsP)
+	}
+
+	// 2. 配置 Gemini 平台与密钥
+	if err := ag.UpdateConfig("gemini", "sk-gemini-test-secret", "gemini-2.5-flash"); err != nil {
+		t.Fatalf("failed to update gemini config: %v", err)
+	}
+	cv = ag.Config()
+	if cv.Provider != "gemini" || cv.ModelName != "gemini-2.5-flash" || !cv.HasAPIKey {
+		t.Fatalf("unexpected cv after gemini update: %+v", cv)
+	}
+
+	// 3. 尝试直接通过模型名 "deepseek-reasoner" 切换：因 deepseek 尚未配置密钥，预期返回失败
+	if err := ag.UpdateConfig("", "", "deepseek-reasoner"); err == nil {
+		t.Fatalf("expected error when switching to unconfigured deepseek model, got nil")
+	}
+
+	// 4. 配置 DeepSeek 密钥
+	if err := ag.UpdateConfig("deepseek", "sk-deepseek-test-secret", "deepseek-flash"); err != nil {
+		t.Fatalf("failed to update deepseek config: %v", err)
+	}
+
+	// 5. 再次通过模型名 "deepseek-reasoner" 智能推断切模：已保存密钥，预期成功！
+	if err := ag.UpdateConfig("", "", "deepseek-reasoner"); err != nil {
+		t.Fatalf("expected success with model inference for deepseek-reasoner, got: %v", err)
+	}
+	cv = ag.Config()
+	if cv.Provider != "deepseek" || cv.ModelName != "deepseek-reasoner" {
+		t.Fatalf("expected deepseek and deepseek-reasoner, got: %+v", cv)
+	}
+
+	// 6. 切换回 Gemini 并更改模型为 "gemini-2.5-pro"，无需重新提供 API Key (自动复用)
+	if err := ag.UpdateConfig("gemini", "", "gemini-2.5-pro"); err != nil {
+		t.Fatalf("expected success reusing saved gemini key, got: %v", err)
+	}
+	cv = ag.Config()
+	if cv.Provider != "gemini" || cv.ModelName != "gemini-2.5-pro" {
+		t.Fatalf("expected gemini and gemini-2.5-pro, got: %+v", cv)
 	}
 }

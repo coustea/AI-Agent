@@ -19,10 +19,11 @@ import (
 type sessionState int
 
 const (
-	stateSelectModel sessionState = iota // 状态 1: 模型选择（官网示例风格）
-	stateInputAPIKey                     // 状态 2: 输入 API Key
-	stateInputModel                      // 状态 3: 输入/确认具体模型名称并保存
-	stateChat                            // 状态 4: 主聊天页面（在 chat.go 中处理）
+	stateSelectModel       sessionState = iota // 状态 1: 模型平台看板 (Enter 一键直切, m 选规格, e 改密钥)
+	stateSelectModelPreset                     // 状态 2: 预设模型规格列表点选 (Flash/Pro/Reasoner/[+]自定义)
+	stateInputAPIKey                           // 状态 3: 输入/修改 API Key
+	stateInputModel                            // 状态 4: 输入自定义模型名称并保存
+	stateChat                                  // 状态 5: 主聊天页面（在 chat.go 中处理）
 )
 
 // agentStreamEventMsg 封装来自 Agent 的单次纯数据流式事件
@@ -56,7 +57,11 @@ type Model struct {
 	currentModel    string
 	currentAPIKey   string
 
-	// 状态 2 & 3: 配置输入框（在 model.go 中处理）
+	// 状态 2: 模型规格预设选择菜单
+	presetChoices []string
+	presetCursor  int
+
+	// 状态 3 & 4: 配置输入框（在 model.go 中处理）
 	apiKeyInput textinput.Model
 	modelInput  textinput.Model
 
@@ -387,6 +392,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case stateSelectModel:
 		return m.updateSelectModel(msg)
+	case stateSelectModelPreset:
+		return m.updateSelectModelPreset(msg)
 	case stateInputAPIKey:
 		return m.updateInputAPIKey(msg)
 	case stateInputModel:
@@ -403,6 +410,8 @@ func (m Model) View() string {
 	switch m.state {
 	case stateSelectModel:
 		return m.viewSelectModel()
+	case stateSelectModelPreset:
+		return m.viewSelectModelPreset()
 	case stateInputAPIKey:
 		return m.viewInputAPIKey()
 	case stateInputModel:

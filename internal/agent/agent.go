@@ -275,19 +275,56 @@ func (a *CoreAgent) Config() protocol.ConfigView {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
+	available := []string{
+		string(config.ProviderLlamaCpp),
+		string(config.ProviderDeepSeek),
+		string(config.ProviderGemini),
+		string(config.ProviderSpark),
+	}
+
 	cv := protocol.ConfigView{
-		AvailableProviders: []string{
-			string(config.ProviderLlamaCpp),
-			string(config.ProviderDeepSeek),
-			string(config.ProviderGemini),
-			string(config.ProviderSpark),
-		},
+		AvailableProviders: available,
 	}
 	if a.cfg != nil {
 		cv.Provider = string(a.cfg.Provider)
 		cv.ModelName = a.cfg.ModelName
 		cv.HasAPIKey = a.cfg.APIKey != "" || config.IsLocalProvider(a.cfg.Provider)
 	}
+
+	providers := make([]protocol.ProviderInfo, 0, len(available))
+	for _, pStr := range available {
+		p := config.Provider(pStr)
+		info := protocol.ProviderInfo{
+			ID:                pStr,
+			Name:              config.ProviderDisplayName(p),
+			Description:       config.ProviderDescription(p),
+			IsLocal:           config.IsLocalProvider(p),
+			RecommendedModels: config.RecommendedModels(p),
+		}
+
+		if a.cfg != nil {
+			pcfg := a.cfg.ProviderConfig(p)
+			if pcfg.ModelName != "" {
+				info.CurrentModel = pcfg.ModelName
+			} else {
+				info.CurrentModel = config.DefaultModel(p)
+			}
+
+			if info.IsLocal {
+				info.IsConfigured = true
+			} else if pcfg.APIKey != "" {
+				info.IsConfigured = true
+			} else if a.cfg.Provider == p && a.cfg.APIKey != "" {
+				info.IsConfigured = true
+			}
+		} else {
+			info.CurrentModel = config.DefaultModel(p)
+			info.IsConfigured = info.IsLocal
+		}
+
+		providers = append(providers, info)
+	}
+	cv.Providers = providers
 	return cv
 }
 
@@ -303,17 +340,38 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 			BaseURL:   config.DefaultLlamaCppBaseURL,
 		}
 	}
-	newProvider := config.Provider(provider)
-	if provider != "" {
-		a.cfg.SwitchProvider(newProvider)
+
+	// 1. 若未显式传入 provider，尝试从 model 名称智能识别所属厂商或保持当前激活厂商
+	pStr := strings.TrimSpace(provider)
+	mStr := strings.TrimSpace(model)
+	if pStr == "" && mStr != "" {
+		if inferred := config.InferProviderFromModel(mStr); inferred != "" {
+			pStr = string(inferred)
+		}
 	}
-	if apiKey != "" {
-		a.cfg.APIKey = apiKey
+	if pStr == "" {
+		pStr = string(a.cfg.Provider)
 	}
-	if strings.TrimSpace(model) != "" {
-		a.cfg.ModelName = strings.TrimSpace(model)
+
+	newProvider := config.Provider(pStr)
+	// 切换厂商（自动载入该厂商已保存的配置历史）
+	a.cfg.SwitchProvider(newProvider)
+
+	// 2. 检查并更新 APIKey（若传入非空，则更新并覆盖；若传入空，则沿用该厂商已保存的密钥）
+	if strings.TrimSpace(apiKey) != "" {
+		a.cfg.APIKey = strings.TrimSpace(apiKey)
+	}
+
+	// 3. 检查并更新 ModelName
+	if mStr != "" {
+		a.cfg.ModelName = mStr
 	} else if a.cfg.ModelName == "" {
 		a.cfg.ModelName = config.DefaultModel(newProvider)
+	}
+
+	// 4. 远程厂商必须具备有效 APIKey
+	if !config.IsLocalProvider(newProvider) && strings.TrimSpace(a.cfg.APIKey) == "" {
+		return fmt.Errorf("agent: provider %q requires an API key", newProvider)
 	}
 
 	if a.cfgPath == "" {

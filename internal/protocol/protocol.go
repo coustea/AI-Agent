@@ -64,10 +64,22 @@ type Event struct {
 	Error      string             `json:"error,omitempty"` // 纯字符串错误说明
 }
 
+// ProviderInfo 暴露给前端只读呈现的平台状态与推荐模型（纯数据契约，无业务逻辑）
+type ProviderInfo struct {
+	ID                string   `json:"id"`                 // 厂商标识 (如 "gemini", "deepseek", "llamacpp", "spark")
+	Name              string   `json:"name"`               // 友好展示名称 (如 "Google Gemini", "DeepSeek", "llama.cpp", "讯飞星辰 MaaS")
+	Description       string   `json:"description"`        // 简短能力说明与端点提示
+	IsLocal           bool     `json:"is_local"`           // 是否为本地免密钥服务
+	IsConfigured      bool     `json:"is_configured"`      // 是否已配置就绪 (已存 Key 或本地服务)
+	CurrentModel      string   `json:"current_model"`      // 当前或最近使用的模型
+	RecommendedModels []string `json:"recommended_models"` // 常用预设推荐模型清单
+}
+
 // ConfigView 暴露给前端只读呈现的配置视图结构体
 type ConfigView struct {
-	Provider           string   `json:"provider"`
-	ModelName          string   `json:"model_name"`
-	HasAPIKey          bool     `json:"has_api_key"`
-	AvailableProviders []string `json:"available_providers"`
+	Provider           string         `json:"provider"`
+	ModelName          string         `json:"model_name"`
+	HasAPIKey          bool           `json:"has_api_key"`
+	AvailableProviders []string       `json:"available_providers"`
+	Providers          []ProviderInfo `json:"providers,omitempty"`
 }

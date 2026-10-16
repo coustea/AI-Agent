@@ -30,6 +30,40 @@ func newMockAgent(replies ...string) *mockTestAgent {
 			ModelName:          "local-model",
 			HasAPIKey:          true,
 			AvailableProviders: []string{"llamacpp", "deepseek", "gemini", "spark"},
+			Providers: []protocol.ProviderInfo{
+				{
+					ID:                "llamacpp",
+					Name:              "llama.cpp",
+					IsLocal:           true,
+					IsConfigured:      true,
+					CurrentModel:      "local-model",
+					RecommendedModels: []string{"local-model", "qwen2.5-coder-7b"},
+				},
+				{
+					ID:                "deepseek",
+					Name:              "DeepSeek",
+					IsLocal:           false,
+					IsConfigured:      false,
+					CurrentModel:      "deepseek-flash",
+					RecommendedModels: []string{"deepseek-flash", "deepseek-v4-pro", "deepseek-reasoner"},
+				},
+				{
+					ID:                "gemini",
+					Name:              "Google Gemini",
+					IsLocal:           false,
+					IsConfigured:      false,
+					CurrentModel:      "gemini-2.5-flash",
+					RecommendedModels: []string{"gemini-2.5-flash", "gemini-2.5-pro"},
+				},
+				{
+					ID:                "spark",
+					Name:              "讯飞星辰 MaaS",
+					IsLocal:           false,
+					IsConfigured:      false,
+					CurrentModel:      "spark-x2.5",
+					RecommendedModels: []string{"spark-x2.5", "lite"},
+				},
+			},
 		},
 		replies: replies,
 	}
@@ -66,12 +100,38 @@ func (m *mockTestAgent) UpdateConfig(provider, apiKey, model string) error {
 	if m.updateConfigErr != nil {
 		return m.updateConfigErr
 	}
-	m.cfgView.Provider = provider
+	pStr := strings.TrimSpace(provider)
+	mStr := strings.TrimSpace(model)
+	if pStr == "" && mStr != "" {
+		if strings.HasPrefix(mStr, "gemini") {
+			pStr = "gemini"
+		} else if strings.HasPrefix(mStr, "deepseek") {
+			pStr = "deepseek"
+		} else if strings.HasPrefix(mStr, "spark") || mStr == "lite" {
+			pStr = "spark"
+		} else {
+			pStr = "llamacpp"
+		}
+	}
+	if pStr != "" {
+		m.cfgView.Provider = pStr
+	}
 	if apiKey != "" {
 		m.cfgView.HasAPIKey = true
 	}
-	if model != "" {
-		m.cfgView.ModelName = model
+	if mStr != "" {
+		m.cfgView.ModelName = mStr
+	}
+	for i := range m.cfgView.Providers {
+		p := &m.cfgView.Providers[i]
+		if p.ID == m.cfgView.Provider {
+			if apiKey != "" {
+				p.IsConfigured = true
+			}
+			if mStr != "" {
+				p.CurrentModel = mStr
+			}
+		}
 	}
 	return nil
 }
@@ -142,15 +202,15 @@ func TestTUIFlow(t *testing.T) {
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
-	// 6. 验证进入模型名称输入，且默认填入 deepseek-chat
-	if m.state != stateInputModel {
-		t.Fatalf("expected stateInputModel, got %v", m.state)
+	// 6. 验证输入 API Key 后进入模型规格点选菜单，且默认光标落在推荐模型上
+	if m.state != stateSelectModelPreset {
+		t.Fatalf("expected stateSelectModelPreset, got %v", m.state)
 	}
-	if m.currentModel != "deepseek-chat" {
-		t.Fatalf("expected default deepseek-chat model, got %s", m.currentModel)
+	if m.currentModel != "deepseek-flash" {
+		t.Fatalf("expected default deepseek-flash model, got %s", m.currentModel)
 	}
 
-	// 回车确认保存
+	// 回车确认选定模型
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
@@ -158,7 +218,7 @@ func TestTUIFlow(t *testing.T) {
 	if m.state != stateChat {
 		t.Fatalf("expected state to return to stateChat, got %v", m.state)
 	}
-	if ag.cfgView.Provider != "deepseek" || ag.cfgView.ModelName != "deepseek-chat" {
+	if ag.cfgView.Provider != "deepseek" || ag.cfgView.ModelName != "deepseek-flash" {
 		t.Fatalf("agent config mismatch: %+v", ag.cfgView)
 	}
 
@@ -310,14 +370,14 @@ func TestTUIFlow_Gemini(t *testing.T) {
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
-	if m.state != stateInputModel {
-		t.Fatalf("expected stateInputModel, got %v", m.state)
+	if m.state != stateSelectModelPreset {
+		t.Fatalf("expected stateSelectModelPreset, got %v", m.state)
 	}
 	if m.currentModel != "gemini-2.5-flash" {
 		t.Fatalf("expected default gemini model gemini-2.5-flash, got %s", m.currentModel)
 	}
 
-	// 回车保存
+	// 回车确认选择该规格并保存
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
@@ -333,7 +393,9 @@ func TestTUIFlow_Gemini(t *testing.T) {
 func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 	ag := newMockAgent()
 	ag.cfgView.Provider = "deepseek"
-	ag.cfgView.ModelName = "deepseek-chat"
+	ag.cfgView.ModelName = "deepseek-flash"
+	ag.cfgView.Providers[1].IsConfigured = true
+	ag.cfgView.Providers[1].CurrentModel = "deepseek-flash"
 
 	m := NewModel(ag)
 	m.currentAPIKey = "sk-deepseek-preserved-key"
@@ -349,7 +411,7 @@ func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
-	// 输入 Gemini Key 并保存
+	// 输入 Gemini Key 并确认规格
 	m.apiKeyInput.SetValue("sk-gemini-preserved-key")
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
@@ -360,27 +422,21 @@ func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 		t.Fatalf("expected switched to gemini, got %s", ag.cfgView.Provider)
 	}
 
-	// 2. 再次通过 /model 切回 DeepSeek
+	// 2. 再次通过 /model 切回 DeepSeek：已配置平台支持 Enter 一键极速直切 (无需重复输入密钥与模型)
 	m.chatInput.SetValue("/model")
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
-	// 当前在 Gemini (索引 2)，上移一次选中 DeepSeek (索引 1)
+	// 当前在 Gemini (索引 2)，上移一次选中已配置的 DeepSeek (索引 1)
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
 	m = mIntf.(Model)
-	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = mIntf.(Model)
 
-	// 直接按 Enter 保留已有 key
-	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	m = mIntf.(Model)
-
-	// 直接按 Enter 保留默认模型
+	// 按下 Enter：一键极速切换直接回到对话！
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
 	if m.state != stateChat {
-		t.Fatalf("expected return to stateChat, got %v", m.state)
+		t.Fatalf("expected fast-switch return to stateChat, got %v", m.state)
 	}
 	if ag.cfgView.Provider != "deepseek" {
 		t.Fatalf("expected deepseek, got %+v", ag.cfgView)
@@ -540,26 +596,146 @@ func TestTUIFlow_Spark(t *testing.T) {
 		t.Fatalf("expected provider spark, got %q", m.currentProvider)
 	}
 
-	// 4. 输入 APIKey
+	// 4. 输入 APIKey 并回车进入规格选择
 	m.apiKeyInput.SetValue("sk-spark-test-secret")
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
-	if m.state != stateInputModel {
-		t.Fatalf("expected stateInputModel, got %v", m.state)
-	}
-	if m.currentModel != "lite" {
-		t.Fatalf("expected default spark model lite, got %s", m.currentModel)
+	if m.state != stateSelectModelPreset {
+		t.Fatalf("expected stateSelectModelPreset, got %v", m.state)
 	}
 
-	// 5. 回车确认默认模型
+	// 5. 下移一次选择 lite 规格 (预设项第二条)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mIntf.(Model)
+
+	// 回车确认选择 lite
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
 	if m.state != stateChat {
-		t.Fatalf("expected stateChat after model input, got %v", m.state)
+		t.Fatalf("expected stateChat after model preset selection, got %v", m.state)
 	}
 	if ag.cfgView.Provider != "spark" || ag.cfgView.ModelName != "lite" {
 		t.Fatalf("agent config mismatch: %+v", ag.cfgView)
+	}
+}
+
+// 测试聊天框直接输入 /model <args> 快捷切换指令
+func TestTUI_ChatInlineModelSwitching(t *testing.T) {
+	ag := newMockAgent()
+	m := NewModel(ag)
+
+	// 1. 输入 /model gemini (未配置 Key 时直接拉起 API Key 输入向导)
+	m.chatInput.SetValue("/model gemini")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateInputAPIKey {
+		t.Fatalf("expected stateInputAPIKey for unconfigured gemini, got %v", m.state)
+	}
+	if m.currentProvider != "gemini" {
+		t.Fatalf("expected provider gemini, got %s", m.currentProvider)
+	}
+
+	// 2. 先将 gemini 标记为已就绪
+	ag.cfgView.Providers[2].IsConfigured = true
+	m.state = stateChat
+
+	// 3. 对话框输入 /model gemini 极速静默切换
+	m.chatInput.SetValue("/model gemini")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateChat {
+		t.Fatalf("expected stateChat on inline fast-switch, got %v", m.state)
+	}
+	if ag.cfgView.Provider != "gemini" {
+		t.Fatalf("expected switched to gemini, got %s", ag.cfgView.Provider)
+	}
+
+	// 4. 对话框输入具体模型名称 /model deepseek-reasoner 智能推断厂商并切换
+	m.chatInput.SetValue("/model deepseek-reasoner")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateChat {
+		t.Fatalf("expected stateChat on inline model switch, got %v", m.state)
+	}
+	if ag.cfgView.Provider != "deepseek" || ag.cfgView.ModelName != "deepseek-reasoner" {
+		t.Fatalf("expected deepseek and deepseek-reasoner, got: %+v", ag.cfgView)
+	}
+}
+
+// 测试通过 'm' 键选择预设模型规格与自定义模型输入
+func TestTUI_PresetModelSpecsMenu(t *testing.T) {
+	ag := newMockAgent()
+	ag.cfgView.Providers[1].IsConfigured = true // DeepSeek 已就绪
+	m := NewModel(ag)
+
+	// 1. 呼出看板
+	m.chatInput.SetValue("/model")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	// 光标移至 DeepSeek
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mIntf.(Model)
+
+	// 2. 按 'm' 展开模型规格列表
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = mIntf.(Model)
+
+	if m.state != stateSelectModelPreset {
+		t.Fatalf("expected stateSelectModelPreset after pressing 'm', got %v", m.state)
+	}
+
+	// 3. 下移一次选择 deepseek-v4-pro 并回车
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mIntf.(Model)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateChat {
+		t.Fatalf("expected return to stateChat, got %v", m.state)
+	}
+	if ag.cfgView.Provider != "deepseek" || ag.cfgView.ModelName != "deepseek-v4-pro" {
+		t.Fatalf("expected deepseek-v4-pro, got %+v", ag.cfgView)
+	}
+
+	// 4. 测试自定义输入模型名称
+	m.chatInput.SetValue("/model")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mIntf.(Model)
+
+	// 按 'm' 展开
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
+	m = mIntf.(Model)
+
+	// 移至最后一项: [+] 自定义输入模型名称...
+	for i := 0; i < len(m.presetChoices)-1; i++ {
+		mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = mIntf.(Model)
+	}
+
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateInputModel {
+		t.Fatalf("expected stateInputModel on custom choice, got %v", m.state)
+	}
+
+	m.modelInput.SetValue("my-custom-deepseek-v4")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateChat {
+		t.Fatalf("expected return to stateChat, got %v", m.state)
+	}
+	if ag.cfgView.ModelName != "my-custom-deepseek-v4" {
+		t.Fatalf("expected my-custom-deepseek-v4, got %s", ag.cfgView.ModelName)
 	}
 }

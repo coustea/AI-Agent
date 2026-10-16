@@ -8,6 +8,7 @@ import (
 
 	"my-agent/internal/protocol"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -115,6 +116,10 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch text {
 			case "/model", "/config":
 				m.state = stateSelectModel
+				if m.agent != nil {
+					cfgView := m.agent.Config()
+					m.syncActiveProvider(cfgView.Provider)
+				}
 				m.cursor = m.selected
 				m.chatInput.Reset()
 				return m, nil
@@ -133,6 +138,91 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			case "/exit", "/quit", "/q":
 				return m, tea.Quit
+			}
+
+			// 支持 /model <provider|model> 快速切换指令
+			if strings.HasPrefix(text, "/model ") || strings.HasPrefix(text, "/config ") {
+				arg := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(text, "/model "), "/config "))
+				if arg != "" {
+					m.chatInput.Reset()
+					if m.agent == nil {
+						m.messages = append(m.messages, ChatMessage{
+							Sender:  "System",
+							Content: "[未连接智能体内核，无法切换模型]",
+						})
+						return m, nil
+					}
+
+					// 1. 判断是否是平台名称或别名
+					pKey := strings.ToLower(arg)
+					cfgView := m.agent.Config()
+					var targetProvider *protocol.ProviderInfo
+					for i := range cfgView.Providers {
+						p := &cfgView.Providers[i]
+						if strings.EqualFold(p.ID, pKey) ||
+							(p.ID == "llamacpp" && (pKey == "llama" || pKey == "local")) ||
+							(p.ID == "gemini" && pKey == "google") ||
+							(p.ID == "deepseek" && pKey == "ds") ||
+							(p.ID == "spark" && (pKey == "maas" || pKey == "xfyun")) {
+							targetProvider = p
+							break
+						}
+					}
+
+					if targetProvider != nil {
+						if targetProvider.IsConfigured {
+							// 已经配置过密钥或本地免密，一键极速切换！
+							if err := m.agent.UpdateConfig(targetProvider.ID, "", targetProvider.CurrentModel); err != nil {
+								m.messages = append(m.messages, ChatMessage{
+									Sender:  "System",
+									Content: fmt.Sprintf("[切换平台失败: %v]", err),
+								})
+							} else {
+								newView := m.agent.Config()
+								m.syncActiveProvider(newView.Provider)
+								m.currentModel = newView.ModelName
+								m.messages = append(m.messages, ChatMessage{
+									Sender:  "System",
+									Content: fmt.Sprintf("已成功切换至大模型平台: %s (模型: %s)", targetProvider.Name, newView.ModelName),
+								})
+							}
+							if m.viewportReady {
+								m.viewport.SetContent(m.renderChatMessages())
+								m.viewport.GotoBottom()
+							}
+							return m, nil
+						} else {
+							// 未配置 Key，直接进入该厂商的 Key 输入页
+							m.currentProvider = targetProvider.ID
+							m.state = stateInputAPIKey
+							m.apiKeyInput.Focus()
+							m.apiKeyInput.Reset()
+							m.apiKeyInput.Placeholder = fmt.Sprintf("请输入 %s 的 API Key (按 Enter 确认)", targetProvider.Name)
+							return m, textinput.Blink
+						}
+					}
+
+					// 2. 不是平台名称，尝试作为具体模型名称进行智能推断切换
+					if err := m.agent.UpdateConfig("", "", arg); err != nil {
+						m.messages = append(m.messages, ChatMessage{
+							Sender:  "System",
+							Content: fmt.Sprintf("[切换模型失败: %v (输入 /model 可在配置看板中查看和设置)]", err),
+						})
+					} else {
+						newView := m.agent.Config()
+						m.syncActiveProvider(newView.Provider)
+						m.currentModel = newView.ModelName
+						m.messages = append(m.messages, ChatMessage{
+							Sender:  "System",
+							Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", newView.Provider, newView.ModelName),
+						})
+					}
+					if m.viewportReady {
+						m.viewport.SetContent(m.renderChatMessages())
+						m.viewport.GotoBottom()
+					}
+					return m, nil
+				}
 			}
 
 			// 发送消息展示：将用户输入添加到消息历史

@@ -24,10 +24,11 @@ const (
 	DefaultLlamaCppBaseURL = "http://127.0.0.1:8080"
 	DefaultLlamaCppModel   = "local-model"
 
-	// DeepSeek 官方最新模型规范 (V4 系列)
-	DefaultDeepSeekModel = "deepseek-flash"
-	DeepSeekProModel     = "deepseek-v4-pro"
-	DeepSeekBaseURL      = "https://api.deepseek.com"
+	// DeepSeek 官方最新模型规范 (V4 系列与 R1 推理)
+	DefaultDeepSeekModel  = "deepseek-flash"
+	DeepSeekProModel      = "deepseek-v4-pro"
+	DeepSeekReasonerModel = "deepseek-reasoner"
+	DeepSeekBaseURL       = "https://api.deepseek.com"
 
 	// Google Gemini 官方最新模型规范 (兼容 OpenAI 协议端点)
 	DefaultGeminiModel = "gemini-2.5-flash"
@@ -36,6 +37,7 @@ const (
 
 	// 讯飞星辰 MaaS 官方最新模型规范
 	DefaultSparkModel   = "spark-x2.5"
+	SparkLiteModel      = "lite"
 	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
 
@@ -141,9 +143,7 @@ func (c *Config) SwitchProvider(p Provider) {
 		c.ModelName = DefaultModel(p)
 	}
 
-	if pcfg.APIKey != "" {
-		c.APIKey = pcfg.APIKey
-	}
+	c.APIKey = pcfg.APIKey
 }
 
 // LoadConfig 从指定 JSON 文件加载配置，支持全局/本地发现与环境变量自动补全
@@ -381,5 +381,70 @@ func DefaultBaseURL(p Provider) string {
 		fallthrough
 	default:
 		return DefaultLlamaCppBaseURL
+	}
+}
+
+// RecommendedModels 返回指定厂商官方推荐的高频常用模型列表
+func RecommendedModels(p Provider) []string {
+	switch strings.ToLower(string(p)) {
+	case "gemini", "google":
+		return []string{DefaultGeminiModel, GeminiProModel}
+	case "deepseek", "ds":
+		return []string{DefaultDeepSeekModel, DeepSeekProModel, DeepSeekReasonerModel}
+	case "spark", "maas", "xfyun":
+		return []string{DefaultSparkModel, SparkLiteModel}
+	case "llamacpp", "llama", "local":
+		fallthrough
+	default:
+		return []string{DefaultLlamaCppModel, "qwen2.5-coder-7b"}
+	}
+}
+
+// ProviderDisplayName 返回厂商的友好展示名称
+func ProviderDisplayName(p Provider) string {
+	switch strings.ToLower(string(p)) {
+	case "gemini", "google":
+		return "Google Gemini"
+	case "deepseek", "ds":
+		return "DeepSeek"
+	case "spark", "maas", "xfyun":
+		return "讯飞星辰 MaaS"
+	case "llamacpp", "llama", "local":
+		fallthrough
+	default:
+		return "llama.cpp"
+	}
+}
+
+// ProviderDescription 返回厂商的能力特征说明
+func ProviderDescription(p Provider) string {
+	switch strings.ToLower(string(p)) {
+	case "gemini", "google":
+		return "官方最新 - 推荐 Flash 极速响应 / Pro 深度代码"
+	case "deepseek", "ds":
+		return "官方最新 - 支持 V4 系列与 R1 深度推理"
+	case "spark", "maas", "xfyun":
+		return "星火通用大模型 / 认知大模型"
+	case "llamacpp", "llama", "local":
+		fallthrough
+	default:
+		return "本地 HTTP 服务 (127.0.0.1:8080)"
+	}
+}
+
+// InferProviderFromModel 根据模型名称前缀或特征智能识别所属厂商
+func InferProviderFromModel(model string) Provider {
+	m := strings.ToLower(strings.TrimSpace(model))
+	switch {
+	case strings.HasPrefix(m, "gemini"):
+		return ProviderGemini
+	case strings.HasPrefix(m, "deepseek"):
+		return ProviderDeepSeek
+	case strings.HasPrefix(m, "spark"), m == "lite":
+		return ProviderSpark
+	case strings.Contains(m, "llama"), strings.Contains(m, "local"), strings.Contains(m, "qwen"):
+		return ProviderLlamaCpp
+	default:
+		return ""
 	}
 }
