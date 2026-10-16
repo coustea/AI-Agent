@@ -66,6 +66,11 @@ func (r *Router) Route(req *ChatRequest) (Gateway, error) {
 				return gw, nil
 			}
 		}
+		if strings.HasPrefix(m, "spark") {
+			if gw, ok := r.providers["spark"]; ok {
+				return gw, nil
+			}
+		}
 		if strings.Contains(m, "llama") || strings.Contains(m, "local") {
 			if gw, ok := r.providers["llamacpp"]; ok {
 				return gw, nil
@@ -152,6 +157,8 @@ func initProviderGateway(p config.Provider, baseURL, apiKey, model string) (Gate
 		return NewGemini(baseURL, apiKey, model, nil)
 	case "deepseek", "ds":
 		return NewDeepSeek(baseURL, apiKey, model, nil)
+	case "spark", "maas", "xfyun":
+		return NewSpark(baseURL, apiKey, model, nil)
 	case "llamacpp", "llama", "local", "":
 		return NewLlamaCpp(baseURL, apiKey, model, nil)
 	default:

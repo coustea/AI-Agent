@@ -257,9 +257,12 @@ func TestTUIFlow_Gemini(t *testing.T) {
 	testCfgPath := "test_gemini_config.json"
 	defer os.Remove(testCfgPath)
 
+	t.Setenv("HOME", t.TempDir())
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("SPARK_API_KEY", "")
+	t.Setenv("MAAS_API_KEY", "")
 
 	m := NewModel(nil)
 	m.cfgPath = testCfgPath
@@ -537,3 +540,74 @@ func TestTUI_PermissionApproval_InteractiveFlow(t *testing.T) {
 		t.Errorf("expected userDecision to be DecisionAllowOnce, got %v", userDecision)
 	}
 }
+
+func TestTUIFlow_Spark(t *testing.T) {
+	testCfgPath := "test_spark_config.json"
+	defer os.Remove(testCfgPath)
+
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("SPARK_API_KEY", "")
+	t.Setenv("MAAS_API_KEY", "")
+
+	m := NewModel(nil)
+	m.cfgPath = testCfgPath
+
+	// 1. 触发 /model
+	m.chatInput.SetValue("/model")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	// 2. 下移三次选择 Spark (第 4 项，索引 3)
+	for i := 0; i < 3; i++ {
+		mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m = mIntf.(Model)
+	}
+
+	if m.cursor != 3 {
+		t.Fatalf("expected cursor to be 3 for spark, got %d", m.cursor)
+	}
+
+	// 3. 回车选中 Spark
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateInputAPIKey {
+		t.Fatalf("expected stateInputAPIKey, got %v", m.state)
+	}
+	if m.config.Provider != config.ProviderSpark {
+		t.Fatalf("expected provider %q, got %q", config.ProviderSpark, m.config.Provider)
+	}
+
+	// 4. 输入 APIKey
+	m.apiKeyInput.SetValue("sk-spark-test-secret")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateInputModel {
+		t.Fatalf("expected stateInputModel, got %v", m.state)
+	}
+	if m.config.ModelName != config.DefaultSparkModel {
+		t.Fatalf("expected default spark model %s, got %s", config.DefaultSparkModel, m.config.ModelName)
+	}
+
+	// 5. 回车确认默认模型
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateChat {
+		t.Fatalf("expected stateChat after model input, got %v", m.state)
+	}
+
+	// 6. 验证配置文件落盘
+	savedCfg, err := config.LoadConfig(testCfgPath)
+	if err != nil {
+		t.Fatalf("failed to load saved config: %v", err)
+	}
+	if savedCfg.Provider != config.ProviderSpark || savedCfg.ModelName != config.DefaultSparkModel || savedCfg.APIKey != "sk-spark-test-secret" {
+		t.Fatalf("saved config mismatch: %+v", savedCfg)
+	}
+}
+

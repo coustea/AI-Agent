@@ -530,6 +530,39 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("expected *Gemini, got %T", geminiSubGW)
 	}
 
+	// 测试 Spark (星辰 MaaS) 配置与动态路由
+	sparkCfg := &config.Config{
+		Provider: config.ProviderSpark,
+		APIKey:   "sk-spark-test-key",
+	}
+	sparkGw, err := NewGatewayFromConfig(sparkCfg)
+	if err != nil {
+		t.Fatalf("failed to create spark gateway: %v", err)
+	}
+	sparkRouter := sparkGw.(*Router)
+	sparkSubGW, _ := sparkRouter.Route(&ChatRequest{})
+	if _, ok := sparkSubGW.(*Spark); !ok {
+		t.Fatalf("expected *Spark, got %T", sparkSubGW)
+	}
+
+	// 测试根据 spark-* 模型前缀动态路由
+	prefixGW, err := sparkRouter.Route(&ChatRequest{Model: "spark-x2.5"})
+	if err != nil {
+		t.Fatalf("failed to route spark-x2.5: %v", err)
+	}
+	if _, ok := prefixGW.(*Spark); !ok {
+		t.Fatalf("expected *Spark for spark-x2.5 model prefix, got %T", prefixGW)
+	}
+
+	// 测试 Spark 缺少 APIKey 返回 ErrEmptyAPIKey
+	sparkNoKeyCfg := &config.Config{
+		Provider: config.ProviderSpark,
+		APIKey:   "",
+	}
+	if _, err := NewGatewayFromConfig(sparkNoKeyCfg); err != ErrEmptyAPIKey {
+		t.Errorf("expected ErrEmptyAPIKey for spark without api key, got: %v", err)
+	}
+
 	// 测试 Gemini 缺少 APIKey 返回 ErrEmptyAPIKey
 	geminiNoKeyCfg := &config.Config{
 		Provider: config.ProviderGemini,

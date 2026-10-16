@@ -16,11 +16,18 @@ func TestConfig_Defaults(t *testing.T) {
 		t.Errorf("expected %s, got %s", DefaultLlamaCppModel, DefaultModel(ProviderLlamaCpp))
 	}
 
+	if DefaultModel(ProviderSpark) != DefaultSparkModel {
+		t.Errorf("expected %s, got %s", DefaultSparkModel, DefaultModel(ProviderSpark))
+	}
+
 	if DefaultBaseURL(ProviderGemini) != GeminiBaseURL {
 		t.Errorf("expected %s, got %s", GeminiBaseURL, DefaultBaseURL(ProviderGemini))
 	}
 	if DefaultBaseURL(ProviderDeepSeek) != DeepSeekBaseURL {
 		t.Errorf("expected %s, got %s", DeepSeekBaseURL, DefaultBaseURL(ProviderDeepSeek))
+	}
+	if DefaultBaseURL(ProviderSpark) != DefaultSparkBaseURL {
+		t.Errorf("expected %s, got %s", DefaultSparkBaseURL, DefaultBaseURL(ProviderSpark))
 	}
 	if DefaultBaseURL(ProviderLlamaCpp) != DefaultLlamaCppBaseURL {
 		t.Errorf("expected %s, got %s", DefaultLlamaCppBaseURL, DefaultBaseURL(ProviderLlamaCpp))
@@ -34,6 +41,9 @@ func TestConfig_Defaults(t *testing.T) {
 	}
 	if IsLocalProvider(ProviderGemini) {
 		t.Errorf("expected gemini to not be local provider")
+	}
+	if IsLocalProvider(ProviderSpark) {
+		t.Errorf("expected spark to not be local provider")
 	}
 }
 
@@ -76,6 +86,8 @@ func TestConfig_AutoDiscovery_Env(t *testing.T) {
 	t.Setenv("DEEPSEEK_API_KEY", "")
 	t.Setenv("GEMINI_API_KEY", "")
 	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("SPARK_API_KEY", "")
+	t.Setenv("MAAS_API_KEY", "")
 
 	// 1. 无环境变量时默认 fallback 到 llamacpp
 	cfg, err := LoadConfig(missingPath)
@@ -86,7 +98,17 @@ func TestConfig_AutoDiscovery_Env(t *testing.T) {
 		t.Errorf("expected fallback to llamacpp, got %s", cfg.Provider)
 	}
 
-	// 2. 设置 GEMINI_API_KEY
+	// 2. 设置 SPARK_API_KEY
+	t.Setenv("SPARK_API_KEY", "env-spark-key")
+	cfgSpark, err := LoadConfig(missingPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfgSpark.Provider != ProviderSpark || cfgSpark.APIKey != "env-spark-key" {
+		t.Errorf("expected spark env discovery, got %+v", cfgSpark)
+	}
+
+	// 3. 设置 GEMINI_API_KEY (优先级高于 Spark)
 	t.Setenv("GEMINI_API_KEY", "env-gemini-key")
 	cfgGemini, err := LoadConfig(missingPath)
 	if err != nil {
@@ -96,7 +118,7 @@ func TestConfig_AutoDiscovery_Env(t *testing.T) {
 		t.Errorf("expected gemini env discovery, got %+v", cfgGemini)
 	}
 
-	// 3. 设置 DEEPSEEK_API_KEY (优先级最高)
+	// 4. 设置 DEEPSEEK_API_KEY (优先级最高)
 	t.Setenv("DEEPSEEK_API_KEY", "env-deepseek-key")
 	cfgDS, err := LoadConfig(missingPath)
 	if err != nil {

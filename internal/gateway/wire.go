@@ -151,7 +151,7 @@ func chatURL(base string) string {
 	if strings.HasSuffix(base, "/chat/completions") {
 		return base
 	}
-	if strings.HasSuffix(base, "/openai") || strings.HasSuffix(base, "/v1") {
+	if strings.HasSuffix(base, "/openai") || strings.HasSuffix(base, "/v1") || strings.HasSuffix(base, "/v2") {
 		return base + "/chat/completions"
 	}
 	return base + "/v1/chat/completions"

@@ -15,6 +15,7 @@ const (
 	ProviderLlamaCpp Provider = "llamacpp"
 	ProviderDeepSeek Provider = "deepseek"
 	ProviderGemini   Provider = "gemini"
+	ProviderSpark    Provider = "spark"
 )
 
 // 默认模型与服务端点推荐
@@ -32,6 +33,10 @@ const (
 	DefaultGeminiModel = "gemini-2.5-flash"
 	GeminiProModel     = "gemini-2.5-pro"
 	GeminiBaseURL      = "https://generativelanguage.googleapis.com/v1beta/openai"
+
+	// 讯飞星辰 MaaS 官方最新模型规范
+	DefaultSparkModel   = "spark-x2.5"
+	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
 
 // ProviderConfig 保存各厂商的专属模型与密钥配置
@@ -96,6 +101,8 @@ func normalizeProviderKey(p Provider) string {
 		return "deepseek"
 	case "google":
 		return "gemini"
+	case "spark", "maas", "xfyun":
+		return "spark"
 	default:
 		return key
 	}
@@ -171,6 +178,19 @@ func LoadConfig(path string) (*Config, error) {
 					APIKey:    googleKey,
 				})
 			}
+			if sparkKey := strings.TrimSpace(os.Getenv("SPARK_API_KEY")); sparkKey != "" {
+				cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
+					BaseURL:   DefaultSparkBaseURL,
+					ModelName: DefaultSparkModel,
+					APIKey:    sparkKey,
+				})
+			} else if maasKey := strings.TrimSpace(os.Getenv("MAAS_API_KEY")); maasKey != "" {
+				cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
+					BaseURL:   DefaultSparkBaseURL,
+					ModelName: DefaultSparkModel,
+					APIKey:    maasKey,
+				})
+			}
 
 			// 预置 llamacpp
 			cfg.SetProviderConfig(ProviderLlamaCpp, ProviderConfig{
@@ -183,6 +203,8 @@ func LoadConfig(path string) (*Config, error) {
 				cfg.SwitchProvider(ProviderDeepSeek)
 			} else if cfg.ProviderConfig(ProviderGemini).APIKey != "" {
 				cfg.SwitchProvider(ProviderGemini)
+			} else if cfg.ProviderConfig(ProviderSpark).APIKey != "" {
+				cfg.SwitchProvider(ProviderSpark)
 			} else {
 				cfg.SwitchProvider(ProviderLlamaCpp)
 			}
@@ -241,6 +263,23 @@ func LoadConfig(path string) (*Config, error) {
 				pcfg.BaseURL = GeminiBaseURL
 			}
 			cfg.SetProviderConfig(ProviderGemini, pcfg)
+		}
+	}
+	sparkKey := strings.TrimSpace(os.Getenv("SPARK_API_KEY"))
+	if sparkKey == "" {
+		sparkKey = strings.TrimSpace(os.Getenv("MAAS_API_KEY"))
+	}
+	if sparkKey != "" {
+		pcfg := cfg.ProviderConfig(ProviderSpark)
+		if pcfg.APIKey == "" {
+			pcfg.APIKey = sparkKey
+			if pcfg.ModelName == "" {
+				pcfg.ModelName = DefaultSparkModel
+			}
+			if pcfg.BaseURL == "" {
+				pcfg.BaseURL = DefaultSparkBaseURL
+			}
+			cfg.SetProviderConfig(ProviderSpark, pcfg)
 		}
 	}
 
@@ -320,6 +359,8 @@ func DefaultModel(p Provider) string {
 		return DefaultGeminiModel
 	case "deepseek", "ds":
 		return DefaultDeepSeekModel
+	case "spark", "maas", "xfyun":
+		return DefaultSparkModel
 	case "llamacpp", "llama", "local":
 		fallthrough
 	default:
@@ -334,6 +375,8 @@ func DefaultBaseURL(p Provider) string {
 		return GeminiBaseURL
 	case "deepseek", "ds":
 		return DeepSeekBaseURL
+	case "spark", "maas", "xfyun":
+		return DefaultSparkBaseURL
 	case "llamacpp", "llama", "local":
 		fallthrough
 	default:

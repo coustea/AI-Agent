@@ -127,6 +127,7 @@ func NewModel(bridge AgentBridge) Model {
 			string(config.ProviderLlamaCpp),
 			string(config.ProviderDeepSeek),
 			string(config.ProviderGemini),
+			string(config.ProviderSpark),
 		},
 		selected:    0,
 		apiKeyInput: apiKeyInput,
