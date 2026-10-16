@@ -1072,3 +1072,82 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 		t.Fatalf("expected gemini and gemini-2.5-pro, got: %+v", cv)
 	}
 }
+
+// TestCoreAgent_DirectToolExecute_PermissionHook 验证装配期钩子在脱离循环本体时依然生效
+func TestCoreAgent_DirectToolExecute_PermissionHook(t *testing.T) {
+	mockGW := newMockGateway("hi")
+	ag, err := NewAgent(mockGW, WithDefaultTools())
+	if err != nil {
+		t.Fatalf("NewAgent failed: %v", err)
+	}
+
+	res, err := ag.tools.Execute(context.Background(), gateway.ToolCall{
+		ID:        "direct_call_1",
+		Name:      "bash",
+		Arguments: json.RawMessage(`{"command": "rm -rf /"}`),
+	})
+	if err == nil {
+		t.Fatal("expected error from PreToolUse hook, got nil")
+	}
+	if !res.IsError || !strings.Contains(res.Content, "blocked by Gate 1 (Hard Deny)") {
+		t.Fatalf("expected Gate 1 hard deny error in ToolResult, got: %+v", res)
+	}
+}
+
+type simpleTestTool struct {
+	name string
+	fn   func(ctx context.Context, args json.RawMessage) (string, error)
+}
+
+func (s *simpleTestTool) Name() string            { return s.name }
+func (s *simpleTestTool) Description() string     { return "test tool" }
+func (s *simpleTestTool) Schema() json.RawMessage { return json.RawMessage(`{"type":"object"}`) }
+func (s *simpleTestTool) Execute(ctx context.Context, args json.RawMessage) (string, error) {
+	return s.fn(ctx, args)
+}
+
+// TestCoreAgent_LargeToolResult_Persisted 验证大输出经 PostToolUse 钩子被落盘且截断为预览
+func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "coustea-posthook-test-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	mockGW := newMockGateway("hi")
+	ag, err := NewAgent(mockGW, WithWorkDir(tmpDir))
+	if err != nil {
+		t.Fatalf("NewAgent failed: %v", err)
+	}
+
+	largeContent := strings.Repeat("A", 10000)
+	ag.tools.Register(&simpleTestTool{
+		name: "large_tool",
+		fn: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return largeContent, nil
+		},
+	})
+
+	res, err := ag.tools.Execute(context.Background(), gateway.ToolCall{
+		ID:        "large_call_1",
+		Name:      "large_tool",
+		Arguments: json.RawMessage(`{}`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(res.Content, "[output truncated: 10000 characters total; full content saved to") {
+		t.Fatalf("expected truncated notice in res.Content, got: %s", res.Content)
+	}
+
+	// 验证磁盘文件确实写入且内容为全量
+	savedPath := filepath.Join(tmpDir, ".coustea", "tool-results", "large_call_1.txt")
+	data, err := os.ReadFile(savedPath)
+	if err != nil {
+		t.Fatalf("expected tool result file to exist at %s, got: %v", savedPath, err)
+	}
+	if string(data) != largeContent {
+		t.Fatalf("expected full content in file, length was %d", len(data))
+	}
+}

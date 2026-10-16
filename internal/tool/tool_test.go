@@ -230,3 +230,61 @@ func TestRegistry_PreToolUse_NoHooks_Regression(t *testing.T) {
 		t.Errorf("behavior changed without hooks: res=%+v err=%v ran=%v", res, err, ran)
 	}
 }
+
+// TestRegistry_PostToolUse_ModifiesResult 验证后置钩子能够观察并改写执行结果
+func TestRegistry_PostToolUse_ModifiesResult(t *testing.T) {
+	inner := &mockTool{
+		name:   "search",
+		schema: json.RawMessage(querySchema),
+		runFn: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return "raw output", nil
+		},
+	}
+
+	reg := NewRegistry(inner)
+	reg.UsePostToolUse(func(ctx context.Context, call gateway.ToolCall, result *gateway.ToolResult) {
+		if result.Content == "raw output" {
+			result.Content = "rewritten output"
+		}
+	})
+
+	res, err := reg.Execute(context.Background(), gateway.ToolCall{
+		ID: "call_1", Name: "search", Arguments: json.RawMessage(`{"query":"hi"}`),
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if res.Content != "rewritten output" {
+		t.Errorf("expected rewritten output, got %q", res.Content)
+	}
+}
+
+// TestRegistry_PostToolUse_ExecutionError 验证执行失败时后置钩子依然被调用
+func TestRegistry_PostToolUse_ExecutionError(t *testing.T) {
+	inner := &mockTool{
+		name:   "search",
+		schema: json.RawMessage(querySchema),
+		runFn: func(ctx context.Context, args json.RawMessage) (string, error) {
+			return "", errors.New("boom")
+		},
+	}
+
+	var seenResult *gateway.ToolResult
+	reg := NewRegistry(inner)
+	reg.UsePostToolUse(func(ctx context.Context, call gateway.ToolCall, result *gateway.ToolResult) {
+		seenResult = result
+	})
+
+	res, err := reg.Execute(context.Background(), gateway.ToolCall{
+		ID: "call_2", Name: "search", Arguments: json.RawMessage(`{"query":"hi"}`),
+	})
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if seenResult == nil || !seenResult.IsError || seenResult.Content != "boom" {
+		t.Errorf("post hook did not observe the error result: %+v", seenResult)
+	}
+	if !res.IsError || res.Content != "boom" {
+		t.Errorf("expected error result: %+v", res)
+	}
+}

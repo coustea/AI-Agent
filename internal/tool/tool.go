@@ -19,9 +19,10 @@ type Tool interface {
 
 // Registry 是线程安全的工具注册表
 type Registry struct {
-	mu       sync.RWMutex
-	tools    map[string]Tool
-	preHooks []PreToolUse
+	mu        sync.RWMutex
+	tools     map[string]Tool
+	preHooks  []PreToolUse
+	postHooks []PostToolUse
 }
 
 // NewRegistry 创建工具注册表并可选地预先注册一批工具
@@ -55,6 +56,16 @@ func (r *Registry) UsePreToolUse(h PreToolUse) {
 	r.preHooks = append(r.preHooks, h)
 }
 
+// UsePostToolUse 挂载一个执行后钩子。钩子按挂载顺序依次执行，可观察或改写 ToolResult。
+func (r *Registry) UsePostToolUse(h PostToolUse) {
+	if h == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.postHooks = append(r.postHooks, h)
+}
+
 // Get 根据名称获取工具
 func (r *Registry) Get(name string) (Tool, bool) {
 	r.mu.RLock()
@@ -81,14 +92,14 @@ func (r *Registry) Definitions() []gateway.ToolDefinition {
 
 // Execute 校验参数并安全执行对应的工具。
 //
-// 执行流水线为：查找工具 → 执行前钩子链 → 参数校验 → 工具执行。
+// 执行流水线为：查找工具 → 执行前钩子链 (PreToolUse) → 参数校验 → 工具执行 → 执行后钩子链 (PostToolUse)。
 // 钩子先于参数校验，看到的是未经校验的原始调用；钩子若无法解析参数应放行，
 // 交由参数校验拒绝，避免重复报错。
 func (r *Registry) Execute(ctx context.Context, call gateway.ToolCall) (gateway.ToolResult, error) {
 	r.mu.RLock()
 	t, ok := r.tools[call.Name]
-	// 快照钩子链后立即释放锁：钩子是外部注入的任意代码，不在持锁期间执行。
-	hooks := r.preHooks
+	preHooks := r.preHooks
+	postHooks := r.postHooks
 	r.mu.RUnlock()
 
 	if !ok {
@@ -100,8 +111,8 @@ func (r *Registry) Execute(ctx context.Context, call gateway.ToolCall) (gateway.
 		}, fmt.Errorf("tool %q not found", call.Name)
 	}
 
-	// 执行前钩子链：权限等策略在此挂载，Registry 自身不含任何规则
-	for _, h := range hooks {
+	// 1. 执行前钩子链：权限等策略在此挂载，任一错误即短路拦截
+	for _, h := range preHooks {
 		if err := h(ctx, call); err != nil {
 			return gateway.ToolResult{
 				ToolCallID: call.ID,
@@ -112,7 +123,7 @@ func (r *Registry) Execute(ctx context.Context, call gateway.ToolCall) (gateway.
 		}
 	}
 
-	// 校验参数格式
+	// 2. 校验参数格式
 	args := call.Arguments
 	if len(args) == 0 {
 		args = json.RawMessage("{}")
@@ -126,20 +137,29 @@ func (r *Registry) Execute(ctx context.Context, call gateway.ToolCall) (gateway.
 		}, fmt.Errorf("invalid arguments: %w", err)
 	}
 
+	// 3. 工具本体执行
 	output, err := t.Execute(ctx, args)
+	var res gateway.ToolResult
 	if err != nil {
-		return gateway.ToolResult{
+		res = gateway.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 			Content:    err.Error(),
 			IsError:    true,
-		}, err
+		}
+	} else {
+		res = gateway.ToolResult{
+			ToolCallID: call.ID,
+			Name:       call.Name,
+			Content:    output,
+			IsError:    false,
+		}
 	}
 
-	return gateway.ToolResult{
-		ToolCallID: call.ID,
-		Name:       call.Name,
-		Content:    output,
-		IsError:    false,
-	}, nil
+	// 4. 执行后置钩子链：大结果落盘预览、审计等在此执行，结果可被观察或改写
+	for _, h := range postHooks {
+		h(ctx, call, &res)
+	}
+
+	return res, err
 }

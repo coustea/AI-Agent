@@ -207,6 +207,24 @@ func (m *Manager) SetAutoApprove(auto bool) {
 	m.autoApprove = auto
 }
 
+// SetWorkDir 原地更新工作目录，保留现有审批器、信任表与自动放行状态
+func (m *Manager) SetWorkDir(workDir string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	cleanDir := strings.TrimSpace(workDir)
+	if cleanDir == "" {
+		if wd, err := os.Getwd(); err == nil {
+			cleanDir = wd
+		} else {
+			cleanDir = "."
+		}
+	}
+	if absDir, err := filepath.Abs(cleanDir); err == nil {
+		cleanDir = absDir
+	}
+	m.workDir = cleanDir
+}
+
 // Evaluate 执行三道闸门权限决策管线：
 // Gate 1: 硬拒绝表 (Hard Deny List) -> 命中直接返回 false，无需人工介入
 // Gate 2: 规则匹配器 (Rule Evaluator) -> 判断是否存在破坏性操作或越界行为

@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"my-agent/internal/config"
 	"my-agent/internal/gateway"
@@ -123,7 +122,7 @@ func WithWorkDir(dir string) Option {
 			_ = memory.InitTemplates(a.workDir)
 			a.persona = defaultPersona(a.workDir)
 			if a.permission != nil {
-				a.permission = permission.NewManager(a.workDir, permission.WithApprover(a.permission.Approver()))
+				a.permission.SetWorkDir(a.workDir)
 			}
 		}
 	}
@@ -185,15 +184,21 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 		workDir:      wd,
 		memory:       memory.NewSlidingWindowMemory(40),
 		tools:        tool.NewRegistry(),
-		permission:   permission.NewManager(wd),
 		persona:      defaultPersona(wd),
 		maxSteps:     10,
 		pendingPerms: make(map[string]chan protocol.Decision),
 	}
 
+	// 默认装配权限管理器，将审批桥注入为默认 Approver
+	a.permission = permission.NewManager(wd, permission.WithApprover(permission.ApproverFunc(a.bridgeApproval)))
+
 	for _, opt := range opts {
 		opt(a)
 	}
+
+	// 装配期在 tool.Registry 上挂载横切机制钩子（核心：机制挂上去，而不是嵌在循环里）
+	a.tools.UsePreToolUse(a.permissionPreHook)
+	a.tools.UsePostToolUse(a.largeResultPostHook)
 
 	return a, nil
 }
@@ -414,14 +419,16 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 			a.mu.Unlock()
 		}()
 
-		// 1. 将用户问题存入 Memory
+		// 1. 将事件通道装载入 context，供装配期挂载的横切钩子（如权限交互审批桥）回传事件
+		ctx = withEventSink(ctx, outCh)
+
+		// 2. 将用户问题存入 Memory
 		userMsg := gateway.Message{Role: gateway.RoleUser, Content: prompt}
 		_ = a.memory.Append(ctx, userMsg)
 
-		// 2. 每用户轮次开始时动态合成系统提示词
+		// 3. 每用户轮次开始时动态合成系统提示词
 		a.mu.RLock()
 		sysPrompt := composeSystemPrompt(a.persona, a.workDir)
-		permMgr := a.permission
 		a.mu.RUnlock()
 
 		var totalTurnUsage gateway.Usage
@@ -516,7 +523,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 				return
 			}
 
-			// 5. 执行工具调用流水线 (Gate 1/2/3 权限审查 -> 工具执行 -> 错误自愈)
+			// 5. 执行工具调用流水线 (所有策略已作为 PreToolUse / PostToolUse 钩子在 Registry 流水线上挂载)
 			for _, tc := range toolCalls {
 				sendEvent(ctx, outCh, protocol.Event{
 					Type: protocol.EventToolCallStart,
@@ -527,94 +534,15 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 					},
 				})
 
-				// 权限门禁审查
-				var allowed bool
-				var denyReason string
+				a.mu.RLock()
+				tools := a.tools
+				a.mu.RUnlock()
 
-				if permMgr != nil {
-					origApprover := permMgr.Approver()
-					if origApprover == nil {
-						permMgr.SetApprover(permission.ApproverFunc(func(pCtx context.Context, req permission.Request) (permission.Decision, error) {
-							reqID := fmt.Sprintf("perm_%d", atomic.AddUint64(&a.permSeq, 1))
-							respCh := make(chan protocol.Decision, 1)
-
-							a.pendingMu.Lock()
-							a.pendingPerms[reqID] = respCh
-							a.pendingMu.Unlock()
-
-							defer func() {
-								a.pendingMu.Lock()
-								delete(a.pendingPerms, reqID)
-								a.pendingMu.Unlock()
-							}()
-
-							if !sendEvent(pCtx, outCh, protocol.Event{
-								Type: protocol.EventPermissionReq,
-								Permission: &protocol.PermissionRequest{
-									RequestID: reqID,
-									ToolName:  req.ToolName,
-									Arguments: string(req.Arguments),
-									Reason:    req.Reason,
-								},
-							}) {
-								return permission.DecisionDeny, pCtx.Err()
-							}
-
-							select {
-							case d := <-respCh:
-								switch d {
-								case protocol.DecisionAllowOnce:
-									return permission.DecisionAllowOnce, nil
-								case protocol.DecisionAllowSession:
-									return permission.DecisionAllowSession, nil
-								default:
-									return permission.DecisionDeny, nil
-								}
-							case <-pCtx.Done():
-								return permission.DecisionDeny, pCtx.Err()
-							}
-						}))
-					}
-
-					var evalErr error
-					allowed, denyReason, evalErr = permMgr.Evaluate(ctx, tc)
-					if origApprover == nil {
-						permMgr.SetApprover(nil) // 恢复状态
-					}
-					if evalErr != nil {
-						allowed = false
-						denyReason = "permission evaluation error: " + evalErr.Error()
-					}
-				} else {
-					allowed = true
-				}
-
-				var res gateway.ToolResult
-
-				if !allowed {
-					// 权限未放行：以工具结果形式回传给模型（Error as Observation）
-					res = gateway.ToolResult{
-						ToolCallID: tc.ID,
-						Name:       tc.Name,
-						Content:    denyReason,
-						IsError:    true,
-					}
-				} else {
-					// 权限放行：分发给 Tool Registry 执行
-					a.mu.RLock()
-					tools := a.tools
-					a.mu.RUnlock()
-
-					var execErr error
-					res, execErr = tools.Execute(ctx, tc)
-					if execErr != nil && strings.TrimSpace(res.Content) == "" {
-						res = gateway.ToolResult{
-							ToolCallID: tc.ID,
-							Name:       tc.Name,
-							Content:    "Tool execution error: " + execErr.Error(),
-							IsError:    true,
-						}
-					}
+				// 一行直调！权限阻断（返回错误为 Observation）、参数校验、大输出落盘均由流水线钩子自治完成
+				res, execErr := tools.Execute(ctx, tc)
+				if execErr != nil && strings.TrimSpace(res.Content) == "" {
+					res.Content = "Tool execution error: " + execErr.Error()
+					res.IsError = true
 				}
 
 				sendEvent(ctx, outCh, protocol.Event{
