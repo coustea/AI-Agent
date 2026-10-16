@@ -356,7 +356,6 @@ flowchart TD
 ```text
 AI-Agent/
 ├── cmd/coustea/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
-├── main.go                    # 根级入口（与 cmd 版本等价）
 ├── internal/
 │   ├── agent/                 # Harness 核心：ReAct 循环与事件分发
 │   ├── config/                # 配置加载、持久化与环境变量补全

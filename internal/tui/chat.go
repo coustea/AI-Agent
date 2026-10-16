@@ -6,11 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"my-agent/internal/agent"
-	"my-agent/internal/config"
-	"my-agent/internal/gateway"
-	"my-agent/internal/memory"
-	"my-agent/internal/permission"
+	"my-agent/internal/protocol"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -32,7 +28,7 @@ type ChatMessage struct {
 	Content          string           // 最终回复文本
 	ReasoningContent string           // 深度思考链 (DeepSeek 等)
 	ToolCalls        []ToolCallRecord // 结构化工具调用列表
-	Usage            *gateway.Usage   // 携带的 Token 用量统计（可选）
+	Usage            *protocol.Usage  // 携带的 Token 用量统计（可选）
 }
 
 // updateChat 处理聊天页面的键盘输入和发送逻辑
@@ -40,11 +36,14 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// 1. 若当前存在挂起的权限审批请求，优先处理审批交互
-		if m.pendingPrompt != nil {
+		if m.pendingPerm != nil {
+			reqID := m.pendingPerm.RequestID
 			switch msg.String() {
 			case "y", "Y":
-				m.pendingPrompt.Respond(permission.DecisionAllowOnce)
-				m.pendingPrompt = nil
+				if m.agent != nil {
+					_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowOnce)
+				}
+				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -52,8 +51,10 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "a", "A":
-				m.pendingPrompt.Respond(permission.DecisionAllowSession)
-				m.pendingPrompt = nil
+				if m.agent != nil {
+					_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowSession)
+				}
+				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -61,8 +62,10 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "n", "N":
-				m.pendingPrompt.Respond(permission.DecisionDeny)
-				m.pendingPrompt = nil
+				if m.agent != nil {
+					_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
+				}
+				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -72,8 +75,10 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if msg.Type == tea.KeyEsc {
-				m.pendingPrompt.Respond(permission.DecisionDeny)
-				m.pendingPrompt = nil
+				if m.agent != nil {
+					_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
+				}
+				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -117,8 +122,8 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "/clear":
 				m.messages = nil
 				m.chatInput.Reset()
-				if m.bridge != nil {
-					m.bridge.Reset()
+				if m.agent != nil {
+					m.agent.Reset()
 				}
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -150,19 +155,10 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 
-			// 如果注入了 Agent 内核接口，开启流式会话；若未注入尝试按配置动态连接
-			if m.bridge == nil && (m.config.APIKey != "" || config.IsLocalProvider(m.config.Provider)) {
-				if gw, err := gateway.NewGatewayFromConfig(&m.config); err == nil {
-					if ag, err := agent.NewAgent(gw, agent.WithDefaultTools()); err == nil {
-						m.bridge = ag
-					}
-				}
-			}
-
-			if m.bridge != nil {
+			if m.agent != nil {
 				ctx, cancel := context.WithCancel(context.Background())
 				m.cancel = cancel
-				ch, err := m.bridge.StreamRun(ctx, text)
+				ch, err := m.agent.StreamRun(ctx, text)
 				if err != nil {
 					m.cancel = nil
 					m.messages[len(m.messages)-1].Content = fmt.Sprintf("[请求失败: %v]", err)
@@ -177,7 +173,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, waitForAgentEvent(ch)
 			}
 
-			// 若仍然无法建立连接（例如缺少 APIKey）
+			// 若未注入 Agent 内核
 			m.messages[len(m.messages)-1].Content = "[未配置可用模型] 请先输入 /model 配置 API Key 或设置环境变量 (DEEPSEEK_API_KEY / GEMINI_API_KEY)。"
 			m.isGenerating = false
 			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
@@ -200,16 +196,21 @@ func (m Model) renderHeaderBar() string {
 	cwd, _ := os.Getwd()
 
 	modelInfo := "未配置模型 (输入 /model 配置)"
-	if m.config.ModelName != "" {
-		modelInfo = fmt.Sprintf("%s • %s", m.config.Provider, m.config.ModelName)
+	if m.agent != nil {
+		cfg := m.agent.Config()
+		if cfg.ModelName != "" {
+			modelInfo = fmt.Sprintf("%s • %s", cfg.Provider, cfg.ModelName)
+		}
 	}
 
 	brandBadge := headerBadgeStyle.Render(" coustea ")
 	modelTag := headerTagStyle.Render(modelInfo)
 
 	// 计算长效记忆激活篇数
-	bundle := memory.LoadBundle(cwd)
-	memCount := len(bundle.GlobalFiles) + len(bundle.ProjectFiles)
+	memCount := 0
+	if m.agent != nil {
+		memCount = m.agent.MemoryCount()
+	}
 	memTag := headerMemoryStyle.Render(fmt.Sprintf("🧠 %d 篇记忆生效", memCount))
 
 	dirTag := headerDirStyle.Render(" 目录: " + cwd)
@@ -225,7 +226,7 @@ func (m Model) renderHeaderBar() string {
 // renderStatusBar 渲染运行状态指示器 (Spinner + 就绪/思考/工具中 + 视口滚动百分比)
 func (m Model) renderStatusBar() string {
 	var statusText string
-	if m.pendingPrompt != nil {
+	if m.pendingPerm != nil {
 		statusText = permissionWarnStyle.Render("🛡️ 等待授权审批 (Gate 3)")
 	} else if m.activeToolName != "" {
 		statusText = toolRunningStyle.Render(fmt.Sprintf("%s 正在执行工具 [%s]...", m.spinner.View(), m.activeToolName))
@@ -246,18 +247,18 @@ func (m Model) renderStatusBar() string {
 
 // renderPermissionCard 渲染 Claude Code 风格高安全性 Gate 3 权限审批交互卡片
 func (m Model) renderPermissionCard() string {
-	if m.pendingPrompt == nil {
+	if m.pendingPerm == nil {
 		return ""
 	}
 	cardWidth := max(60, m.width-6)
-	req := m.pendingPrompt.Request
+	req := m.pendingPerm
 
 	var sb strings.Builder
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorYellow).Render("🛡️ [权限审批 Gate 3] · 安全防护拦截")
 	sb.WriteString(title + "\n\n")
 
 	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorOrange).Render("工具名称:"), req.ToolName))
-	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Render("调用参数:"), string(req.Arguments)))
+	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Render("调用参数:"), req.Arguments))
 	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorRed).Render("拦截原因:"), req.Reason))
 
 	divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(20, cardWidth-6)))
@@ -287,7 +288,7 @@ func (m Model) renderInputBox() string {
 	var borderCol lipgloss.Color = colorCoral
 	title := "❯ 对话 coustea"
 
-	if m.pendingPrompt != nil {
+	if m.pendingPerm != nil {
 		borderCol = colorYellow
 		title = "🛡️ 等待授权审批中 (请在上方卡片按 y / a / n 决策)"
 	} else if m.isGenerating {
@@ -308,7 +309,7 @@ func (m Model) renderInputBox() string {
 
 // renderFooterBar 渲染底部快捷键提示胶囊
 func (m Model) renderFooterBar() string {
-	if m.pendingPrompt != nil {
+	if m.pendingPerm != nil {
 		return permissionWarnStyle.Render("等待权限审批: 按 [y] 允许本次  [a] 本会话始终允许  [n/Esc] 拒绝本次  [Ctrl+C] 退出")
 	}
 
@@ -487,7 +488,7 @@ func (m Model) viewChat() string {
 	s.WriteString(m.renderStatusBar())
 
 	// 4. 若有挂起的权限审批，高亮呈现权限提示卡片
-	if m.pendingPrompt != nil {
+	if m.pendingPerm != nil {
 		s.WriteString(m.renderPermissionCard() + "\n\n")
 	}
 

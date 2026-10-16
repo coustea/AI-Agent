@@ -16,7 +16,7 @@ import (
 
 	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
-	"my-agent/internal/permission"
+	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 )
 
@@ -104,16 +104,16 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 
 	var text1 strings.Builder
 	var done1 bool
-	var usage1 *gateway.Usage
+	var usage1 *protocol.Usage
 
 	for ev := range stream1 {
-		if ev.Err != nil {
-			t.Fatalf("turn 1 unexpected error: %v", ev.Err)
+		if ev.Type == protocol.EventError {
+			t.Fatalf("turn 1 unexpected error: %s", ev.Error)
 		}
-		if ev.Delta != "" {
+		if ev.Type == protocol.EventDelta {
 			text1.WriteString(ev.Delta)
 		}
-		if ev.Done {
+		if ev.Type == protocol.EventDone {
 			done1 = true
 			usage1 = ev.Usage
 		}
@@ -429,7 +429,7 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 		t.Fatalf("StreamRun failed: %v", err)
 	}
 
-	var events []AgentEvent
+	var events []protocol.Event
 	for ev := range stream {
 		events = append(events, ev)
 	}
@@ -440,19 +440,19 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 
 	for _, ev := range events {
 		switch ev.Type {
-		case EventToolCallStart:
+		case protocol.EventToolCallStart:
 			hasToolStart = true
 			if ev.ToolCall.Name != "adder" {
 				t.Errorf("unexpected tool call: %v", ev.ToolCall)
 			}
-		case EventToolCallResult:
+		case protocol.EventToolCallResult:
 			hasToolResult = true
 			if ev.ToolResult.IsError {
 				t.Errorf("tool execution failed unexpectedly: %v", ev.ToolResult.Content)
 			}
-		case EventTextDelta:
+		case protocol.EventDelta:
 			finalAnswer.WriteString(ev.Delta)
-		case EventDone:
+		case protocol.EventDone:
 			hasDone = true
 		}
 	}
@@ -509,10 +509,10 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 	var errorObsSeen bool
 	var finalAnswer strings.Builder
 	for ev := range stream {
-		if ev.Type == EventToolCallResult && ev.ToolResult.IsError {
+		if ev.Type == protocol.EventToolCallResult && ev.ToolResult.IsError {
 			errorObsSeen = true
 		}
-		if ev.Type == EventTextDelta {
+		if ev.Type == protocol.EventDelta {
 			finalAnswer.WriteString(ev.Delta)
 		}
 	}
@@ -574,7 +574,7 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 
 	var maxStepsErrSeen bool
 	for ev := range stream {
-		if ev.Type == EventError && errors.Is(ev.Err, ErrMaxSteps) {
+		if ev.Type == protocol.EventError && strings.Contains(ev.Error, ErrMaxSteps.Error()) {
 			maxStepsErrSeen = true
 		}
 	}
@@ -887,13 +887,13 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 
 	permissionPromptReceived := false
 	for ev := range streamAllow {
-		if ev.Type == EventToolPermissionRequest && ev.PermissionPrompt != nil {
+		if ev.Type == protocol.EventPermissionReq && ev.Permission != nil {
 			permissionPromptReceived = true
-			if ev.PermissionPrompt.Request.ToolName != "bash" {
-				t.Errorf("expected permission tool name 'bash', got %s", ev.PermissionPrompt.Request.ToolName)
+			if ev.Permission.ToolName != "bash" {
+				t.Errorf("expected permission tool name 'bash', got %s", ev.Permission.ToolName)
 			}
 			// 模拟用户在终端同意执行
-			ev.PermissionPrompt.Respond(permission.DecisionAllowOnce)
+			_ = agAllow.RespondPermission(ev.Permission.RequestID, protocol.DecisionAllowOnce)
 		}
 	}
 
@@ -944,10 +944,10 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 
 	permissionDenyReceived := false
 	for ev := range streamDeny {
-		if ev.Type == EventToolPermissionRequest && ev.PermissionPrompt != nil {
+		if ev.Type == protocol.EventPermissionReq && ev.Permission != nil {
 			permissionDenyReceived = true
 			// 模拟用户在终端拒绝执行
-			ev.PermissionPrompt.Respond(permission.DecisionDeny)
+			_ = agDeny.RespondPermission(ev.Permission.RequestID, protocol.DecisionDeny)
 		}
 	}
 

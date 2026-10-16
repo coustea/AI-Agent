@@ -285,4 +285,3 @@ func TestPermission_DangerousCommands_Intercept(t *testing.T) {
 		}
 	}
 }
-

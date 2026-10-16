@@ -7,10 +7,13 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 
+	"my-agent/internal/config"
 	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
 	"my-agent/internal/permission"
+	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 	"my-agent/internal/tool/builtin"
 )
@@ -59,7 +62,6 @@ func defaultPersona(workDir string) string {
 }
 
 // composeSystemPrompt 将静态 persona 与实时读取的长期记忆合成为最终系统提示词。
-// 记忆在每轮对话开始时重新读取，因此模型上一轮通过 write_file 沉淀的内容会在下一轮立即生效。
 func composeSystemPrompt(persona, workDir string) string {
 	memoryBlock := memory.LoadBundle(workDir).FormatForPrompt()
 	if memoryBlock == "" {
@@ -68,45 +70,33 @@ func composeSystemPrompt(persona, workDir string) string {
 	return persona + "\n\n" + memoryBlock
 }
 
-// EventType 定义 Agent 发送给调用方的流式事件类型
-type EventType string
-
-const (
-	EventTextDelta             EventType = "text_delta"
-	EventReasoningDelta        EventType = "reasoning_delta"
-	EventToolCallStart         EventType = "tool_call_start"
-	EventToolPermissionRequest EventType = "tool_permission_request"
-	EventToolCallResult        EventType = "tool_call_result"
-	EventDone                  EventType = "done"
-	EventError                 EventType = "error"
-)
-
-// PermissionPrompt 包含待审批的工具调用请求与用户决策回调
-type PermissionPrompt struct {
-	Request permission.Request
-	Respond func(permission.Decision)
-}
-
-// AgentEvent 是 Agent 向调用方发送的流式事件
-type AgentEvent struct {
-	Type             EventType
-	Delta            string              // 文本流式增量
-	ReasoningDelta   string              // 深度思考链流式增量 (DeepSeek 等)
-	ToolCall         *gateway.ToolCall   // 工具开始调用时携带
-	PermissionPrompt *PermissionPrompt   // 遇到高危工具需要权限确认时携带
-	ToolResult       *gateway.ToolResult // 工具执行结束时携带
-	Usage            *gateway.Usage      // 本轮 Token 消耗汇总
-	Done             bool                // 对话是否完成
-	Err              error               // 遇到的错误
-}
-
-// Agent 定义智能体调用的对外核心契约
+// Agent 定义智能体调用的对外核心契约，任何前端（TUI、桌面端、无头宿主）直接引入使用
 type Agent interface {
-	StreamRun(ctx context.Context, prompt string) (<-chan AgentEvent, error)
+	// StreamRun 开启单轮对话交互，返回原生支持序列化的纯数据事件流
+	StreamRun(ctx context.Context, prompt string) (<-chan protocol.Event, error)
+
+	// RespondPermission 异步审批权限请求（基于 requestID 关联）
+	RespondPermission(requestID string, decision protocol.Decision) error
+
+	// Reset 清空当前会话记忆
 	Reset()
-	SetGateway(gw gateway.Gateway)
-	History() []gateway.Message
+
+	// Config 获取当前配置与就绪状态（只读视图）
+	Config() protocol.ConfigView
+
+	// UpdateConfig 更新模型提供商、密钥与模型名称（内核负责落盘 config.json 与热切网关）
+	UpdateConfig(provider, apiKey, model string) error
+
+	// MemoryCount 返回当前工作区生效的长期记忆篇数
+	MemoryCount() int
+
+	// TotalUsage 获取当前实例累计消耗的总 Token 用量
+	TotalUsage() protocol.Usage
+
+	// SystemPrompt 获取当前由 persona 与长期记忆合成的完整系统提示词
 	SystemPrompt() string
+
+	// WorkDir 获取当前绑定的工作目录
 	WorkDir() string
 }
 
@@ -115,15 +105,20 @@ type Option func(*CoreAgent)
 
 // CoreAgent 是基于 Harness 思想驱动 ReAct 循环与状态机管理的运行核心
 type CoreAgent struct {
-	mu         sync.RWMutex
-	gw         gateway.Gateway
-	workDir    string
-	memory     memory.Memory
-	tools      *tool.Registry
-	permission *permission.Manager
-	persona    string
-	maxSteps   int
-	running    bool
+	mu           sync.RWMutex
+	gw           gateway.Gateway
+	cfg          *config.Config
+	cfgPath      string
+	workDir      string
+	memory       memory.Memory
+	tools        *tool.Registry
+	permission   *permission.Manager
+	persona      string
+	maxSteps     int
+	running      bool
+	pendingMu    sync.Mutex
+	pendingPerms map[string]chan protocol.Decision
+	permSeq      uint64
 }
 
 // WithMemory 配置自定义记忆管理器
@@ -203,8 +198,7 @@ func WithDefaultTools(workDir ...string) Option {
 	}
 }
 
-// WithSystemPrompt 配置自定义 persona（静态身份与准则部分）。
-// 长期记忆块不受其影响，仍会在每轮对话开始时动态追加。
+// WithSystemPrompt 配置自定义 persona
 func WithSystemPrompt(prompt string) Option {
 	return func(a *CoreAgent) {
 		if strings.TrimSpace(prompt) != "" {
@@ -222,6 +216,16 @@ func WithMaxSteps(steps int) Option {
 	}
 }
 
+// WithConfig 配置初始配置对象与落盘路径
+func WithConfig(cfg *config.Config, cfgPath ...string) Option {
+	return func(a *CoreAgent) {
+		a.cfg = cfg
+		if len(cfgPath) > 0 && cfgPath[0] != "" {
+			a.cfgPath = cfgPath[0]
+		}
+	}
+}
+
 // NewAgent 使用函数式选项构建 CoreAgent 实例（严格遵守零 nil 默认装配原则）
 func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 	if gw == nil {
@@ -232,13 +236,14 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 	_ = memory.InitTemplates(wd)
 
 	a := &CoreAgent{
-		gw:         gw,
-		workDir:    wd,
-		memory:     memory.NewSlidingWindowMemory(40),
-		tools:      tool.NewRegistry(),
-		permission: permission.NewManager(wd),
-		persona:    defaultPersona(wd),
-		maxSteps:   10,
+		gw:           gw,
+		workDir:      wd,
+		memory:       memory.NewSlidingWindowMemory(40),
+		tools:        tool.NewRegistry(),
+		permission:   permission.NewManager(wd),
+		persona:      defaultPersona(wd),
+		maxSteps:     10,
+		pendingPerms: make(map[string]chan protocol.Decision),
 	}
 
 	for _, opt := range opts {
@@ -248,13 +253,131 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 	return a, nil
 }
 
-// SetGateway 支持运行时热切换大模型网关，完整保留当前记忆与已注册工具
+// NewFromConfig 根据配置一步初始化就绪的 CoreAgent（默认装配内置安全沙箱工具与配置自治管理）
+func NewFromConfig(cfg *config.Config, opts ...Option) (*CoreAgent, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("agent: config cannot be nil")
+	}
+	gw, err := gateway.NewGatewayFromConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	defaultOpts := []Option{
+		WithDefaultTools(),
+		WithConfig(cfg, config.DefaultConfigPath()),
+	}
+	defaultOpts = append(defaultOpts, opts...)
+	return NewAgent(gw, defaultOpts...)
+}
+
+// Config 返回当前配置与就绪状态视图（只读数据，供 UI 呈现）
+func (a *CoreAgent) Config() protocol.ConfigView {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	cv := protocol.ConfigView{
+		AvailableProviders: []string{
+			string(config.ProviderLlamaCpp),
+			string(config.ProviderDeepSeek),
+			string(config.ProviderGemini),
+			string(config.ProviderSpark),
+		},
+	}
+	if a.cfg != nil {
+		cv.Provider = string(a.cfg.Provider)
+		cv.ModelName = a.cfg.ModelName
+		cv.HasAPIKey = a.cfg.APIKey != "" || config.IsLocalProvider(a.cfg.Provider)
+	}
+	return cv
+}
+
+// UpdateConfig 运行时更新模型提供商、密钥与模型名称（由内核自动负责校验、落盘 config.json 与热切网关）
+func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if a.cfg == nil {
+		a.cfg = &config.Config{
+			Provider:  config.ProviderLlamaCpp,
+			ModelName: config.DefaultLlamaCppModel,
+			BaseURL:   config.DefaultLlamaCppBaseURL,
+		}
+	}
+	newProvider := config.Provider(provider)
+	if provider != "" {
+		a.cfg.SwitchProvider(newProvider)
+	}
+	if apiKey != "" {
+		a.cfg.APIKey = apiKey
+	}
+	if strings.TrimSpace(model) != "" {
+		a.cfg.ModelName = strings.TrimSpace(model)
+	} else if a.cfg.ModelName == "" {
+		a.cfg.ModelName = config.DefaultModel(newProvider)
+	}
+
+	if a.cfgPath == "" {
+		a.cfgPath = config.DefaultConfigPath()
+	}
+	if err := config.SaveConfig(a.cfgPath, a.cfg); err != nil {
+		return fmt.Errorf("agent: save config failed: %w", err)
+	}
+
+	gw, err := gateway.NewGatewayFromConfig(a.cfg)
+	if err != nil {
+		return fmt.Errorf("agent: initialize gateway failed: %w", err)
+	}
+	a.gw = gw
+	return nil
+}
+
+// RespondPermission 异步审批权限请求（无状态，由 RequestID 关联）
+func (a *CoreAgent) RespondPermission(requestID string, decision protocol.Decision) error {
+	a.pendingMu.Lock()
+	ch, ok := a.pendingPerms[requestID]
+	a.pendingMu.Unlock()
+	if !ok {
+		return fmt.Errorf("agent: permission request %q not found or already resolved", requestID)
+	}
+	select {
+	case ch <- decision:
+		return nil
+	default:
+		return fmt.Errorf("agent: permission request %q is busy or channel closed", requestID)
+	}
+}
+
+// SetGateway 支持运行时热切换大模型网关
 func (a *CoreAgent) SetGateway(gw gateway.Gateway) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if gw != nil {
 		a.gw = gw
 	}
+}
+
+// MemoryCount 返回当前工作区生效的长期记忆篇数，供前端直接展示
+func (a *CoreAgent) MemoryCount() int {
+	a.mu.RLock()
+	wd := a.workDir
+	a.mu.RUnlock()
+	bundle := memory.LoadBundle(wd)
+	return len(bundle.GlobalFiles) + len(bundle.ProjectFiles)
+}
+
+// TotalUsage 获取当前实例累计消耗的总 Token 用量
+func (a *CoreAgent) TotalUsage() protocol.Usage {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.gw != nil {
+		u := a.gw.TotalUsage()
+		return protocol.Usage{
+			PromptTokens:     u.PromptTokens,
+			CompletionTokens: u.CompletionTokens,
+			TotalTokens:      u.TotalTokens,
+		}
+	}
+	return protocol.Usage{}
 }
 
 // Reset 清空当前会话记忆
@@ -264,7 +387,7 @@ func (a *CoreAgent) Reset() {
 	a.memory.Clear()
 }
 
-// History 获取历史消息快照
+// History 获取历史消息快照（内部测试与监控使用）
 func (a *CoreAgent) History() []gateway.Message {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
@@ -299,13 +422,8 @@ func (a *CoreAgent) RegisterTools(ts ...tool.Tool) {
 	a.tools.Register(ts...)
 }
 
-// StreamRun 驱动 Harness 核心 ReAct 状态循环：
-// 1. 记忆安全检索与组装
-// 2. 网关流式推理与打字输出
-// 3. 轮次收敛判断与工具调用检测
-// 4. 三道闸门权限管线审批
-// 5. 工具安全执行与观察结果 (Observation) 回传
-func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentEvent, error) {
+// StreamRun 驱动 Harness 核心 ReAct 状态循环，返回纯数据事件流
+func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protocol.Event, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return nil, ErrEmptyPrompt
@@ -313,6 +431,13 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 
 	if ctx == nil {
 		ctx = context.Background()
+	}
+
+	a.mu.RLock()
+	gw := a.gw
+	a.mu.RUnlock()
+	if gw == nil {
+		return nil, errors.New("agent: no model gateway configured, please configure via /model")
 	}
 
 	a.mu.Lock()
@@ -323,7 +448,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 	a.running = true
 	a.mu.Unlock()
 
-	outCh := make(chan AgentEvent, 32)
+	outCh := make(chan protocol.Event, 32)
 
 	go func() {
 		defer close(outCh)
@@ -337,7 +462,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 		userMsg := gateway.Message{Role: gateway.RoleUser, Content: prompt}
 		_ = a.memory.Append(ctx, userMsg)
 
-		// 2. 每用户轮次开始时动态合成系统提示词（静态 persona + 实时长期记忆）
+		// 2. 每用户轮次开始时动态合成系统提示词
 		a.mu.RLock()
 		sysPrompt := composeSystemPrompt(a.persona, a.workDir)
 		permMgr := a.permission
@@ -349,7 +474,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 		for step := 0; step < a.maxSteps; step++ {
 			select {
 			case <-ctx.Done():
-				sendAgentEvent(ctx, outCh, AgentEvent{Type: EventError, Err: ctx.Err(), Done: true})
+				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: ctx.Err().Error()})
 				return
 			default:
 			}
@@ -359,10 +484,10 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 			toolDefs := a.tools.Definitions()
 			a.mu.RUnlock()
 
-			// 基于记忆状态机安全构建当前上下文 (保证 Turn Atomicity 轮次原子性)
+			// 基于记忆状态机安全构建当前上下文
 			reqMsgs, err := a.memory.BuildContext(ctx, sysPrompt)
 			if err != nil {
-				sendAgentEvent(ctx, outCh, AgentEvent{Type: EventError, Err: err, Done: true})
+				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
 				return
 			}
 
@@ -372,7 +497,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 				Tools:    toolDefs,
 			})
 			if err != nil {
-				sendAgentEvent(ctx, outCh, AgentEvent{Type: EventError, Err: err, Done: true})
+				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
 				return
 			}
 
@@ -388,15 +513,15 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 				}
 				if chunk.ReasoningContent != "" {
 					reasoningBuilder.WriteString(chunk.ReasoningContent)
-					sendAgentEvent(ctx, outCh, AgentEvent{
-						Type:           EventReasoningDelta,
-						ReasoningDelta: chunk.ReasoningContent,
+					sendEvent(ctx, outCh, protocol.Event{
+						Type:      protocol.EventReasoningDelta,
+						Reasoning: chunk.ReasoningContent,
 					})
 				}
 				if chunk.Delta != "" {
 					replyBuilder.WriteString(chunk.Delta)
-					sendAgentEvent(ctx, outCh, AgentEvent{
-						Type:  EventTextDelta,
+					sendEvent(ctx, outCh, protocol.Event{
+						Type:  protocol.EventDelta,
 						Delta: chunk.Delta,
 					})
 				}
@@ -408,9 +533,9 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 				}
 			}
 
-			// 流式异常回滚原则：若网关流发生网络或协议错误中断，不得残留半截残缺消息破坏记忆
+			// 流式异常回滚原则
 			if streamErr != nil {
-				sendAgentEvent(ctx, outCh, AgentEvent{Type: EventError, Err: streamErr, Done: true})
+				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: streamErr.Error()})
 				return
 			}
 
@@ -422,48 +547,73 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 				ToolCalls:        toolCalls,
 			})
 
-			// 4. 收敛退出判断：若无工具调用，说明已得出最终回答，结束本轮交互
+			// 4. 收敛退出判断：若无工具调用，说明已得出最终回答，发送 EventDone 结束本轮交互
 			if len(toolCalls) == 0 {
-				sendAgentEvent(ctx, outCh, AgentEvent{
-					Type:  EventDone,
-					Usage: &totalTurnUsage,
-					Done:  true,
+				sendEvent(ctx, outCh, protocol.Event{
+					Type: protocol.EventDone,
+					Usage: &protocol.Usage{
+						PromptTokens:     totalTurnUsage.PromptTokens,
+						CompletionTokens: totalTurnUsage.CompletionTokens,
+						TotalTokens:      totalTurnUsage.TotalTokens,
+					},
 				})
 				return
 			}
 
-			// 5. 执行工具调用流水线 (Gate 1/2/3 权限审查 -> 工具执行 -> 错误自愈 Error as Observation)
+			// 5. 执行工具调用流水线 (Gate 1/2/3 权限审查 -> 工具执行 -> 错误自愈)
 			for _, tc := range toolCalls {
-				sendAgentEvent(ctx, outCh, AgentEvent{Type: EventToolCallStart, ToolCall: &tc})
+				sendEvent(ctx, outCh, protocol.Event{
+					Type: protocol.EventToolCallStart,
+					ToolCall: &protocol.ToolCallRecord{
+						ID:        tc.ID,
+						Name:      tc.Name,
+						Arguments: string(tc.Arguments),
+					},
+				})
 
 				// 权限门禁审查
 				var allowed bool
 				var denyReason string
 
 				if permMgr != nil {
-					// 若未配置外部审批器，动态桥接流式通道通知调用方进行审批
 					origApprover := permMgr.Approver()
 					if origApprover == nil {
 						permMgr.SetApprover(permission.ApproverFunc(func(pCtx context.Context, req permission.Request) (permission.Decision, error) {
-							respCh := make(chan permission.Decision, 1)
-							prompt := &PermissionPrompt{
-								Request: req,
-								Respond: func(d permission.Decision) {
-									select {
-									case respCh <- d:
-									default:
-									}
+							reqID := fmt.Sprintf("perm_%d", atomic.AddUint64(&a.permSeq, 1))
+							respCh := make(chan protocol.Decision, 1)
+
+							a.pendingMu.Lock()
+							a.pendingPerms[reqID] = respCh
+							a.pendingMu.Unlock()
+
+							defer func() {
+								a.pendingMu.Lock()
+								delete(a.pendingPerms, reqID)
+								a.pendingMu.Unlock()
+							}()
+
+							if !sendEvent(pCtx, outCh, protocol.Event{
+								Type: protocol.EventPermissionReq,
+								Permission: &protocol.PermissionRequest{
+									RequestID: reqID,
+									ToolName:  req.ToolName,
+									Arguments: string(req.Arguments),
+									Reason:    req.Reason,
 								},
-							}
-							if !sendAgentEvent(pCtx, outCh, AgentEvent{
-								Type:             EventToolPermissionRequest,
-								PermissionPrompt: prompt,
 							}) {
 								return permission.DecisionDeny, pCtx.Err()
 							}
+
 							select {
 							case d := <-respCh:
-								return d, nil
+								switch d {
+								case protocol.DecisionAllowOnce:
+									return permission.DecisionAllowOnce, nil
+								case protocol.DecisionAllowSession:
+									return permission.DecisionAllowSession, nil
+								default:
+									return permission.DecisionDeny, nil
+								}
 							case <-pCtx.Done():
 								return permission.DecisionDeny, pCtx.Err()
 							}
@@ -511,7 +661,15 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 					}
 				}
 
-				sendAgentEvent(ctx, outCh, AgentEvent{Type: EventToolCallResult, ToolResult: &res})
+				sendEvent(ctx, outCh, protocol.Event{
+					Type: protocol.EventToolCallResult,
+					ToolResult: &protocol.ToolResultRecord{
+						ToolCallID: res.ToolCallID,
+						Name:       res.Name,
+						Content:    res.Content,
+						IsError:    res.IsError,
+					},
+				})
 
 				_ = a.memory.Append(ctx, gateway.Message{
 					Role:       gateway.RoleTool,
@@ -521,17 +679,16 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan AgentE
 			// 继续下一步 ReAct 循环
 		}
 
-		sendAgentEvent(ctx, outCh, AgentEvent{
-			Type: EventError,
-			Err:  ErrMaxSteps,
-			Done: true,
+		sendEvent(ctx, outCh, protocol.Event{
+			Type:  protocol.EventError,
+			Error: ErrMaxSteps.Error(),
 		})
 	}()
 
 	return outCh, nil
 }
 
-func sendAgentEvent(ctx context.Context, ch chan<- AgentEvent, ev AgentEvent) bool {
+func sendEvent(ctx context.Context, ch chan<- protocol.Event, ev protocol.Event) bool {
 	select {
 	case ch <- ev:
 		return true

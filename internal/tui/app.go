@@ -6,8 +6,7 @@ import (
 	"strings"
 
 	"my-agent/internal/agent"
-	"my-agent/internal/config"
-	"my-agent/internal/gateway"
+	"my-agent/internal/protocol"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -26,19 +25,17 @@ const (
 	stateChat                            // 状态 4: 主聊天页面（在 chat.go 中处理）
 )
 
-// agentStreamEventMsg 封装来自 Agent 的单次流式事件
+// agentStreamEventMsg 封装来自 Agent 的单次纯数据流式事件
 type agentStreamEventMsg struct {
-	event agent.AgentEvent
-	ch    <-chan agent.AgentEvent
+	event protocol.Event
+	ch    <-chan protocol.Event
 }
 
-func waitForAgentEvent(ch <-chan agent.AgentEvent) tea.Cmd {
+func waitForAgentEvent(ch <-chan protocol.Event) tea.Cmd {
 	return func() tea.Msg {
 		event, ok := <-ch
 		if !ok {
-			return agentStreamEventMsg{
-				event: agent.AgentEvent{Done: true},
-			}
+			return nil
 		}
 		return agentStreamEventMsg{
 			event: event,
@@ -51,14 +48,13 @@ func waitForAgentEvent(ch <-chan agent.AgentEvent) tea.Cmd {
 type Model struct {
 	state sessionState
 
-	// 配置文件与模型配置
-	cfgPath string
-	config  config.Config
-
 	// 状态 1: 模型选择（官网示例风格，在 model.go 中处理）
-	cursor   int
-	choices  []string
-	selected int
+	cursor          int
+	choices         []string
+	selected        int
+	currentProvider string
+	currentModel    string
+	currentAPIKey   string
 
 	// 状态 2 & 3: 配置输入框（在 model.go 中处理）
 	apiKeyInput textinput.Model
@@ -70,8 +66,8 @@ type Model struct {
 	isGenerating bool               // 是否正在流式生成中
 	cancel       context.CancelFunc // 当前流式会话的中断回调
 
-	// 权限门禁待审批请求（基于 Harness Gate 3 交互）
-	pendingPrompt *agent.PermissionPrompt
+	// 权限门禁待审批请求（基于纯数据 Protocol RequestID 关联）
+	pendingPerm *protocol.PermissionRequest
 
 	// 视口与动态指示器
 	viewport       viewport.Model
@@ -83,15 +79,12 @@ type Model struct {
 	width  int
 	height int
 
-	// 预留给后期接入 Agent 内核的契约接口
-	bridge AgentBridge
+	// 注入的 Agent 智能体核心接口
+	agent agent.Agent
 }
 
 // NewModel 初始化并返回主 Model
-func NewModel(bridge AgentBridge) Model {
-	cfgPath := config.DefaultConfigPath()
-	existingCfg, err := config.LoadConfig(cfgPath)
-
+func NewModel(ag agent.Agent) Model {
 	// 1. API Key 输入框
 	apiKeyInput := textinput.New()
 	apiKeyInput.Placeholder = "在此粘贴或输入你的 API Key (按 Enter 确认)"
@@ -121,49 +114,57 @@ func NewModel(bridge AgentBridge) Model {
 	// 5. 消息滚动视口 (Viewport)
 	vp := viewport.New(80, 20)
 
+	choices := []string{"llamacpp", "deepseek", "gemini", "spark"}
+	var curProvider, curModel string
+	if ag != nil {
+		cfgView := ag.Config()
+		if len(cfgView.AvailableProviders) > 0 {
+			choices = cfgView.AvailableProviders
+		}
+		curProvider = cfgView.Provider
+		curModel = cfgView.ModelName
+	}
+
+	selectedIdx := 0
+	for i, c := range choices {
+		if strings.EqualFold(c, curProvider) {
+			selectedIdx = i
+			break
+		}
+	}
+
 	m := Model{
-		cfgPath: cfgPath,
-		choices: []string{
-			string(config.ProviderLlamaCpp),
-			string(config.ProviderDeepSeek),
-			string(config.ProviderGemini),
-			string(config.ProviderSpark),
-		},
-		selected:    0,
-		apiKeyInput: apiKeyInput,
-		modelInput:  modelInput,
-		chatInput:   chatInput,
-		messages:    []ChatMessage{},
-		bridge:      bridge,
-		spinner:     sp,
-		viewport:    vp,
+		choices:         choices,
+		selected:        selectedIdx,
+		cursor:          selectedIdx,
+		currentProvider: curProvider,
+		currentModel:    curModel,
+		apiKeyInput:     apiKeyInput,
+		modelInput:      modelInput,
+		chatInput:       chatInput,
+		messages:        []ChatMessage{},
+		agent:           ag,
+		spinner:         sp,
+		viewport:        vp,
 	}
 
 	// 主线永远是聊天对话页面（输入框交互）
 	m.state = stateChat
 	m.chatInput.Focus()
 
-	// 检查是否有现有配置或可用环境配置
-	if err == nil && existingCfg != nil && (existingCfg.APIKey != "" || config.IsLocalProvider(existingCfg.Provider)) {
-		m.config = *existingCfg
-		for i, c := range m.choices {
-			if strings.EqualFold(c, string(m.config.Provider)) {
-				m.selected = i
-				m.cursor = i
-				break
-			}
+	if ag != nil && curModel != "" {
+		cfgView := ag.Config()
+		if cfgView.HasAPIKey {
+			m.messages = append(m.messages, ChatMessage{
+				Sender:  "System",
+				Content: fmt.Sprintf("已连接大模型服务，平台: %s, 模型: %s。直接输入问题即可开始多轮对话 (输入 /model 可切换模型平台)。", cfgView.Provider, cfgView.ModelName),
+			})
+		} else {
+			m.messages = append(m.messages, ChatMessage{
+				Sender:  "System",
+				Content: "欢迎使用 coustea！当前模型尚未配置 API Key，可随时输入 /model 调出配置向导。",
+			})
 		}
-		if m.bridge == nil {
-			if gw, gwErr := gateway.NewGatewayFromConfig(existingCfg); gwErr == nil {
-				if ag, agErr := agent.NewAgent(gw, agent.WithDefaultTools()); agErr == nil {
-					m.bridge = ag
-				}
-			}
-		}
-		m.messages = append(m.messages, ChatMessage{
-			Sender:  "System",
-			Content: fmt.Sprintf("已连接大模型服务 [%s]，平台: %s, 模型: %s。直接输入问题即可开始多轮对话 (输入 /model 可切换模型平台)。", cfgPath, m.config.Provider, m.config.ModelName),
-		})
 	} else {
 		m.messages = append(m.messages, ChatMessage{
 			Sender:  "System",
@@ -172,7 +173,6 @@ func NewModel(bridge AgentBridge) Model {
 	}
 
 	m.viewport.SetContent(m.renderChatMessages())
-
 	return m
 }
 
@@ -258,7 +258,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		headerHeight := 4
 		footerHeight := 8
-		if m.pendingPrompt != nil {
+		if m.pendingPerm != nil {
 			footerHeight += 8
 		}
 		vpHeight := max(6, msg.Height-headerHeight-footerHeight)
@@ -275,8 +275,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		lastIdx := len(m.messages) - 1
 
-		if msg.event.Err != nil {
-			m.messages[lastIdx].Content += fmt.Sprintf("\n[出错: %v]", msg.event.Err)
+		switch msg.event.Type {
+		case protocol.EventError:
+			errMsg := msg.event.Error
+			if errMsg == "" {
+				errMsg = "未知异常"
+			}
+			m.messages[lastIdx].Content += fmt.Sprintf("\n[出错: %s]", errMsg)
 			m.isGenerating = false
 			m.activeToolName = ""
 			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
@@ -286,78 +291,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 			return m, nil
-		}
 
-		if msg.event.Type == agent.EventReasoningDelta {
-			m.messages[lastIdx].ReasoningContent += msg.event.ReasoningDelta
-			if m.viewportReady {
-				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
-			}
-			return m, waitForAgentEvent(msg.ch)
-		}
-
-		if msg.event.Type == agent.EventToolCallStart && msg.event.ToolCall != nil {
-			m.activeToolName = msg.event.ToolCall.Name
-			m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
-				ID:        msg.event.ToolCall.ID,
-				Name:      msg.event.ToolCall.Name,
-				Arguments: string(msg.event.ToolCall.Arguments),
-				Running:   true,
-			})
-			if m.viewportReady {
-				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
-			}
-		}
-
-		if msg.event.Type == agent.EventToolPermissionRequest && msg.event.PermissionPrompt != nil {
-			m.pendingPrompt = msg.event.PermissionPrompt
-			m.chatInput.Placeholder = "[等待权限决策] 请直接按 y (允许) / a (信任) / n (拒绝)"
-			if m.viewportReady {
-				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
-			}
-			return m, waitForAgentEvent(msg.ch)
-		}
-
-		if msg.event.Type == agent.EventToolCallResult && msg.event.ToolResult != nil {
-			m.activeToolName = ""
-			tcs := m.messages[lastIdx].ToolCalls
-			found := false
-			for i := len(tcs) - 1; i >= 0; i-- {
-				if tcs[i].ID == msg.event.ToolResult.ToolCallID || tcs[i].Name == msg.event.ToolResult.Name {
-					tcs[i].Running = false
-					tcs[i].Result = msg.event.ToolResult.Content
-					tcs[i].IsError = msg.event.ToolResult.IsError
-					found = true
-					break
-				}
-			}
-			if !found {
-				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
-					ID:      msg.event.ToolResult.ToolCallID,
-					Name:    msg.event.ToolResult.Name,
-					Result:  msg.event.ToolResult.Content,
-					IsError: msg.event.ToolResult.IsError,
-					Running: false,
-				})
-			}
-			if m.viewportReady {
-				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
-			}
-		}
-
-		if msg.event.Delta != "" {
-			m.messages[lastIdx].Content += msg.event.Delta
-			if m.viewportReady {
-				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
-			}
-		}
-
-		if msg.event.Done {
+		case protocol.EventDone:
 			m.isGenerating = false
 			m.activeToolName = ""
 			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
@@ -370,6 +305,79 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 			return m, nil
+
+		case protocol.EventReasoningDelta:
+			m.messages[lastIdx].ReasoningContent += msg.event.Reasoning
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
+			return m, waitForAgentEvent(msg.ch)
+
+		case protocol.EventDelta:
+			m.messages[lastIdx].Content += msg.event.Delta
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
+			return m, waitForAgentEvent(msg.ch)
+
+		case protocol.EventToolCallStart:
+			if msg.event.ToolCall != nil {
+				m.activeToolName = msg.event.ToolCall.Name
+				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
+					ID:        msg.event.ToolCall.ID,
+					Name:      msg.event.ToolCall.Name,
+					Arguments: msg.event.ToolCall.Arguments,
+					Running:   true,
+				})
+				if m.viewportReady {
+					m.viewport.SetContent(m.renderChatMessages())
+					m.viewport.GotoBottom()
+				}
+			}
+			return m, waitForAgentEvent(msg.ch)
+
+		case protocol.EventToolCallResult:
+			if msg.event.ToolResult != nil {
+				m.activeToolName = ""
+				tcs := m.messages[lastIdx].ToolCalls
+				found := false
+				for i := len(tcs) - 1; i >= 0; i-- {
+					if tcs[i].ID == msg.event.ToolResult.ToolCallID || tcs[i].Name == msg.event.ToolResult.Name {
+						tcs[i].Running = false
+						tcs[i].Result = msg.event.ToolResult.Content
+						tcs[i].IsError = msg.event.ToolResult.IsError
+						found = true
+						break
+					}
+				}
+				if !found {
+					m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
+						ID:      msg.event.ToolResult.ToolCallID,
+						Name:    msg.event.ToolResult.Name,
+						Result:  msg.event.ToolResult.Content,
+						IsError: msg.event.ToolResult.IsError,
+						Running: false,
+					})
+				}
+				if m.viewportReady {
+					m.viewport.SetContent(m.renderChatMessages())
+					m.viewport.GotoBottom()
+				}
+			}
+			return m, waitForAgentEvent(msg.ch)
+
+		case protocol.EventPermissionReq:
+			if msg.event.Permission != nil {
+				m.pendingPerm = msg.event.Permission
+				m.chatInput.Placeholder = "[等待权限决策] 请直接按 y (允许) / a (信任) / n (拒绝)"
+				if m.viewportReady {
+					m.viewport.SetContent(m.renderChatMessages())
+					m.viewport.GotoBottom()
+				}
+			}
+			return m, waitForAgentEvent(msg.ch)
 		}
 
 		return m, waitForAgentEvent(msg.ch)
@@ -385,12 +393,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateInputModel(msg)
 	case stateChat:
 		return m.updateChat(msg)
+	default:
+		return m, nil
 	}
-
-	return m, nil
 }
 
-// View 界面渲染总入口
+// View 总渲染入口
 func (m Model) View() string {
 	switch m.state {
 	case stateSelectModel:
@@ -402,13 +410,6 @@ func (m Model) View() string {
 	case stateChat:
 		return m.viewChat()
 	default:
-		return ""
+		return "未知界面状态"
 	}
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
