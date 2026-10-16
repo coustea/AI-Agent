@@ -173,13 +173,13 @@ func (m Model) renderHeaderBar() string {
 	}
 
 	brandBadge := headerBadgeStyle.Render(" coustea ")
-	modelTag := headerTagStyle.Render(modelInfo)
+	modelTag := headerTagStyle.Render("● " + modelInfo)
 
 	// 计算长效记忆激活篇数
 	memCount := m.agent.MemoryCount()
 	memTag := headerMemoryStyle.Render(fmt.Sprintf("🧠 %d 篇记忆生效", memCount))
 
-	dirTag := headerDirStyle.Render(" 目录: " + m.agent.WorkDir())
+	dirTag := headerDirStyle.Render(" 📂 目录: " + m.agent.WorkDir())
 
 	headerRow := fmt.Sprintf("%s %s %s%s", brandBadge, modelTag, memTag, dirTag)
 	sb.WriteString("\n" + headerRow + "\n")
@@ -193,11 +193,11 @@ func (m Model) renderHeaderBar() string {
 func (m Model) renderStatusBar() string {
 	var statusText string
 	if m.pendingPerm != nil {
-		statusText = permissionWarnStyle.Render("🛡️ 等待授权审批 (Gate 3)")
+		statusText = permissionWarnStyle.Render("🛡️ 等待授权决策 (Gate 3)")
 	} else if m.activeToolName != "" {
-		statusText = toolRunningStyle.Render(fmt.Sprintf("%s 正在执行工具 [%s]...", m.spinner.View(), m.activeToolName))
+		statusText = toolRunningStyle.Render(fmt.Sprintf("%s 正在调用 [%s]...", m.spinner.View(), m.activeToolName))
 	} else if m.isGenerating {
-		statusText = statusThinkingStyle.Render(fmt.Sprintf("%s 正在思考生成中...", m.spinner.View()))
+		statusText = statusThinkingStyle.Render(fmt.Sprintf("%s 正在深度思考生成中...", m.spinner.View()))
 	} else {
 		statusText = statusReadyStyle.Render("● 就绪")
 	}
@@ -205,7 +205,7 @@ func (m Model) renderStatusBar() string {
 	scrollHint := ""
 	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
 		percent := int(m.viewport.ScrollPercent() * 100)
-		scrollHint = scrollIndicatorStyle.Render(fmt.Sprintf(" [已滚至 %d%% | PgUp/PgDn 滚动]", percent))
+		scrollHint = scrollIndicatorStyle.Render(fmt.Sprintf(" [已滚至 %d%% | PgUp/PgDn 翻页]", percent))
 	}
 
 	return fmt.Sprintf(" %s%s\n", statusText, scrollHint)
@@ -220,22 +220,23 @@ func (m Model) renderPermissionCard() string {
 	req := m.pendingPerm
 
 	var sb strings.Builder
-	title := lipgloss.NewStyle().Bold(true).Foreground(colorYellow).Render("🛡️ [权限审批 Gate 3] · 安全防护拦截")
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorYellow).Render("🛡️  [权限审批 Gate 3] · 拦截潜在高危行为")
 	sb.WriteString(title + "\n\n")
 
-	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorOrange).Render("工具名称:"), req.ToolName))
-	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Render("调用参数:"), req.Arguments))
-	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorRed).Render("拦截原因:"), req.Reason))
+	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorOrange).Render("⚡ 工具目标:"), req.ToolName))
+	argPreview := lipgloss.NewStyle().Background(colorSurface).Foreground(colorCyan).Padding(0, 1).Render(req.Arguments)
+	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Render("📝 风险调用:"), argPreview))
+	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorRed).Render("⚠️  拦截原因:"), req.Reason))
 
 	divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(20, cardWidth-6)))
 	sb.WriteString("\n" + divider + "\n")
 
 	actions := fmt.Sprintf("  %s %s   %s %s   %s %s",
-		lipgloss.NewStyle().Bold(true).Foreground(colorGreen).Render("[y] 允许本次"),
-		dimStyle.Render("(单次执行)"),
-		lipgloss.NewStyle().Bold(true).Foreground(colorYellow).Render("[a] 本会话始终允许"),
+		keycapAllowStyle.Render("[y] 允许本次"),
+		dimStyle.Render("(单次放行)"),
+		keycapSessionStyle.Render("[a] 本会话始终允许"),
 		dimStyle.Render("(信任同类)"),
-		lipgloss.NewStyle().Bold(true).Foreground(colorRed).Render("[n/Esc] 拒绝本次"),
+		keycapDenyStyle.Render("[n/Esc] 阻断执行"),
 		dimStyle.Render("(安全拦截)"),
 	)
 	sb.WriteString(actions)
@@ -243,6 +244,7 @@ func (m Model) renderPermissionCard() string {
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(colorYellow).
+		Background(colorYellowSubtle).
 		Padding(0, 1).
 		Width(cardWidth).
 		Render(sb.String())
@@ -276,24 +278,24 @@ func (m Model) renderInputBox() string {
 // renderFooterBar 渲染底部快捷键提示胶囊
 func (m Model) renderFooterBar() string {
 	if m.pendingPerm != nil {
-		return permissionWarnStyle.Render("等待权限审批: 按 [y] 允许本次  [a] 本会话始终允许  [n/Esc] 拒绝本次  [Ctrl+C] 退出")
+		return permissionWarnStyle.Render("等待权限决策: [y] 允许单次  [a] 会话始终允许  [n/Esc] 阻断执行  [Ctrl+C] 退出")
 	}
 
-	sep := dimStyle.Render(" • ")
+	sep := dimStyle.Render("  ")
 	item := func(key, desc string) string {
-		return fmt.Sprintf("%s %s", keycapStyle.Render(key), dimStyle.Render(desc))
+		return fmt.Sprintf("%s %s", keycapPillStyle.Render(key), dimStyle.Render(desc))
 	}
 
 	return fmt.Sprintf(" %s%s%s%s%s%s%s%s%s\n",
-		item("[Enter]", "发送"),
+		item("Enter", "发送"),
 		sep,
-		item("[PgUp/PgDn]", "滚动历史"),
+		item("PgUp/PgDn", "翻页滚动"),
 		sep,
-		item("[/model]", "切换模型"),
+		item("/model", "切换模型"),
 		sep,
-		item("[/clear]", "清屏"),
+		item("/clear", "清屏"),
 		sep,
-		item("[Ctrl+C]", "退出"),
+		item("Ctrl+C", "退出"),
 	)
 }
 
@@ -304,12 +306,13 @@ func (m Model) renderChatMessages() string {
 		welcomeBox := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(colorBorder).
-			Padding(0, 1).
+			Background(colorSurface).
+			Padding(1, 2).
 			Width(cardWidth)
 
-		title := lipgloss.NewStyle().Bold(true).Foreground(colorCoral).Render("👋 欢迎使用 coustea 智能助手")
+		title := lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render("👋 欢迎使用 coustea 智能助手")
 		text := "  在下方输入框键入问题并按 Enter 即可开始多轮深度对话。\n" +
-			"  随时输入 /model 切换大模型平台，输入 /clear 可清空上下文记忆。"
+			"  随时输入 /model 调出模型配置向导，输入 /clear 可清空上下文记忆。"
 		return welcomeBox.Render(title+"\n\n"+dimStyle.Render(text)) + "\n"
 	}
 
@@ -320,36 +323,39 @@ func (m Model) renderChatMessages() string {
 			userBox := lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(colorBorder).
+				Background(colorUserSubtle).
 				Padding(0, 1).
 				Width(cardWidth)
 
-			title := userPrefixStyle.Render("❯ You")
-			card := fmt.Sprintf("%s\n%s", title, msg.Content)
-			sb.WriteString(userBox.Render(card) + "\n")
+			badge := userBadgeStyle.Render(" 👤 You ")
+			card := fmt.Sprintf("%s\n%s", badge, lipgloss.NewStyle().Foreground(colorTextNormal).Render(msg.Content))
+			sb.WriteString(userBox.Render(card) + "\n\n")
 
 		case "System":
 			sysBox := lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(colorBorder).
+				Background(colorSurface).
 				Padding(0, 1).
 				Width(cardWidth)
 
-			title := systemPrefixStyle.Render("ℹ System")
-			card := fmt.Sprintf("%s\n%s", title, dimStyle.Render(msg.Content))
-			sb.WriteString(sysBox.Render(card) + "\n")
+			badge := systemBadgeStyle.Render(" ℹ System ")
+			card := fmt.Sprintf("%s\n%s", badge, dimStyle.Render(msg.Content))
+			sb.WriteString(sysBox.Render(card) + "\n\n")
 
 		case "coustea":
 			// 1. 若有深度思考链，独立渲染高雅紫调思考气泡卡片
 			if msg.ReasoningContent != "" {
 				thoughtBox := lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
-					BorderForeground(colorPurple).
+					BorderForeground(colorReasoning).
+					Background(colorReasoningSubtle).
 					Padding(0, 1).
 					Width(cardWidth)
 
 				title := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process)")
 				card := fmt.Sprintf("%s\n%s", title, reasoningTextStyle.Render(msg.ReasoningContent))
-				sb.WriteString(thoughtBox.Render(card) + "\n")
+				sb.WriteString(thoughtBox.Render(card) + "\n\n")
 			}
 
 			// 2. 若有工具调用，按彩色结构化状态卡片渲染
@@ -357,7 +363,7 @@ func (m Model) renderChatMessages() string {
 				var header string
 				var borderCol lipgloss.Color
 				if tc.Running {
-					header = toolRunningStyle.Render("⏳ 正在调用工具: ") + toolHeaderStyle.Render(tc.Name)
+					header = toolRunningStyle.Render("⚙️ 正在执行工具: ") + toolHeaderStyle.Render(tc.Name)
 					borderCol = colorYellow
 				} else if tc.IsError {
 					header = toolResultErrorStyle.Render("✖ 工具执行报错: ") + toolHeaderStyle.Render(tc.Name)
@@ -389,26 +395,28 @@ func (m Model) renderChatMessages() string {
 				tcBox := lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
 					BorderForeground(borderCol).
+					Background(colorSurface).
 					Padding(0, 1).
 					Width(cardWidth)
 
-				sb.WriteString(tcBox.Render(body.String()) + "\n")
+				sb.WriteString(tcBox.Render(body.String()) + "\n\n")
 			}
 
 			// 3. 最终回复文本气泡卡片：流式输出时打字光标实时闪烁，完成后渲染富文本 Markdown
 			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1 && len(msg.ToolCalls) == 0 && msg.ReasoningContent == "") {
 				asstBox := lipgloss.NewStyle().
 					Border(lipgloss.RoundedBorder()).
-					BorderForeground(colorCoral).
+					BorderForeground(colorBrand).
+					Background(colorSurface).
 					Padding(0, 1).
 					Width(cardWidth)
 
-				header := assistantPrefixStyle.Render("● coustea")
+				header := assistantBadgeStyle.Render(" 🤖 coustea ")
 				var bodyText string
 				if msg.Content != "" {
 					if m.isGenerating && i == len(m.messages)-1 {
 						// 实时流式生成中：文本增量 + 显式珊瑚色打字块光标
-						bodyText = msg.Content + lipgloss.NewStyle().Foreground(colorCoral).Render(" ▊")
+						bodyText = msg.Content + lipgloss.NewStyle().Foreground(colorBrand).Render(" ▊")
 					} else {
 						// 已生成完毕：Glamour 富文本 Markdown 排版（高亮代码块、标题色彩、列表缩进）
 						bodyText = renderMarkdown(msg.Content, cardWidth-4)
@@ -419,13 +427,13 @@ func (m Model) renderChatMessages() string {
 
 				if msg.Usage != nil && msg.Usage.TotalTokens > 0 {
 					divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(20, cardWidth-6)))
-					usageText := fmt.Sprintf("↳ Token 用量: %d (输入 %d / 输出 %d)",
-						msg.Usage.TotalTokens, msg.Usage.PromptTokens, msg.Usage.CompletionTokens)
-					bodyText += "\n" + divider + "\n" + dimStyle.Render(usageText)
+					usageText := tokenBadgeStyle.Render(fmt.Sprintf("📊 Token 用量: %d (输入 %d / 输出 %d)",
+						msg.Usage.TotalTokens, msg.Usage.PromptTokens, msg.Usage.CompletionTokens))
+					bodyText += "\n" + divider + "\n" + usageText
 				}
 
 				card := fmt.Sprintf("%s\n%s", header, bodyText)
-				sb.WriteString(asstBox.Render(card) + "\n")
+				sb.WriteString(asstBox.Render(card) + "\n\n")
 			}
 
 		default:

@@ -366,33 +366,35 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // viewSelectModel 渲染平台总览与状态看板
 func (m Model) viewSelectModel() string {
+	cardWidth := max(64, min(m.width-6, 88))
 	var s strings.Builder
 
-	s.WriteString(titleStyle.Render("╭─ coustea • 大模型平台与服务看板 ──────────────────────────────────╮") + "\n")
-	s.WriteString("请选择大模型平台 (已就绪平台按 Enter 一键直切，按 m 可选择具体规格)：\n\n")
+	// 标题区域
+	titleBadge := bentoTitleBadgeStyle.Render(" coustea ")
+	titleText := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(" 大模型平台与服务看板")
+	subText := dimStyle.Render("请选择大模型平台 (已就绪平台按 Enter 一键直切，按 m 可选择具体规格)：")
+
+	s.WriteString(fmt.Sprintf("%s %s\n%s\n\n", titleBadge, titleText, subText))
 
 	providers := m.getProviders()
 	activeProvider := m.agent.Config().Provider
 
-	statusReadyStyle := lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
-	statusUnsetStyle := lipgloss.NewStyle().Foreground(colorDim)
-
 	for i, p := range providers {
-		cursor := " "
+		cursor := "  "
 		if m.cursor == i {
-			cursor = cursorStyle.Render(">")
+			cursor = cursorStyle.Render("❯ ")
 		}
 
-		checked := " "
+		checked := dimStyle.Render("[ ]")
 		if strings.EqualFold(p.ID, activeProvider) || (activeProvider == "" && m.selected == i) {
-			checked = selectedStyle.Render("x")
+			checked = selectedStyle.Render("[x]")
 		}
 
 		statusBadge := ""
 		if p.IsConfigured {
-			statusBadge = statusReadyStyle.Render("● [已就绪]")
+			statusBadge = bentoReadyBadgeStyle.Render("● [已就绪]")
 		} else {
-			statusBadge = statusUnsetStyle.Render("○ [未配置]")
+			statusBadge = bentoUnsetBadgeStyle.Render("○ [未配置]")
 		}
 
 		desc := ""
@@ -402,20 +404,44 @@ func (m Model) viewSelectModel() string {
 
 		modelHint := ""
 		if p.CurrentModel != "" {
-			modelHint = lipgloss.NewStyle().Foreground(colorYellow).Render(fmt.Sprintf(" [模型: %s]", p.CurrentModel))
+			modelHint = bentoModelChipStyle.Render(fmt.Sprintf(" [模型: %s]", p.CurrentModel))
 		}
 
-		s.WriteString(fmt.Sprintf("  %s [%s] %-14s %s%s%s\n", cursor, checked, p.Name, statusBadge, modelHint, desc))
+		nameStyled := p.Name
+		if m.cursor == i {
+			nameStyled = bentoActiveItemStyle.Render(p.Name)
+		} else {
+			nameStyled = bentoNormalItemStyle.Render(p.Name)
+		}
+
+		s.WriteString(fmt.Sprintf("%s%s %-16s %s%s%s\n", cursor, checked, nameStyled, statusBadge, modelHint, desc))
 	}
 
-	s.WriteString("\n" + footerStyle.Render("操作说明: [Enter] 一键直切  [m/Tab] 选模型规格  [e] 修改API Key  [↑/k, ↓/j] 移动  [Esc/q] 返回对话") + "\n")
-	s.WriteString(titleStyle.Render("╰───────────────────────────────────────────────────────────────────╯") + "\n")
+	divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(30, cardWidth-8)))
+	s.WriteString("\n" + divider + "\n")
 
-	return s.String()
+	// 底部操作快捷键胶囊 (包含原说明中的完整关键字，保证测试和操作完全兼容)
+	footer := fmt.Sprintf("操作说明: %s 一键直切  %s 选模型规格  %s 修改API Key  %s 移动  %s 返回对话",
+		keycapPillStyle.Render("[Enter]"),
+		keycapPillStyle.Render("[m/Tab]"),
+		keycapPillStyle.Render("[e]"),
+		keycapPillStyle.Render("[↑/k, ↓/j]"),
+		keycapPillStyle.Render("[Esc/q]"),
+	)
+	s.WriteString(footerStyle.Render(footer))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBorderActive).
+		Background(colorSurface).
+		Padding(1, 2).
+		Width(cardWidth).
+		Render(s.String()) + "\n"
 }
 
 // viewSelectModelPreset 渲染预设模型规格点选菜单
 func (m Model) viewSelectModelPreset() string {
+	cardWidth := max(64, min(m.width-6, 88))
 	var s strings.Builder
 
 	pName := m.currentProvider
@@ -426,18 +452,21 @@ func (m Model) viewSelectModelPreset() string {
 		}
 	}
 
-	s.WriteString(titleStyle.Render(fmt.Sprintf("╭─ coustea • 选择 %s 模型规格 ──────────────────────────────────────╮", pName)) + "\n")
-	s.WriteString("请按上下键点选要激活的模型规格 (Enter 确认生效)：\n\n")
+	badge := bentoTitleBadgeStyle.Render(" coustea ")
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(fmt.Sprintf(" 选择 %s 模型规格", pName))
+	sub := dimStyle.Render("请按上下键点选要激活的模型规格 (Enter 确认生效)：")
+
+	s.WriteString(fmt.Sprintf("%s %s\n%s\n\n", badge, title, sub))
 
 	for i, choice := range m.presetChoices {
-		cursor := " "
+		cursor := "  "
 		if m.presetCursor == i {
-			cursor = cursorStyle.Render(">")
+			cursor = cursorStyle.Render("❯ ")
 		}
 
-		checked := " "
+		checked := dimStyle.Render("[ ]")
 		if choice == m.currentModel {
-			checked = selectedStyle.Render("*")
+			checked = selectedStyle.Render("[*]")
 		}
 
 		itemStyled := choice
@@ -445,19 +474,37 @@ func (m Model) viewSelectModelPreset() string {
 			itemStyled = lipgloss.NewStyle().Foreground(colorYellow).Render(choice)
 		} else if choice == m.currentModel {
 			itemStyled = lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Render(choice) + dimStyle.Render(" (当前激活)")
+		} else if m.presetCursor == i {
+			itemStyled = bentoActiveItemStyle.Render(choice)
+		} else {
+			itemStyled = bentoNormalItemStyle.Render(choice)
 		}
 
-		s.WriteString(fmt.Sprintf("  %s [%s] %s\n", cursor, checked, itemStyled))
+		s.WriteString(fmt.Sprintf("%s%s %s\n", cursor, checked, itemStyled))
 	}
 
-	s.WriteString("\n" + footerStyle.Render("操作说明: [Enter] 确认切换并返回对话  [Esc/q] 返回平台列表  [Ctrl+C] 退出") + "\n")
-	s.WriteString(titleStyle.Render("╰───────────────────────────────────────────────────────────────────╯") + "\n")
+	divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(30, cardWidth-8)))
+	s.WriteString("\n" + divider + "\n")
 
-	return s.String()
+	footer := fmt.Sprintf("操作说明: %s 确认切换并返回对话  %s 返回平台列表  %s 退出",
+		keycapPillStyle.Render("[Enter]"),
+		keycapPillStyle.Render("[Esc/q]"),
+		keycapPillStyle.Render("[Ctrl+C]"),
+	)
+	s.WriteString(footerStyle.Render(footer))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBorderActive).
+		Background(colorSurface).
+		Padding(1, 2).
+		Width(cardWidth).
+		Render(s.String()) + "\n"
 }
 
 // viewInputAPIKey 渲染 API Key 输入页
 func (m Model) viewInputAPIKey() string {
+	cardWidth := max(64, min(m.width-6, 80))
 	var s strings.Builder
 
 	provider := m.currentProvider
@@ -468,7 +515,9 @@ func (m Model) viewInputAPIKey() string {
 		}
 	}
 
-	s.WriteString(titleStyle.Render(fmt.Sprintf("╭─ coustea • 配置 %s API Key ─────────────────────────────────────────╮", provider)) + "\n")
+	badge := bentoTitleBadgeStyle.Render(" coustea ")
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(fmt.Sprintf(" 配置 %s API Key", provider))
+	s.WriteString(fmt.Sprintf("%s %s\n\n", badge, title))
 
 	if m.currentAPIKey != "" {
 		s.WriteString(fmt.Sprintf("检测到已输入 %s 的 API Key。直接按 Enter 保留，或输入新 Key 覆盖：\n\n", provider))
@@ -479,14 +528,29 @@ func (m Model) viewInputAPIKey() string {
 	}
 
 	s.WriteString("  " + m.apiKeyInput.View() + "\n\n")
-	s.WriteString(footerStyle.Render("  [Enter] 确认下一步  [Esc] 返回平台列表  [Ctrl+C] 退出") + "\n")
-	s.WriteString(titleStyle.Render("╰───────────────────────────────────────────────────────────────────╯") + "\n")
 
-	return s.String()
+	divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(30, cardWidth-8)))
+	s.WriteString(divider + "\n")
+
+	footer := fmt.Sprintf("%s 确认下一步  %s 返回平台列表  %s 退出",
+		keycapPillStyle.Render("[Enter]"),
+		keycapPillStyle.Render("[Esc]"),
+		keycapPillStyle.Render("[Ctrl+C]"),
+	)
+	s.WriteString(footerStyle.Render(footer))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBrand).
+		Background(colorSurface).
+		Padding(1, 2).
+		Width(cardWidth).
+		Render(s.String()) + "\n"
 }
 
 // viewInputModel 渲染自定义模型名称输入/确认页
 func (m Model) viewInputModel() string {
+	cardWidth := max(64, min(m.width-6, 80))
 	var s strings.Builder
 
 	provider := m.currentProvider
@@ -497,13 +561,30 @@ func (m Model) viewInputModel() string {
 		}
 	}
 
-	s.WriteString(titleStyle.Render(fmt.Sprintf("╭─ coustea • 配置 %s 自定义模型 ──────────────────────────────────────╮", provider)) + "\n")
+	badge := bentoTitleBadgeStyle.Render(" coustea ")
+	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(fmt.Sprintf(" 配置 %s 自定义模型", provider))
+	s.WriteString(fmt.Sprintf("%s %s\n\n", badge, title))
+
 	s.WriteString(fmt.Sprintf("请输入自定义模型名称（直接按 Enter 使用当前值: %s）：\n\n", m.currentModel))
 	s.WriteString("  " + m.modelInput.View() + "\n\n")
-	s.WriteString(footerStyle.Render("  [Enter] 保存配置并进入对话  [Esc] 返回规格列表  [Ctrl+C] 退出") + "\n")
-	s.WriteString(titleStyle.Render("╰───────────────────────────────────────────────────────────────────╯") + "\n")
 
-	return s.String()
+	divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(30, cardWidth-8)))
+	s.WriteString(divider + "\n")
+
+	footer := fmt.Sprintf("%s 保存配置并进入对话  %s 返回规格列表  %s 退出",
+		keycapPillStyle.Render("[Enter]"),
+		keycapPillStyle.Render("[Esc]"),
+		keycapPillStyle.Render("[Ctrl+C]"),
+	)
+	s.WriteString(footerStyle.Render(footer))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(colorBrand).
+		Background(colorSurface).
+		Padding(1, 2).
+		Width(cardWidth).
+		Render(s.String()) + "\n"
 }
 
 // handleModelCommand 集中处理模型配置相关的快捷指令（呼出向导看板或快速切换模型）
