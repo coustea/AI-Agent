@@ -20,7 +20,6 @@ import (
 
 var (
 	ErrEmptyPrompt   = errors.New("agent: prompt cannot be empty")
-	ErrNilGateway    = errors.New("agent: gateway client cannot be nil")
 	ErrRunInProgress = errors.New("agent: another turn is already running")
 	ErrMaxSteps      = errors.New("agent: exceeded maximum ReAct steps")
 )
@@ -89,12 +88,6 @@ type Agent interface {
 
 	// MemoryCount 返回当前工作区生效的长期记忆篇数
 	MemoryCount() int
-
-	// TotalUsage 获取当前实例累计消耗的总 Token 用量
-	TotalUsage() protocol.Usage
-
-	// SystemPrompt 获取当前由 persona 与长期记忆合成的完整系统提示词
-	SystemPrompt() string
 
 	// WorkDir 获取当前绑定的工作目录
 	WorkDir() string
@@ -226,12 +219,9 @@ func WithConfig(cfg *config.Config, cfgPath ...string) Option {
 	}
 }
 
-// NewAgent 使用函数式选项构建 CoreAgent 实例（严格遵守零 nil 默认装配原则）
+// NewAgent 使用函数式选项构建 CoreAgent 实例；gw 为 nil 表示未就绪内核，
+// 待 /model 向导补齐密钥后由 UpdateConfig 热装网关。
 func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
-	if gw == nil {
-		return nil, ErrNilGateway
-	}
-
 	wd, _ := os.Getwd()
 	_ = memory.InitTemplates(wd)
 
@@ -259,9 +249,10 @@ func NewFromConfig(cfg *config.Config, opts ...Option) (*CoreAgent, error) {
 		return nil, fmt.Errorf("agent: config cannot be nil")
 	}
 	gw, err := gateway.NewGatewayFromConfig(cfg)
-	if err != nil {
+	if err != nil && !errors.Is(err, gateway.ErrEmptyAPIKey) {
 		return nil, err
 	}
+	// 远程厂商缺密钥：保留未就绪内核（gw 为 nil），待 /model 向导补齐后热装网关
 	defaultOpts := []Option{
 		WithDefaultTools(),
 		WithConfig(cfg, config.DefaultConfigPath()),

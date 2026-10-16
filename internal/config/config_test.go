@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -186,5 +187,29 @@ func TestConfig_ResolveConfigPath(t *testing.T) {
 	globalPath := GlobalConfigPath()
 	if !filepath.IsAbs(globalPath) {
 		t.Errorf("expected global path to be absolute, got %s", globalPath)
+	}
+}
+
+// 测试远程厂商缺密钥的配置文件按未就绪状态加载而非报错（就绪判定交由上层视图表达）
+func TestConfig_Load_RemoteWithoutKey_Unready(t *testing.T) {
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("SPARK_API_KEY", "")
+	t.Setenv("MAAS_API_KEY", "")
+
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "unready.json")
+	raw := `{"provider":"deepseek","model_name":"deepseek-flash","base_url":"https://api.deepseek.com"}`
+	if err := os.WriteFile(cfgPath, []byte(raw), 0o600); err != nil {
+		t.Fatalf("failed to write fixture config: %v", err)
+	}
+
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("expected remote config without key to load, got: %v", err)
+	}
+	if cfg.Provider != ProviderDeepSeek || cfg.APIKey != "" {
+		t.Fatalf("unexpected cfg: provider=%s apiKey=%q", cfg.Provider, cfg.APIKey)
 	}
 }

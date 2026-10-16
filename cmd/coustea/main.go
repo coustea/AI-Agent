@@ -12,14 +12,21 @@ import (
 )
 
 func main() {
-	var ag agent.Agent
-
 	// 组装调用链：LLM -> Gateway -> Agent (驱动 ReAct 循环与内置工具) -> TUI
+	// 配置文件损坏时回退全新默认装配；未就绪状态由 ConfigView 表达，交由 /model 向导修复
 	cfg, err := config.LoadConfig("")
-	if err == nil && cfg != nil && (cfg.APIKey != "" || config.IsLocalProvider(cfg.Provider)) {
-		if coreAg, err := agent.NewFromConfig(cfg); err == nil {
-			ag = coreAg
-		}
+	if err != nil {
+		cfg = config.DefaultConfig()
+	}
+
+	ag, err := agent.NewFromConfig(cfg)
+	if err != nil {
+		// 配置语义无效（如未知厂商）时同样回退，保证前端始终获得可注入的内核
+		ag, err = agent.NewFromConfig(config.DefaultConfig())
+	}
+	if err != nil {
+		fmt.Printf("coustea 内核装配失败: %v\n", err)
+		os.Exit(1)
 	}
 
 	// 启动 TUI 终端界面，注入解耦后的 agent 实例

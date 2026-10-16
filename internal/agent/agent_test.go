@@ -308,15 +308,48 @@ func (b *blockingGateway) TotalUsage() gateway.Usage {
 
 // 测试边界校验与空参数
 func TestCoreAgent_Validation(t *testing.T) {
-	_, err := NewAgent(nil)
-	if !errors.Is(err, ErrNilGateway) {
-		t.Errorf("expected ErrNilGateway, got: %v", err)
+	// nil 网关表示未就绪内核：允许装配，但发起对话须给出配置引导
+	unready, err := NewAgent(nil)
+	if err != nil {
+		t.Fatalf("expected nil gateway to assemble an unready agent, got: %v", err)
+	}
+	if _, err := unready.StreamRun(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "no model gateway") {
+		t.Errorf("expected unready agent StreamRun to fail with configuration guidance, got: %v", err)
 	}
 
 	ag, _ := NewAgent(&mockGateway{}, WithMemory(memory.NewSlidingWindowMemory(10)), WithMaxSteps(5))
 	_, err = ag.StreamRun(context.Background(), "   ")
 	if !errors.Is(err, ErrEmptyPrompt) {
 		t.Errorf("expected ErrEmptyPrompt, got: %v", err)
+	}
+}
+
+// 测试远程厂商缺密钥时仍装配出未就绪内核，供 /model 向导补齐密钥后热装网关
+func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
+	cfg := &config.Config{
+		Provider:  config.ProviderDeepSeek,
+		BaseURL:   config.DeepSeekBaseURL,
+		ModelName: config.DefaultDeepSeekModel,
+	}
+	cfgPath := filepath.Join(t.TempDir(), "unready_config.json")
+
+	ag, err := NewFromConfig(cfg, WithConfig(cfg, cfgPath))
+	if err != nil {
+		t.Fatalf("expected unready assembly without error, got: %v", err)
+	}
+	if ag.Config().HasAPIKey {
+		t.Errorf("expected remote provider without key to be unready")
+	}
+	if _, err := ag.StreamRun(context.Background(), "hello"); err == nil {
+		t.Errorf("expected StreamRun to fail before gateway is attached")
+	}
+
+	// 模拟 /model 向导补齐密钥：热装网关后恢复就绪
+	if err := ag.UpdateConfig(string(config.ProviderDeepSeek), "sk-test-key", config.DefaultDeepSeekModel); err != nil {
+		t.Fatalf("expected UpdateConfig to attach gateway, got: %v", err)
+	}
+	if !ag.Config().HasAPIKey {
+		t.Errorf("expected agent to become ready after key configured")
 	}
 }
 

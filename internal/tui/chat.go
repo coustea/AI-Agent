@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	"my-agent/internal/protocol"
@@ -40,9 +39,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			reqID := m.pendingPerm.RequestID
 			switch msg.String() {
 			case "y", "Y":
-				if m.agent != nil {
-					_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowOnce)
-				}
+				_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowOnce)
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -51,9 +48,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "a", "A":
-				if m.agent != nil {
-					_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowSession)
-				}
+				_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowSession)
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -62,9 +57,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			case "n", "N":
-				if m.agent != nil {
-					_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
-				}
+				_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -75,9 +68,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if msg.Type == tea.KeyEsc {
-				if m.agent != nil {
-					_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
-				}
+				_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -136,33 +127,33 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 
-			if m.agent != nil {
-				ctx, cancel := context.WithCancel(context.Background())
-				m.cancel = cancel
-				ch, err := m.agent.StreamRun(ctx, text)
-				if err != nil {
-					m.cancel = nil
-					m.messages[len(m.messages)-1].Content = fmt.Sprintf("[请求失败: %v]", err)
-					m.isGenerating = false
-					m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
-					if m.viewportReady {
-						m.viewport.SetContent(m.renderChatMessages())
-						m.viewport.GotoBottom()
-					}
-					return m, nil
+			// 未就绪校验：远程厂商缺密钥时先引导配置（本地服务恒就绪）
+			if !m.agent.Config().HasAPIKey {
+				m.messages[len(m.messages)-1].Content = "[未配置可用模型] 请先输入 /model 配置 API Key 或设置环境变量 (DEEPSEEK_API_KEY / GEMINI_API_KEY)。"
+				m.isGenerating = false
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				if m.viewportReady {
+					m.viewport.SetContent(m.renderChatMessages())
+					m.viewport.GotoBottom()
 				}
-				return m, waitForAgentEvent(ch)
+				return m, nil
 			}
 
-			// 若未注入 Agent 内核
-			m.messages[len(m.messages)-1].Content = "[未配置可用模型] 请先输入 /model 配置 API Key 或设置环境变量 (DEEPSEEK_API_KEY / GEMINI_API_KEY)。"
-			m.isGenerating = false
-			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
-			if m.viewportReady {
-				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
+			ctx, cancel := context.WithCancel(context.Background())
+			m.cancel = cancel
+			ch, err := m.agent.StreamRun(ctx, text)
+			if err != nil {
+				m.cancel = nil
+				m.messages[len(m.messages)-1].Content = fmt.Sprintf("[请求失败: %v]", err)
+				m.isGenerating = false
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				if m.viewportReady {
+					m.viewport.SetContent(m.renderChatMessages())
+					m.viewport.GotoBottom()
+				}
+				return m, nil
 			}
-			return m, nil
+			return m, waitForAgentEvent(ch)
 		}
 	}
 
@@ -174,27 +165,21 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 // renderHeaderBar 渲染固定在顶部的 Claude 风格品牌与状态栏
 func (m Model) renderHeaderBar() string {
 	var sb strings.Builder
-	cwd, _ := os.Getwd()
 
+	cfg := m.agent.Config()
 	modelInfo := "未配置模型 (输入 /model 配置)"
-	if m.agent != nil {
-		cfg := m.agent.Config()
-		if cfg.ModelName != "" {
-			modelInfo = fmt.Sprintf("%s • %s", cfg.Provider, cfg.ModelName)
-		}
+	if cfg.ModelName != "" {
+		modelInfo = fmt.Sprintf("%s • %s", cfg.Provider, cfg.ModelName)
 	}
 
 	brandBadge := headerBadgeStyle.Render(" coustea ")
 	modelTag := headerTagStyle.Render(modelInfo)
 
 	// 计算长效记忆激活篇数
-	memCount := 0
-	if m.agent != nil {
-		memCount = m.agent.MemoryCount()
-	}
+	memCount := m.agent.MemoryCount()
 	memTag := headerMemoryStyle.Render(fmt.Sprintf("🧠 %d 篇记忆生效", memCount))
 
-	dirTag := headerDirStyle.Render(" 目录: " + cwd)
+	dirTag := headerDirStyle.Render(" 目录: " + m.agent.WorkDir())
 
 	headerRow := fmt.Sprintf("%s %s %s%s", brandBadge, modelTag, memTag, dirTag)
 	sb.WriteString("\n" + headerRow + "\n")

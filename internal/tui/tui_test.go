@@ -19,7 +19,6 @@ type mockTestAgent struct {
 	lastPermissionReqID string
 	lastDecision        protocol.Decision
 	memoryCount         int
-	totalUsage          protocol.Usage
 	updateConfigErr     error
 }
 
@@ -140,12 +139,7 @@ func (m *mockTestAgent) MemoryCount() int {
 	return m.memoryCount
 }
 
-func (m *mockTestAgent) TotalUsage() protocol.Usage {
-	return m.totalUsage
-}
-
-func (m *mockTestAgent) SystemPrompt() string { return "" }
-func (m *mockTestAgent) WorkDir() string      { return "" }
+func (m *mockTestAgent) WorkDir() string { return "/mock/workdir" }
 
 func TestTUIFlow(t *testing.T) {
 	ag := newMockAgent()
@@ -445,7 +439,7 @@ func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 
 // 测试键盘按键操作：退出 (Ctrl+C, Ctrl+D, /exit, /quit, /q) 以及生成中断 (Ctrl+C, Esc)
 func TestTUI_KeyOperations_ExitAndInterrupt(t *testing.T) {
-	m := NewModel(nil)
+	m := NewModel(newMockAgent())
 
 	// 1. 空闲聊天状态下按 Ctrl+C 直接退出
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -737,5 +731,48 @@ func TestTUI_PresetModelSpecsMenu(t *testing.T) {
 	}
 	if ag.cfgView.ModelName != "my-custom-deepseek-v4" {
 		t.Fatalf("expected my-custom-deepseek-v4, got %s", ag.cfgView.ModelName)
+	}
+}
+
+// 测试顶栏目录展示取自 Agent 契约 (WorkDir)，而非进程自身 cwd
+func TestTUI_HeaderUsesAgentWorkDir(t *testing.T) {
+	m := NewModel(newMockAgent())
+	view := ansi.Strip(m.View())
+	if !strings.Contains(view, "目录: /mock/workdir") {
+		t.Fatalf("expected header to show agent workdir, got:\n%s", view)
+	}
+}
+
+// 测试未就绪内核（远程厂商缺密钥）的欢迎语与发送引导
+func TestTUI_UnreadyAgent_GuidesToConfiguration(t *testing.T) {
+	ag := newMockAgent()
+	ag.cfgView.Provider = "deepseek"
+	ag.cfgView.ModelName = "deepseek-flash"
+	ag.cfgView.HasAPIKey = false
+	m := NewModel(ag)
+
+	// 1. 欢迎语提示尚未配置密钥
+	welcomeShown := false
+	for _, msg := range m.messages {
+		if strings.Contains(msg.Content, "尚未配置 API Key") {
+			welcomeShown = true
+			break
+		}
+	}
+	if !welcomeShown {
+		t.Fatalf("expected welcome message to mention missing API key, got: %+v", m.messages)
+	}
+
+	// 2. 直接发送消息应被引导至 /model 向导，而不是发起流式请求
+	m.chatInput.SetValue("你好")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	last := m.messages[len(m.messages)-1]
+	if !strings.Contains(last.Content, "未配置可用模型") {
+		t.Fatalf("expected send to be blocked with configuration guidance, got: %+v", last)
+	}
+	if m.isGenerating {
+		t.Fatalf("expected generation to stay idle for unready agent")
 	}
 }

@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,6 +145,68 @@ func (c *Config) SwitchProvider(p Provider) {
 	c.APIKey = pcfg.APIKey
 }
 
+// DefaultConfig 构建一份全新的默认配置（含环境变量密钥自动补全与 llamacpp 预置），
+// 作为配置文件缺失或损坏时的安全回退。
+func DefaultConfig() *Config {
+	cfg := &Config{
+		Providers: make(map[string]ProviderConfig),
+	}
+
+	// 收集环境变量中的密钥
+	if dsKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); dsKey != "" {
+		cfg.SetProviderConfig(ProviderDeepSeek, ProviderConfig{
+			BaseURL:   DeepSeekBaseURL,
+			ModelName: DefaultDeepSeekModel,
+			APIKey:    dsKey,
+		})
+	}
+	if geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY")); geminiKey != "" {
+		cfg.SetProviderConfig(ProviderGemini, ProviderConfig{
+			BaseURL:   GeminiBaseURL,
+			ModelName: DefaultGeminiModel,
+			APIKey:    geminiKey,
+		})
+	} else if googleKey := strings.TrimSpace(os.Getenv("GOOGLE_API_KEY")); googleKey != "" {
+		cfg.SetProviderConfig(ProviderGemini, ProviderConfig{
+			BaseURL:   GeminiBaseURL,
+			ModelName: DefaultGeminiModel,
+			APIKey:    googleKey,
+		})
+	}
+	if sparkKey := strings.TrimSpace(os.Getenv("SPARK_API_KEY")); sparkKey != "" {
+		cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
+			BaseURL:   DefaultSparkBaseURL,
+			ModelName: DefaultSparkModel,
+			APIKey:    sparkKey,
+		})
+	} else if maasKey := strings.TrimSpace(os.Getenv("MAAS_API_KEY")); maasKey != "" {
+		cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
+			BaseURL:   DefaultSparkBaseURL,
+			ModelName: DefaultSparkModel,
+			APIKey:    maasKey,
+		})
+	}
+
+	// 预置 llamacpp
+	cfg.SetProviderConfig(ProviderLlamaCpp, ProviderConfig{
+		BaseURL:   DefaultLlamaCppBaseURL,
+		ModelName: DefaultLlamaCppModel,
+	})
+
+	// 默认激活提供商选择
+	if cfg.ProviderConfig(ProviderDeepSeek).APIKey != "" {
+		cfg.SwitchProvider(ProviderDeepSeek)
+	} else if cfg.ProviderConfig(ProviderGemini).APIKey != "" {
+		cfg.SwitchProvider(ProviderGemini)
+	} else if cfg.ProviderConfig(ProviderSpark).APIKey != "" {
+		cfg.SwitchProvider(ProviderSpark)
+	} else {
+		cfg.SwitchProvider(ProviderLlamaCpp)
+	}
+
+	return cfg
+}
+
 // LoadConfig 从指定 JSON 文件加载配置，支持全局/本地发现与环境变量自动补全
 func LoadConfig(path string) (*Config, error) {
 	resolvedPath := ResolveConfigPath(path)
@@ -153,63 +214,7 @@ func LoadConfig(path string) (*Config, error) {
 	data, err := os.ReadFile(resolvedPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			cfg := &Config{
-				Providers: make(map[string]ProviderConfig),
-			}
-
-			// 收集环境变量中的密钥
-			if dsKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); dsKey != "" {
-				cfg.SetProviderConfig(ProviderDeepSeek, ProviderConfig{
-					BaseURL:   DeepSeekBaseURL,
-					ModelName: DefaultDeepSeekModel,
-					APIKey:    dsKey,
-				})
-			}
-			if geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY")); geminiKey != "" {
-				cfg.SetProviderConfig(ProviderGemini, ProviderConfig{
-					BaseURL:   GeminiBaseURL,
-					ModelName: DefaultGeminiModel,
-					APIKey:    geminiKey,
-				})
-			} else if googleKey := strings.TrimSpace(os.Getenv("GOOGLE_API_KEY")); googleKey != "" {
-				cfg.SetProviderConfig(ProviderGemini, ProviderConfig{
-					BaseURL:   GeminiBaseURL,
-					ModelName: DefaultGeminiModel,
-					APIKey:    googleKey,
-				})
-			}
-			if sparkKey := strings.TrimSpace(os.Getenv("SPARK_API_KEY")); sparkKey != "" {
-				cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
-					BaseURL:   DefaultSparkBaseURL,
-					ModelName: DefaultSparkModel,
-					APIKey:    sparkKey,
-				})
-			} else if maasKey := strings.TrimSpace(os.Getenv("MAAS_API_KEY")); maasKey != "" {
-				cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
-					BaseURL:   DefaultSparkBaseURL,
-					ModelName: DefaultSparkModel,
-					APIKey:    maasKey,
-				})
-			}
-
-			// 预置 llamacpp
-			cfg.SetProviderConfig(ProviderLlamaCpp, ProviderConfig{
-				BaseURL:   DefaultLlamaCppBaseURL,
-				ModelName: DefaultLlamaCppModel,
-			})
-
-			// 默认激活提供商选择
-			if cfg.ProviderConfig(ProviderDeepSeek).APIKey != "" {
-				cfg.SwitchProvider(ProviderDeepSeek)
-			} else if cfg.ProviderConfig(ProviderGemini).APIKey != "" {
-				cfg.SwitchProvider(ProviderGemini)
-			} else if cfg.ProviderConfig(ProviderSpark).APIKey != "" {
-				cfg.SwitchProvider(ProviderSpark)
-			} else {
-				cfg.SwitchProvider(ProviderLlamaCpp)
-			}
-
-			return cfg, nil
+			return DefaultConfig(), nil
 		}
 		return nil, err
 	}
@@ -306,11 +311,8 @@ func LoadConfig(path string) (*Config, error) {
 		}
 	}
 
-	// 针对远程云端服务要求必填 APIKey，本地 llamacpp 可不填 APIKey
-	if !IsLocalProvider(cfg.Provider) && cfg.APIKey == "" {
-		return nil, errors.New("incomplete config: api_key is required for remote provider")
-	}
-
+	// 远程云端服务缺密钥不再视为加载失败：未就绪状态由上层视图（ConfigView.HasAPIKey）表达，
+	// 待 /model 配置向导补齐密钥后由内核热装网关。
 	return &cfg, nil
 }
 

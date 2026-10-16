@@ -11,27 +11,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// getProviders 从 Agent 协议契约获取完整的平台状态列表，支持离线/测试桩兜底
+// getProviders 从 Agent 协议契约获取完整的平台状态列表
 func (m Model) getProviders() []protocol.ProviderInfo {
-	if m.agent != nil {
-		cfgView := m.agent.Config()
-		if len(cfgView.Providers) > 0 {
-			return cfgView.Providers
-		}
-	}
-	// 针对未注入 Agent 或轻量测试桩的兜底
-	res := make([]protocol.ProviderInfo, 0, len(m.choices))
-	for _, c := range m.choices {
-		isLocal := isLocalProviderName(c)
-		res = append(res, protocol.ProviderInfo{
-			ID:           c,
-			Name:         c,
-			IsLocal:      isLocal,
-			IsConfigured: isLocal,
-			CurrentModel: "default-model",
-		})
-	}
-	return res
+	return m.agent.Config().Providers
 }
 
 // isLocalProviderName 判断是否为免密钥本地服务
@@ -98,21 +80,19 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if p.IsConfigured {
 				// 一键极速切换 (Fast Switch)！已保存密钥或本地免密，直接切换并返回对话
-				if m.agent != nil {
-					if err := m.agent.UpdateConfig(p.ID, "", p.CurrentModel); err != nil {
-						m.messages = append(m.messages, ChatMessage{
-							Sender:  "System",
-							Content: fmt.Sprintf("[配置切换失败: %v]", err),
-						})
-					} else {
-						cfgView := m.agent.Config()
-						m.syncActiveProvider(cfgView.Provider)
-						m.currentModel = cfgView.ModelName
-						m.messages = append(m.messages, ChatMessage{
-							Sender:  "System",
-							Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
-						})
-					}
+				if err := m.agent.UpdateConfig(p.ID, "", p.CurrentModel); err != nil {
+					m.messages = append(m.messages, ChatMessage{
+						Sender:  "System",
+						Content: fmt.Sprintf("[配置切换失败: %v]", err),
+					})
+				} else {
+					cfgView := m.agent.Config()
+					m.syncActiveProvider(cfgView.Provider)
+					m.currentModel = cfgView.ModelName
+					m.messages = append(m.messages, ChatMessage{
+						Sender:  "System",
+						Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
+					})
 				}
 				m.state = stateChat
 				m.chatInput.Focus()
@@ -245,21 +225,19 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				// 平台已就绪，立即热切换模型并返回对话
-				if m.agent != nil {
-					if err := m.agent.UpdateConfig(m.currentProvider, m.currentAPIKey, m.currentModel); err != nil {
-						m.messages = append(m.messages, ChatMessage{
-							Sender:  "System",
-							Content: fmt.Sprintf("[配置切换失败: %v]", err),
-						})
-					} else {
-						cfgView := m.agent.Config()
-						m.syncActiveProvider(cfgView.Provider)
-						m.currentModel = cfgView.ModelName
-						m.messages = append(m.messages, ChatMessage{
-							Sender:  "System",
-							Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
-						})
-					}
+				if err := m.agent.UpdateConfig(m.currentProvider, m.currentAPIKey, m.currentModel); err != nil {
+					m.messages = append(m.messages, ChatMessage{
+						Sender:  "System",
+						Content: fmt.Sprintf("[配置切换失败: %v]", err),
+					})
+				} else {
+					cfgView := m.agent.Config()
+					m.syncActiveProvider(cfgView.Provider)
+					m.currentModel = cfgView.ModelName
+					m.messages = append(m.messages, ChatMessage{
+						Sender:  "System",
+						Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
+					})
 				}
 
 				m.state = stateChat
@@ -356,21 +334,19 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if nameVal != "" {
 				m.currentModel = nameVal
 
-				if m.agent != nil {
-					if err := m.agent.UpdateConfig(m.currentProvider, m.currentAPIKey, m.currentModel); err != nil {
-						m.messages = append(m.messages, ChatMessage{
-							Sender:  "System",
-							Content: fmt.Sprintf("[配置切换失败: %v]", err),
-						})
-					} else {
-						cfgView := m.agent.Config()
-						m.syncActiveProvider(cfgView.Provider)
-						m.currentModel = cfgView.ModelName
-						m.messages = append(m.messages, ChatMessage{
-							Sender:  "System",
-							Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
-						})
-					}
+				if err := m.agent.UpdateConfig(m.currentProvider, m.currentAPIKey, m.currentModel); err != nil {
+					m.messages = append(m.messages, ChatMessage{
+						Sender:  "System",
+						Content: fmt.Sprintf("[配置切换失败: %v]", err),
+					})
+				} else {
+					cfgView := m.agent.Config()
+					m.syncActiveProvider(cfgView.Provider)
+					m.currentModel = cfgView.ModelName
+					m.messages = append(m.messages, ChatMessage{
+						Sender:  "System",
+						Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
+					})
 				}
 
 				m.state = stateChat
@@ -396,10 +372,7 @@ func (m Model) viewSelectModel() string {
 	s.WriteString("请选择大模型平台 (已就绪平台按 Enter 一键直切，按 m 可选择具体规格)：\n\n")
 
 	providers := m.getProviders()
-	activeProvider := ""
-	if m.agent != nil {
-		activeProvider = m.agent.Config().Provider
-	}
+	activeProvider := m.agent.Config().Provider
 
 	statusReadyStyle := lipgloss.NewStyle().Bold(true).Foreground(colorGreen)
 	statusUnsetStyle := lipgloss.NewStyle().Foreground(colorDim)
@@ -540,19 +513,9 @@ func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
 	// 1. 无参数：直接呼出全屏平台选择看板
 	if strings.TrimSpace(arg) == "" {
 		m.state = stateSelectModel
-		if m.agent != nil {
-			cfgView := m.agent.Config()
-			m.syncActiveProvider(cfgView.Provider)
-		}
+		cfgView := m.agent.Config()
+		m.syncActiveProvider(cfgView.Provider)
 		m.cursor = m.selected
-		return m, nil
-	}
-
-	if m.agent == nil {
-		m.messages = append(m.messages, ChatMessage{
-			Sender:  "System",
-			Content: "[未连接智能体内核，无法切换模型]",
-		})
 		return m, nil
 	}
 

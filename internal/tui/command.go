@@ -23,9 +23,7 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 	case "/clear":
 		m.messages = nil
 		m.chatInput.Reset()
-		if m.agent != nil {
-			m.agent.Reset()
-		}
+		m.agent.Reset()
 		if m.viewportReady {
 			m.viewport.SetContent(m.renderChatMessages())
 			m.viewport.GotoBottom()

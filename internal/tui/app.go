@@ -88,7 +88,7 @@ type Model struct {
 	agent agent.Agent
 }
 
-// NewModel 初始化并返回主 Model
+// NewModel 初始化并返回主 Model；ag 由装配入口保证非 nil，未就绪状态经 ConfigView 表达
 func NewModel(ag agent.Agent) Model {
 	// 1. API Key 输入框
 	apiKeyInput := textinput.New()
@@ -119,16 +119,13 @@ func NewModel(ag agent.Agent) Model {
 	// 5. 消息滚动视口 (Viewport)
 	vp := viewport.New(80, 20)
 
+	cfgView := ag.Config()
 	choices := []string{"llamacpp", "deepseek", "gemini", "spark"}
-	var curProvider, curModel string
-	if ag != nil {
-		cfgView := ag.Config()
-		if len(cfgView.AvailableProviders) > 0 {
-			choices = cfgView.AvailableProviders
-		}
-		curProvider = cfgView.Provider
-		curModel = cfgView.ModelName
+	if len(cfgView.AvailableProviders) > 0 {
+		choices = cfgView.AvailableProviders
 	}
+	curProvider := cfgView.Provider
+	curModel := cfgView.ModelName
 
 	selectedIdx := 0
 	for i, c := range choices {
@@ -157,23 +154,15 @@ func NewModel(ag agent.Agent) Model {
 	m.state = stateChat
 	m.chatInput.Focus()
 
-	if ag != nil && curModel != "" {
-		cfgView := ag.Config()
-		if cfgView.HasAPIKey {
-			m.messages = append(m.messages, ChatMessage{
-				Sender:  "System",
-				Content: fmt.Sprintf("已连接大模型服务，平台: %s, 模型: %s。直接输入问题即可开始多轮对话 (输入 /model 可切换模型平台)。", cfgView.Provider, cfgView.ModelName),
-			})
-		} else {
-			m.messages = append(m.messages, ChatMessage{
-				Sender:  "System",
-				Content: "欢迎使用 coustea！当前模型尚未配置 API Key，可随时输入 /model 调出配置向导。",
-			})
-		}
+	if cfgView.HasAPIKey {
+		m.messages = append(m.messages, ChatMessage{
+			Sender:  "System",
+			Content: fmt.Sprintf("已连接大模型服务，平台: %s, 模型: %s。直接输入问题即可开始多轮对话 (输入 /model 可切换模型平台)。", cfgView.Provider, cfgView.ModelName),
+		})
 	} else {
 		m.messages = append(m.messages, ChatMessage{
 			Sender:  "System",
-			Content: "欢迎使用 coustea！可在下方输入框直接对话；如需配置模型，可随时输入 /model 调出配置向导。",
+			Content: "欢迎使用 coustea！当前模型尚未配置 API Key，可随时输入 /model 调出配置向导。",
 		})
 	}
 
