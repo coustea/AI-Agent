@@ -532,3 +532,98 @@ func (m Model) viewInputModel() string {
 
 	return s.String()
 }
+
+// handleModelCommand 集中处理模型配置相关的快捷指令（呼出向导看板或快速切换模型）
+func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
+	m.chatInput.Reset()
+
+	// 1. 无参数：直接呼出全屏平台选择看板
+	if strings.TrimSpace(arg) == "" {
+		m.state = stateSelectModel
+		if m.agent != nil {
+			cfgView := m.agent.Config()
+			m.syncActiveProvider(cfgView.Provider)
+		}
+		m.cursor = m.selected
+		return m, nil
+	}
+
+	if m.agent == nil {
+		m.messages = append(m.messages, ChatMessage{
+			Sender:  "System",
+			Content: "[未连接智能体内核，无法切换模型]",
+		})
+		return m, nil
+	}
+
+	// 2. 尝试匹配平台名称或常见别名
+	pKey := strings.ToLower(strings.TrimSpace(arg))
+	cfgView := m.agent.Config()
+	var targetProvider *protocol.ProviderInfo
+	for i := range cfgView.Providers {
+		p := &cfgView.Providers[i]
+		if strings.EqualFold(p.ID, pKey) ||
+			(p.ID == "llamacpp" && (pKey == "llama" || pKey == "local")) ||
+			(p.ID == "gemini" && pKey == "google") ||
+			(p.ID == "deepseek" && pKey == "ds") ||
+			(p.ID == "spark" && (pKey == "maas" || pKey == "xfyun")) {
+			targetProvider = p
+			break
+		}
+	}
+
+	if targetProvider != nil {
+		if targetProvider.IsConfigured {
+			// 平台已就绪：极速静默直切
+			if err := m.agent.UpdateConfig(targetProvider.ID, "", targetProvider.CurrentModel); err != nil {
+				m.messages = append(m.messages, ChatMessage{
+					Sender:  "System",
+					Content: fmt.Sprintf("[切换平台失败: %v]", err),
+				})
+			} else {
+				newView := m.agent.Config()
+				m.syncActiveProvider(newView.Provider)
+				m.currentModel = newView.ModelName
+				m.messages = append(m.messages, ChatMessage{
+					Sender:  "System",
+					Content: fmt.Sprintf("已成功切换至大模型平台: %s (模型: %s)", targetProvider.Name, newView.ModelName),
+				})
+			}
+			if m.viewportReady {
+				m.viewport.SetContent(m.renderChatMessages())
+				m.viewport.GotoBottom()
+			}
+			return m, nil
+		}
+
+		// 平台未就绪：引导进入 API Key 输入
+		m.currentProvider = targetProvider.ID
+		m.state = stateInputAPIKey
+		m.apiKeyInput.Focus()
+		m.apiKeyInput.Reset()
+		m.apiKeyInput.Placeholder = fmt.Sprintf("请输入 %s 的 API Key (按 Enter 确认)", targetProvider.Name)
+		return m, textinput.Blink
+	}
+
+	// 3. 作为具体模型名称智能识别与切换
+	if err := m.agent.UpdateConfig("", "", arg); err != nil {
+		m.messages = append(m.messages, ChatMessage{
+			Sender:  "System",
+			Content: fmt.Sprintf("[切换模型失败: %v (输入 /model 可在配置看板中查看和设置)]", err),
+		})
+	} else {
+		newView := m.agent.Config()
+		m.syncActiveProvider(newView.Provider)
+		m.currentModel = newView.ModelName
+		m.messages = append(m.messages, ChatMessage{
+			Sender:  "System",
+			Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", newView.Provider, newView.ModelName),
+		})
+	}
+
+	if m.viewportReady {
+		m.viewport.SetContent(m.renderChatMessages())
+		m.viewport.GotoBottom()
+	}
+	return m, nil
+}
