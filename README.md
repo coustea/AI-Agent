@@ -28,7 +28,8 @@ coustea 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码�
 | 模型协议 | 所有厂商统一走 **OpenAI Chat Completions** 协议，无需为每家 SDK 单独适配 |
 | 交互美学 | Claude Code 风格圆角卡片、流式打字机光标、深度思考链气泡、Glamour 富文本 Markdown、Token 用量统计 |
 | 自主心智 | 拒绝被动拒答，遵循 ReAct 思考循环，面对实时信息与环境问题主动调用工具破局 |
-| 安全模型 | 工作区沙箱 + 三道闸门权限管线，危险操作永不静默执行 |
+| 安全模型 | 工作区沙箱 + 三道闸门权限管线：常规操作自主放行，高风险操作触发人工审批，永不静默执行 |
+| 跨端契约 | `internal/protocol` 纯数据事件流与配置视图，TUI 与内核零 UI 耦合，可复用于桌面端与无头宿主 |
 
 ---
 
@@ -59,10 +60,11 @@ coustea 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码�
 | 能力 | 说明 |
 |---|---|
 | **Harness 架构** | 一个 ReAct 循环 + 一圈可插拔接缝（工具、权限、记忆、网关），代码中不含"替模型做决策"的编排逻辑 |
+| **纯数据契约** | `internal/protocol` 零依赖事件流、权限请求与配置视图，TUI 与内核零 UI 耦合，可平滑扩展桌面端与无头宿主 |
 | **自主解题心智** | 打破大模型"我无法获取实时信息"的消极惯性，遇到实时数据（如天气、网络诊断、Git 状态）主动调用工具探查 |
-| **多模型网关** | 内置 `llamacpp`（本地）、`deepseek`、`gemini` 三个 Provider，统一 OpenAI 协议，支持运行时热切换且不丢上下文 |
+| **多模型网关** | 内置 `llamacpp`（本地）、`deepseek`、`gemini`、`spark`（讯飞星辰 MaaS）四家 Provider，统一 OpenAI 协议，按模型名前缀动态路由，运行时热切换且不丢上下文 |
 | **ReAct 工具循环** | 单轮最多 10 步推理-行动迭代，工具结果以 Observation 形式回灌模型，支持错误自愈 |
-| **三道闸门权限** | 硬拒绝表 → 风险规则匹配 → 交互式审批（支持会话级信任），危险操作永不静默执行 |
+| **三道闸门权限** | 硬拒绝表 → 风险规则精准匹配（删除 / 提权 / 越界写入等）→ 交互式审批（支持会话级信任），常规命令自主放行，高危操作永不静默执行 |
 | **分层长期记忆** | 全局 + 项目两级 Markdown 记忆，每轮对话开始时重新读取，运行期沉淀即时生效 |
 | **Claude Code 美学 TUI** | 全景圆角卡片流式排版、深度思考链气泡、实时打字机光标 ` ▊`、Glamour 代码语法高亮与富文本排版 |
 | **工作区沙箱** | 文件工具通过 `SafePath` 严格限制在工作区与 `~/.coustea` 内，阻断 `../` 路径逃逸 |
@@ -87,8 +89,8 @@ make build
 ./coustea
 ```
 
-首次启动后，在输入框输入 `/model` 打开配置向导，三步完成：**选择平台 → 输入 API Key → 确认模型名**。
-若已有 `DEEPSEEK_API_KEY` 或 `GEMINI_API_KEY` 环境变量，也可跳过向导直接对话。
+首次启动后，在输入框输入 `/model` 打开配置向导：**平台看板 → API Key → 模型规格点选**，已就绪平台按 Enter 一键直切。
+若已有 `DEEPSEEK_API_KEY`、`GEMINI_API_KEY` 或 `SPARK_API_KEY` 环境变量，也可跳过向导直接对话。
 
 ---
 
@@ -99,7 +101,7 @@ make build
 | Go | **1.26.2 或更高**（见 [`go.mod`](./go.mod)） |
 | 终端 | 支持 ANSI 转义的现代终端（iTerm2 / Windows Terminal / Alacritty 等） |
 | 操作系统 | macOS / Linux / Windows |
-| 模型服务 | 本地 `llama-server`，或 DeepSeek / Gemini 的 API Key（三选一） |
+| 模型服务 | 本地 `llama-server`，或 DeepSeek / Gemini / 讯飞星辰 MaaS 的 API Key（任选其一） |
 
 第三方依赖仅四个直接依赖：`bubbles`、`bubbletea`、`lipgloss`、`glamour`，其余均为间接依赖。
 
@@ -141,7 +143,7 @@ go build -o coustea ./cmd/coustea
 ./coustea
 ```
 
-首次启动若未检测到任何配置，界面会提示"欢迎使用 coustea"，输入 `/model` 即可进入配置向导。
+首次启动若未检测到可用密钥，界面会提示「欢迎使用 coustea！当前模型尚未配置 API Key」，输入 `/model` 即可调出配置向导。
 
 ### 5. （可选）加入 PATH
 
@@ -160,11 +162,13 @@ coustea 按以下**优先级**解析配置文件：
 2. **当前工作目录**下的 `config.json`（项目级配置优先）
 3. 用户主目录的全局配置 `~/.coustea/config.json`
 
-若配置文件不存在，程序会**从环境变量自动补全**密钥，并按 `DEEPSEEK_API_KEY` → `GEMINI_API_KEY` → `llamacpp` 的顺序选择默认激活的 Provider。
+若配置文件不存在，程序会**从环境变量自动补全**密钥，并按 `DEEPSEEK_API_KEY` → `GEMINI_API_KEY`（兼容 `GOOGLE_API_KEY`）→ `SPARK_API_KEY`（兼容 `MAAS_API_KEY`）→ `llamacpp` 的顺序选择默认激活的 Provider。
 
 ### 方式 A：TUI 向导（推荐）
 
-启动后输入 `/model`，按提示三步完成：选择平台 → 输入 API Key → 确认模型名称。配置会自动持久化到解析出的配置文件中，各厂商的密钥与模型会**分别记住**，之后切换平台无需重复输入。
+启动后输入 `/model` 调出平台看板：已就绪平台按 `Enter` 一键直切，按 `m`（或 `Tab`）点选推荐模型规格，按 `e` 可修改 API Key；未配置的平台会引导输入密钥后进入规格点选（支持自定义模型名）。配置会自动持久化到解析出的配置文件中，各厂商的密钥与模型会**分别记住**，之后切换无需重复输入。
+
+也可在对话中直接使用快捷指令：`/model ds`（按别名直切）、`/model deepseek-reasoner`（按模型名前缀智能识别平台）。
 
 ### 方式 B：手写 `config.json`
 
@@ -188,6 +192,11 @@ coustea 按以下**优先级**解析配置文件：
     "llamacpp": {
       "base_url": "http://127.0.0.1:8080",
       "model_name": "local-model"
+    },
+    "spark": {
+      "base_url": "https://maas-api.cn-huabei-1.xf-yun.com/v2",
+      "model_name": "spark-x2.5",
+      "api_key": "xxxxxxxxxxxxxxxx"
     }
   }
 }
@@ -201,19 +210,23 @@ coustea 按以下**优先级**解析配置文件：
 ```bash
 export DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxxxxx"
 # 或
-export GEMINI_API_KEY="AIza-xxxxxxxxxxxxxxxx"
-# Gemini 也兼容 GOOGLE_API_KEY
+export GEMINI_API_KEY="AIza-xxxxxxxxxxxxxxxx"    # 兼容 GOOGLE_API_KEY
+# 或
+export SPARK_API_KEY="xxxxxxxxxxxxxxxx"          # 讯飞星辰 MaaS，兼容 MAAS_API_KEY
 ```
 
 ### 支持的 Provider
 
 | Provider | 标识 | 默认端点 | 默认模型 | 备选模型 | 需要 API Key |
 |---|---|---|---|---|---|
-| 本地 llama.cpp | `llamacpp` | `http://127.0.0.1:8080` | `local-model` | — | 否 |
-| DeepSeek | `deepseek` | `https://api.deepseek.com` | `deepseek-flash` | `deepseek-v4-pro` | 是 |
+| 本地 llama.cpp | `llamacpp` | `http://127.0.0.1:8080` | `local-model` | `qwen2.5-coder-7b` | 否 |
+| DeepSeek | `deepseek` | `https://api.deepseek.com` | `deepseek-flash` | `deepseek-v4-pro`、`deepseek-reasoner` | 是 |
 | Google Gemini | `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` | `gemini-2.5-pro` | 是 |
+| 讯飞星辰 MaaS | `spark` | `https://maas-api.cn-huabei-1.xf-yun.com/v2` | `spark-x2.5` | `lite` | 是 |
 
-别名兼容：`llama` / `local` → `llamacpp`，`ds` → `deepseek`，`google` → `gemini`。
+别名兼容：`llama` / `local` → `llamacpp`，`ds` → `deepseek`，`google` → `gemini`，`maas` / `xfyun` → `spark`。
+
+> Router 会优先按请求的模型名前缀动态路由到对应厂商（`gemini*`、`deepseek*`、`spark*`、`llama*` / `local`），未命中前缀时回退到当前激活平台。
 
 ### 本地模型（llama.cpp）准备
 
@@ -276,31 +289,36 @@ make run            # 等价于 go run ./cmd/coustea
 | `PgUp` / `PgDn` | 滚动聊天历史 |
 | `Ctrl+C` | 生成中 → 中断当前生成；空闲时 → 退出应用 |
 | `Esc` | 生成中 → 中断当前生成；权限审批时 → 拒绝本次 |
-| `Ctrl+D` | 退出应用（输入框为空时） |
+| `Ctrl+D` | 退出应用（输入框为空或位于配置向导时） |
 | `y` / `Y` | 权限审批拦截时 → 允许本次执行 |
 | `a` / `A` | 权限审批拦截时 → 本会话始终信任并放行 |
 | `n` / `N` | 权限审批拦截时 → 拒绝本次执行 |
 | `↑` / `↓` / `k` / `j` | 配置向导中移动光标 |
+| `m` / `Tab` / `→` | 配置向导中打开当前平台的模型规格菜单 |
+| `e` | 配置向导中修改当前平台的 API Key |
+| `q` / `Esc` | 配置向导中返回上一级或返回对话 |
 
 ### 斜杠命令
 
 | 命令 | 说明 |
 |---|---|
-| `/model`、`/config` | 打开模型配置向导（选择平台 → API Key → 模型名） |
+| `/model`、`/config` | 打开平台看板（一键直切 / 规格点选 / 修改密钥） |
+| `/model <平台>` | 对已就绪平台一键直切，支持别名（如 `/model ds`、`/model spark`）；未就绪则引导输入 API Key |
+| `/model <模型名>` | 按模型名前缀智能识别所属平台并切换（如 `/model gemini-2.5-pro`、`/model deepseek-reasoner`） |
 | `/clear` | 清空当前会话上下文与消息列表 |
 | `/exit`、`/quit`、`/q` | 退出应用 |
 
 ### 权限审批示例
 
-当模型尝试执行 Shell 命令或访问越界文件时，界面会弹出高亮警示卡片：
+仅当调用命中风险规则（如破坏性删除、越界路径）时，界面才会弹出高亮警示卡片；常规只读命令与工作区内文件操作直接放行。
 
 ```text
 ╭──────────────────────────────────────────────────────────────────────────╮
 │ 🛡️ [权限审批 Gate 3] · 安全防护拦截                                       │
 │                                                                          │
 │   工具名称: bash                                                         │
-│   调用参数: {"command": "go test ./internal/agent/..."}                  │
-│   拦截原因: shell command execution: go test ./internal/agent/...          │
+│   调用参数: {"command": "rm -rf build/"}                                 │
+│   拦截原因: potentially destructive shell command: file deletion: rm ... │
 │                                                                          │
 │ ──────────────────────────────────────────────────────────────────────── │
 │   [y] 允许本次 (单次执行)   [a] 本会话始终允许 (信任同类)   [n/Esc] 拒绝本次     │
@@ -310,23 +328,26 @@ make run            # 等价于 go run ./cmd/coustea
 | 决策 | 行为 |
 |---|---|
 | `y` | 仅放行本次调用 |
-| `a` | 本会话内对相同 `工具:签名` 始终放行 |
+| `a` | 本会话内对相同 `工具:签名` 始终放行（bash 按完整命令、文件工具按路径记忆） |
 | `n` / `Esc` | 拒绝；拒绝原因以 Observation 形式回灌模型，模型可自行调整策略 |
 
 ---
 
 ## 架构总览
 
-调用链自底向上：**LLM → Gateway → Agent → TUI**。
+调用链：**LLM → Gateway → Agent → Protocol → TUI**。协议层为纯数据契约（事件流与配置视图），内核零 UI 依赖，同一内核可直接复用于桌面端与无头宿主。
 
 ```mermaid
 flowchart TD
     U[用户输入] --> TUI[TUI / Bubble Tea<br/>internal/tui]
-    TUI -->|AgentBridge 流式契约| AG[CoreAgent<br/>internal/agent]
+    TUI -->|Agent 前端契约<br/>StreamRun / RespondPermission| AG[CoreAgent<br/>internal/agent]
+    AG -->|protocol.Event 纯数据事件流| PR[Protocol 契约<br/>internal/protocol]
+    PR --> TUI
     AG -->|每轮重算| MEM[Memory<br/>滑动窗口 + 长期记忆]
     AG -->|ChatStream| RT[Router<br/>internal/gateway]
     RT --> DS[DeepSeek]
     RT --> GM[Gemini]
+    RT --> SP[讯飞星辰 MaaS]
     RT --> LC[LlamaCpp 本地]
     AG -->|工具调用| PERM[Permission<br/>三道闸门]
     PERM --> REG[Tool Registry<br/>internal/tool]
@@ -343,13 +364,14 @@ flowchart TD
 | 包 | 职责 |
 |---|---|
 | `internal/config` | 配置加载与持久化，全局/本地配置发现，环境变量自动补全，多厂商配置历史 |
-| `internal/gateway` | 统一网关接口与 OpenAI 协议 wire 层，Router 模型路由，三家 Provider 实现 |
-| `internal/agent` | Harness 核心：ReAct 循环、系统提示词合成、流式事件分发、工具流水线 |
+| `internal/gateway` | 统一网关接口与 OpenAI 协议 wire 层，Router 按模型名前缀动态路由，四家 Provider 实现 |
+| `internal/agent` | Harness 核心：ReAct 循环、Persona 与长期记忆合成、纯数据事件分发、工具流水线与权限审查 |
+| `internal/protocol` | 零依赖纯数据契约：流式事件、权限请求（RequestID 异步关联）、配置视图与 Token 统计，原生支持跨端序列化 |
 | `internal/tool` | 工具接口、线程安全注册表、执行前钩子（`PreToolUse`）、参数校验 |
 | `internal/tool/builtin` | 五个内置工具实现与 `SafePath` 沙箱 |
 | `internal/permission` | 三道闸门权限管线与审批回调 |
 | `internal/memory` | 会话滑动窗口记忆 + 两级长期记忆文件系统 |
-| `internal/tui` | Bubble Tea 终端界面、状态机、流式渲染 |
+| `internal/tui` | Bubble Tea 终端界面、状态机、流式渲染（chat / command / model 分层协作） |
 
 ### 项目结构
 
@@ -357,12 +379,13 @@ flowchart TD
 AI-Agent/
 ├── cmd/coustea/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
 ├── internal/
-│   ├── agent/                 # Harness 核心：ReAct 循环与事件分发
+│   ├── agent/                 # Harness 核心：ReAct 循环、Persona 合成与事件分发
 │   ├── config/                # 配置加载、持久化与环境变量补全
-│   ├── gateway/               # 统一网关、OpenAI wire 层、Router、三家 Provider
+│   ├── gateway/               # 统一网关、OpenAI wire 层、Router、四家 Provider
 │   ├── memory/                # 滑动窗口记忆与两级长期记忆
 │   ├── permission/            # 三道闸门权限管线
-│   ├── tool/                  # 工具接口、注册表、执行前钩子
+│   ├── protocol/              # 纯数据契约：事件流、权限请求、配置视图
+│   ├── tool/                  # 工具接口、注册表、PreToolUse 钩子
 │   │   └── builtin/           # 内置工具与 SafePath 沙箱
 │   └── tui/                   # Bubble Tea 终端界面
 ├── outputs/                   # 设计文档
@@ -383,7 +406,7 @@ AI-Agent/
 | `read_file` | `path`、`limit`（可选） | 读取工作区内文件内容，支持限制行数 |
 | `write_file` | `path`、`content` | 写入完整文件内容，自动创建缺失的父目录 |
 | `edit_file` | `path`、`old_text`、`new_text` | 对现有文件做精确的单次文本替换，避免破坏周边代码 |
-| `glob` | `pattern` | 递归匹配文件（支持 `**`），用于探索仓库结构；默认忽略 `.git`、`.agents` |
+| `glob` | `pattern` | 递归匹配文件（支持 `**`），用于探索仓库结构；默认忽略 `.git`、`.agents`，最多返回 200 条匹配 |
 
 **安全边界**：文件类工具统一经 `SafePath` 校验，仅允许访问当前工作区与 `~/.coustea`；`bash` 的输出上限为 50,000 字节，超出部分自动截断。
 
@@ -400,7 +423,7 @@ type Tool interface {
 }
 ```
 
-工具本身是**纯执行器，不含任何安全策略**；是否放行由权限管线统一裁决。
+工具本身是**纯执行器，不含任何安全策略**：调用先经 Agent 的三道闸门权限审查，放行后进入注册表执行流水线（`PreToolUse` 钩子链 → 参数校验 → 工具执行）。是否放行始终由权限管线统一裁决。
 
 ---
 
@@ -424,15 +447,15 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 ## 权限模型
 
-所有工具调用都必须穿过三道闸门（`internal/permission`）：
+所有工具调用都会穿过三道闸门（`internal/permission`）裁决：
 
 | 闸门 | 机制 | 行为 |
 |---|---|---|
 | **Gate 1 — 硬拒绝表** | 字面量黑名单（`rm -rf /`、`sudo `、`shutdown`、`reboot`、`mkfs`、`dd if=`、fork 炸弹等） | 命中即**永久拒绝**，不触发人工审批 |
-| **Gate 2 — 风险规则** | 破坏性命令正则（`rm`/`del`/`rmdir`）、`chmod 777`、写入 `/etc/`、路径逃逸工作区 | 标记为"需审批"，进入 Gate 3 |
-| **Gate 3 — 交互审批** | TUI 审批卡片，支持"本次放行"与"本会话始终放行" | 无审批通道时**默认拒绝**（安全默认值） |
+| **Gate 2 — 风险规则** | 破坏性命令正则（`rm`/`del`/`rmdir`、`git reset --hard`/强制推送、`chmod`/`chown`/`chgrp`、`kill`、`curl \| sh`、系统目录写入、磁盘工具等）与文件工具越界路径（工作区与 `~/.coustea` 之外） | 命中才标记"需审批"并进入 Gate 3；**未命中的常规命令直接放行** |
+| **Gate 3 — 交互审批** | TUI 审批卡片："允许本次 / 本会话始终允许（按 `工具:签名` 记授信）/ 拒绝" | 无审批通道时**默认拒绝**（安全默认值） |
 
-**安全默认值**：`alwaysAskBash` 默认为 `true`，即任何 Shell 命令执行前都会提示确认。若需在可信自动化场景中放行，可通过 `WithAutoApprove(true)` 显式关闭交互审批。
+**精准拦截**：只有命中风险规则的操作才需要人工确认——日常只读查询（`git status`、`go test`、`curl` 探测等）与工作区内文件读写自主放行，不再逐条打断。会话内可按 `a` 对相同签名持续授信；自动化场景可通过 `WithAutoApprove(true)` 全自动放行非硬拒绝操作——请确保仅在可信环境中使用。
 
 ---
 
@@ -441,21 +464,22 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <details>
 <summary><b>启动后提示「未配置可用模型」怎么办？</b></summary>
 
-输入 `/model` 打开配置向导完成配置；或设置 `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` 环境变量后重启。
+输入 `/model` 打开平台看板完成配置；或设置 `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` / `SPARK_API_KEY` 环境变量后重启。
 若使用本地模型，请确认 `llama-server` 已在 `http://127.0.0.1:8080` 运行。
 </details>
 
 <details>
-<summary><b>为什么每次执行 Shell 命令都要确认？</b></summary>
+<summary><b>哪些操作会触发权限审批？</b></summary>
 
-这是安全默认值（`alwaysAskBash = true`）。可按 `a` 在本会话内对相同命令始终放行。
-自动化场景下可通过 `WithAutoApprove(true)` 关闭交互审批——请确保仅在可信环境中使用。
+只有命中风险规则（Gate 2）的操作才会弹出审批卡片：破坏性文件删除、`git reset --hard` / 强制推送、`chmod` / `chown`、`kill`、`curl | sh`、系统目录写入、工作区外文件访问等。
+日常只读命令（如 `git status`、`go test`）与工作区内文件读写会直接放行。会话内可按 `a` 对相同 `工具:签名` 持续授信；
+自动化场景可用 `WithAutoApprove(true)` 关闭交互审批——请确保仅在可信环境中使用。
 </details>
 
 <details>
 <summary><b>切换模型平台后，之前的对话上下文会丢失吗？</b></summary>
 
-不会。配置向导保存后会通过 `SetGateway` 热切换网关，**完整保留当前记忆与已注册工具**。
+不会。配置保存后内核会热装新网关（`UpdateConfig`），**完整保留当前记忆与已注册工具**。
 若需清空上下文，请显式执行 `/clear`。
 </details>
 
@@ -476,14 +500,14 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <details>
 <summary><b>支持哪些模型？能接入其他 OpenAI 兼容服务吗？</b></summary>
 
-原生支持 `llamacpp` / `deepseek` / `gemini`。由于所有 Provider 统一走 OpenAI Chat Completions 协议，
+原生支持 `llamacpp` / `deepseek` / `gemini` / `spark`。由于所有 Provider 统一走 OpenAI Chat Completions 协议，
 接入其他兼容服务只需在 `internal/gateway` 中新增一个 Provider 实现并在 `initProviderGateway` 中注册。
 </details>
 
 <details>
 <summary><b>问实时信息（如天气、网络状态、git 状态）时，模型为什么能自主调用命令行解决？</b></summary>
 
-系统提示词赋予了模型**自主解题心智（Autonomous Problem-Solving）**：当用户询问外部实时数据或环境状态时，模型不会消极推脱「我无法连接互联网」，而是会主动构思解决方案并通过 `bash` 工具执行只读 CLI 指令（例如 `curl -s "wttr.in/城市?format=3"` 获取天气、`git status` 查看分支状态、`ping` 或 `curl` 探测网络连通性）。调用命令时会穿过 Gate 3 权限审批，用户确认后即刻将终端结果作为 Observation 回灌模型，形成完整的感知-行动闭环。
+系统提示词赋予了模型**自主解题心智（Autonomous Problem-Solving）**：当用户询问外部实时数据或环境状态时，模型不会消极推脱「我无法连接互联网」，而是会主动构思解决方案并通过 `bash` 工具执行只读 CLI 指令（例如 `curl -s "wttr.in/城市?format=3"` 获取天气、`git status` 查看分支状态、`ping` 或 `curl` 探测网络连通性）。只读命令直接执行，高风险命令才会触发 Gate 3 审批，用户确认后即刻将终端结果作为 Observation 回灌模型，形成完整的感知-行动闭环。
 </details>
 
 <details>
@@ -510,18 +534,20 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 ### 当前测试规模
 
-9 个测试文件、55 个测试用例，覆盖 `agent`、`config`、`gateway`、`memory`、`permission`、`tool`、`tool/builtin`、`tui` 全部包。
+10 个测试文件、69 个测试用例，覆盖 `agent`、`config`、`gateway`、`memory`、`permission`、`tool`、`tool/builtin`、`tui` 八个包（`cmd` 为纯装配入口、`protocol` 为纯数据契约，无独立测试）。
 
 ```bash
-$ go test ./internal/...
-ok  	my-agent/internal/agent	2.385s
-ok  	my-agent/internal/config	(cached)
-ok  	my-agent/internal/gateway	(cached)
-ok  	my-agent/internal/memory	2.823s
-ok  	my-agent/internal/permission	3.268s
-ok  	my-agent/internal/tool	3.689s
-ok  	my-agent/internal/tool/builtin	1.998s
-ok  	my-agent/internal/tui	4.088s
+$ go test -count=1 ./...
+?   	my-agent/cmd/coustea	[no test files]
+ok  	my-agent/internal/agent	1.146s
+ok  	my-agent/internal/config	1.853s
+ok  	my-agent/internal/gateway	3.615s
+ok  	my-agent/internal/memory	4.044s
+ok  	my-agent/internal/permission	2.298s
+?   	my-agent/internal/protocol	[no test files]
+ok  	my-agent/internal/tool	3.152s
+ok  	my-agent/internal/tool/builtin	2.777s
+ok  	my-agent/internal/tui	4.483s
 ```
 
 测试原则：优先使用 `httptest` 服务器或轻量 fake 模拟 Provider 与 Agent 行为，**不依赖真实凭据**。
@@ -559,12 +585,12 @@ ok  	my-agent/internal/tui	4.088s
 
 ### 提交信息
 
-采用简短祈使句，一次提交只描述一个变更，例如：
+采用中文「主题：描述」单行风格，一次提交只描述一个变更，主题落到行为变化，例如：
 
 ```text
-Add DeepSeek stream error handling
-Fix workspace path escape in edit_file
-Refactor permission gate into hook chain
+网关扩展：接入讯飞星辰MaaS平台与动态模型路由支持
+权限优化：重构为危险命令精准拦截与非危险命令自主放行
+架构解耦：建立独立Protocol纯数据契约层并实现TUI与Agent内核完全解耦
 ```
 
 ### Pull Request 清单
@@ -582,7 +608,7 @@ Refactor permission gate into hook chain
 - **凭据**：`config.json`、`*.local.json`、`test_config.json` 均已加入 `.gitignore`，请勿提交填充了真实密钥的配置文件。
 - **密钥存储**：`SaveConfig` 以 `0600` 权限写入配置文件，并确保目录存在。
 - **工作区隔离**：文件工具只能读写当前工作区与 `~/.coustea`，任何越界路径都会被拒绝。
-- **命令执行**：`bash` 工具默认对每条命令要求人工确认，硬拒绝表中的危险指令永不执行。
+- **命令执行**：`bash` 命中 Gate 2 风险规则（破坏性删除、提权、系统目录写入等）时触发人工确认，无审批通道时默认拒绝；硬拒绝表中的危险指令永不执行。
 - **记忆文件**：长期记忆为明文 Markdown，请避免在其中写入敏感信息。
 
 如发现安全问题，请通过 [Issue](https://github.com/coustea/AI-Agent/issues) 私下联系维护者，勿直接公开披露。
@@ -595,6 +621,8 @@ Refactor permission gate into hook chain
 |---|---|
 | [`outputs/ARCHITECTURE_PLAN.md`](./outputs/ARCHITECTURE_PLAN.md) | 架构演进与统一协议分步实施计划 |
 | [`outputs/HARNESS_ARCHITECTURE.md`](./outputs/HARNESS_ARCHITECTURE.md) | Harness 架构设计：循环、接缝与参考实现对照 |
+| [`outputs/PURE_CONTRACT_DECOUPLING_PLAN.md`](./outputs/PURE_CONTRACT_DECOUPLING_PLAN.md) | 纯数据契约（Protocol）解耦与规范化重构方案 |
+| [`outputs/TUI_AGENT_DECOUPLING_PLAN.md`](./outputs/TUI_AGENT_DECOUPLING_PLAN.md) | TUI 与 Agent 解耦设计与前端契约收敛 |
 | [`outputs/OPTIMIZATION_PLAN.md`](./outputs/OPTIMIZATION_PLAN.md) | 全仓架构审查结论与优化方案（P1–P5） |
 | [`outputs/P2_BASH_HARDENING.md`](./outputs/P2_BASH_HARDENING.md) | 权限接缝与 Bash 加固设计 |
 | [`outputs/SKILL_AUDIT_bubbletea-code-review.md`](./outputs/SKILL_AUDIT_bubbletea-code-review.md) | Bubble Tea TUI 架构规范与代码审查审计报告 |
