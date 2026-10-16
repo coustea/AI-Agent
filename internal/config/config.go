@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"my-agent/internal/protocol"
 )
 
 // Provider 定义支持的模型厂商
@@ -449,4 +451,59 @@ func InferProviderFromModel(model string) Provider {
 	default:
 		return ""
 	}
+}
+
+// ToView 将当前配置映射为面向前端只读呈现的纯数据 ConfigView 契约
+func (c *Config) ToView() protocol.ConfigView {
+	available := []string{
+		string(ProviderLlamaCpp),
+		string(ProviderDeepSeek),
+		string(ProviderGemini),
+		string(ProviderSpark),
+	}
+
+	cv := protocol.ConfigView{
+		AvailableProviders: available,
+	}
+	if c != nil {
+		cv.Provider = string(c.Provider)
+		cv.ModelName = c.ModelName
+		cv.HasAPIKey = c.APIKey != "" || IsLocalProvider(c.Provider)
+	}
+
+	providers := make([]protocol.ProviderInfo, 0, len(available))
+	for _, pStr := range available {
+		p := Provider(pStr)
+		info := protocol.ProviderInfo{
+			ID:                pStr,
+			Name:              ProviderDisplayName(p),
+			Description:       ProviderDescription(p),
+			IsLocal:           IsLocalProvider(p),
+			RecommendedModels: RecommendedModels(p),
+		}
+
+		if c != nil {
+			pcfg := c.ProviderConfig(p)
+			if pcfg.ModelName != "" {
+				info.CurrentModel = pcfg.ModelName
+			} else {
+				info.CurrentModel = DefaultModel(p)
+			}
+
+			if info.IsLocal {
+				info.IsConfigured = true
+			} else if pcfg.APIKey != "" {
+				info.IsConfigured = true
+			} else if c.Provider == p && c.APIKey != "" {
+				info.IsConfigured = true
+			}
+		} else {
+			info.CurrentModel = DefaultModel(p)
+			info.IsConfigured = info.IsLocal
+		}
+
+		providers = append(providers, info)
+	}
+	cv.Providers = providers
+	return cv
 }
