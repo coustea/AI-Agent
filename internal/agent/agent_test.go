@@ -852,7 +852,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				return []gateway.StreamChunk{
 					{
 						ToolCalls: []gateway.ToolCall{
-							{ID: "call_bash_1", Name: "bash", Arguments: json.RawMessage(`{"command": "echo 'harness_approval_test'"}`)},
+							{ID: "call_bash_1", Name: "bash", Arguments: json.RawMessage(`{"command": "rm -f 'harness_approval_test.tmp' && echo 'harness_approval_test'"}`)},
 						},
 						Done: true,
 					},
@@ -909,7 +909,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				return []gateway.StreamChunk{
 					{
 						ToolCalls: []gateway.ToolCall{
-							{ID: "call_bash_2", Name: "bash", Arguments: json.RawMessage(`{"command": "echo 'will_be_denied'"}`)},
+							{ID: "call_bash_2", Name: "bash", Arguments: json.RawMessage(`{"command": "rm -f 'harness_approval_test.tmp' && echo 'will_be_denied'"}`)},
 						},
 						Done: true,
 					},

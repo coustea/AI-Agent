@@ -67,7 +67,60 @@ var defaultHardDenyList = []string{
 	":(){ :|:& };:",
 }
 
-var destructiveWordPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:rm|del|rmdir)(?:\s+-[rf]+)?\s+`)
+var (
+	// 文件与目录破坏性删除 (rm, rmdir, unlink, shred, del)
+	destructiveWordPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:rm|rmdir|unlink|shred|del)(?:\s+-[a-zA-Z]+)*\s+`)
+
+	// Git 破坏性或强覆盖操作 (强制回滚、强制推送、强制清理、丢弃更改)
+	gitDangerousPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*git\s+(?:reset\s+--hard|clean\s+-[a-zA-Z]*f|restore\s+\.|checkout\s+\.|push\s+.*(?:-f|--force))(?:\s+|$)`)
+
+	// 权限与属组篡改
+	permChangePattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:chmod|chown|chgrp)\s+`)
+
+	// 进程销毁与强制终止
+	processKillPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:kill|pkill|killall)\s+`)
+
+	// 远程脚本管道直接执行 (如 curl ... | sh, wget ... | bash)
+	remotePipeExecPattern = regexp.MustCompile(`(?i)(?:curl|wget)\s+[^|;]+\|\s*(?:sh|bash|zsh)`)
+
+	// 重定向篡改系统核心目录
+	systemDirWritePattern = regexp.MustCompile(`(?:>|>>)\s*/(?:etc|usr|bin|sbin|System|Library)/`)
+
+	// 磁盘擦除与低级分区操作
+	diskManipulatePattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:dd|fdisk|parted|mkfs|format)\s+`)
+)
+
+// checkDangerousBashCommand 判定命令是否属于破坏性或高风险操作
+func checkDangerousBashCommand(cmd string) (bool, string) {
+	clean := strings.TrimSpace(cmd)
+	if clean == "" {
+		return false, ""
+	}
+
+	if destructiveWordPattern.MatchString(clean) {
+		return true, fmt.Sprintf("file deletion: %s", clean)
+	}
+	if gitDangerousPattern.MatchString(clean) {
+		return true, fmt.Sprintf("destructive git operation: %s", clean)
+	}
+	if permChangePattern.MatchString(clean) {
+		return true, fmt.Sprintf("permission modification: %s", clean)
+	}
+	if processKillPattern.MatchString(clean) {
+		return true, fmt.Sprintf("process termination: %s", clean)
+	}
+	if remotePipeExecPattern.MatchString(clean) {
+		return true, fmt.Sprintf("remote script pipe execution: %s", clean)
+	}
+	if systemDirWritePattern.MatchString(clean) {
+		return true, fmt.Sprintf("writing to system directory: %s", clean)
+	}
+	if diskManipulatePattern.MatchString(clean) {
+		return true, fmt.Sprintf("disk manipulation command: %s", clean)
+	}
+
+	return false, ""
+}
 
 // Manager 实现基于 Harness 思想的三道闸门权限管线
 type Manager struct {
@@ -76,7 +129,6 @@ type Manager struct {
 	approver       Approver
 	hardDenyList   []string
 	sessionAllowed map[string]bool // key 格式: "tool:signature"
-	alwaysAskBash  bool
 	autoApprove    bool
 }
 
@@ -96,13 +148,6 @@ func WithHardDenyList(denyList []string) Option {
 		if len(denyList) > 0 {
 			m.hardDenyList = append([]string(nil), denyList...)
 		}
-	}
-}
-
-// WithAlwaysAskBash 设置是否对所有 Bash 命令强制要求用户审批
-func WithAlwaysAskBash(always bool) Option {
-	return func(m *Manager) {
-		m.alwaysAskBash = always
 	}
 }
 
@@ -132,7 +177,6 @@ func NewManager(workDir string, opts ...Option) *Manager {
 		workDir:        cleanDir,
 		hardDenyList:   append([]string(nil), defaultHardDenyList...),
 		sessionAllowed: make(map[string]bool),
-		alwaysAskBash:  true, // 遵循安全默认值：执行任何 Shell 命令前提示用户确认
 	}
 
 	for _, opt := range opts {
@@ -259,15 +303,12 @@ func (m *Manager) checkRules(call gateway.ToolCall) (bool, string) {
 			return true, "empty shell command"
 		}
 
-		// 1. 检查破坏性指令
-		if destructiveWordPattern.MatchString(cmd) || strings.Contains(cmd, "chmod 777") || strings.Contains(cmd, "> /etc/") {
-			return true, fmt.Sprintf("potentially destructive shell command: %s", cmd)
+		// 检查是否命中危险/破坏性操作特征 (未命中则直接放行)
+		if isDangerous, reason := checkDangerousBashCommand(cmd); isDangerous {
+			return true, fmt.Sprintf("potentially destructive shell command: %s", reason)
 		}
 
-		// 2. 检查全局 bash 审批策略
-		if m.alwaysAskBash {
-			return true, fmt.Sprintf("shell command execution: %s", cmd)
-		}
+		return false, ""
 
 	case "read_file", "write_file", "edit_file":
 		path := extractStringArg(call.Arguments, "path")
