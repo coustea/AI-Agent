@@ -54,26 +54,10 @@ func (r *Router) Route(req *protocol.ChatRequest) (Gateway, error) {
 		return nil, fmt.Errorf("gateway router: no providers registered")
 	}
 
-	// 1. 若请求明确指定了模型，优先根据模型名称前缀智能分配
+	// 1. 若请求明确指定了模型，优先根据统一元数据智能推断并分配厂商网关
 	if req != nil && strings.TrimSpace(req.Model) != "" {
-		m := strings.ToLower(strings.TrimSpace(req.Model))
-		if strings.HasPrefix(m, "gemini") {
-			if gw, ok := r.providers["gemini"]; ok {
-				return gw, nil
-			}
-		}
-		if strings.HasPrefix(m, "deepseek") {
-			if gw, ok := r.providers["deepseek"]; ok {
-				return gw, nil
-			}
-		}
-		if strings.HasPrefix(m, "spark") {
-			if gw, ok := r.providers["spark"]; ok {
-				return gw, nil
-			}
-		}
-		if strings.Contains(m, "llama") || strings.Contains(m, "local") {
-			if gw, ok := r.providers["llamacpp"]; ok {
+		if p := config.InferProviderFromModel(req.Model); p != "" {
+			if gw, ok := r.providers[string(p)]; ok {
 				return gw, nil
 			}
 		}
