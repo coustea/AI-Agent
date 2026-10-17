@@ -20,13 +20,13 @@ import (
 // 3. 大模型返回的原始思考链 (ReasoningContent) 与回复 (Content)
 // 4. 工具调用的精确参数与执行结果 (ToolCall & ToolResult)
 // 5. Token 消耗统计与总耗时 (Usage & Summary)
-// 实时结构化收集为 []TraceEvent，并以 100% 原始 JSON 写入 .coustea/logs/latest.json 与追加归档到 .coustea/logs/agent.jsonl。
+// 实时结构化收集为 []protocol.TraceEvent，并以 100% 原始 JSON 写入 .coustea/logs/latest.json 与追加归档到 .coustea/logs/agent.jsonl。
 type LoggingMiddleware struct {
 	mu         sync.RWMutex
 	logDir     string
 	latestJSON string
 	jsonlFile  string
-	events     []TraceEvent
+	events     []protocol.TraceEvent
 }
 
 // NewLoggingMiddleware 构造日志中间件实例
@@ -39,15 +39,15 @@ func NewLoggingMiddleware(workDir string) *LoggingMiddleware {
 		logDir:     dir,
 		latestJSON: filepath.Join(dir, "latest.json"),
 		jsonlFile:  filepath.Join(dir, "agent.jsonl"),
-		events:     make([]TraceEvent, 0),
+		events:     make([]protocol.TraceEvent, 0),
 	}
 }
 
 // Traces 返回当前轮次已收集到的全部全量结构化追踪事件切片副本
-func (l *LoggingMiddleware) Traces() []TraceEvent {
+func (l *LoggingMiddleware) Traces() []protocol.TraceEvent {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
-	return append([]TraceEvent(nil), l.events...)
+	return append([]protocol.TraceEvent(nil), l.events...)
 }
 
 func (l *LoggingMiddleware) ensureDirLocked() {
@@ -62,7 +62,7 @@ func (l *LoggingMiddleware) writeLatestJSONLocked() {
 	}
 }
 
-func (l *LoggingMiddleware) appendJSONLLocked(ev TraceEvent) {
+func (l *LoggingMiddleware) appendJSONLLocked(ev protocol.TraceEvent) {
 	l.ensureDirLocked()
 	f, err := os.OpenFile(l.jsonlFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err == nil {
@@ -74,7 +74,7 @@ func (l *LoggingMiddleware) appendJSONLLocked(ev TraceEvent) {
 	}
 }
 
-func (l *LoggingMiddleware) recordEvent(ev TraceEvent) {
+func (l *LoggingMiddleware) recordEvent(ev protocol.TraceEvent) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -86,10 +86,10 @@ func (l *LoggingMiddleware) recordEvent(ev TraceEvent) {
 // OnTurnStart 单轮交互开始
 func (l *LoggingMiddleware) OnTurnStart(ctx context.Context, turnID string, prompt string) {
 	l.mu.Lock()
-	l.events = make([]TraceEvent, 0)
+	l.events = make([]protocol.TraceEvent, 0)
 	l.mu.Unlock()
 
-	l.recordEvent(TraceEvent{
+	l.recordEvent(protocol.TraceEvent{
 		Step:      -1,
 		Type:      "turn_start",
 		Title:     "👤 用户提问 · 新轮次开启",
@@ -103,8 +103,8 @@ func (l *LoggingMiddleware) OnTurnStart(ctx context.Context, turnID string, prom
 }
 
 // OnLLMRequest 每步发起大模型调用前
-func (l *LoggingMiddleware) OnLLMRequest(ctx context.Context, req *LLMRequestTrace) {
-	l.recordEvent(TraceEvent{
+func (l *LoggingMiddleware) OnLLMRequest(ctx context.Context, req *protocol.LLMRequestTrace) {
+	l.recordEvent(protocol.TraceEvent{
 		Step:      req.Step,
 		Type:      "llm_req",
 		Title:     fmt.Sprintf("Step %d · 📤 LLM 请求上下文 (%s • %s)", req.Step, req.Provider, req.ModelName),
@@ -121,19 +121,10 @@ func (l *LoggingMiddleware) OnLLMRequest(ctx context.Context, req *LLMRequestTra
 }
 
 // OnLLMResponse 大模型决策返回完毕后
-func (l *LoggingMiddleware) OnLLMResponse(ctx context.Context, resp *LLMResponseTrace) {
-	var toolCallsParsed []map[string]any
-	for _, tc := range resp.ToolCalls {
-		tcItem := map[string]any{
-			"id":            tc.ID,
-			"name":          tc.Name,
-			"raw_arguments": tc.Arguments,
-		}
-		var parsedArgs any
-		if err := json.Unmarshal([]byte(tc.Arguments), &parsedArgs); err == nil {
-			tcItem["arguments"] = parsedArgs
-		}
-		toolCallsParsed = append(toolCallsParsed, tcItem)
+func (l *LoggingMiddleware) OnLLMResponse(ctx context.Context, resp *protocol.LLMResponseTrace) {
+	var errStr string
+	if resp.Error != nil {
+		errStr = resp.Error.Error()
 	}
 
 	respPayload := map[string]any{
@@ -141,11 +132,25 @@ func (l *LoggingMiddleware) OnLLMResponse(ctx context.Context, resp *LLMResponse
 		"duration_ms":       resp.Duration.Milliseconds(),
 		"reply":             resp.Reply,
 		"reasoning_content": resp.ReasoningContent,
-		"tool_calls":        toolCallsParsed,
+		"tool_calls":        resp.ToolCalls,
 		"usage":             resp.Usage,
+		"error":             errStr,
 	}
-	if resp.Error != nil {
-		respPayload["error"] = resp.Error.Error()
+
+	if len(resp.ToolCalls) > 0 {
+		var callsSummary []map[string]any
+		for _, tc := range resp.ToolCalls {
+			var parsedArgs any
+			if err := json.Unmarshal([]byte(tc.Arguments), &parsedArgs); err != nil {
+				parsedArgs = tc.Arguments
+			}
+			callsSummary = append(callsSummary, map[string]any{
+				"id":        tc.ID,
+				"name":      tc.Name,
+				"arguments": parsedArgs,
+			})
+		}
+		respPayload["tool_calls"] = callsSummary
 	}
 
 	title := fmt.Sprintf("Step %d · 📥 LLM 决策回复", resp.Step)
@@ -157,7 +162,7 @@ func (l *LoggingMiddleware) OnLLMResponse(ctx context.Context, resp *LLMResponse
 		title = fmt.Sprintf("Step %d · 💬 大模型生成最终回答", resp.Step)
 	}
 
-	l.recordEvent(TraceEvent{
+	l.recordEvent(protocol.TraceEvent{
 		Step:      resp.Step,
 		Type:      "llm_resp",
 		Title:     title,
@@ -174,7 +179,7 @@ func (l *LoggingMiddleware) OnToolStart(ctx context.Context, step int, call prot
 		parsedArgs = call.Arguments
 	}
 
-	l.recordEvent(TraceEvent{
+	l.recordEvent(protocol.TraceEvent{
 		Step:      step,
 		Type:      "tool_start",
 		Title:     fmt.Sprintf("Step %d · ⚙️ 开始调用工具: %s", step, call.Name),
@@ -189,7 +194,7 @@ func (l *LoggingMiddleware) OnToolStart(ctx context.Context, step int, call prot
 }
 
 // OnToolEnd 工具调用执行完毕后
-func (l *LoggingMiddleware) OnToolEnd(ctx context.Context, trace *ToolTrace) {
+func (l *LoggingMiddleware) OnToolEnd(ctx context.Context, trace *protocol.ToolTrace) {
 	var parsedArgs any
 	if err := json.Unmarshal([]byte(trace.Call.Arguments), &parsedArgs); err != nil {
 		parsedArgs = trace.Call.Arguments
@@ -200,7 +205,7 @@ func (l *LoggingMiddleware) OnToolEnd(ctx context.Context, trace *ToolTrace) {
 		statusText = "❌ 异常"
 	}
 
-	l.recordEvent(TraceEvent{
+	l.recordEvent(protocol.TraceEvent{
 		Step:      trace.Step,
 		Type:      "tool_end",
 		Title:     fmt.Sprintf("Step %d · 🔧 工具执行结果: %s (%s)", trace.Step, trace.Call.Name, statusText),
@@ -219,7 +224,7 @@ func (l *LoggingMiddleware) OnToolEnd(ctx context.Context, trace *ToolTrace) {
 }
 
 // OnTurnEnd 单轮交互完整收敛结束
-func (l *LoggingMiddleware) OnTurnEnd(ctx context.Context, summary *TurnSummaryTrace) {
+func (l *LoggingMiddleware) OnTurnEnd(ctx context.Context, summary *protocol.TurnSummaryTrace) {
 	status := "completed"
 	if !summary.Success {
 		status = "failed"
@@ -229,7 +234,7 @@ func (l *LoggingMiddleware) OnTurnEnd(ctx context.Context, summary *TurnSummaryT
 		errStr = summary.Error.Error()
 	}
 
-	l.recordEvent(TraceEvent{
+	l.recordEvent(protocol.TraceEvent{
 		Step:      -1,
 		Type:      "turn_end",
 		Title:     fmt.Sprintf("🏁 轮次收敛总结 (%d 步, %d tokens, %v)", summary.TotalSteps, summary.TotalUsage.TotalTokens, summary.Duration.Round(time.Millisecond)),

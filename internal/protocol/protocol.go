@@ -1,6 +1,11 @@
 package protocol
 
-import "encoding/json"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+)
 
 // Role 统一消息角色类型
 type Role string
@@ -138,4 +143,100 @@ type ConfigView struct {
 	HasAPIKey          bool           `json:"has_api_key"`
 	AvailableProviders []string       `json:"available_providers"`
 	Providers          []ProviderInfo `json:"providers,omitempty"`
+}
+
+// ============================================================================
+// 全系统统一结构化链路审计与追踪契约 (Trace DTOs)
+// ============================================================================
+
+// TraceEvent 记录全系统单次结构化执行链路事件，支持 100% 原始数据格式化为完整 JSON
+type TraceEvent struct {
+	Step      int           `json:"step"`               // 所属 ReAct 步骤 (-1 为全局轮次事件)
+	Type      string        `json:"type"`               // "turn_start", "llm_req", "llm_resp", "tool_start", "tool_end", "turn_end"
+	Title     string        `json:"title"`              // 列表摘要标题
+	Timestamp time.Time     `json:"timestamp"`          // 记录时间戳
+	Duration  time.Duration `json:"duration,omitempty"` // 耗时 (若有)
+	Payload   any           `json:"payload"`            // 原始结构体数据对象 (如 LLMRequestTrace, ToolTrace 等)
+}
+
+// PrettyJSON 将 Payload 格式化为 2 格缩进的完整 JSON 字符串，保留所有真实字段与参数
+func (e TraceEvent) PrettyJSON() string {
+	b, err := json.MarshalIndent(e.Payload, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("{\n  \"error\": %q\n}", err.Error())
+	}
+	return string(b)
+}
+
+// LLMRequestTrace 记录向大模型发送的完整请求快照
+type LLMRequestTrace struct {
+	Step         int              `json:"step"`
+	Provider     string           `json:"provider"`
+	ModelName    string           `json:"model_name"`
+	SystemPrompt string           `json:"system_prompt"`
+	Messages     []Message        `json:"messages"`
+	Tools        []ToolDefinition `json:"tools"`
+	Timestamp    time.Time        `json:"timestamp"`
+}
+
+// LLMResponseTrace 记录大模型返回的完整决策快照
+type LLMResponseTrace struct {
+	Step             int           `json:"step"`
+	Duration         time.Duration `json:"duration"`
+	Reply            string        `json:"reply"`
+	ReasoningContent string        `json:"reasoning_content,omitempty"`
+	ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
+	Usage            *Usage        `json:"usage,omitempty"`
+	Error            error         `json:"error,omitempty"`
+}
+
+// ToolTrace 记录工具执行前后的完整快照
+type ToolTrace struct {
+	Step      int           `json:"step"`
+	Call      ToolCall      `json:"call"`
+	Result    ToolResult    `json:"result"`
+	Duration  time.Duration `json:"duration"`
+	Timestamp time.Time     `json:"timestamp"`
+}
+
+// TurnSummaryTrace 记录一轮完整问答的汇总快照
+type TurnSummaryTrace struct {
+	TurnID     string        `json:"turn_id"`
+	Prompt     string        `json:"prompt"`
+	TotalSteps int           `json:"total_steps"`
+	TotalUsage Usage         `json:"total_usage"`
+	Duration   time.Duration `json:"duration"`
+	Success    bool          `json:"success"`
+	Error      error         `json:"error,omitempty"`
+}
+
+// ============================================================================
+// 智能体核心对外纯虚接口 (Agent Contract)
+// ============================================================================
+
+// Agent 定义智能体调用的对外核心契约，任何前端（TUI、桌面端、无头宿主）直接依赖该接口
+type Agent interface {
+	// StreamRun 开启单轮对话交互，返回原生支持序列化的纯数据事件流
+	StreamRun(ctx context.Context, prompt string) (<-chan Event, error)
+
+	// RespondPermission 异步审批权限请求（基于 requestID 关联）
+	RespondPermission(requestID string, decision Decision) error
+
+	// Reset 清空当前会话记忆
+	Reset()
+
+	// Config 获取当前配置与就绪状态（只读视图）
+	Config() ConfigView
+
+	// UpdateConfig 更新模型提供商、密钥与模型名称（内核负责落盘 config.json 与热切网关）
+	UpdateConfig(provider, apiKey, model string) error
+
+	// MemoryCount 返回当前工作区生效的长期记忆篇数
+	MemoryCount() int
+
+	// WorkDir 获取当前绑定的工作目录
+	WorkDir() string
+
+	// Traces 返回当前/最近一轮对话的完整详细结构化追踪事件切片
+	Traces() []TraceEvent
 }

@@ -1,0 +1,270 @@
+package agent
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"my-agent/internal/protocol"
+)
+
+// StreamRun 驱动 Harness 核心 ReAct 状态循环，返回纯数据事件流
+func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protocol.Event, error) {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return nil, ErrEmptyPrompt
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	a.mu.RLock()
+	gw := a.gw
+	a.mu.RUnlock()
+	if gw == nil {
+		return nil, errors.New("agent: no model gateway configured, please configure via /model")
+	}
+
+	a.mu.Lock()
+	if a.running {
+		a.mu.Unlock()
+		return nil, ErrRunInProgress
+	}
+	a.running = true
+	a.mu.Unlock()
+
+	outCh := make(chan protocol.Event, 32)
+
+	go func() {
+		defer close(outCh)
+		defer func() {
+			a.mu.Lock()
+			a.running = false
+			a.mu.Unlock()
+		}()
+
+		// 1. 将事件通道装载入 context，供装配期挂载的横切钩子（如权限交互审批桥）回传事件
+		ctx = withEventSink(ctx, outCh)
+
+		turnID := fmt.Sprintf("turn_%d", time.Now().UnixNano())
+		turnStart := time.Now()
+		a.dispatchTurnStart(ctx, turnID, prompt)
+
+		var (
+			totalTurnUsage protocol.Usage
+			turnErr        error
+			stepCount      int
+		)
+
+		defer func() {
+			a.dispatchTurnEnd(ctx, &protocol.TurnSummaryTrace{
+				TurnID:     turnID,
+				Prompt:     prompt,
+				TotalSteps: stepCount,
+				TotalUsage: totalTurnUsage,
+				Duration:   time.Since(turnStart),
+				Success:    turnErr == nil,
+				Error:      turnErr,
+			})
+		}()
+
+		// 2. 将用户问题存入 Memory
+		userMsg := protocol.Message{Role: protocol.RoleUser, Content: prompt}
+		_ = a.memory.Append(ctx, userMsg)
+
+		// 3. 每用户轮次开始时动态合成系统提示词
+		a.mu.RLock()
+		sysPrompt := composeSystemPrompt(a.persona, a.workDir)
+		a.mu.RUnlock()
+
+		// 4. 驱动 Harness 循环 (最多迭代 maxSteps 步)
+		for step := 0; step < a.maxSteps; step++ {
+			stepCount = step + 1
+			select {
+			case <-ctx.Done():
+				turnErr = ctx.Err()
+				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: ctx.Err().Error()})
+				return
+			default:
+			}
+
+			stepUsage, finished, err := a.runStep(ctx, outCh, sysPrompt, step)
+			if err != nil {
+				turnErr = err
+				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
+				return
+			}
+			totalTurnUsage.Add(stepUsage)
+			if finished {
+				sendEvent(ctx, outCh, protocol.Event{
+					Type:  protocol.EventDone,
+					Usage: &totalTurnUsage,
+				})
+				return
+			}
+		}
+
+		turnErr = ErrMaxSteps
+		sendEvent(ctx, outCh, protocol.Event{
+			Type:  protocol.EventError,
+			Error: ErrMaxSteps.Error(),
+		})
+	}()
+
+	return outCh, nil
+}
+
+// runStep 执行单步 ReAct：一次流式模型调用，必要时执行其发起的工具调用。
+// 返回本步 token 用量；finished 为 true 表示模型已给出最终答复，循环应终止。
+func (a *CoreAgent) runStep(ctx context.Context, eventCh chan<- protocol.Event, sysPrompt string, step int) (stepUsage protocol.Usage, finished bool, err error) {
+	a.mu.RLock()
+	var providerName, modelName string
+	if a.cfg != nil {
+		providerName = string(a.cfg.Provider)
+		modelName = a.cfg.ModelName
+	}
+	gw := a.gw
+	toolDefs := a.tools.Definitions()
+	a.mu.RUnlock()
+	if gw == nil {
+		return stepUsage, false, errors.New("agent: no model gateway configured, please configure via /model")
+	}
+
+	// 基于记忆状态机安全构建当前上下文
+	reqMsgs, err := a.memory.BuildContext(ctx, sysPrompt)
+	if err != nil {
+		return stepUsage, false, err
+	}
+
+	// 触发 OnLLMRequest 钩子
+	stepStart := time.Now()
+	a.dispatchLLMRequest(ctx, &protocol.LLMRequestTrace{
+		Step:         step,
+		Provider:     providerName,
+		ModelName:    modelName,
+		SystemPrompt: sysPrompt,
+		Messages:     reqMsgs,
+		Tools:        toolDefs,
+		Timestamp:    stepStart,
+	})
+
+	// 发起网关流式调用
+	stream, err := gw.ChatStream(ctx, &protocol.ChatRequest{
+		Messages: reqMsgs,
+		Tools:    toolDefs,
+	})
+	if err != nil {
+		a.dispatchLLMResponse(ctx, &protocol.LLMResponseTrace{
+			Step:     step,
+			Duration: time.Since(stepStart),
+			Error:    err,
+		})
+		return stepUsage, false, err
+	}
+
+	var replyBuilder, reasoningBuilder strings.Builder
+	var toolCalls []protocol.ToolCall
+	for chunk := range stream {
+		if chunk.Err != nil {
+			// 流式异常回滚：本步 assistant 消息不入记忆
+			a.dispatchLLMResponse(ctx, &protocol.LLMResponseTrace{
+				Step:     step,
+				Duration: time.Since(stepStart),
+				Error:    chunk.Err,
+			})
+			return stepUsage, false, chunk.Err
+		}
+		if chunk.ReasoningContent != "" {
+			reasoningBuilder.WriteString(chunk.ReasoningContent)
+			sendEvent(ctx, eventCh, protocol.Event{
+				Type:      protocol.EventReasoningDelta,
+				Reasoning: chunk.ReasoningContent,
+			})
+		}
+		if chunk.Delta != "" {
+			replyBuilder.WriteString(chunk.Delta)
+			sendEvent(ctx, eventCh, protocol.Event{
+				Type:  protocol.EventDelta,
+				Delta: chunk.Delta,
+			})
+		}
+		if len(chunk.ToolCalls) > 0 {
+			toolCalls = append(toolCalls, chunk.ToolCalls...)
+		}
+		if chunk.Done && chunk.Usage != nil {
+			stepUsage.Add(*chunk.Usage)
+		}
+	}
+
+	// 触发 OnLLMResponse 钩子
+	a.dispatchLLMResponse(ctx, &protocol.LLMResponseTrace{
+		Step:             step,
+		Duration:         time.Since(stepStart),
+		Reply:            replyBuilder.String(),
+		ReasoningContent: reasoningBuilder.String(),
+		ToolCalls:        toolCalls,
+		Usage:            &stepUsage,
+	})
+
+	// 将模型本轮完整回复存入记忆
+	_ = a.memory.Append(ctx, protocol.Message{
+		Role:             protocol.RoleAssistant,
+		Content:          replyBuilder.String(),
+		ReasoningContent: reasoningBuilder.String(),
+		ToolCalls:        toolCalls,
+	})
+
+	// 无工具调用：模型已得出最终回答
+	if len(toolCalls) == 0 {
+		return stepUsage, true, nil
+	}
+
+	// 执行工具调用流水线（权限、参数校验、大结果落盘均由 Registry 钩子自治完成）
+	a.mu.RLock()
+	tools := a.tools
+	a.mu.RUnlock()
+	for _, tc := range toolCalls {
+		a.dispatchToolStart(ctx, step, tc)
+
+		sendEvent(ctx, eventCh, protocol.Event{
+			Type:     protocol.EventToolCallStart,
+			ToolCall: &tc,
+		})
+
+		toolStart := time.Now()
+		res := tools.Execute(ctx, tc)
+		toolDuration := time.Since(toolStart)
+
+		a.dispatchToolEnd(ctx, &protocol.ToolTrace{
+			Step:      step,
+			Call:      tc,
+			Result:    res,
+			Duration:  toolDuration,
+			Timestamp: toolStart,
+		})
+
+		sendEvent(ctx, eventCh, protocol.Event{
+			Type:       protocol.EventToolCallResult,
+			ToolResult: &res,
+		})
+
+		_ = a.memory.Append(ctx, protocol.Message{
+			Role:       protocol.RoleTool,
+			ToolResult: &res,
+		})
+	}
+
+	return stepUsage, false, nil
+}
+
+func sendEvent(ctx context.Context, eventCh chan<- protocol.Event, ev protocol.Event) bool {
+	select {
+	case eventCh <- ev:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}

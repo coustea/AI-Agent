@@ -500,9 +500,9 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("failed to route active gateway: %v", err)
 	}
 
-	lgw, ok := activeGW.(*LlamaCpp)
-	if !ok {
-		t.Fatalf("expected *LlamaCpp, got %T", activeGW)
+	lgw, ok := activeGW.(*Client)
+	if !ok || lgw.Provider() != config.ProviderLlamaCpp {
+		t.Fatalf("expected *Client for llamacpp, got %T", activeGW)
 	}
 	if lgw.baseURL != "http://localhost:8080" {
 		t.Errorf("expected baseURL http://localhost:8080, got %s", lgw.baseURL)
@@ -519,8 +519,8 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	}
 	dsRouter := dsGw.(*Router)
 	dsSubGW, _ := dsRouter.Route(&protocol.ChatRequest{})
-	if _, ok := dsSubGW.(*DeepSeek); !ok {
-		t.Fatalf("expected *DeepSeek, got %T", dsSubGW)
+	if client, ok := dsSubGW.(*Client); !ok || client.Provider() != config.ProviderDeepSeek {
+		t.Fatalf("expected *Client for deepseek, got %T", dsSubGW)
 	}
 
 	// 测试 Google Gemini 官方配置
@@ -534,8 +534,8 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	}
 	geminiRouter := geminiGw.(*Router)
 	geminiSubGW, _ := geminiRouter.Route(&protocol.ChatRequest{})
-	if _, ok := geminiSubGW.(*Gemini); !ok {
-		t.Fatalf("expected *Gemini, got %T", geminiSubGW)
+	if client, ok := geminiSubGW.(*Client); !ok || client.Provider() != config.ProviderGemini {
+		t.Fatalf("expected *Client for gemini, got %T", geminiSubGW)
 	}
 
 	// 测试 Spark (星辰 MaaS) 配置与动态路由
@@ -549,8 +549,8 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	}
 	sparkRouter := sparkGw.(*Router)
 	sparkSubGW, _ := sparkRouter.Route(&protocol.ChatRequest{})
-	if _, ok := sparkSubGW.(*Spark); !ok {
-		t.Fatalf("expected *Spark, got %T", sparkSubGW)
+	if client, ok := sparkSubGW.(*Client); !ok || client.Provider() != config.ProviderSpark {
+		t.Fatalf("expected *Client for spark, got %T", sparkSubGW)
 	}
 
 	// 测试根据 spark-* 模型前缀动态路由
@@ -558,8 +558,8 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to route spark-x2.5: %v", err)
 	}
-	if _, ok := prefixGW.(*Spark); !ok {
-		t.Fatalf("expected *Spark for spark-x2.5 model prefix, got %T", prefixGW)
+	if client, ok := prefixGW.(*Client); !ok || client.Provider() != config.ProviderSpark {
+		t.Fatalf("expected *Client for spark-x2.5 model prefix, got %T", prefixGW)
 	}
 
 	// 测试 Spark 缺少 APIKey 返回 ErrEmptyAPIKey
@@ -581,8 +581,8 @@ func TestNewGatewayFromConfig(t *testing.T) {
 	}
 }
 
-// 测试 compatClient 在遭遇 429 或 5xx 时自动指数退避重试并在第三次成功
-func TestCompatClient_RetryOn429And5xx(t *testing.T) {
+// 测试 apiClient 在遭遇 429 或 5xx 时自动指数退避重试并在第三次成功
+func TestApiClient_RetryOn429And5xx(t *testing.T) {
 	var attempts int
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attempts++

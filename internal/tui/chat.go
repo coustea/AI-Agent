@@ -11,12 +11,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ToolCallRecord 结构化记录单次工具调用过程与结果
+// ToolCallRecord 结构化记录单次工具调用过程与结果，组合统一的 ToolCall 与 ToolResult
 type ToolCallRecord struct {
-	protocol.ToolCall
-	Result  string `json:"result,omitempty"`
-	IsError bool   `json:"is_error,omitempty"`
-	Running bool   `json:"running,omitempty"`
+	Call   protocol.ToolCall
+	Result *protocol.ToolResult
 }
 
 // ChatMessage 用于在界面上展示发送和接收的消息
@@ -100,7 +98,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// 拦截并分发快捷指令（委托给 command.go / model.go 处理，chat.go 纯粹负责聊天设计与交互）
+			// 拦截并分发快捷指令（委托给 command.go / config_wizard.go 处理，chat.go 纯粹负责聊天设计与交互）
 			if newM, cmd, handled := m.handleSlashCommand(text); handled {
 				return newM, cmd
 			}
@@ -365,22 +363,22 @@ func (m Model) renderChatMessages() string {
 			// 2. 若有工具调用，彩色紧凑结构化呈现
 			for _, tc := range msg.ToolCalls {
 				var header string
-				if tc.Running {
-					header = toolRunningStyle.Render("⚙️  正在执行工具: ") + toolHeaderStyle.Render(tc.Name)
-				} else if tc.IsError {
-					header = toolResultErrorStyle.Render("✖  工具执行报错: ") + toolHeaderStyle.Render(tc.Name)
+				if tc.Result == nil {
+					header = toolRunningStyle.Render("⚙️  正在执行工具: ") + toolHeaderStyle.Render(tc.Call.Name)
+				} else if tc.Result.IsError {
+					header = toolResultErrorStyle.Render("✖  工具执行报错: ") + toolHeaderStyle.Render(tc.Call.Name)
 				} else {
-					header = toolResultSuccessStyle.Render("✔  工具执行完成: ") + toolHeaderStyle.Render(tc.Name)
+					header = toolResultSuccessStyle.Render("✔  工具执行完成: ") + toolHeaderStyle.Render(tc.Call.Name)
 				}
 
 				var body strings.Builder
 				body.WriteString(fmt.Sprintf("  %s\n", header))
 
-				if tc.Arguments != "" && tc.Arguments != "{}" {
-					body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("参数: "+tc.Arguments)))
+				if tc.Call.Arguments != "" && tc.Call.Arguments != "{}" {
+					body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("参数: "+tc.Call.Arguments)))
 				}
-				if tc.Result != "" {
-					snippet := strings.TrimSpace(tc.Result)
+				if tc.Result != nil && tc.Result.Content != "" {
+					snippet := strings.TrimSpace(tc.Result.Content)
 					lines := strings.Split(snippet, "\n")
 					if len(lines) > 4 {
 						snippet = strings.Join(lines[:4], "\n") + fmt.Sprintf("\n    ... (共 %d 行，其余已折叠)", len(lines))

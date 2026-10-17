@@ -31,7 +31,7 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 		return m, nil, true
 	}
 
-	// 2. 模型配置与切换类指令 (解耦委托给 model.go 处理)
+	// 2. 模型配置与切换类指令 (解耦委托给 config_wizard.go 处理)
 	if trimmed == "/model" || trimmed == "/config" {
 		newM, cmd := m.handleModelCommand("")
 		return newM, cmd, true

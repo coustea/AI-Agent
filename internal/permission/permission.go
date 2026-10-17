@@ -62,7 +62,7 @@ var (
 )
 
 // checkDangerousBashCommand 判定命令是否属于破坏性或高风险操作
-func checkDangerousBashCommand(cmd string) (bool, string) {
+func checkDangerousBashCommand(cmd string) (isDangerous bool, reason string) {
 	clean := strings.TrimSpace(cmd)
 	if clean == "" {
 		return false, ""
@@ -257,7 +257,7 @@ func (m *Manager) Evaluate(ctx context.Context, call protocol.ToolCall) (allowed
 }
 
 // checkHardDeny 检查 Gate 1: 绝对不可执行的硬拒绝指令
-func (m *Manager) checkHardDeny(call protocol.ToolCall) (bool, string) {
+func (m *Manager) checkHardDeny(call protocol.ToolCall) (blocked bool, denyReason string) {
 	if call.Name != "bash" {
 		return false, ""
 	}
@@ -277,7 +277,7 @@ func (m *Manager) checkHardDeny(call protocol.ToolCall) (bool, string) {
 }
 
 // checkRules 检查 Gate 2: 规则匹配与风险识别
-func (m *Manager) checkRules(call protocol.ToolCall) (bool, string) {
+func (m *Manager) checkRules(call protocol.ToolCall) (needsApproval bool, ruleReason string) {
 	switch call.Name {
 	case "bash":
 		cmd := extractStringArg(call.Arguments, "command")
@@ -311,17 +311,17 @@ func (m *Manager) checkRules(call protocol.ToolCall) (bool, string) {
 }
 
 // isPathEscapingWorkspace 校验目标文件路径是否逃逸了当前项目工作区和用户 ~/.coustea 目录
-func (m *Manager) isPathEscapingWorkspace(p string) (bool, string) {
-	cleanP := strings.TrimSpace(p)
-	if cleanP == "" {
+func (m *Manager) isPathEscapingWorkspace(targetPath string) (escapes bool, resolvedAbs string) {
+	cleanPath := strings.TrimSpace(targetPath)
+	if cleanPath == "" {
 		return true, ""
 	}
 
 	var targetAbs string
-	if filepath.IsAbs(cleanP) {
-		targetAbs = filepath.Clean(cleanP)
+	if filepath.IsAbs(cleanPath) {
+		targetAbs = filepath.Clean(cleanPath)
 	} else {
-		targetAbs = filepath.Clean(filepath.Join(m.workDir, cleanP))
+		targetAbs = filepath.Clean(filepath.Join(m.workDir, cleanPath))
 	}
 
 	// 1. 位于当前项目工作区内，合法

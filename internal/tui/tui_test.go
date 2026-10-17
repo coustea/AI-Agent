@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"my-agent/internal/agent"
 	"my-agent/internal/protocol"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -143,8 +142,8 @@ func (m *mockTestAgent) MemoryCount() int {
 
 func (m *mockTestAgent) WorkDir() string { return "/mock/workdir" }
 
-func (m *mockTestAgent) Traces() []agent.TraceEvent {
-	return []agent.TraceEvent{
+func (m *mockTestAgent) Traces() []protocol.TraceEvent {
+	return []protocol.TraceEvent{
 		{
 			Step:      -1,
 			Type:      "turn_start",
@@ -274,7 +273,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 	m = mIntf.(Model)
 
 	lastMsg := m.messages[len(m.messages)-1]
-	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Name != "read_file" {
+	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Call.Name != "read_file" {
 		t.Fatalf("expected tool call to be recorded in ToolCalls, got: %+v", lastMsg.ToolCalls)
 	}
 
@@ -293,7 +292,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 	m = mIntf.(Model)
 
 	lastMsg = m.messages[len(m.messages)-1]
-	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Running || !strings.Contains(lastMsg.ToolCalls[0].Result, "package main") {
+	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Result == nil || !strings.Contains(lastMsg.ToolCalls[0].Result.Content, "package main") {
 		t.Fatalf("expected tool result to be recorded, got: %+v", lastMsg.ToolCalls)
 	}
 

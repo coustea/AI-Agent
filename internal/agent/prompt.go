@@ -88,13 +88,13 @@ func detectGitBranch(workDir string) string {
 	return ""
 }
 
-// composeSystemPrompt 将静态 persona、动态环境上下文与实时长期记忆合成为最终系统提示词。
-func composeSystemPrompt(persona, workDir string) string {
+// composeSystemPrompt 将静态 basePersona、动态环境上下文与实时长期记忆合成为最终系统提示词。
+func composeSystemPrompt(basePersona, workDir string) string {
 	envBlock := composeEnvironmentContext(workDir)
 	memoryBlock := memory.LoadBundle(workDir).FormatForPrompt()
 
 	var sb strings.Builder
-	sb.WriteString(persona)
+	sb.WriteString(basePersona)
 	if envBlock != "" {
 		sb.WriteString("\n\n" + envBlock)
 	}

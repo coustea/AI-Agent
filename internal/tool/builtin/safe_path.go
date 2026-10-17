@@ -8,8 +8,8 @@ import (
 )
 
 // SafePath 解析并校验路径，确保文件操作严格限制在工作区内部，防止路径遍历逃逸（如 ../../）
-func SafePath(workDir, p string) (string, error) {
-	cleanP := strings.TrimSpace(p)
+func SafePath(workDir, targetPath string) (string, error) {
+	cleanP := strings.TrimSpace(targetPath)
 	if cleanP == "" {
 		return "", fmt.Errorf("path cannot be empty")
 	}

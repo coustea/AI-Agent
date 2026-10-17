@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"my-agent/internal/agent"
 	"my-agent/internal/protocol"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -50,7 +49,7 @@ func waitForAgentEvent(ch <-chan protocol.Event) tea.Cmd {
 type Model struct {
 	state sessionState
 
-	// 状态 1: 模型选择（官网示例风格，在 model.go 中处理）
+	// 状态 1: 模型选择（官网示例风格，在 config_wizard.go 中处理）
 	cursor          int
 	choices         []string
 	selected        int
@@ -62,11 +61,11 @@ type Model struct {
 	presetChoices []string
 	presetCursor  int
 
-	// 状态 3 & 4: 配置输入框（在 model.go 中处理）
+	// 状态 3 & 4: 配置输入框（在 config_wizard.go 中处理）
 	apiKeyInput textinput.Model
 	modelInput  textinput.Model
 
-	// 状态 4: 聊天输入框与消息列表（在 chat.go 中处理）
+	// 状态 5: 聊天输入框与消息列表（在 chat.go 中处理）
 	chatInput    textinput.Model
 	messages     []ChatMessage
 	isGenerating bool               // 是否正在流式生成中
@@ -82,7 +81,7 @@ type Model struct {
 	activeToolName string
 
 	// 状态 6: 终端全量 JSON 追踪审计看板 (在 inspector.go 中处理)
-	traceEvents     []agent.TraceEvent
+	traceEvents     []protocol.TraceEvent
 	traceCursor     int
 	traceViewport   viewport.Model
 	traceFocusRight bool
@@ -91,12 +90,12 @@ type Model struct {
 	width  int
 	height int
 
-	// 注入的 Agent 智能体核心接口
-	agent agent.Agent
+	// 注入的 Agent 智能体核心契约接口
+	agent protocol.Agent
 }
 
 // NewModel 初始化并返回主 Model；ag 由装配入口保证非 nil，未就绪状态经 ConfigView 表达
-func NewModel(ag agent.Agent) Model {
+func NewModel(ag protocol.Agent) Model {
 	// 1. API Key 输入框
 	apiKeyInput := textinput.New()
 	apiKeyInput.Placeholder = "在此粘贴或输入你的 API Key (按 Enter 确认)"
@@ -336,8 +335,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.event.ToolCall != nil {
 				m.activeToolName = msg.event.ToolCall.Name
 				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
-					ToolCall: *msg.event.ToolCall,
-					Running:  true,
+					Call:   *msg.event.ToolCall,
+					Result: nil,
 				})
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -352,23 +351,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tcs := m.messages[lastIdx].ToolCalls
 				found := false
 				for i := len(tcs) - 1; i >= 0; i-- {
-					if tcs[i].ID == msg.event.ToolResult.ToolCallID || tcs[i].Name == msg.event.ToolResult.Name {
-						tcs[i].Running = false
-						tcs[i].Result = msg.event.ToolResult.Content
-						tcs[i].IsError = msg.event.ToolResult.IsError
+					if tcs[i].Call.ID == msg.event.ToolResult.ToolCallID || tcs[i].Call.Name == msg.event.ToolResult.Name {
+						tcs[i].Result = msg.event.ToolResult
 						found = true
 						break
 					}
 				}
 				if !found {
 					m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
-						ToolCall: protocol.ToolCall{
+						Call: protocol.ToolCall{
 							ID:   msg.event.ToolResult.ToolCallID,
 							Name: msg.event.ToolResult.Name,
 						},
-						Result:  msg.event.ToolResult.Content,
-						IsError: msg.event.ToolResult.IsError,
-						Running: false,
+						Result: msg.event.ToolResult,
 					})
 				}
 				if m.viewportReady {

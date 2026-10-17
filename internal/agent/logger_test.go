@@ -104,7 +104,7 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 		t.Fatalf("failed to read latest.json: %v", err)
 	}
 
-	var loadedEvents []TraceEvent
+	var loadedEvents []protocol.TraceEvent
 	if err := json.Unmarshal(jsonBytes, &loadedEvents); err != nil {
 		t.Fatalf("latest.json is not valid JSON array: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 		if line == "" {
 			continue
 		}
-		var ev TraceEvent
+		var ev protocol.TraceEvent
 		if err := json.Unmarshal([]byte(line), &ev); err != nil {
 			t.Errorf("invalid json line in agent.jsonl: %v", err)
 		}
@@ -168,7 +168,7 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *test
 	}
 
 	data2, _ := os.ReadFile(latestPath)
-	var eventsTurn2 []TraceEvent
+	var eventsTurn2 []protocol.TraceEvent
 	if err := json.Unmarshal(data2, &eventsTurn2); err != nil {
 		t.Fatalf("failed to unmarshal latest.json after turn 2: %v", err)
 	}

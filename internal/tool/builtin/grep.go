@@ -205,7 +205,7 @@ func (t *GrepTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 }
 
 // grepFile 扫描单个文本文件，返回匹配项列表
-func grepFile(ctx context.Context, fullPath, workDirAbs string, re *regexp.Regexp, budget int) ([]string, bool) {
+func grepFile(ctx context.Context, fullPath, workDirAbs string, re *regexp.Regexp, budget int) (matches []string, truncated bool) {
 	file, err := os.Open(fullPath)
 	if err != nil {
 		return nil, false
@@ -227,7 +227,6 @@ func grepFile(ctx context.Context, fullPath, workDirAbs string, re *regexp.Regex
 	relSlash := filepath.ToSlash(relPath)
 
 	scanner := bufio.NewScanner(file)
-	var matches []string
 	lineNum := 0
 
 	for scanner.Scan() {

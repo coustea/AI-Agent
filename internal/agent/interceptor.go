@@ -62,6 +62,22 @@ func (a *CoreAgent) bridgeApproval(ctx context.Context, req protocol.PermissionR
 	}
 }
 
+// RespondPermission 异步审批权限请求（无状态，由 RequestID 关联）
+func (a *CoreAgent) RespondPermission(requestID string, decision protocol.Decision) error {
+	a.pendingMu.Lock()
+	ch, ok := a.pendingPerms[requestID]
+	a.pendingMu.Unlock()
+	if !ok {
+		return fmt.Errorf("agent: permission request %q not found or already resolved", requestID)
+	}
+	select {
+	case ch <- decision:
+		return nil
+	default:
+		return fmt.Errorf("agent: permission request %q is busy or channel closed", requestID)
+	}
+}
+
 // permissionPreHook 作为 PreToolUse 钩子挂载在 tool.Registry 流水线上。
 // 在工具实际调用前拦截高危行为与越界路径，直接阻断并返回错误作为 Observation 回灌。
 func (a *CoreAgent) permissionPreHook(ctx context.Context, call protocol.ToolCall) error {

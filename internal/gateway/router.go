@@ -14,7 +14,7 @@ import (
 type Router struct {
 	mu        sync.RWMutex
 	active    string             // 当前默认激活的提供商名称
-	providers map[string]Gateway // 注册的各厂商网关实例 ("gemini", "deepseek", "llamacpp")
+	providers map[string]Gateway // 注册的各厂商网关实例 ("gemini", "deepseek", "llamacpp", "spark")
 }
 
 // NewRouter 创建一个支持多厂商模型动态分配的网关路由实例
@@ -97,7 +97,7 @@ func (r *Router) TotalUsage() protocol.Usage {
 	return total
 }
 
-// NewGatewayFromConfig 根据配置构建支持模型分配的网关实例
+// NewGatewayFromConfig 根据配置直接构建支持多模型路由的网关实例
 func NewGatewayFromConfig(cfg *config.Config) (Gateway, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("gateway: configuration cannot be nil")
@@ -110,7 +110,7 @@ func NewGatewayFromConfig(cfg *config.Config) (Gateway, error) {
 	if cfg.Providers != nil {
 		for pName, pcfg := range cfg.Providers {
 			id := config.ProviderID(config.Provider(pName))
-			gw, err := initProviderGateway(config.Provider(pName), pcfg.BaseURL, pcfg.APIKey, pcfg.ModelName)
+			gw, err := NewClient(config.Provider(pName), pcfg.BaseURL, pcfg.APIKey, pcfg.ModelName, nil)
 			if err == nil {
 				router.Register(id, gw)
 			}
@@ -118,39 +118,11 @@ func NewGatewayFromConfig(cfg *config.Config) (Gateway, error) {
 	}
 
 	// 2. 确保当前激活的提供商一定初始化并注册
-	activeGW, err := initProviderGateway(cfg.Provider, cfg.BaseURL, cfg.APIKey, cfg.ModelName)
+	activeGW, err := NewClient(cfg.Provider, cfg.BaseURL, cfg.APIKey, cfg.ModelName, nil)
 	if err != nil {
 		return nil, err
 	}
 	router.Register(activeName, activeGW)
 
 	return router, nil
-}
-
-// providerConstructors 是规范厂商标识到具体网关构造器的唯一映射。
-var providerConstructors = map[string]func(baseURL, apiKey, model string) (Gateway, error){
-	"llamacpp": func(baseURL, apiKey, model string) (Gateway, error) {
-		return NewLlamaCpp(baseURL, apiKey, model, nil)
-	},
-	"deepseek": func(baseURL, apiKey, model string) (Gateway, error) {
-		return NewDeepSeek(baseURL, apiKey, model, nil)
-	},
-	"gemini": func(baseURL, apiKey, model string) (Gateway, error) {
-		return NewGemini(baseURL, apiKey, model, nil)
-	},
-	"spark": func(baseURL, apiKey, model string) (Gateway, error) {
-		return NewSpark(baseURL, apiKey, model, nil)
-	},
-}
-
-func initProviderGateway(p config.Provider, baseURL, apiKey, model string) (Gateway, error) {
-	id := config.ProviderID(p)
-	if id == "" {
-		id = "llamacpp"
-	}
-	ctor, ok := providerConstructors[id]
-	if !ok {
-		return nil, fmt.Errorf("unsupported provider %q", p)
-	}
-	return ctor(baseURL, apiKey, model)
 }
