@@ -2,10 +2,9 @@ package memory
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
-	"my-agent/internal/gateway"
+	"my-agent/internal/protocol"
 )
 
 // 测试基本的追加、历史获取与清空
@@ -13,8 +12,8 @@ func TestSlidingWindowMemory_Basic(t *testing.T) {
 	mem := NewSlidingWindowMemory(10)
 	ctx := context.Background()
 
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleUser, Content: "Hello"})
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleAssistant, Content: "Hi there!"})
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleUser, Content: "Hello"})
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleAssistant, Content: "Hi there!"})
 
 	history := mem.History()
 	if len(history) != 2 {
@@ -32,7 +31,7 @@ func TestSlidingWindowMemory_Basic(t *testing.T) {
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(msgs))
 	}
-	if msgs[0].Role != gateway.RoleSystem || msgs[0].Content != "You are a coding assistant." {
+	if msgs[0].Role != protocol.RoleSystem || msgs[0].Content != "You are a coding assistant." {
 		t.Errorf("expected system message first, got %+v", msgs[0])
 	}
 
@@ -49,30 +48,30 @@ func TestSlidingWindowMemory_TurnAtomicity(t *testing.T) {
 	ctx := context.Background()
 
 	// 轮次 1
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleUser, Content: "Query 1"})
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleAssistant, Content: "Answer 1"})
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleUser, Content: "Query 1"})
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleAssistant, Content: "Answer 1"})
 
 	// 轮次 2：包含工具调用与工具执行结果
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleUser, Content: "Query 2"})
-	_ = mem.Append(ctx, gateway.Message{
-		Role: gateway.RoleAssistant,
-		ToolCalls: []gateway.ToolCall{
-			{ID: "call_1", Name: "calculator", Arguments: json.RawMessage(`{"expr":"1+1"}`)},
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleUser, Content: "Query 2"})
+	_ = mem.Append(ctx, protocol.Message{
+		Role: protocol.RoleAssistant,
+		ToolCalls: []protocol.ToolCall{
+			{ID: "call_1", Name: "calculator", Arguments: `{"expr":"1+1"}`},
 		},
 	})
-	_ = mem.Append(ctx, gateway.Message{
-		Role: gateway.RoleTool,
-		ToolResult: &gateway.ToolResult{
+	_ = mem.Append(ctx, protocol.Message{
+		Role: protocol.RoleTool,
+		ToolResult: &protocol.ToolResult{
 			ToolCallID: "call_1",
 			Name:       "calculator",
 			Content:    "2",
 		},
 	})
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleAssistant, Content: "Answer 2: result is 2"})
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleAssistant, Content: "Answer 2: result is 2"})
 
 	// 轮次 3
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleUser, Content: "Query 3"})
-	_ = mem.Append(ctx, gateway.Message{Role: gateway.RoleAssistant, Content: "Answer 3"})
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleUser, Content: "Query 3"})
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleAssistant, Content: "Answer 3"})
 
 	// 总消息数 = 8 条。按 maxMessages=3，原切片理论起点为 index 5 (Answer 2)
 	// 但如果 maxMessages 设为 4，理论切片起点为 index 4 (RoleTool)。
@@ -89,23 +88,23 @@ func TestSlidingWindowMemory_TurnAtomicity(t *testing.T) {
 		}
 
 		// 第一条必须是 System
-		if ctxMsgs[0].Role != gateway.RoleSystem {
+		if ctxMsgs[0].Role != protocol.RoleSystem {
 			t.Errorf("max=%d: first message must be system", max)
 		}
 
 		// 第二条（即首条非系统消息）必须是 RoleUser，严禁是 RoleTool
 		if len(ctxMsgs) > 1 {
 			firstNonSys := ctxMsgs[1]
-			if firstNonSys.Role != gateway.RoleUser {
+			if firstNonSys.Role != protocol.RoleUser {
 				t.Errorf("max=%d: first non-system message MUST be RoleUser, but got %s", max, firstNonSys.Role)
 			}
 		}
 
 		// 检查消息流中所有 RoleTool 前一条是否是发起了工具调用的 RoleAssistant
 		for i := 1; i < len(ctxMsgs); i++ {
-			if ctxMsgs[i].Role == gateway.RoleTool {
+			if ctxMsgs[i].Role == protocol.RoleTool {
 				prev := ctxMsgs[i-1]
-				if prev.Role != gateway.RoleAssistant && prev.Role != gateway.RoleTool {
+				if prev.Role != protocol.RoleAssistant && prev.Role != protocol.RoleTool {
 					t.Errorf("max=%d: RoleTool at %d preceded by illegal %s", max, i, prev.Role)
 				}
 			}

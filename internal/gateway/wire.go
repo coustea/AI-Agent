@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+
+	"my-agent/internal/protocol"
 )
 
 // --- OpenAI 协议内部 wire 结构体 ---
@@ -27,8 +29,8 @@ type wireToolCall struct {
 }
 
 type wireTool struct {
-	Type     string         `json:"type"`
-	Function ToolDefinition `json:"function"`
+	Type     string                  `json:"type"`
+	Function protocol.ToolDefinition `json:"function"`
 }
 
 type wireMsg struct {
@@ -56,19 +58,6 @@ type wireUsage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-type wireResp struct {
-	Choices []struct {
-		Message struct {
-			Role             string         `json:"role"`
-			Content          string         `json:"content"`
-			ReasoningContent string         `json:"reasoning_content,omitempty"`
-			ToolCalls        []wireToolCall `json:"tool_calls"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage *wireUsage `json:"usage"`
-}
-
 type wireChunk struct {
 	Choices []struct {
 		Delta struct {
@@ -85,14 +74,14 @@ type wireChunk struct {
 // --- 共享转换与协议处理函数 ---
 
 // toWireMessages 将统一 Message 转为 OpenAI wire 格式
-func toWireMessages(messages []Message) []wireMsg {
+func toWireMessages(messages []protocol.Message) []wireMsg {
 	out := make([]wireMsg, 0, len(messages))
 	for _, m := range messages {
 		msg := wireMsg{
 			Role: string(m.Role),
 		}
 
-		if m.Content != "" || (m.Role != RoleAssistant && m.Role != RoleTool) {
+		if m.Content != "" || (m.Role != protocol.RoleAssistant && m.Role != protocol.RoleTool) {
 			s := m.Content
 			msg.Content = &s
 		}
@@ -102,14 +91,14 @@ func toWireMessages(messages []Message) []wireMsg {
 			msg.ReasoningContent = &s
 		}
 
-		if m.Role == RoleTool && m.ToolResult != nil {
+		if m.Role == protocol.RoleTool && m.ToolResult != nil {
 			msg.ToolCallID = m.ToolResult.ToolCallID
 			msg.Name = m.ToolResult.Name
 			s := m.ToolResult.Content
 			msg.Content = &s
 		}
 
-		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
+		if m.Role == protocol.RoleAssistant && len(m.ToolCalls) > 0 {
 			if msg.ReasoningContent == nil {
 				empty := ""
 				msg.ReasoningContent = &empty
@@ -121,7 +110,7 @@ func toWireMessages(messages []Message) []wireMsg {
 					Type: "function",
 					Function: wireFunc{
 						Name:      tc.Name,
-						Arguments: string(tc.Arguments),
+						Arguments: tc.Arguments,
 					},
 				})
 			}
@@ -134,7 +123,7 @@ func toWireMessages(messages []Message) []wireMsg {
 }
 
 // toWireTools 将统一工具定义转为 OpenAI wire 格式
-func toWireTools(tools []ToolDefinition) []wireTool {
+func toWireTools(tools []protocol.ToolDefinition) []wireTool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -197,38 +186,6 @@ func buildHTTPRequest(ctx context.Context, url string, model string, req *ChatRe
 	return httpReq, nil
 }
 
-// parseResponse 解析同步响应 body
-func parseResponse(bodyBytes []byte) (string, []ToolCall, Usage, error) {
-	var res wireResp
-	if err := json.Unmarshal(bodyBytes, &res); err != nil {
-		return "", nil, Usage{}, fmt.Errorf("gateway: json decode: %w", err)
-	}
-	if len(res.Choices) == 0 {
-		return "", nil, Usage{}, fmt.Errorf("gateway: no choices in response")
-	}
-
-	choice := res.Choices[0]
-	toolCalls := make([]ToolCall, 0, len(choice.Message.ToolCalls))
-	for _, tc := range choice.Message.ToolCalls {
-		toolCalls = append(toolCalls, ToolCall{
-			ID:        tc.ID,
-			Name:      tc.Function.Name,
-			Arguments: json.RawMessage(tc.Function.Arguments),
-		})
-	}
-
-	var usage Usage
-	if res.Usage != nil {
-		usage = Usage{
-			PromptTokens:     res.Usage.PromptTokens,
-			CompletionTokens: res.Usage.CompletionTokens,
-			TotalTokens:      res.Usage.TotalTokens,
-		}
-	}
-
-	return choice.Message.Content, toolCalls, usage, nil
-}
-
 type tcBuilder struct {
 	id   string
 	name strings.Builder
@@ -236,9 +193,9 @@ type tcBuilder struct {
 }
 
 // readSSE 读取 SSE 流并向 channel 逐块发送，返回累计 Usage
-func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) Usage {
+func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) protocol.Usage {
 	scanner := bufio.NewReader(reader)
-	var turnUsage Usage
+	var turnUsage protocol.Usage
 	tcMap := make(map[int]*tcBuilder)
 
 	for {
@@ -270,7 +227,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) Usag
 		}
 
 		if chunk.Usage != nil {
-			turnUsage = Usage{
+			turnUsage = protocol.Usage{
 				PromptTokens:     chunk.Usage.PromptTokens,
 				CompletionTokens: chunk.Usage.CompletionTokens,
 				TotalTokens:      chunk.Usage.TotalTokens,
@@ -313,7 +270,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) Usag
 		}
 	}
 
-	var finalTCs []ToolCall
+	var finalTCs []protocol.ToolCall
 	if len(tcMap) > 0 {
 		indices := make([]int, 0, len(tcMap))
 		for idx := range tcMap {
@@ -322,10 +279,10 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) Usag
 		sort.Ints(indices)
 		for _, idx := range indices {
 			b := tcMap[idx]
-			finalTCs = append(finalTCs, ToolCall{
+			finalTCs = append(finalTCs, protocol.ToolCall{
 				ID:        b.id,
 				Name:      b.name.String(),
-				Arguments: json.RawMessage(b.args.String()),
+				Arguments: b.args.String(),
 			})
 		}
 	}

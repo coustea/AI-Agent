@@ -13,12 +13,10 @@ import (
 
 // ToolCallRecord 结构化记录单次工具调用过程与结果
 type ToolCallRecord struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"`
-	Result    string `json:"result,omitempty"`
-	IsError   bool   `json:"is_error,omitempty"`
-	Running   bool   `json:"running,omitempty"`
+	protocol.ToolCall
+	Result  string `json:"result,omitempty"`
+	IsError bool   `json:"is_error,omitempty"`
+	Running bool   `json:"running,omitempty"`
 }
 
 // ChatMessage 用于在界面上展示发送和接收的消息

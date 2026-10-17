@@ -235,7 +235,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 	mIntf, _ := m.Update(agentStreamEventMsg{
 		event: protocol.Event{
 			Type: protocol.EventToolCallStart,
-			ToolCall: &protocol.ToolCallRecord{
+			ToolCall: &protocol.ToolCall{
 				ID:        "call_1",
 				Name:      "read_file",
 				Arguments: `{"path": "sample.go"}`,
@@ -253,7 +253,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 	mIntf, _ = m.Update(agentStreamEventMsg{
 		event: protocol.Event{
 			Type: protocol.EventToolCallResult,
-			ToolResult: &protocol.ToolResultRecord{
+			ToolResult: &protocol.ToolResult{
 				ToolCallID: "call_1",
 				Name:       "read_file",
 				Content:    "package main\nfunc main() {}",

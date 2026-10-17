@@ -11,7 +11,34 @@ import (
 	"time"
 
 	"my-agent/internal/config"
+	"my-agent/internal/protocol"
 )
+
+// streamResult 收集一次流式调用的完整结果。
+type streamResult struct {
+	content   string
+	reasoning string
+	toolCalls []protocol.ToolCall
+	usage     *protocol.Usage
+}
+
+// collectStream 排空流式通道并聚合文本、思维链、工具调用与用量。
+func collectStream(t *testing.T, stream <-chan StreamChunk) streamResult {
+	t.Helper()
+	var r streamResult
+	for chunk := range stream {
+		if chunk.Err != nil {
+			t.Fatalf("stream chunk error: %v", chunk.Err)
+		}
+		r.content += chunk.Delta
+		r.reasoning += chunk.ReasoningContent
+		r.toolCalls = append(r.toolCalls, chunk.ToolCalls...)
+		if chunk.Done && chunk.Usage != nil {
+			r.usage = chunk.Usage
+		}
+	}
+	return r
+}
 
 // 测试 llama-server 健康检查与模型就绪检测
 func TestLlamaCpp_HealthCheck(t *testing.T) {
@@ -47,7 +74,7 @@ func TestLlamaCpp_HealthCheck(t *testing.T) {
 	}
 }
 
-// 测试 llama.cpp 同步对话与 Token 统计
+// 测试 llama.cpp 流式对话与 Token 统计
 func TestLlamaCpp_Chat_Text(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
@@ -55,26 +82,17 @@ func TestLlamaCpp_Chat_Text(t *testing.T) {
 			return
 		}
 
-		respJSON := `{
-			"choices": [
-				{
-					"index": 0,
-					"message": {
-						"role": "assistant",
-						"content": "Hello, I am running on local llama.cpp!"
-					},
-					"finish_reason": "stop"
-				}
-			],
-			"usage": {
-				"prompt_tokens": 8,
-				"completion_tokens": 12,
-				"total_tokens": 20
-			}
-		}`
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(respJSON))
+		flusher := w.(http.Flusher)
+		for _, ev := range []string{
+			`data: {"choices":[{"delta":{"content":"Hello, I am running on local llama.cpp!"}}]}`,
+			`data: {"choices":[],"usage":{"prompt_tokens":8,"completion_tokens":12,"total_tokens":20}}`,
+			`data: [DONE]`,
+		} {
+			_, _ = fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
 	}))
 	defer mockServer.Close()
 
@@ -86,21 +104,22 @@ func TestLlamaCpp_Chat_Text(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	resp, err := gw.Chat(ctx, &ChatRequest{
-		Messages: []Message{
-			{Role: RoleSystem, Content: "You are a helpful assistant."},
-			{Role: RoleUser, Content: "Hello!"},
+	stream, err := gw.ChatStream(ctx, &ChatRequest{
+		Messages: []protocol.Message{
+			{Role: protocol.RoleSystem, Content: "You are a helpful assistant."},
+			{Role: protocol.RoleUser, Content: "Hello!"},
 		},
 	})
 	if err != nil {
-		t.Fatalf("Chat failed: %v", err)
+		t.Fatalf("ChatStream failed: %v", err)
 	}
 
-	if resp.Content != "Hello, I am running on local llama.cpp!" {
-		t.Errorf("unexpected content: %s", resp.Content)
+	res := collectStream(t, stream)
+	if res.content != "Hello, I am running on local llama.cpp!" {
+		t.Errorf("unexpected content: %s", res.content)
 	}
-	if resp.Usage.TotalTokens != 20 {
-		t.Errorf("expected 20 tokens, got %d", resp.Usage.TotalTokens)
+	if res.usage == nil || res.usage.TotalTokens != 20 {
+		t.Errorf("expected 20 tokens, got %+v", res.usage)
 	}
 	if gw.TotalUsage().TotalTokens != 20 {
 		t.Errorf("expected cumulative 20 tokens, got %d", gw.TotalUsage().TotalTokens)
@@ -121,46 +140,26 @@ func TestLlamaCpp_Chat_WithToolCalls(t *testing.T) {
 			return
 		}
 
-		respJSON := `{
-			"choices": [
-				{
-					"index": 0,
-					"message": {
-						"role": "assistant",
-						"content": null,
-						"tool_calls": [
-							{
-								"id": "call_12345",
-								"type": "function",
-								"function": {
-									"name": "read_file",
-									"arguments": "{\"path\":\"main.go\"}"
-								}
-							}
-						]
-					},
-					"finish_reason": "tool_calls"
-				}
-			],
-			"usage": {
-				"prompt_tokens": 20,
-				"completion_tokens": 10,
-				"total_tokens": 30
-			}
-		}`
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(respJSON))
+		flusher := w.(http.Flusher)
+		for _, ev := range []string{
+			`data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_12345","type":"function","function":{"name":"read_file","arguments":"{\"path\":\"main.go\"}"}}]}}]}`,
+			`data: [DONE]`,
+		} {
+			_, _ = fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
 	}))
 	defer mockServer.Close()
 
 	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
-	resp, err := gw.Chat(context.Background(), &ChatRequest{
-		Messages: []Message{
-			{Role: RoleUser, Content: "Read main.go"},
+	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
+		Messages: []protocol.Message{
+			{Role: protocol.RoleUser, Content: "Read main.go"},
 		},
-		Tools: []ToolDefinition{
+		Tools: []protocol.ToolDefinition{
 			{
 				Name:        "read_file",
 				Description: "Read file contents",
@@ -169,14 +168,15 @@ func TestLlamaCpp_Chat_WithToolCalls(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("Chat with tools failed: %v", err)
+		t.Fatalf("ChatStream with tools failed: %v", err)
 	}
 
-	if len(resp.ToolCalls) != 1 {
-		t.Fatalf("expected 1 tool call, got %d", len(resp.ToolCalls))
+	res := collectStream(t, stream)
+	if len(res.toolCalls) != 1 {
+		t.Fatalf("expected 1 tool call, got %d", len(res.toolCalls))
 	}
 
-	tc := resp.ToolCalls[0]
+	tc := res.toolCalls[0]
 	if tc.ID != "call_12345" || tc.Name != "read_file" {
 		t.Errorf("unexpected tool call: %+v", tc)
 	}
@@ -205,29 +205,33 @@ func TestLlamaCpp_Chat_WithToolResult(t *testing.T) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{
-			"choices": [{"message": {"role": "assistant", "content": "File read successfully."}}],
-			"usage": {"total_tokens": 35}
-		}`))
+		flusher := w.(http.Flusher)
+		for _, ev := range []string{
+			`data: {"choices":[{"delta":{"content":"File read successfully."}}]}`,
+			`data: [DONE]`,
+		} {
+			_, _ = fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
 	}))
 	defer mockServer.Close()
 
 	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
-	resp, err := gw.Chat(context.Background(), &ChatRequest{
-		Messages: []Message{
-			{Role: RoleUser, Content: "Read main.go"},
+	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
+		Messages: []protocol.Message{
+			{Role: protocol.RoleUser, Content: "Read main.go"},
 			{
-				Role: RoleAssistant,
-				ToolCalls: []ToolCall{
-					{ID: "call_12345", Name: "read_file", Arguments: json.RawMessage(`{"path":"main.go"}`)},
+				Role: protocol.RoleAssistant,
+				ToolCalls: []protocol.ToolCall{
+					{ID: "call_12345", Name: "read_file", Arguments: `{"path":"main.go"}`},
 				},
 			},
 			{
-				Role: RoleTool,
-				ToolResult: &ToolResult{
+				Role: protocol.RoleTool,
+				ToolResult: &protocol.ToolResult{
 					ToolCallID: "call_12345",
 					Name:       "read_file",
 					Content:    "package main",
@@ -236,11 +240,12 @@ func TestLlamaCpp_Chat_WithToolResult(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("Chat failed: %v", err)
+		t.Fatalf("ChatStream failed: %v", err)
 	}
 
-	if resp.Content != "File read successfully." {
-		t.Errorf("unexpected content: %s", resp.Content)
+	res := collectStream(t, stream)
+	if res.content != "File read successfully." {
+		t.Errorf("unexpected content: %s", res.content)
 	}
 }
 
@@ -273,7 +278,7 @@ func TestLlamaCpp_ChatStream_Text(t *testing.T) {
 	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
 	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
+		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hi"}},
 	})
 	if err != nil {
 		t.Fatalf("ChatStream failed: %v", err)
@@ -281,7 +286,7 @@ func TestLlamaCpp_ChatStream_Text(t *testing.T) {
 
 	var sb strings.Builder
 	var doneReceived bool
-	var finalUsage *Usage
+	var finalUsage *protocol.Usage
 
 	for chunk := range stream {
 		if chunk.Err != nil {
@@ -339,7 +344,7 @@ func TestDeepSeek_Chat_Text_WithReasoning(t *testing.T) {
 	}
 
 	stream, err := ds.ChatStream(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Hello"}},
+		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hello"}},
 	})
 	if err != nil {
 		t.Fatalf("ChatStream failed: %v", err)
@@ -377,11 +382,17 @@ func TestGemini_Chat_Text_AndAuth(t *testing.T) {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{
-			"choices": [{"message": {"role": "assistant", "content": "Hello from Gemini 2.5!"}}],
-			"usage": {"prompt_tokens": 5, "completion_tokens": 6, "total_tokens": 11}
-		}`))
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher := w.(http.Flusher)
+		for _, ev := range []string{
+			`data: {"choices":[{"delta":{"content":"Hello from Gemini 2.5!"}}]}`,
+			`data: {"choices":[],"usage":{"prompt_tokens":5,"completion_tokens":6,"total_tokens":11}}`,
+			`data: [DONE]`,
+		} {
+			_, _ = fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
 	}))
 	defer mockServer.Close()
 
@@ -390,39 +401,44 @@ func TestGemini_Chat_Text_AndAuth(t *testing.T) {
 		t.Fatalf("NewGemini failed: %v", err)
 	}
 
-	resp, err := gemini.Chat(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Hello Gemini"}},
+	stream, err := gemini.ChatStream(context.Background(), &ChatRequest{
+		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hello Gemini"}},
 	})
 	if err != nil {
-		t.Fatalf("gemini.Chat failed: %v", err)
+		t.Fatalf("gemini.ChatStream failed: %v", err)
 	}
 
-	if resp.Content != "Hello from Gemini 2.5!" {
-		t.Errorf("unexpected content: %s", resp.Content)
+	res := collectStream(t, stream)
+	if res.content != "Hello from Gemini 2.5!" {
+		t.Errorf("unexpected content: %s", res.content)
 	}
-	if resp.Usage.TotalTokens != 11 {
-		t.Errorf("expected 11 tokens, got %d", resp.Usage.TotalTokens)
+	if res.usage == nil || res.usage.TotalTokens != 11 {
+		t.Errorf("expected 11 tokens, got %+v", res.usage)
 	}
 }
 
 // 测试整个系统通过先经过 Agent 然后经过 Gateway Router 进行模型分配与路由
 func TestRouter_ModelAllocation(t *testing.T) {
-	geminiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"from-gemini"}}]}`))
-	}))
+	newSSEServer := func(content string) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flusher := w.(http.Flusher)
+			for _, ev := range []string{
+				fmt.Sprintf(`data: {"choices":[{"delta":{"content":%q}}]}`, content),
+				`data: [DONE]`,
+			} {
+				_, _ = fmt.Fprintf(w, "%s\n\n", ev)
+				flusher.Flush()
+			}
+		}))
+	}
+
+	geminiServer := newSSEServer("from-gemini")
 	defer geminiServer.Close()
-
-	dsServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"from-deepseek"}}]}`))
-	}))
+	dsServer := newSSEServer("from-deepseek")
 	defer dsServer.Close()
-
-	llamaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"from-llamacpp"}}]}`))
-	}))
+	llamaServer := newSSEServer("from-llamacpp")
 	defer llamaServer.Close()
 
 	geminiGW, _ := NewGemini(geminiServer.URL, "key", "gemini-2.5-flash", geminiServer.Client())
@@ -434,40 +450,32 @@ func TestRouter_ModelAllocation(t *testing.T) {
 	router.Register("deepseek", dsGW)
 	router.Register("llamacpp", llamaGW)
 
-	// 1. 请求指定 gemini 模型 -> 自动分配到 gemini
-	res1, err := router.Chat(context.Background(), &ChatRequest{
-		Model:    "gemini-2.5-flash",
-		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
-	})
-	if err != nil || res1.Content != "from-gemini" {
-		t.Fatalf("expected allocation to gemini, got: %v, content: %s", err, res1.Content)
+	route := func(modelName, want string) {
+		t.Helper()
+		stream, err := router.ChatStream(context.Background(), &ChatRequest{
+			Model:    modelName,
+			Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hi"}},
+		})
+		if err != nil {
+			t.Fatalf("route(%q) failed: %v", modelName, err)
+		}
+		if got := collectStream(t, stream).content; got != want {
+			t.Fatalf("route(%q): expected content %q, got %q", modelName, want, got)
+		}
 	}
+
+	// 1. 请求指定 gemini 模型 -> 自动分配到 gemini
+	route("gemini-2.5-flash", "from-gemini")
 
 	// 2. 请求指定 deepseek 模型 -> 自动分配到 deepseek
-	res2, err := router.Chat(context.Background(), &ChatRequest{
-		Model:    "deepseek-flash",
-		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
-	})
-	if err != nil || res2.Content != "from-deepseek" {
-		t.Fatalf("expected allocation to deepseek, got: %v, content: %s", err, res2.Content)
-	}
+	route("deepseek-flash", "from-deepseek")
 
 	// 3. 请求未指定模型 -> 自动分配到默认激活的 llamacpp
-	res3, err := router.Chat(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
-	})
-	if err != nil || res3.Content != "from-llamacpp" {
-		t.Fatalf("expected allocation to active llamacpp, got: %v, content: %s", err, res3.Content)
-	}
+	route("", "from-llamacpp")
 
 	// 4. 切换默认激活为 deepseek
 	router.SetActive("deepseek")
-	res4, err := router.Chat(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Hi"}},
-	})
-	if err != nil || res4.Content != "from-deepseek" {
-		t.Fatalf("expected allocation to new active deepseek, got: %v, content: %s", err, res4.Content)
-	}
+	route("", "from-deepseek")
 }
 
 // 测试工厂方法 NewGatewayFromConfig

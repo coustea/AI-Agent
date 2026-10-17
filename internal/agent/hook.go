@@ -10,8 +10,6 @@ import (
 	"sync/atomic"
 	"unicode/utf8"
 
-	"my-agent/internal/gateway"
-	"my-agent/internal/permission"
 	"my-agent/internal/protocol"
 )
 
@@ -29,13 +27,14 @@ func eventSinkFrom(ctx context.Context) (chan<- protocol.Event, bool) {
 }
 
 // bridgeApproval 将权限审批请求桥接至本轮的事件流通道，等待用户交互审批
-func (a *CoreAgent) bridgeApproval(ctx context.Context, req permission.Request) (permission.Decision, error) {
+func (a *CoreAgent) bridgeApproval(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
 	outCh, ok := eventSinkFrom(ctx)
 	if !ok {
-		return permission.DecisionDeny, errors.New("no interactive approval channel available")
+		return protocol.DecisionDeny, errors.New("no interactive approval channel available")
 	}
 
 	reqID := fmt.Sprintf("perm_%d", atomic.AddUint64(&a.permSeq, 1))
+	req.RequestID = reqID
 	respCh := make(chan protocol.Decision, 1)
 
 	a.pendingMu.Lock()
@@ -49,35 +48,23 @@ func (a *CoreAgent) bridgeApproval(ctx context.Context, req permission.Request) 
 	}()
 
 	if !sendEvent(ctx, outCh, protocol.Event{
-		Type: protocol.EventPermissionReq,
-		Permission: &protocol.PermissionRequest{
-			RequestID: reqID,
-			ToolName:  req.ToolName,
-			Arguments: string(req.Arguments),
-			Reason:    req.Reason,
-		},
+		Type:       protocol.EventPermissionReq,
+		Permission: &req,
 	}) {
-		return permission.DecisionDeny, ctx.Err()
+		return protocol.DecisionDeny, ctx.Err()
 	}
 
 	select {
 	case d := <-respCh:
-		switch d {
-		case protocol.DecisionAllowOnce:
-			return permission.DecisionAllowOnce, nil
-		case protocol.DecisionAllowSession:
-			return permission.DecisionAllowSession, nil
-		default:
-			return permission.DecisionDeny, nil
-		}
+		return d, nil
 	case <-ctx.Done():
-		return permission.DecisionDeny, ctx.Err()
+		return protocol.DecisionDeny, ctx.Err()
 	}
 }
 
 // permissionPreHook 作为 PreToolUse 钩子挂载在 tool.Registry 流水线上。
 // 在工具实际调用前拦截高危行为与越界路径，直接阻断并返回错误作为 Observation 回灌。
-func (a *CoreAgent) permissionPreHook(ctx context.Context, call gateway.ToolCall) error {
+func (a *CoreAgent) permissionPreHook(ctx context.Context, call protocol.ToolCall) error {
 	a.mu.RLock()
 	perm := a.permission
 	a.mu.RUnlock()
@@ -108,7 +95,7 @@ const (
 // 学习自 learn-claude-code 的 PostToolUse 机制：
 // 工具执行已完成，若输出内容过大（超过阈值），则全量落盘并改写为“前缀预览 + 完整路径提示”，
 // 既防止单条工具大输出打爆模型上下文，又保留模型通过 read_file 回读全量内容的能力。
-func (a *CoreAgent) largeResultPostHook(ctx context.Context, call gateway.ToolCall, res *gateway.ToolResult) {
+func (a *CoreAgent) largeResultPostHook(ctx context.Context, call protocol.ToolCall, res *protocol.ToolResult) {
 	if res == nil || res.Content == "" {
 		return
 	}

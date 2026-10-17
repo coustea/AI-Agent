@@ -2,12 +2,11 @@ package permission
 
 import (
 	"context"
-	"encoding/json"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"my-agent/internal/gateway"
+	"my-agent/internal/protocol"
 )
 
 func TestPermission_Gate1_HardDeny(t *testing.T) {
@@ -19,21 +18,21 @@ func TestPermission_Gate1_HardDeny(t *testing.T) {
 
 	mgr := NewManager("/tmp/test-workspace", WithApprover(approver))
 
-	dangerousCalls := []gateway.ToolCall{
+	dangerousCalls := []protocol.ToolCall{
 		{
 			ID:        "tc-1",
 			Name:      "bash",
-			Arguments: json.RawMessage(`{"command":"rm -rf /"}`),
+			Arguments: `{"command":"rm -rf /"}`,
 		},
 		{
 			ID:        "tc-2",
 			Name:      "bash",
-			Arguments: json.RawMessage(`{"command":"sudo rm -f something"}`),
+			Arguments: `{"command":"sudo rm -f something"}`,
 		},
 		{
 			ID:        "tc-3",
 			Name:      "bash",
-			Arguments: json.RawMessage(`{"command":"mkfs.ext4 /dev/sda1"}`),
+			Arguments: `{"command":"mkfs.ext4 /dev/sda1"}`,
 		},
 	}
 
@@ -68,10 +67,10 @@ func TestPermission_Gate2_WorkspaceEscape(t *testing.T) {
 	mgr := NewManager(workDir, WithApprover(approver))
 
 	// 1. 越界写入工作区外文件
-	escapeCall := gateway.ToolCall{
+	escapeCall := protocol.ToolCall{
 		ID:        "tc-esc",
 		Name:      "write_file",
-		Arguments: json.RawMessage(`{"path":"/etc/passwd","content":"test"}`),
+		Arguments: `{"path":"/etc/passwd","content":"test"}`,
 	}
 
 	allowed, _, err := mgr.Evaluate(context.Background(), escapeCall)
@@ -87,10 +86,10 @@ func TestPermission_Gate2_WorkspaceEscape(t *testing.T) {
 
 	// 2. 工作区内的常规只读文件，直接放行，无需调用 approver
 	lastReq = Request{}
-	safeCall := gateway.ToolCall{
+	safeCall := protocol.ToolCall{
 		ID:        "tc-safe",
 		Name:      "read_file",
-		Arguments: json.RawMessage(`{"path":"main.go"}`),
+		Arguments: `{"path":"main.go"}`,
 	}
 	allowed, _, err = mgr.Evaluate(context.Background(), safeCall)
 	if err != nil {
@@ -116,10 +115,10 @@ func TestPermission_Gate3_UserApproval_DenyAndSession(t *testing.T) {
 
 	mgr := NewManager(tmpDir, WithApprover(approver))
 
-	call := gateway.ToolCall{
+	call := protocol.ToolCall{
 		ID:        "tc-bash",
 		Name:      "bash",
-		Arguments: json.RawMessage(`{"command":"rm -rf ./tmp"}`),
+		Arguments: `{"command":"rm -rf ./tmp"}`,
 	}
 
 	// 1. 用户拒绝
@@ -168,10 +167,10 @@ func TestPermission_AutoApprove(t *testing.T) {
 	tmpDir := t.TempDir()
 	mgr := NewManager(tmpDir, WithAutoApprove(true))
 
-	call := gateway.ToolCall{
+	call := protocol.ToolCall{
 		ID:        "tc-auto",
 		Name:      "bash",
-		Arguments: json.RawMessage(`{"command":"echo hello"}`),
+		Arguments: `{"command":"echo hello"}`,
 	}
 
 	allowed, _, err := mgr.Evaluate(context.Background(), call)
@@ -213,10 +212,10 @@ func TestPermission_SafeCommands_AutoPass(t *testing.T) {
 	}
 
 	for _, cmd := range safeCommands {
-		call := gateway.ToolCall{
+		call := protocol.ToolCall{
 			ID:        "tc-safe",
 			Name:      "bash",
-			Arguments: json.RawMessage(`{"command":"` + cmd + `"}`),
+			Arguments: `{"command":"` + cmd + `"}`,
 		}
 		allowed, _, err := mgr.Evaluate(context.Background(), call)
 		if err != nil {
@@ -264,10 +263,10 @@ func TestPermission_DangerousCommands_Intercept(t *testing.T) {
 
 		mgr := NewManager(t.TempDir(), WithApprover(approver))
 
-		call := gateway.ToolCall{
+		call := protocol.ToolCall{
 			ID:        "tc-danger",
 			Name:      "bash",
-			Arguments: json.RawMessage(`{"command":"` + cmd + `"}`),
+			Arguments: `{"command":"` + cmd + `"}`,
 		}
 
 		allowed, _, err := mgr.Evaluate(context.Background(), call)

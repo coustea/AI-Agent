@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"my-agent/internal/config"
+	"my-agent/internal/protocol"
 )
 
 func TestSpark_NewSpark(t *testing.T) {
@@ -81,26 +83,17 @@ func TestSpark_Chat(t *testing.T) {
 			t.Errorf("expected model %q, got %v", config.DefaultSparkModel, reqBody["model"])
 		}
 
-		resp := `{
-			"choices": [
-				{
-					"index": 0,
-					"message": {
-						"role": "assistant",
-						"content": "Hello from Xingchen MaaS Spark!"
-					},
-					"finish_reason": "stop"
-				}
-			],
-			"usage": {
-				"prompt_tokens": 10,
-				"completion_tokens": 15,
-				"total_tokens": 25
-			}
-		}`
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(resp))
+		flusher := w.(http.Flusher)
+		for _, ev := range []string{
+			`data: {"choices":[{"delta":{"content":"Hello from Xingchen MaaS Spark!"}}]}`,
+			`data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":15,"total_tokens":25}}`,
+			`data: [DONE]`,
+		} {
+			_, _ = fmt.Fprintf(w, "%s\n\n", ev)
+			flusher.Flush()
+		}
 	}))
 	defer mockServer.Close()
 
@@ -113,20 +106,21 @@ func TestSpark_Chat(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	resp, err := gw.Chat(ctx, &ChatRequest{
-		Messages: []Message{
-			{Role: RoleUser, Content: "Hello Spark!"},
+	stream, err := gw.ChatStream(ctx, &ChatRequest{
+		Messages: []protocol.Message{
+			{Role: protocol.RoleUser, Content: "Hello Spark!"},
 		},
 	})
 	if err != nil {
-		t.Fatalf("Chat failed: %v", err)
+		t.Fatalf("ChatStream failed: %v", err)
 	}
 
-	if resp.Content != "Hello from Xingchen MaaS Spark!" {
-		t.Errorf("unexpected content: %q", resp.Content)
+	res := collectStream(t, stream)
+	if res.content != "Hello from Xingchen MaaS Spark!" {
+		t.Errorf("unexpected content: %q", res.content)
 	}
-	if resp.Usage.TotalTokens != 25 {
-		t.Errorf("expected 25 total tokens, got %d", resp.Usage.TotalTokens)
+	if res.usage == nil || res.usage.TotalTokens != 25 {
+		t.Errorf("expected 25 total tokens, got %+v", res.usage)
 	}
 
 	usage := gw.TotalUsage()
@@ -173,8 +167,8 @@ func TestSpark_ChatStream(t *testing.T) {
 	defer cancel()
 
 	stream, err := gw.ChatStream(ctx, &ChatRequest{
-		Messages: []Message{
-			{Role: RoleUser, Content: "Hi"},
+		Messages: []protocol.Message{
+			{Role: protocol.RoleUser, Content: "Hi"},
 		},
 	})
 	if err != nil {
@@ -203,12 +197,12 @@ func TestSpark_ChatStream(t *testing.T) {
 func TestSpark_Errors(t *testing.T) {
 	// 1. 空消息校验
 	gw, _ := NewSpark("http://127.0.0.1:9999/v2", "key", "", nil)
-	_, err := gw.Chat(context.Background(), &ChatRequest{Messages: nil})
+	_, err := gw.ChatStream(context.Background(), &ChatRequest{Messages: nil})
 	if err != ErrEmptyMessages {
 		t.Errorf("expected ErrEmptyMessages, got: %v", err)
 	}
 
-	// 2. HTTP 错误状态码
+	// 2. 流式 HTTP 错误状态码
 	errServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"error":"insufficient quota"}`))
@@ -216,16 +210,8 @@ func TestSpark_Errors(t *testing.T) {
 	defer errServer.Close()
 
 	gwErr, _ := NewSpark(errServer.URL+"/v2", "key", "", errServer.Client())
-	_, err = gwErr.Chat(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Hello"}},
-	})
-	if err == nil || !strings.Contains(err.Error(), "403") {
-		t.Errorf("expected 403 error, got: %v", err)
-	}
-
-	// 3. 流式 HTTP 错误状态码
 	_, err = gwErr.ChatStream(context.Background(), &ChatRequest{
-		Messages: []Message{{Role: RoleUser, Content: "Hello"}},
+		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hello"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "403") {
 		t.Errorf("expected 403 error for stream, got: %v", err)

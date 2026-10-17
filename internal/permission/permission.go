@@ -10,37 +10,20 @@ import (
 	"strings"
 	"sync"
 
-	"my-agent/internal/gateway"
+	"my-agent/internal/protocol"
 )
 
-// Decision 表示用户对权限请求的决策
-type Decision int
+// Decision 统一采用 protocol.Decision 决策枚举
+type Decision = protocol.Decision
 
 const (
-	DecisionDeny Decision = iota
-	DecisionAllowOnce
-	DecisionAllowSession
+	DecisionDeny         = protocol.DecisionDeny
+	DecisionAllowOnce    = protocol.DecisionAllowOnce
+	DecisionAllowSession = protocol.DecisionAllowSession
 )
 
-func (d Decision) String() string {
-	switch d {
-	case DecisionAllowOnce:
-		return "allow_once"
-	case DecisionAllowSession:
-		return "allow_session"
-	default:
-		return "deny"
-	}
-}
-
-// Request 封装需要审批的工具调用上下文与风险原因
-type Request struct {
-	ToolCallID string          `json:"tool_call_id"`
-	ToolName   string          `json:"tool_name"`
-	Arguments  json.RawMessage `json:"arguments"`
-	WorkDir    string          `json:"work_dir"`
-	Reason     string          `json:"reason"`
-}
+// Request 统一采用 protocol.PermissionRequest 纯数据契约
+type Request = protocol.PermissionRequest
 
 // Approver 定义人机交互或外部策略决策接口
 type Approver interface {
@@ -229,7 +212,7 @@ func (m *Manager) SetWorkDir(workDir string) {
 // Gate 1: 硬拒绝表 (Hard Deny List) -> 命中直接返回 false，无需人工介入
 // Gate 2: 规则匹配器 (Rule Evaluator) -> 判断是否存在破坏性操作或越界行为
 // Gate 3: 交互式审批 (Interactive Approval) -> 触发人类介入确认并支持会话级信任
-func (m *Manager) Evaluate(ctx context.Context, call gateway.ToolCall) (allowed bool, reason string, err error) {
+func (m *Manager) Evaluate(ctx context.Context, call protocol.ToolCall) (allowed bool, reason string, err error) {
 	// --- Gate 1: 硬拒绝表检查 ---
 	if blocked, denyReason := m.checkHardDeny(call); blocked {
 		return false, denyReason, nil
@@ -293,7 +276,7 @@ func (m *Manager) Evaluate(ctx context.Context, call gateway.ToolCall) (allowed 
 }
 
 // checkHardDeny 检查 Gate 1: 绝对不可执行的硬拒绝指令
-func (m *Manager) checkHardDeny(call gateway.ToolCall) (bool, string) {
+func (m *Manager) checkHardDeny(call protocol.ToolCall) (bool, string) {
 	if call.Name != "bash" {
 		return false, ""
 	}
@@ -313,7 +296,7 @@ func (m *Manager) checkHardDeny(call gateway.ToolCall) (bool, string) {
 }
 
 // checkRules 检查 Gate 2: 规则匹配与风险识别
-func (m *Manager) checkRules(call gateway.ToolCall) (bool, string) {
+func (m *Manager) checkRules(call protocol.ToolCall) (bool, string) {
 	switch call.Name {
 	case "bash":
 		cmd := extractStringArg(call.Arguments, "command")
@@ -379,7 +362,7 @@ func (m *Manager) isPathEscapingWorkspace(p string) (bool, string) {
 	return true, targetAbs
 }
 
-func (m *Manager) callSignature(call gateway.ToolCall) string {
+func (m *Manager) callSignature(call protocol.ToolCall) string {
 	switch call.Name {
 	case "bash":
 		cmd := strings.TrimSpace(extractStringArg(call.Arguments, "command"))
@@ -388,16 +371,17 @@ func (m *Manager) callSignature(call gateway.ToolCall) string {
 		path := strings.TrimSpace(extractStringArg(call.Arguments, "path"))
 		return call.Name + ":" + path
 	default:
-		return call.Name + ":" + string(call.Arguments)
+		return call.Name + ":" + call.Arguments
 	}
 }
 
-func extractStringArg(raw json.RawMessage, key string) string {
-	if len(raw) == 0 {
+func extractStringArg(raw string, key string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
 		return ""
 	}
 	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		return ""
 	}
 	val, ok := m[key]

@@ -320,10 +320,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.event.ToolCall != nil {
 				m.activeToolName = msg.event.ToolCall.Name
 				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
-					ID:        msg.event.ToolCall.ID,
-					Name:      msg.event.ToolCall.Name,
-					Arguments: msg.event.ToolCall.Arguments,
-					Running:   true,
+					ToolCall: *msg.event.ToolCall,
+					Running:  true,
 				})
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -348,8 +346,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				if !found {
 					m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
-						ID:      msg.event.ToolResult.ToolCallID,
-						Name:    msg.event.ToolResult.Name,
+						ToolCall: protocol.ToolCall{
+							ID:   msg.event.ToolResult.ToolCallID,
+							Name: msg.event.ToolResult.Name,
+						},
 						Result:  msg.event.ToolResult.Content,
 						IsError: msg.event.ToolResult.IsError,
 						Running: false,

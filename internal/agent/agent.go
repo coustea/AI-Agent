@@ -349,7 +349,7 @@ func (a *CoreAgent) Reset() {
 }
 
 // History 获取历史消息快照（内部测试与监控使用）
-func (a *CoreAgent) History() []gateway.Message {
+func (a *CoreAgent) History() []protocol.Message {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.memory.History()
@@ -423,7 +423,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 		ctx = withEventSink(ctx, outCh)
 
 		// 2. 将用户问题存入 Memory
-		userMsg := gateway.Message{Role: gateway.RoleUser, Content: prompt}
+		userMsg := protocol.Message{Role: protocol.RoleUser, Content: prompt}
 		_ = a.memory.Append(ctx, userMsg)
 
 		// 3. 每用户轮次开始时动态合成系统提示词
@@ -431,9 +431,9 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 		sysPrompt := composeSystemPrompt(a.persona, a.workDir)
 		a.mu.RUnlock()
 
-		var totalTurnUsage gateway.Usage
+		var totalTurnUsage protocol.Usage
 
-		// 3. 驱动 Harness 循环 (最多迭代 maxSteps 步)
+		// 4. 驱动 Harness 循环 (最多迭代 maxSteps 步)
 		for step := 0; step < a.maxSteps; step++ {
 			select {
 			case <-ctx.Done():
@@ -442,125 +442,19 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 			default:
 			}
 
-			a.mu.RLock()
-			gw := a.gw
-			toolDefs := a.tools.Definitions()
-			a.mu.RUnlock()
-
-			// 基于记忆状态机安全构建当前上下文
-			reqMsgs, err := a.memory.BuildContext(ctx, sysPrompt)
+			stepUsage, finished, err := a.runStep(ctx, outCh, sysPrompt)
 			if err != nil {
 				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
 				return
 			}
-
-			// 发起网关流式调用
-			stream, err := gw.ChatStream(ctx, &gateway.ChatRequest{
-				Messages: reqMsgs,
-				Tools:    toolDefs,
-			})
-			if err != nil {
-				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
-				return
-			}
-
-			var replyBuilder strings.Builder
-			var reasoningBuilder strings.Builder
-			var toolCalls []gateway.ToolCall
-			var streamErr error
-
-			for chunk := range stream {
-				if chunk.Err != nil {
-					streamErr = chunk.Err
-					break
-				}
-				if chunk.ReasoningContent != "" {
-					reasoningBuilder.WriteString(chunk.ReasoningContent)
-					sendEvent(ctx, outCh, protocol.Event{
-						Type:      protocol.EventReasoningDelta,
-						Reasoning: chunk.ReasoningContent,
-					})
-				}
-				if chunk.Delta != "" {
-					replyBuilder.WriteString(chunk.Delta)
-					sendEvent(ctx, outCh, protocol.Event{
-						Type:  protocol.EventDelta,
-						Delta: chunk.Delta,
-					})
-				}
-				if len(chunk.ToolCalls) > 0 {
-					toolCalls = append(toolCalls, chunk.ToolCalls...)
-				}
-				if chunk.Done && chunk.Usage != nil {
-					totalTurnUsage.Add(*chunk.Usage)
-				}
-			}
-
-			// 流式异常回滚原则
-			if streamErr != nil {
-				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: streamErr.Error()})
-				return
-			}
-
-			// 将模型本轮完整回复存入记忆
-			_ = a.memory.Append(ctx, gateway.Message{
-				Role:             gateway.RoleAssistant,
-				Content:          replyBuilder.String(),
-				ReasoningContent: reasoningBuilder.String(),
-				ToolCalls:        toolCalls,
-			})
-
-			// 4. 收敛退出判断：若无工具调用，说明已得出最终回答，发送 EventDone 结束本轮交互
-			if len(toolCalls) == 0 {
+			totalTurnUsage.Add(stepUsage)
+			if finished {
 				sendEvent(ctx, outCh, protocol.Event{
-					Type: protocol.EventDone,
-					Usage: &protocol.Usage{
-						PromptTokens:     totalTurnUsage.PromptTokens,
-						CompletionTokens: totalTurnUsage.CompletionTokens,
-						TotalTokens:      totalTurnUsage.TotalTokens,
-					},
+					Type:  protocol.EventDone,
+					Usage: &totalTurnUsage,
 				})
 				return
 			}
-
-			// 5. 执行工具调用流水线 (所有策略已作为 PreToolUse / PostToolUse 钩子在 Registry 流水线上挂载)
-			for _, tc := range toolCalls {
-				sendEvent(ctx, outCh, protocol.Event{
-					Type: protocol.EventToolCallStart,
-					ToolCall: &protocol.ToolCallRecord{
-						ID:        tc.ID,
-						Name:      tc.Name,
-						Arguments: string(tc.Arguments),
-					},
-				})
-
-				a.mu.RLock()
-				tools := a.tools
-				a.mu.RUnlock()
-
-				// 一行直调！权限阻断（返回错误为 Observation）、参数校验、大输出落盘均由流水线钩子自治完成
-				res, execErr := tools.Execute(ctx, tc)
-				if execErr != nil && strings.TrimSpace(res.Content) == "" {
-					res.Content = "Tool execution error: " + execErr.Error()
-					res.IsError = true
-				}
-
-				sendEvent(ctx, outCh, protocol.Event{
-					Type: protocol.EventToolCallResult,
-					ToolResult: &protocol.ToolResultRecord{
-						ToolCallID: res.ToolCallID,
-						Name:       res.Name,
-						Content:    res.Content,
-						IsError:    res.IsError,
-					},
-				})
-
-				_ = a.memory.Append(ctx, gateway.Message{
-					Role:       gateway.RoleTool,
-					ToolResult: &res,
-				})
-			}
-			// 继续下一步 ReAct 循环
 		}
 
 		sendEvent(ctx, outCh, protocol.Event{
@@ -570,6 +464,102 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 	}()
 
 	return outCh, nil
+}
+
+// runStep 执行单步 ReAct：一次流式模型调用，必要时执行其发起的工具调用。
+// 返回本步 token 用量；finished 为 true 表示模型已给出最终答复，循环应终止。
+func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sysPrompt string) (protocol.Usage, bool, error) {
+	var stepUsage protocol.Usage
+
+	a.mu.RLock()
+	gw := a.gw
+	toolDefs := a.tools.Definitions()
+	a.mu.RUnlock()
+	if gw == nil {
+		return stepUsage, false, errors.New("agent: no model gateway configured, please configure via /model")
+	}
+
+	// 基于记忆状态机安全构建当前上下文
+	reqMsgs, err := a.memory.BuildContext(ctx, sysPrompt)
+	if err != nil {
+		return stepUsage, false, err
+	}
+
+	// 发起网关流式调用
+	stream, err := gw.ChatStream(ctx, &gateway.ChatRequest{
+		Messages: reqMsgs,
+		Tools:    toolDefs,
+	})
+	if err != nil {
+		return stepUsage, false, err
+	}
+
+	var replyBuilder, reasoningBuilder strings.Builder
+	var toolCalls []protocol.ToolCall
+	for chunk := range stream {
+		if chunk.Err != nil {
+			// 流式异常回滚：本步 assistant 消息不入记忆
+			return stepUsage, false, chunk.Err
+		}
+		if chunk.ReasoningContent != "" {
+			reasoningBuilder.WriteString(chunk.ReasoningContent)
+			sendEvent(ctx, outCh, protocol.Event{
+				Type:      protocol.EventReasoningDelta,
+				Reasoning: chunk.ReasoningContent,
+			})
+		}
+		if chunk.Delta != "" {
+			replyBuilder.WriteString(chunk.Delta)
+			sendEvent(ctx, outCh, protocol.Event{
+				Type:  protocol.EventDelta,
+				Delta: chunk.Delta,
+			})
+		}
+		if len(chunk.ToolCalls) > 0 {
+			toolCalls = append(toolCalls, chunk.ToolCalls...)
+		}
+		if chunk.Done && chunk.Usage != nil {
+			stepUsage.Add(*chunk.Usage)
+		}
+	}
+
+	// 将模型本轮完整回复存入记忆
+	_ = a.memory.Append(ctx, protocol.Message{
+		Role:             protocol.RoleAssistant,
+		Content:          replyBuilder.String(),
+		ReasoningContent: reasoningBuilder.String(),
+		ToolCalls:        toolCalls,
+	})
+
+	// 无工具调用：模型已得出最终回答
+	if len(toolCalls) == 0 {
+		return stepUsage, true, nil
+	}
+
+	// 执行工具调用流水线（权限、参数校验、大结果落盘均由 Registry 钩子自治完成）
+	a.mu.RLock()
+	tools := a.tools
+	a.mu.RUnlock()
+	for _, tc := range toolCalls {
+		sendEvent(ctx, outCh, protocol.Event{
+			Type:     protocol.EventToolCallStart,
+			ToolCall: &tc,
+		})
+
+		res := tools.Execute(ctx, tc)
+
+		sendEvent(ctx, outCh, protocol.Event{
+			Type:       protocol.EventToolCallResult,
+			ToolResult: &res,
+		})
+
+		_ = a.memory.Append(ctx, protocol.Message{
+			Role:       protocol.RoleTool,
+			ToolResult: &res,
+		})
+	}
+
+	return stepUsage, false, nil
 }
 
 func sendEvent(ctx context.Context, ch chan<- protocol.Event, ev protocol.Event) bool {

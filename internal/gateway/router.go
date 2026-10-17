@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"my-agent/internal/config"
+	"my-agent/internal/protocol"
 )
 
 // Router 作为统一网关，负责根据请求的模型名称或配置进行模型路由与分配
@@ -91,15 +92,6 @@ func (r *Router) Route(req *ChatRequest) (Gateway, error) {
 	return nil, fmt.Errorf("gateway router: active provider %q not found", r.active)
 }
 
-// Chat 经过网关进行模型分配后执行同步对话
-func (r *Router) Chat(ctx context.Context, req *ChatRequest) (*ChatResponse, error) {
-	gw, err := r.Route(req)
-	if err != nil {
-		return nil, err
-	}
-	return gw.Chat(ctx, req)
-}
-
 // ChatStream 经过网关进行模型分配后执行流式对话
 func (r *Router) ChatStream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
 	gw, err := r.Route(req)
@@ -110,11 +102,11 @@ func (r *Router) ChatStream(ctx context.Context, req *ChatRequest) (<-chan Strea
 }
 
 // TotalUsage 统计所有已注册厂商消耗的累计总 Token 用量
-func (r *Router) TotalUsage() Usage {
+func (r *Router) TotalUsage() protocol.Usage {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var total Usage
+	var total protocol.Usage
 	for _, gw := range r.providers {
 		total.Add(gw.TotalUsage())
 	}
@@ -127,15 +119,16 @@ func NewGatewayFromConfig(cfg *config.Config) (Gateway, error) {
 		return nil, fmt.Errorf("gateway: configuration cannot be nil")
 	}
 
-	activeName := strings.ToLower(string(cfg.Provider))
+	activeName := config.ProviderID(cfg.Provider)
 	router := NewRouter(activeName)
 
 	// 1. 若配置中保存了各厂商独立配置，初始化已配置的提供商
 	if cfg.Providers != nil {
 		for pName, pcfg := range cfg.Providers {
+			id := config.ProviderID(config.Provider(pName))
 			gw, err := initProviderGateway(config.Provider(pName), pcfg.BaseURL, pcfg.APIKey, pcfg.ModelName)
 			if err == nil {
-				router.Register(pName, gw)
+				router.Register(id, gw)
 			}
 		}
 	}
@@ -150,18 +143,30 @@ func NewGatewayFromConfig(cfg *config.Config) (Gateway, error) {
 	return router, nil
 }
 
-func initProviderGateway(p config.Provider, baseURL, apiKey, model string) (Gateway, error) {
-	pName := strings.ToLower(string(p))
-	switch pName {
-	case "gemini", "google":
-		return NewGemini(baseURL, apiKey, model, nil)
-	case "deepseek", "ds":
-		return NewDeepSeek(baseURL, apiKey, model, nil)
-	case "spark", "maas", "xfyun":
-		return NewSpark(baseURL, apiKey, model, nil)
-	case "llamacpp", "llama", "local", "":
+// providerConstructors 是规范厂商标识到具体网关构造器的唯一映射。
+var providerConstructors = map[string]func(baseURL, apiKey, model string) (Gateway, error){
+	"llamacpp": func(baseURL, apiKey, model string) (Gateway, error) {
 		return NewLlamaCpp(baseURL, apiKey, model, nil)
-	default:
+	},
+	"deepseek": func(baseURL, apiKey, model string) (Gateway, error) {
+		return NewDeepSeek(baseURL, apiKey, model, nil)
+	},
+	"gemini": func(baseURL, apiKey, model string) (Gateway, error) {
+		return NewGemini(baseURL, apiKey, model, nil)
+	},
+	"spark": func(baseURL, apiKey, model string) (Gateway, error) {
+		return NewSpark(baseURL, apiKey, model, nil)
+	},
+}
+
+func initProviderGateway(p config.Provider, baseURL, apiKey, model string) (Gateway, error) {
+	id := config.ProviderID(p)
+	if id == "" {
+		id = "llamacpp"
+	}
+	ctor, ok := providerConstructors[id]
+	if !ok {
 		return nil, fmt.Errorf("unsupported provider %q", p)
 	}
+	return ctor(baseURL, apiKey, model)
 }

@@ -5,14 +5,14 @@ import (
 	"strings"
 	"sync"
 
-	"my-agent/internal/gateway"
+	"my-agent/internal/protocol"
 )
 
 // SlidingWindowMemory 基于滑动窗口并严格保证轮次原子性（Turn Atomicity）的记忆实现。
 // 裁剪历史时，保证 User -> Assistant(ToolCalls) -> Tool(ToolResult) 永远同生共死，绝不产生孤立的 RoleTool。
 type SlidingWindowMemory struct {
 	mu          sync.RWMutex
-	messages    []gateway.Message
+	messages    []protocol.Message
 	maxMessages int
 }
 
@@ -22,13 +22,13 @@ func NewSlidingWindowMemory(maxMessages int) *SlidingWindowMemory {
 		maxMessages = 40
 	}
 	return &SlidingWindowMemory{
-		messages:    make([]gateway.Message, 0),
+		messages:    make([]protocol.Message, 0),
 		maxMessages: maxMessages,
 	}
 }
 
 // Append 追加一条消息到记忆中。
-func (m *SlidingWindowMemory) Append(ctx context.Context, msg gateway.Message) error {
+func (m *SlidingWindowMemory) Append(ctx context.Context, msg protocol.Message) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.messages = append(m.messages, msg)
@@ -36,21 +36,21 @@ func (m *SlidingWindowMemory) Append(ctx context.Context, msg gateway.Message) e
 }
 
 // History 返回当前全部消息的副本。
-func (m *SlidingWindowMemory) History() []gateway.Message {
+func (m *SlidingWindowMemory) History() []protocol.Message {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return append([]gateway.Message(nil), m.messages...)
+	return append([]protocol.Message(nil), m.messages...)
 }
 
 // Clear 清空记忆。
 func (m *SlidingWindowMemory) Clear() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.messages = make([]gateway.Message, 0)
+	m.messages = make([]protocol.Message, 0)
 }
 
 // BuildContext 构建准备发往模型的上下文序列，自动注入 systemPrompt 并按轮次原子性进行安全裁剪。
-func (m *SlidingWindowMemory) BuildContext(ctx context.Context, systemPrompt string) ([]gateway.Message, error) {
+func (m *SlidingWindowMemory) BuildContext(ctx context.Context, systemPrompt string) ([]protocol.Message, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
@@ -61,9 +61,9 @@ func (m *SlidingWindowMemory) BuildContext(ctx context.Context, systemPrompt str
 
 	if total == 0 {
 		if systemPrompt != "" {
-			return []gateway.Message{{Role: gateway.RoleSystem, Content: systemPrompt}}, nil
+			return []protocol.Message{{Role: protocol.RoleSystem, Content: systemPrompt}}, nil
 		}
-		return []gateway.Message{}, nil
+		return []protocol.Message{}, nil
 	}
 
 	startIdx := 0
@@ -75,28 +75,28 @@ func (m *SlidingWindowMemory) BuildContext(ctx context.Context, systemPrompt str
 	// 确保切片的起点永远不是孤立的 RoleTool 或孤立的 RoleAssistant(ToolCalls)
 	for startIdx > 0 {
 		// 1. 如果起点落在 RoleTool，向前寻找发出该调用的 RoleAssistant
-		if raw[startIdx].Role == gateway.RoleTool {
+		if raw[startIdx].Role == protocol.RoleTool {
 			startIdx--
 			continue
 		}
 		// 2. 如果落在发起了 ToolCalls 的 RoleAssistant 上，进一步向前包含发起提问的 RoleUser
-		if raw[startIdx].Role == gateway.RoleAssistant && len(raw[startIdx].ToolCalls) > 0 {
-			if startIdx > 0 && raw[startIdx-1].Role == gateway.RoleUser {
+		if raw[startIdx].Role == protocol.RoleAssistant && len(raw[startIdx].ToolCalls) > 0 {
+			if startIdx > 0 && raw[startIdx-1].Role == protocol.RoleUser {
 				startIdx--
 			}
 			break
 		}
 		// 3. 如果已经对齐到完整的 RoleUser，对齐完毕
-		if raw[startIdx].Role == gateway.RoleUser {
+		if raw[startIdx].Role == protocol.RoleUser {
 			break
 		}
 		startIdx--
 	}
 
 	selected := raw[startIdx:]
-	result := make([]gateway.Message, 0, len(selected)+1)
+	result := make([]protocol.Message, 0, len(selected)+1)
 	if systemPrompt != "" {
-		result = append(result, gateway.Message{Role: gateway.RoleSystem, Content: systemPrompt})
+		result = append(result, protocol.Message{Role: protocol.RoleSystem, Content: systemPrompt})
 	}
 	result = append(result, selected...)
 	return result, nil

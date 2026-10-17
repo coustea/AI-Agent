@@ -42,6 +42,108 @@ const (
 	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
 
+// providerMeta 描述一个模型厂商的静态元数据，是全部厂商相关映射的单一来源。
+type providerMeta struct {
+	ID                string
+	Aliases           []string
+	DefaultBaseURL    string
+	DefaultModel      string
+	RecommendedModels []string
+	DisplayName       string
+	Description       string
+	IsLocal           bool
+	ModelPrefixes     []string
+	ModelSubstrings   []string
+	ExactModels       []string
+}
+
+// providerRegistry 是全部厂商元数据的唯一注册表，按展示顺序排列。
+var providerRegistry = []providerMeta{
+	{
+		ID:                "llamacpp",
+		Aliases:           []string{"llama", "local"},
+		DefaultBaseURL:    DefaultLlamaCppBaseURL,
+		DefaultModel:      DefaultLlamaCppModel,
+		RecommendedModels: []string{DefaultLlamaCppModel, "qwen2.5-coder-7b"},
+		DisplayName:       "llama.cpp",
+		Description:       "本地 HTTP 服务 (127.0.0.1:8080)",
+		IsLocal:           true,
+		ModelSubstrings:   []string{"llama", "local", "qwen"},
+	},
+	{
+		ID:                "deepseek",
+		Aliases:           []string{"ds"},
+		DefaultBaseURL:    DeepSeekBaseURL,
+		DefaultModel:      DefaultDeepSeekModel,
+		RecommendedModels: []string{DefaultDeepSeekModel, DeepSeekProModel, DeepSeekReasonerModel},
+		DisplayName:       "DeepSeek",
+		Description:       "官方最新 - 支持 V4 系列与 R1 深度推理",
+		ModelPrefixes:     []string{"deepseek"},
+	},
+	{
+		ID:                "gemini",
+		Aliases:           []string{"google"},
+		DefaultBaseURL:    GeminiBaseURL,
+		DefaultModel:      DefaultGeminiModel,
+		RecommendedModels: []string{DefaultGeminiModel, GeminiProModel},
+		DisplayName:       "Google Gemini",
+		Description:       "官方最新 - 推荐 Flash 极速响应 / Pro 深度代码",
+		ModelPrefixes:     []string{"gemini"},
+	},
+	{
+		ID:                "spark",
+		Aliases:           []string{"maas", "xfyun"},
+		DefaultBaseURL:    DefaultSparkBaseURL,
+		DefaultModel:      DefaultSparkModel,
+		RecommendedModels: []string{DefaultSparkModel, SparkLiteModel},
+		DisplayName:       "讯飞星辰 MaaS",
+		Description:       "星火通用大模型 / 认知大模型",
+		ModelPrefixes:     []string{"spark"},
+		ExactModels:       []string{"lite"},
+	},
+}
+
+// canonicalProvider 返回厂商的规范 ID；未知输入返回其小写形式。
+func canonicalProvider(p Provider) string {
+	key := strings.ToLower(string(p))
+	for _, pm := range providerRegistry {
+		if pm.ID == key {
+			return pm.ID
+		}
+		for _, a := range pm.Aliases {
+			if a == key {
+				return pm.ID
+			}
+		}
+	}
+	return key
+}
+
+// lookupProvider 返回厂商元数据；未知厂商返回 nil。
+func lookupProvider(p Provider) *providerMeta {
+	key := canonicalProvider(p)
+	for i := range providerRegistry {
+		if providerRegistry[i].ID == key {
+			return &providerRegistry[i]
+		}
+	}
+	return nil
+}
+
+// ProviderIDs 返回按展示顺序排列的全部厂商规范 ID。
+func ProviderIDs() []string {
+	ids := make([]string, 0, len(providerRegistry))
+	for _, pm := range providerRegistry {
+		ids = append(ids, pm.ID)
+	}
+	return ids
+}
+
+// ProviderID 返回厂商的规范 ID（别名归一化）。
+func ProviderID(p Provider) string {
+	return canonicalProvider(p)
+}
+
 // ProviderConfig 保存各厂商的专属模型与密钥配置
 type ProviderConfig struct {
 	BaseURL   string `json:"base_url,omitempty"`   // 服务端点地址
@@ -94,29 +196,12 @@ func DefaultConfigPath() string {
 	return ResolveConfigPath("")
 }
 
-// normalizeProviderKey 标准化厂商标识 key
-func normalizeProviderKey(p Provider) string {
-	key := strings.ToLower(string(p))
-	switch key {
-	case "llama", "local":
-		return "llamacpp"
-	case "ds":
-		return "deepseek"
-	case "google":
-		return "gemini"
-	case "spark", "maas", "xfyun":
-		return "spark"
-	default:
-		return key
-	}
-}
-
-// ProviderConfig 获取指定厂商已保存的配置
-func (c Config) ProviderConfig(p Provider) ProviderConfig {
+// ProviderFor 获取指定厂商已保存的配置
+func (c Config) ProviderFor(p Provider) ProviderConfig {
 	if c.Providers == nil {
 		return ProviderConfig{}
 	}
-	return c.Providers[normalizeProviderKey(p)]
+	return c.Providers[canonicalProvider(p)]
 }
 
 // SetProviderConfig 记录并更新指定厂商的专属配置
@@ -124,13 +209,13 @@ func (c *Config) SetProviderConfig(p Provider, pcfg ProviderConfig) {
 	if c.Providers == nil {
 		c.Providers = make(map[string]ProviderConfig)
 	}
-	c.Providers[normalizeProviderKey(p)] = pcfg
+	c.Providers[canonicalProvider(p)] = pcfg
 }
 
 // SwitchProvider 切换当前激活的厂商，并自动载入该厂商已保存的配置历史
 func (c *Config) SwitchProvider(p Provider) {
 	c.Provider = p
-	pcfg := c.ProviderConfig(p)
+	pcfg := c.ProviderFor(p)
 
 	if pcfg.BaseURL != "" {
 		c.BaseURL = pcfg.BaseURL
@@ -147,6 +232,53 @@ func (c *Config) SwitchProvider(p Provider) {
 	c.APIKey = pcfg.APIKey
 }
 
+// envFallback 描述一个厂商的环境变量密钥来源与默认端点/模型。
+type envFallback struct {
+	provider Provider
+	envKeys  []string
+	baseURL  string
+	model    string
+}
+
+// envFallbacks 是环境变量补全的唯一来源。
+var envFallbacks = []envFallback{
+	{ProviderDeepSeek, []string{"DEEPSEEK_API_KEY"}, DeepSeekBaseURL, DefaultDeepSeekModel},
+	{ProviderGemini, []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"}, GeminiBaseURL, DefaultGeminiModel},
+	{ProviderSpark, []string{"SPARK_API_KEY", "MAAS_API_KEY"}, DefaultSparkBaseURL, DefaultSparkModel},
+}
+
+// applyEnvFallbacks 使用环境变量补齐缺失的厂商密钥与默认端点/模型。
+func applyEnvFallbacks(cfg *Config) {
+	for _, fb := range envFallbacks {
+		pcfg := cfg.ProviderFor(fb.provider)
+		if pcfg.APIKey != "" {
+			continue
+		}
+		key := firstEnv(fb.envKeys...)
+		if key == "" {
+			continue
+		}
+		pcfg.APIKey = key
+		if pcfg.BaseURL == "" {
+			pcfg.BaseURL = fb.baseURL
+		}
+		if pcfg.ModelName == "" {
+			pcfg.ModelName = fb.model
+		}
+		cfg.SetProviderConfig(fb.provider, pcfg)
+	}
+}
+
+// firstEnv 返回第一个非空的环境变量值。
+func firstEnv(keys ...string) string {
+	for _, k := range keys {
+		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 // DefaultConfig 构建一份全新的默认配置（含环境变量密钥自动补全与 llamacpp 预置），
 // 作为配置文件缺失或损坏时的安全回退。
 func DefaultConfig() *Config {
@@ -155,39 +287,7 @@ func DefaultConfig() *Config {
 	}
 
 	// 收集环境变量中的密钥
-	if dsKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); dsKey != "" {
-		cfg.SetProviderConfig(ProviderDeepSeek, ProviderConfig{
-			BaseURL:   DeepSeekBaseURL,
-			ModelName: DefaultDeepSeekModel,
-			APIKey:    dsKey,
-		})
-	}
-	if geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY")); geminiKey != "" {
-		cfg.SetProviderConfig(ProviderGemini, ProviderConfig{
-			BaseURL:   GeminiBaseURL,
-			ModelName: DefaultGeminiModel,
-			APIKey:    geminiKey,
-		})
-	} else if googleKey := strings.TrimSpace(os.Getenv("GOOGLE_API_KEY")); googleKey != "" {
-		cfg.SetProviderConfig(ProviderGemini, ProviderConfig{
-			BaseURL:   GeminiBaseURL,
-			ModelName: DefaultGeminiModel,
-			APIKey:    googleKey,
-		})
-	}
-	if sparkKey := strings.TrimSpace(os.Getenv("SPARK_API_KEY")); sparkKey != "" {
-		cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
-			BaseURL:   DefaultSparkBaseURL,
-			ModelName: DefaultSparkModel,
-			APIKey:    sparkKey,
-		})
-	} else if maasKey := strings.TrimSpace(os.Getenv("MAAS_API_KEY")); maasKey != "" {
-		cfg.SetProviderConfig(ProviderSpark, ProviderConfig{
-			BaseURL:   DefaultSparkBaseURL,
-			ModelName: DefaultSparkModel,
-			APIKey:    maasKey,
-		})
-	}
+	applyEnvFallbacks(cfg)
 
 	// 预置 llamacpp
 	cfg.SetProviderConfig(ProviderLlamaCpp, ProviderConfig{
@@ -196,11 +296,11 @@ func DefaultConfig() *Config {
 	})
 
 	// 默认激活提供商选择
-	if cfg.ProviderConfig(ProviderDeepSeek).APIKey != "" {
+	if cfg.ProviderFor(ProviderDeepSeek).APIKey != "" {
 		cfg.SwitchProvider(ProviderDeepSeek)
-	} else if cfg.ProviderConfig(ProviderGemini).APIKey != "" {
+	} else if cfg.ProviderFor(ProviderGemini).APIKey != "" {
 		cfg.SwitchProvider(ProviderGemini)
-	} else if cfg.ProviderConfig(ProviderSpark).APIKey != "" {
+	} else if cfg.ProviderFor(ProviderSpark).APIKey != "" {
 		cfg.SwitchProvider(ProviderSpark)
 	} else {
 		cfg.SwitchProvider(ProviderLlamaCpp)
@@ -232,7 +332,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// 保证顶层当前配置已落入 providers
 	if cfg.Provider != "" {
-		pcfg := cfg.ProviderConfig(cfg.Provider)
+		pcfg := cfg.ProviderFor(cfg.Provider)
 		if pcfg.APIKey == "" && cfg.APIKey != "" {
 			pcfg.APIKey = cfg.APIKey
 		}
@@ -246,55 +346,13 @@ func LoadConfig(path string) (*Config, error) {
 	}
 
 	// 环境变量补充
-	if dsKey := strings.TrimSpace(os.Getenv("DEEPSEEK_API_KEY")); dsKey != "" {
-		pcfg := cfg.ProviderConfig(ProviderDeepSeek)
-		if pcfg.APIKey == "" {
-			pcfg.APIKey = dsKey
-			if pcfg.ModelName == "" {
-				pcfg.ModelName = DefaultDeepSeekModel
-			}
-			if pcfg.BaseURL == "" {
-				pcfg.BaseURL = DeepSeekBaseURL
-			}
-			cfg.SetProviderConfig(ProviderDeepSeek, pcfg)
-		}
-	}
-	if geminiKey := strings.TrimSpace(os.Getenv("GEMINI_API_KEY")); geminiKey != "" {
-		pcfg := cfg.ProviderConfig(ProviderGemini)
-		if pcfg.APIKey == "" {
-			pcfg.APIKey = geminiKey
-			if pcfg.ModelName == "" {
-				pcfg.ModelName = DefaultGeminiModel
-			}
-			if pcfg.BaseURL == "" {
-				pcfg.BaseURL = GeminiBaseURL
-			}
-			cfg.SetProviderConfig(ProviderGemini, pcfg)
-		}
-	}
-	sparkKey := strings.TrimSpace(os.Getenv("SPARK_API_KEY"))
-	if sparkKey == "" {
-		sparkKey = strings.TrimSpace(os.Getenv("MAAS_API_KEY"))
-	}
-	if sparkKey != "" {
-		pcfg := cfg.ProviderConfig(ProviderSpark)
-		if pcfg.APIKey == "" {
-			pcfg.APIKey = sparkKey
-			if pcfg.ModelName == "" {
-				pcfg.ModelName = DefaultSparkModel
-			}
-			if pcfg.BaseURL == "" {
-				pcfg.BaseURL = DefaultSparkBaseURL
-			}
-			cfg.SetProviderConfig(ProviderSpark, pcfg)
-		}
-	}
+	applyEnvFallbacks(&cfg)
 
 	// 确保当前激活项有效
 	if cfg.Provider == "" {
 		cfg.Provider = ProviderLlamaCpp
 	}
-	activePcfg := cfg.ProviderConfig(cfg.Provider)
+	activePcfg := cfg.ProviderFor(cfg.Provider)
 	if cfg.APIKey == "" && activePcfg.APIKey != "" {
 		cfg.APIKey = activePcfg.APIKey
 	}
@@ -320,12 +378,10 @@ func LoadConfig(path string) (*Config, error) {
 
 // IsLocalProvider 判断是否为无需鉴权的本地服务提供商
 func IsLocalProvider(p Provider) bool {
-	switch strings.ToLower(string(p)) {
-	case "llamacpp", "llama", "local":
-		return true
-	default:
-		return false
+	if pm := lookupProvider(p); pm != nil {
+		return pm.IsLocal
 	}
+	return false
 }
 
 // SaveConfig 将配置持久化为格式化的 JSON 文件
@@ -356,111 +412,65 @@ func SaveConfig(path string, cfg *Config) error {
 	return os.WriteFile(resolvedPath, data, 0o600)
 }
 
+// metaOrDefault 返回厂商元数据；未知厂商回退到本地 llamacpp。
+func metaOrDefault(p Provider) *providerMeta {
+	if pm := lookupProvider(p); pm != nil {
+		return pm
+	}
+	return lookupProvider(ProviderLlamaCpp)
+}
+
 // DefaultModel 根据厂商返回最新默认模型名称
 func DefaultModel(p Provider) string {
-	switch strings.ToLower(string(p)) {
-	case "gemini", "google":
-		return DefaultGeminiModel
-	case "deepseek", "ds":
-		return DefaultDeepSeekModel
-	case "spark", "maas", "xfyun":
-		return DefaultSparkModel
-	case "llamacpp", "llama", "local":
-		fallthrough
-	default:
-		return DefaultLlamaCppModel
-	}
+	return metaOrDefault(p).DefaultModel
 }
 
 // DefaultBaseURL 根据厂商返回默认服务端点
 func DefaultBaseURL(p Provider) string {
-	switch strings.ToLower(string(p)) {
-	case "gemini", "google":
-		return GeminiBaseURL
-	case "deepseek", "ds":
-		return DeepSeekBaseURL
-	case "spark", "maas", "xfyun":
-		return DefaultSparkBaseURL
-	case "llamacpp", "llama", "local":
-		fallthrough
-	default:
-		return DefaultLlamaCppBaseURL
-	}
+	return metaOrDefault(p).DefaultBaseURL
 }
 
 // RecommendedModels 返回指定厂商官方推荐的高频常用模型列表
 func RecommendedModels(p Provider) []string {
-	switch strings.ToLower(string(p)) {
-	case "gemini", "google":
-		return []string{DefaultGeminiModel, GeminiProModel}
-	case "deepseek", "ds":
-		return []string{DefaultDeepSeekModel, DeepSeekProModel, DeepSeekReasonerModel}
-	case "spark", "maas", "xfyun":
-		return []string{DefaultSparkModel, SparkLiteModel}
-	case "llamacpp", "llama", "local":
-		fallthrough
-	default:
-		return []string{DefaultLlamaCppModel, "qwen2.5-coder-7b"}
-	}
+	return metaOrDefault(p).RecommendedModels
 }
 
 // ProviderDisplayName 返回厂商的友好展示名称
 func ProviderDisplayName(p Provider) string {
-	switch strings.ToLower(string(p)) {
-	case "gemini", "google":
-		return "Google Gemini"
-	case "deepseek", "ds":
-		return "DeepSeek"
-	case "spark", "maas", "xfyun":
-		return "讯飞星辰 MaaS"
-	case "llamacpp", "llama", "local":
-		fallthrough
-	default:
-		return "llama.cpp"
-	}
+	return metaOrDefault(p).DisplayName
 }
 
 // ProviderDescription 返回厂商的能力特征说明
 func ProviderDescription(p Provider) string {
-	switch strings.ToLower(string(p)) {
-	case "gemini", "google":
-		return "官方最新 - 推荐 Flash 极速响应 / Pro 深度代码"
-	case "deepseek", "ds":
-		return "官方最新 - 支持 V4 系列与 R1 深度推理"
-	case "spark", "maas", "xfyun":
-		return "星火通用大模型 / 认知大模型"
-	case "llamacpp", "llama", "local":
-		fallthrough
-	default:
-		return "本地 HTTP 服务 (127.0.0.1:8080)"
-	}
+	return metaOrDefault(p).Description
 }
 
 // InferProviderFromModel 根据模型名称前缀或特征智能识别所属厂商
 func InferProviderFromModel(model string) Provider {
 	m := strings.ToLower(strings.TrimSpace(model))
-	switch {
-	case strings.HasPrefix(m, "gemini"):
-		return ProviderGemini
-	case strings.HasPrefix(m, "deepseek"):
-		return ProviderDeepSeek
-	case strings.HasPrefix(m, "spark"), m == "lite":
-		return ProviderSpark
-	case strings.Contains(m, "llama"), strings.Contains(m, "local"), strings.Contains(m, "qwen"):
-		return ProviderLlamaCpp
-	default:
-		return ""
+	for _, pm := range providerRegistry {
+		for _, exact := range pm.ExactModels {
+			if m == exact {
+				return Provider(pm.ID)
+			}
+		}
+		for _, prefix := range pm.ModelPrefixes {
+			if strings.HasPrefix(m, prefix) {
+				return Provider(pm.ID)
+			}
+		}
+		for _, sub := range pm.ModelSubstrings {
+			if strings.Contains(m, sub) {
+				return Provider(pm.ID)
+			}
+		}
 	}
+	return ""
 }
 
 // ToView 将当前配置映射为面向前端只读呈现的纯数据 ConfigView 契约
 func (c *Config) ToView() protocol.ConfigView {
-	available := []string{
-		string(ProviderLlamaCpp),
-		string(ProviderDeepSeek),
-		string(ProviderGemini),
-		string(ProviderSpark),
-	}
+	available := ProviderIDs()
 
 	cv := protocol.ConfigView{
 		AvailableProviders: available,
@@ -483,7 +493,7 @@ func (c *Config) ToView() protocol.ConfigView {
 		}
 
 		if c != nil {
-			pcfg := c.ProviderConfig(p)
+			pcfg := c.ProviderFor(p)
 			if pcfg.ModelName != "" {
 				info.CurrentModel = pcfg.ModelName
 			} else {

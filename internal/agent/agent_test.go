@@ -35,10 +35,6 @@ func newMockGateway(replies ...string) *mockGateway {
 	}
 }
 
-func (m *mockGateway) Chat(ctx context.Context, req *gateway.ChatRequest) (*gateway.ChatResponse, error) {
-	return nil, nil
-}
-
 func (m *mockGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) (<-chan gateway.StreamChunk, error) {
 	m.mu.Lock()
 	m.requests = append(m.requests, req)
@@ -67,7 +63,7 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) 
 
 		ch <- gateway.StreamChunk{
 			Done: true,
-			Usage: &gateway.Usage{
+			Usage: &protocol.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 5,
 				TotalTokens:      15,
@@ -78,8 +74,8 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) 
 	return ch, nil
 }
 
-func (m *mockGateway) TotalUsage() gateway.Usage {
-	return gateway.Usage{TotalTokens: 15}
+func (m *mockGateway) TotalUsage() protocol.Usage {
+	return protocol.Usage{TotalTokens: 15}
 }
 
 // 测试多轮对话上下文累加与记忆保留
@@ -135,10 +131,10 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 	if len(history1) != 2 {
 		t.Fatalf("expected 2 history messages after turn 1, got %d", len(history1))
 	}
-	if history1[0].Role != gateway.RoleUser || history1[0].Content != "Hello, my name is Coustea." {
+	if history1[0].Role != protocol.RoleUser || history1[0].Content != "Hello, my name is Coustea." {
 		t.Errorf("unexpected history[0]: %+v", history1[0])
 	}
-	if history1[1].Role != gateway.RoleAssistant || history1[1].Content != "Hello! Nice to meet you, Coustea." {
+	if history1[1].Role != protocol.RoleAssistant || history1[1].Content != "Hello! Nice to meet you, Coustea." {
 		t.Errorf("unexpected history[1]: %+v", history1[1])
 	}
 
@@ -171,7 +167,7 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 	if len(req2.Messages) != 4 {
 		t.Fatalf("turn 2 request expected 4 messages, got %d", len(req2.Messages))
 	}
-	if req2.Messages[0].Role != gateway.RoleSystem {
+	if req2.Messages[0].Role != protocol.RoleSystem {
 		t.Errorf("expected System prompt first, got: %+v", req2.Messages[0])
 	}
 	if req2.Messages[1].Content != "Hello, my name is Coustea." {
@@ -288,10 +284,6 @@ type blockingGateway struct {
 	blockCh <-chan struct{}
 }
 
-func (b *blockingGateway) Chat(ctx context.Context, req *gateway.ChatRequest) (*gateway.ChatResponse, error) {
-	return nil, nil
-}
-
 func (b *blockingGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) (<-chan gateway.StreamChunk, error) {
 	ch := make(chan gateway.StreamChunk, 2)
 	go func() {
@@ -302,8 +294,8 @@ func (b *blockingGateway) ChatStream(ctx context.Context, req *gateway.ChatReque
 	return ch, nil
 }
 
-func (b *blockingGateway) TotalUsage() gateway.Usage {
-	return gateway.Usage{}
+func (b *blockingGateway) TotalUsage() protocol.Usage {
+	return protocol.Usage{}
 }
 
 // 测试边界校验与空参数
@@ -359,10 +351,6 @@ type toolCallStepGateway struct {
 	calls int
 }
 
-func (m *toolCallStepGateway) Chat(ctx context.Context, req *gateway.ChatRequest) (*gateway.ChatResponse, error) {
-	return nil, nil
-}
-
 func (m *toolCallStepGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) (<-chan gateway.StreamChunk, error) {
 	m.mu.Lock()
 	idx := m.calls
@@ -382,8 +370,8 @@ func (m *toolCallStepGateway) ChatStream(ctx context.Context, req *gateway.ChatR
 	return ch, nil
 }
 
-func (m *toolCallStepGateway) TotalUsage() gateway.Usage {
-	return gateway.Usage{}
+func (m *toolCallStepGateway) TotalUsage() protocol.Usage {
+	return protocol.Usage{}
 }
 
 type mockAdderTool struct{}
@@ -427,11 +415,11 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 				}
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
+						ToolCalls: []protocol.ToolCall{
 							{
 								ID:        "call_123",
 								Name:      "adder",
-								Arguments: json.RawMessage(`{"a": 2, "b": 3}`),
+								Arguments: `{"a": 2, "b": 3}`,
 							},
 						},
 						Done: true,
@@ -442,7 +430,7 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				// 验证上下文历史中已经包含了 RoleTool
 				lastMsg := req.Messages[len(req.Messages)-1]
-				if lastMsg.Role != gateway.RoleTool || lastMsg.ToolResult == nil || lastMsg.ToolResult.IsError {
+				if lastMsg.Role != protocol.RoleTool || lastMsg.ToolResult == nil || lastMsg.ToolResult.IsError {
 					t.Errorf("expected successful RoleTool message, got: %+v", lastMsg)
 				}
 				return []gateway.StreamChunk{
@@ -509,11 +497,11 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
+						ToolCalls: []protocol.ToolCall{
 							{
 								ID:        "call_neg",
 								Name:      "adder",
-								Arguments: json.RawMessage(`{"a": -5, "b": 3}`),
+								Arguments: `{"a": -5, "b": 3}`,
 							},
 						},
 						Done: true,
@@ -523,7 +511,7 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 			// Step 2: 模型收到错误 Observation，进行自愈回答
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				lastMsg := req.Messages[len(req.Messages)-1]
-				if lastMsg.Role != gateway.RoleTool || lastMsg.ToolResult == nil || !lastMsg.ToolResult.IsError {
+				if lastMsg.Role != protocol.RoleTool || lastMsg.ToolResult == nil || !lastMsg.ToolResult.IsError {
 					t.Errorf("expected RoleTool with IsError=true, got: %+v", lastMsg)
 				}
 				return []gateway.StreamChunk{
@@ -569,8 +557,8 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
-							{ID: "c1", Name: "adder", Arguments: json.RawMessage(`{"a":1,"b":1}`)},
+						ToolCalls: []protocol.ToolCall{
+							{ID: "c1", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
 						Done: true,
 					},
@@ -579,8 +567,8 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
-							{ID: "c2", Name: "adder", Arguments: json.RawMessage(`{"a":1,"b":1}`)},
+						ToolCalls: []protocol.ToolCall{
+							{ID: "c2", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
 						Done: true,
 					},
@@ -589,8 +577,8 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
-							{ID: "c3", Name: "adder", Arguments: json.RawMessage(`{"a":1,"b":1}`)},
+						ToolCalls: []protocol.ToolCall{
+							{ID: "c3", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
 						Done: true,
 					},
@@ -718,7 +706,7 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	}
 
 	turn1System := reqs[0].Messages[0]
-	if turn1System.Role != gateway.RoleSystem {
+	if turn1System.Role != protocol.RoleSystem {
 		t.Fatalf("expected first message to be system, got %s", turn1System.Role)
 	}
 	if strings.Contains(turn1System.Content, "MAGIC_LONG_TERM_MEMORY_TOKEN") {
@@ -726,7 +714,7 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	}
 
 	turn2System := reqs[1].Messages[0]
-	if turn2System.Role != gateway.RoleSystem {
+	if turn2System.Role != protocol.RoleSystem {
 		t.Fatalf("expected first message to be system, got %s", turn2System.Role)
 	}
 	if !strings.Contains(turn2System.Content, "MAGIC_LONG_TERM_MEMORY_TOKEN") {
@@ -743,8 +731,8 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
-							{ID: "call_1", Name: "bash", Arguments: json.RawMessage(`{"command": "rm -rf /"}`)},
+						ToolCalls: []protocol.ToolCall{
+							{ID: "call_1", Name: "bash", Arguments: `{"command": "rm -rf /"}`},
 						},
 						Done: true,
 					},
@@ -757,7 +745,7 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 					return []gateway.StreamChunk{{Delta: "blocked"}, {Done: true}}
 				}
 				last := req.Messages[len(req.Messages)-1]
-				if last.Role != gateway.RoleTool || last.ToolResult == nil {
+				if last.Role != protocol.RoleTool || last.ToolResult == nil {
 					t.Errorf("expected a RoleTool message, got %+v", last)
 					return []gateway.StreamChunk{{Delta: "blocked"}, {Done: true}}
 				}
@@ -885,8 +873,8 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
-							{ID: "call_bash_1", Name: "bash", Arguments: json.RawMessage(`{"command": "rm -f 'harness_approval_test.tmp' && echo 'harness_approval_test'"}`)},
+						ToolCalls: []protocol.ToolCall{
+							{ID: "call_bash_1", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'harness_approval_test'"}`},
 						},
 						Done: true,
 					},
@@ -895,7 +883,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 			// Step 2: 模型接收到工具执行输出并生成最终回复
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				last := req.Messages[len(req.Messages)-1]
-				if last.Role != gateway.RoleTool || last.ToolResult == nil {
+				if last.Role != protocol.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
 				}
 				if last.ToolResult.IsError {
@@ -942,8 +930,8 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				return []gateway.StreamChunk{
 					{
-						ToolCalls: []gateway.ToolCall{
-							{ID: "call_bash_2", Name: "bash", Arguments: json.RawMessage(`{"command": "rm -f 'harness_approval_test.tmp' && echo 'will_be_denied'"}`)},
+						ToolCalls: []protocol.ToolCall{
+							{ID: "call_bash_2", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'will_be_denied'"}`},
 						},
 						Done: true,
 					},
@@ -952,7 +940,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 			// Step 2: 模型接收到人类拒绝的观察结果，完成自愈回复
 			func(req *gateway.ChatRequest) []gateway.StreamChunk {
 				last := req.Messages[len(req.Messages)-1]
-				if last.Role != gateway.RoleTool || last.ToolResult == nil {
+				if last.Role != protocol.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
 				}
 				if !last.ToolResult.IsError {
@@ -1081,14 +1069,11 @@ func TestCoreAgent_DirectToolExecute_PermissionHook(t *testing.T) {
 		t.Fatalf("NewAgent failed: %v", err)
 	}
 
-	res, err := ag.tools.Execute(context.Background(), gateway.ToolCall{
+	res := ag.tools.Execute(context.Background(), protocol.ToolCall{
 		ID:        "direct_call_1",
 		Name:      "bash",
-		Arguments: json.RawMessage(`{"command": "rm -rf /"}`),
+		Arguments: `{"command": "rm -rf /"}`,
 	})
-	if err == nil {
-		t.Fatal("expected error from PreToolUse hook, got nil")
-	}
 	if !res.IsError || !strings.Contains(res.Content, "blocked by Gate 1 (Hard Deny)") {
 		t.Fatalf("expected Gate 1 hard deny error in ToolResult, got: %+v", res)
 	}
@@ -1128,14 +1113,11 @@ func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
 		},
 	})
 
-	res, err := ag.tools.Execute(context.Background(), gateway.ToolCall{
+	res := ag.tools.Execute(context.Background(), protocol.ToolCall{
 		ID:        "large_call_1",
 		Name:      "large_tool",
-		Arguments: json.RawMessage(`{}`),
+		Arguments: `{}`,
 	})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
 
 	if !strings.Contains(res.Content, "[output truncated: 10000 characters total; full content saved to") {
 		t.Fatalf("expected truncated notice in res.Content, got: %s", res.Content)
