@@ -81,6 +81,10 @@ var (
 			Foreground(colorUser).
 			Padding(0, 1)
 
+	userPromptTextStyle = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(colorTextNormal)
+
 	assistantBadgeStyle = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorBrandSubtle).
@@ -276,4 +280,33 @@ var (
 
 	bentoNormalItemStyle = lipgloss.NewStyle().
 				Foreground(colorTextNormal)
+
+	// ==========================================
+	// 9. Command Dock (控制台悬浮驾驶舱) 样式
+	// ==========================================
+	dockPromptBadgeStyle = lipgloss.NewStyle().
+				Bold(true).
+				Background(colorBrand).
+				Foreground(lipgloss.Color("#FFFFFF")).
+				Padding(0, 1)
+
+	dockGeneratingBadgeStyle = lipgloss.NewStyle().
+					Bold(true).
+					Background(colorYellowSubtle).
+					Foreground(colorYellow).
+					Padding(0, 1)
+
+	dockPermissionBadgeStyle = lipgloss.NewStyle().
+					Bold(true).
+					Background(colorYellowSubtle).
+					Foreground(colorYellow).
+					Padding(0, 1)
+
+	dockModelTagStyle = lipgloss.NewStyle().
+				Background(colorSurface).
+				Foreground(colorCyan).
+				Padding(0, 1)
+
+	dockDividerStyle = lipgloss.NewStyle().
+				Foreground(colorBorder)
 )

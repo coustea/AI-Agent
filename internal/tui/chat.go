@@ -250,32 +250,74 @@ func (m Model) renderPermissionCard() string {
 		Render(sb.String())
 }
 
-// renderInputBox 渲染外包微边框的 Claude Code 质感输入框卡片
+// renderInputBox 渲染高视觉重心的 Command Dock 交互控制台驾驶舱
 func (m Model) renderInputBox() string {
 	cardWidth := max(60, m.width-6)
-	var borderCol lipgloss.Color = colorCoral
-	title := "❯ 对话 coustea"
+
+	var borderCol lipgloss.Color = colorBrand
+	var statusBadge string
 
 	if m.pendingPerm != nil {
 		borderCol = colorYellow
-		title = "🛡️ 等待授权审批中 (请在上方卡片按 y / a / n 决策)"
+		statusBadge = dockPermissionBadgeStyle.Render(" 🛡️ 权限审批决策中 ")
 	} else if m.isGenerating {
 		borderCol = colorYellow
-		title = "⏳ coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+		statusBadge = dockGeneratingBadgeStyle.Render(" ⏳ 思考生成中 ")
+	} else {
+		statusBadge = dockPromptBadgeStyle.Render(" 💬 PROMPT · 对话模式 ")
 	}
 
-	titleStyled := lipgloss.NewStyle().Bold(true).Foreground(borderCol).Render(title)
-	inputContent := fmt.Sprintf("%s\n%s", titleStyled, m.chatInput.View())
+	cfg := m.agent.Config()
+	modelBadge := ""
+	if cfg.ModelName != "" {
+		modelBadge = dockModelTagStyle.Render(fmt.Sprintf("● %s • %s", cfg.Provider, cfg.ModelName))
+	}
+
+	topRow := fmt.Sprintf("%s  %s", statusBadge, modelBadge)
+	inputRow := m.chatInput.View()
+
+	// 底部操作快捷键栏
+	var footerRow string
+	if m.pendingPerm != nil {
+		footerRow = fmt.Sprintf(" %s %s   %s %s   %s %s",
+			keycapAllowStyle.Render("[y] 允许本次"),
+			dimStyle.Render("(单次放行)"),
+			keycapSessionStyle.Render("[a] 本会话始终信任"),
+			dimStyle.Render("(信任同类)"),
+			keycapDenyStyle.Render("[n/Esc] 阻断执行"),
+			dimStyle.Render("(安全拦截)"),
+		)
+	} else {
+		sep := dimStyle.Render("  •  ")
+		item := func(key, desc string) string {
+			return fmt.Sprintf("%s %s", keycapPillStyle.Render(key), dimStyle.Render(desc))
+		}
+		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s",
+			item("Enter", "发送"),
+			sep,
+			item("PgUp/PgDn", "翻页"),
+			sep,
+			item("/model", "切换模型"),
+			sep,
+			item("/clear", "清屏"),
+			sep,
+			item("Ctrl+C", "退出"),
+		)
+	}
+
+	divider := dockDividerStyle.Render(strings.Repeat("─", max(20, cardWidth-4)))
+	dockContent := fmt.Sprintf("%s\n\n  %s\n\n%s\n%s", topRow, inputRow, divider, footerRow)
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(borderCol).
+		Background(colorSurface).
 		Padding(0, 1).
 		Width(cardWidth).
-		Render(inputContent)
+		Render(dockContent)
 }
 
-// renderFooterBar 渲染底部快捷键提示胶囊
+// renderFooterBar 渲染底部快捷键提示胶囊（已集成于 Command Dock 中）
 func (m Model) renderFooterBar() string {
 	if m.pendingPerm != nil {
 		return permissionWarnStyle.Render("等待权限决策: [y] 允许单次  [a] 会话始终允许  [n/Esc] 阻断执行  [Ctrl+C] 退出")
@@ -299,141 +341,102 @@ func (m Model) renderFooterBar() string {
 	)
 }
 
-// renderChatMessages 将所有历史消息格式化为适用于 Viewport 渲染的高质量卡片文本
+// renderChatMessages 将所有历史消息格式化为适用于 Viewport 渲染的高质量通透呼吸文本 (无生硬封闭边框)
 func (m Model) renderChatMessages() string {
 	cardWidth := max(60, m.width-6)
 	if len(m.messages) == 0 {
-		welcomeBox := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorBorder).
-			Background(colorSurface).
-			Padding(1, 2).
-			Width(cardWidth)
-
 		title := lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render("👋 欢迎使用 coustea 智能助手")
 		text := "  在下方输入框键入问题并按 Enter 即可开始多轮深度对话。\n" +
 			"  随时输入 /model 调出模型配置向导，输入 /clear 可清空上下文记忆。"
-		return welcomeBox.Render(title+"\n\n"+dimStyle.Render(text)) + "\n"
+		return fmt.Sprintf("\n%s\n%s\n\n", title, dimStyle.Render(text))
 	}
 
 	var sb strings.Builder
 	for i, msg := range m.messages {
 		switch msg.Sender {
 		case "You":
-			userBox := lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorBorder).
-				Background(colorUserSubtle).
-				Padding(0, 1).
-				Width(cardWidth)
-
 			badge := userBadgeStyle.Render(" 👤 You ")
-			card := fmt.Sprintf("%s\n%s", badge, lipgloss.NewStyle().Foreground(colorTextNormal).Render(msg.Content))
-			sb.WriteString(userBox.Render(card) + "\n\n")
+			lines := strings.Split(msg.Content, "\n")
+			var indented strings.Builder
+			for j, line := range lines {
+				if j > 0 {
+					indented.WriteString("\n")
+				}
+				indented.WriteString("  " + userPromptTextStyle.Render(line))
+			}
+			sb.WriteString(fmt.Sprintf("%s\n%s\n\n", badge, indented.String()))
 
 		case "System":
-			sysBox := lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorBorder).
-				Background(colorSurface).
-				Padding(0, 1).
-				Width(cardWidth)
-
 			badge := systemBadgeStyle.Render(" ℹ System ")
-			card := fmt.Sprintf("%s\n%s", badge, dimStyle.Render(msg.Content))
-			sb.WriteString(sysBox.Render(card) + "\n\n")
+			lines := strings.Split(msg.Content, "\n")
+			var indented strings.Builder
+			for j, line := range lines {
+				if j > 0 {
+					indented.WriteString("\n")
+				}
+				indented.WriteString("  " + dimStyle.Render(line))
+			}
+			sb.WriteString(fmt.Sprintf("%s\n%s\n\n", badge, indented.String()))
 
 		case "coustea":
-			// 1. 若有深度思考链，独立渲染高雅紫调思考气泡卡片
+			// 1. 若有深度思考链，独立优雅呈现
 			if msg.ReasoningContent != "" {
-				thoughtBox := lipgloss.NewStyle().
-					Border(lipgloss.RoundedBorder()).
-					BorderForeground(colorReasoning).
-					Background(colorReasoningSubtle).
-					Padding(0, 1).
-					Width(cardWidth)
-
-				title := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process)")
-				card := fmt.Sprintf("%s\n%s", title, reasoningTextStyle.Render(msg.ReasoningContent))
-				sb.WriteString(thoughtBox.Render(card) + "\n\n")
+				thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):")
+				thoughtText := reasoningTextStyle.Render(msg.ReasoningContent)
+				sb.WriteString(fmt.Sprintf("  %s\n  %s\n\n", thoughtHeader, thoughtText))
 			}
 
-			// 2. 若有工具调用，按彩色结构化状态卡片渲染
+			// 2. 若有工具调用，彩色紧凑结构化呈现
 			for _, tc := range msg.ToolCalls {
 				var header string
-				var borderCol lipgloss.Color
 				if tc.Running {
-					header = toolRunningStyle.Render("⚙️ 正在执行工具: ") + toolHeaderStyle.Render(tc.Name)
-					borderCol = colorYellow
+					header = toolRunningStyle.Render("⚙️  正在执行工具: ") + toolHeaderStyle.Render(tc.Name)
 				} else if tc.IsError {
-					header = toolResultErrorStyle.Render("✖ 工具执行报错: ") + toolHeaderStyle.Render(tc.Name)
-					borderCol = colorRed
+					header = toolResultErrorStyle.Render("✖  工具执行报错: ") + toolHeaderStyle.Render(tc.Name)
 				} else {
-					header = toolResultSuccessStyle.Render("✔ 工具执行完成: ") + toolHeaderStyle.Render(tc.Name)
-					borderCol = colorGreen
+					header = toolResultSuccessStyle.Render("✔  工具执行完成: ") + toolHeaderStyle.Render(tc.Name)
 				}
 
 				var body strings.Builder
-				body.WriteString(header + "\n")
+				body.WriteString(fmt.Sprintf("  %s\n", header))
 
 				if tc.Arguments != "" && tc.Arguments != "{}" {
-					body.WriteString(fmt.Sprintf("  ↳ %s\n", toolSnippetStyle.Render("参数: "+tc.Arguments)))
+					body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("参数: "+tc.Arguments)))
 				}
 				if tc.Result != "" {
-					divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(20, cardWidth-6)))
-					body.WriteString(divider + "\n")
 					snippet := strings.TrimSpace(tc.Result)
 					lines := strings.Split(snippet, "\n")
 					if len(lines) > 4 {
-						snippet = strings.Join(lines[:4], "\n") + fmt.Sprintf("\n  ... (共 %d 行，其余已折叠)", len(lines))
+						snippet = strings.Join(lines[:4], "\n") + fmt.Sprintf("\n    ... (共 %d 行，其余已折叠)", len(lines))
 					} else if len(snippet) > 240 {
 						snippet = snippet[:240] + "... (已截断)"
 					}
-					body.WriteString(fmt.Sprintf("  ↳ %s\n", toolSnippetStyle.Render("结果: ")+snippet))
+					body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("结果: ")+snippet))
 				}
-
-				tcBox := lipgloss.NewStyle().
-					Border(lipgloss.RoundedBorder()).
-					BorderForeground(borderCol).
-					Background(colorSurface).
-					Padding(0, 1).
-					Width(cardWidth)
-
-				sb.WriteString(tcBox.Render(body.String()) + "\n\n")
+				sb.WriteString(body.String() + "\n")
 			}
 
-			// 3. 最终回复文本气泡卡片：流式输出时打字光标实时闪烁，完成后渲染富文本 Markdown
+			// 3. 回复正文：完全释放 Markdown 富文本能力，通透自然排版
 			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1 && len(msg.ToolCalls) == 0 && msg.ReasoningContent == "") {
-				asstBox := lipgloss.NewStyle().
-					Border(lipgloss.RoundedBorder()).
-					BorderForeground(colorBrand).
-					Background(colorSurface).
-					Padding(0, 1).
-					Width(cardWidth)
-
 				header := assistantBadgeStyle.Render(" 🤖 coustea ")
 				var bodyText string
 				if msg.Content != "" {
 					if m.isGenerating && i == len(m.messages)-1 {
-						// 实时流式生成中：文本增量 + 显式珊瑚色打字块光标
 						bodyText = msg.Content + lipgloss.NewStyle().Foreground(colorBrand).Render(" ▊")
 					} else {
-						// 已生成完毕：Glamour 富文本 Markdown 排版（高亮代码块、标题色彩、列表缩进）
-						bodyText = renderMarkdown(msg.Content, cardWidth-4)
+						bodyText = renderMarkdown(msg.Content, cardWidth)
 					}
 				} else {
 					bodyText = m.spinner.View() + dimStyle.Render(" 正在思考中...")
 				}
 
+				usageText := ""
 				if msg.Usage != nil && msg.Usage.TotalTokens > 0 {
-					divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(20, cardWidth-6)))
-					usageText := tokenBadgeStyle.Render(fmt.Sprintf("📊 Token 用量: %d (输入 %d / 输出 %d)",
+					usageText = "\n  " + tokenBadgeStyle.Render(fmt.Sprintf("📊 Token 用量: %d (输入 %d / 输出 %d)",
 						msg.Usage.TotalTokens, msg.Usage.PromptTokens, msg.Usage.CompletionTokens))
-					bodyText += "\n" + divider + "\n" + usageText
 				}
 
-				card := fmt.Sprintf("%s\n%s", header, bodyText)
-				sb.WriteString(asstBox.Render(card) + "\n\n")
+				sb.WriteString(fmt.Sprintf("%s\n%s%s\n\n", header, bodyText, usageText))
 			}
 
 		default:
@@ -458,7 +461,7 @@ func (m Model) viewChat() string {
 		s.WriteString(m.renderChatMessages() + "\n\n")
 	}
 
-	// 3. 运行状态栏 (就绪/思考中/工具执行中)
+	// 3. 运行状态栏 (Spinner / 就绪 / 视口滚动百分比)
 	s.WriteString(m.renderStatusBar())
 
 	// 4. 若有挂起的权限审批，高亮呈现权限提示卡片
@@ -466,11 +469,8 @@ func (m Model) viewChat() string {
 		s.WriteString(m.renderPermissionCard() + "\n\n")
 	}
 
-	// 5. 底部输入框（Claude Code 质感输入框，外包圆角边框）
-	s.WriteString(m.renderInputBox() + "\n\n")
-
-	// 6. 底部快捷栏提示
-	s.WriteString(m.renderFooterBar())
+	// 5. 底部高亮交互驾驶舱 (Command Dock: 整合输入框、模式状态、当前模型与按键操作)
+	s.WriteString(m.renderInputBox() + "\n")
 
 	return s.String()
 }
