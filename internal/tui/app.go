@@ -24,6 +24,7 @@ const (
 	stateInputAPIKey                           // 状态 3: 输入/修改 API Key
 	stateInputModel                            // 状态 4: 输入自定义模型名称并保存
 	stateChat                                  // 状态 5: 主聊天页面（在 chat.go 中处理）
+	stateTraceInspector                        // 状态 6: 终端全量 JSON 追踪看板（在 inspector.go 中处理）
 )
 
 // agentStreamEventMsg 封装来自 Agent 的单次纯数据流式事件
@@ -80,6 +81,12 @@ type Model struct {
 	spinner        spinner.Model
 	activeToolName string
 
+	// 状态 6: 终端全量 JSON 追踪审计看板 (在 inspector.go 中处理)
+	traceEvents     []agent.TraceEvent
+	traceCursor     int
+	traceViewport   viewport.Model
+	traceFocusRight bool
+
 	// 终端宽高适配
 	width  int
 	height int
@@ -107,7 +114,7 @@ func NewModel(ag agent.Agent) Model {
 	// 3. 聊天输入框 (Claude Code 风格)
 	chatInput := textinput.New()
 	chatInput.Prompt = promptPrefixStyle.Render("❯ ")
-	chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+	chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 	chatInput.CharLimit = 2000
 	chatInput.Width = 70
 
@@ -203,7 +210,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.isGenerating = false
 				m.activeToolName = ""
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				m.chatInput.Focus()
 				if len(m.messages) > 0 {
 					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
@@ -223,6 +230,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			}
 
+		case tea.KeyCtrlL:
+			// Ctrl+L 快捷键呼出全量执行链路与 JSON 追踪看板
+			if m.state == stateTraceInspector {
+				m.state = stateChat
+				m.chatInput.Focus()
+				return m, nil
+			}
+			return m.openTraceInspector(), nil
+
 		case tea.KeyEsc:
 			// 若在生成中按 Esc，同样支持快速中断当前生成
 			if m.isGenerating {
@@ -232,7 +248,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.isGenerating = false
 				m.activeToolName = ""
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				m.chatInput.Focus()
 				if len(m.messages) > 0 {
 					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
@@ -278,7 +294,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages[lastIdx].Content += fmt.Sprintf("\n[出错: %s]", errMsg)
 			m.isGenerating = false
 			m.activeToolName = ""
-			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
 			if m.viewportReady {
 				m.viewport.SetContent(m.renderChatMessages())
@@ -289,7 +305,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case protocol.EventDone:
 			m.isGenerating = false
 			m.activeToolName = ""
-			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
 			if msg.event.Usage != nil && msg.event.Usage.TotalTokens > 0 {
 				m.messages[lastIdx].Usage = msg.event.Usage
@@ -389,6 +405,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateInputModel(msg)
 	case stateChat:
 		return m.updateChat(msg)
+	case stateTraceInspector:
+		return m.updateTraceInspector(msg)
 	default:
 		return m, nil
 	}
@@ -407,6 +425,8 @@ func (m Model) View() string {
 		return m.viewInputModel()
 	case stateChat:
 		return m.viewChat()
+	case stateTraceInspector:
+		return m.viewTraceInspector()
 	default:
 		return "未知界面状态"
 	}

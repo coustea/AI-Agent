@@ -4,7 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
+	"my-agent/internal/agent"
 	"my-agent/internal/protocol"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -140,6 +142,33 @@ func (m *mockTestAgent) MemoryCount() int {
 }
 
 func (m *mockTestAgent) WorkDir() string { return "/mock/workdir" }
+
+func (m *mockTestAgent) Traces() []agent.TraceEvent {
+	return []agent.TraceEvent{
+		{
+			Step:      -1,
+			Type:      "turn_start",
+			Title:     "👤 用户提问 · 模拟轮次",
+			Timestamp: time.Now(),
+			Payload: map[string]any{
+				"turn_id": "turn_mock_123",
+				"prompt":  "查看项目文件",
+			},
+		},
+		{
+			Step:      0,
+			Type:      "llm_req",
+			Title:     "Step 0 · 📤 LLM 请求上下文",
+			Timestamp: time.Now(),
+			Payload: map[string]any{
+				"model": "deepseek-reasoner",
+				"messages": []protocol.Message{
+					{Role: protocol.RoleUser, Content: "查看项目文件"},
+				},
+			},
+		},
+	}
+}
 
 func TestTUIFlow(t *testing.T) {
 	ag := newMockAgent()
@@ -774,5 +803,69 @@ func TestTUI_UnreadyAgent_GuidesToConfiguration(t *testing.T) {
 	}
 	if m.isGenerating {
 		t.Fatalf("expected generation to stay idle for unready agent")
+	}
+}
+
+func TestTUI_TraceInspector_Flow(t *testing.T) {
+	ag := newMockAgent()
+	m := NewModel(ag)
+	m.width = 100
+	m.height = 30
+
+	// 1. 输入 /log 进入追踪审计看板
+	m.chatInput.SetValue("/log")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateTraceInspector {
+		t.Fatalf("expected stateTraceInspector after /log, got %v", m.state)
+	}
+
+	// 2. 验证渲染视图包含看板标题与 JSON 关键字段
+	view := m.View()
+	if !strings.Contains(view, "全系统执行链路与详细 JSON 追踪看板") {
+		t.Errorf("expected view to contain trace inspector header, got:\n%s", view)
+	}
+	if !strings.Contains(view, "turn_mock_123") {
+		t.Errorf("expected view to contain first event's JSON text, got:\n%s", view)
+	}
+
+	// 3. 向下移动光标至下一个事件 (Step 0)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mIntf.(Model)
+	if m.traceCursor != 1 {
+		t.Errorf("expected traceCursor to be 1, got %d", m.traceCursor)
+	}
+	view = m.View()
+	if !strings.Contains(view, "deepseek-reasoner") {
+		t.Errorf("expected view to update to second event JSON, got:\n%s", view)
+	}
+
+	// 4. 按 Tab 切换焦点到右侧 JSON 视口
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mIntf.(Model)
+	if !m.traceFocusRight {
+		t.Errorf("expected traceFocusRight to be true after Tab")
+	}
+
+	// 5. 按 Esc 返回主对话页面
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mIntf.(Model)
+	if m.state != stateChat {
+		t.Fatalf("expected stateChat after Esc, got %v", m.state)
+	}
+
+	// 6. 测试 Ctrl+L 快捷键一键唤出看板
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	m = mIntf.(Model)
+	if m.state != stateTraceInspector {
+		t.Fatalf("expected stateTraceInspector after Ctrl+L, got %v", m.state)
+	}
+
+	// 7. 在看板中按 q 返回
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = mIntf.(Model)
+	if m.state != stateChat {
+		t.Fatalf("expected stateChat after q, got %v", m.state)
 	}
 }

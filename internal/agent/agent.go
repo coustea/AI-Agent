@@ -44,6 +44,9 @@ type Agent interface {
 
 	// WorkDir 获取当前绑定的工作目录
 	WorkDir() string
+
+	// Traces 返回当前/最近一轮对话的完整详细结构化追踪事件切片
+	Traces() []TraceEvent
 }
 
 // CoreAgent 是基于 Harness 思想驱动 ReAct 循环与状态机管理的运行核心
@@ -168,6 +171,18 @@ func (a *CoreAgent) MemoryCount() int {
 	a.mu.RUnlock()
 	bundle := memory.LoadBundle(wd)
 	return len(bundle.GlobalFiles) + len(bundle.ProjectFiles)
+}
+
+// Traces 返回当前/最近一轮对话由日志中间件捕获的全量结构化追踪事件
+func (a *CoreAgent) Traces() []TraceEvent {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	for _, h := range a.hooks {
+		if lm, ok := h.(*LoggingMiddleware); ok {
+			return lm.Traces()
+		}
+	}
+	return nil
 }
 
 // TotalUsage 获取当前实例累计消耗的总 Token 用量

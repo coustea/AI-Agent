@@ -129,7 +129,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.agent.Config().HasAPIKey {
 				m.messages[len(m.messages)-1].Content = "[未配置可用模型] 请先输入 /model 配置 API Key 或设置环境变量 (DEEPSEEK_API_KEY / GEMINI_API_KEY)。"
 				m.isGenerating = false
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -144,7 +144,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel = nil
 				m.messages[len(m.messages)-1].Content = fmt.Sprintf("[请求失败: %v]", err)
 				m.isGenerating = false
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -290,10 +290,12 @@ func (m Model) renderInputBox() string {
 		item := func(key, desc string) string {
 			return fmt.Sprintf("%s %s", keycapPillStyle.Render(key), dimStyle.Render(desc))
 		}
-		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s",
+		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s%s%s",
 			item("Enter", "发送"),
 			sep,
 			item("PgUp/PgDn", "翻页"),
+			sep,
+			item("/log", "JSON追踪"),
 			sep,
 			item("/model", "切换模型"),
 			sep,

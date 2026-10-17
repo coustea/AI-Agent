@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,18 +15,18 @@ import (
 
 // LoggingMiddleware 是基于 Hook 思想实现的透明可观测性日志中间件。
 // 它通过监听 Agent 生命周期的全量 Trace 数据，将每一轮对话中的：
-// 1. 用户输入
-// 2. 发送给大模型的上下文与可用工具
-// 3. 大模型返回的思考链 (ReasoningContent) 与回复 (Content)
-// 4. 工具调用的参数与执行结果 (ToolCall & ToolResult)
-// 5. Token 消耗统计与总耗时
-// 实时结构化写入 .coustea/logs/latest.md（供开发者在 IDE 中实时查看）以及追加归档到 .coustea/logs/agent.log。
+// 1. 用户输入 (User Prompt)
+// 2. 发送给大模型的完整上下文与可用工具参数 Schema (ChatRequest)
+// 3. 大模型返回的原始思考链 (ReasoningContent) 与回复 (Content)
+// 4. 工具调用的精确参数与执行结果 (ToolCall & ToolResult)
+// 5. Token 消耗统计与总耗时 (Usage & Summary)
+// 实时结构化收集为 []TraceEvent，并以 100% 原始 JSON 写入 .coustea/logs/latest.json 与追加归档到 .coustea/logs/agent.jsonl。
 type LoggingMiddleware struct {
-	mu       sync.Mutex
-	logDir   string
-	latestMD string
-	logFile  string
-	turnBuf  strings.Builder
+	mu         sync.RWMutex
+	logDir     string
+	latestJSON string
+	jsonlFile  string
+	events     []TraceEvent
 }
 
 // NewLoggingMiddleware 构造日志中间件实例
@@ -35,173 +36,213 @@ func NewLoggingMiddleware(workDir string) *LoggingMiddleware {
 	}
 	dir := filepath.Join(workDir, ".coustea", "logs")
 	return &LoggingMiddleware{
-		logDir:   dir,
-		latestMD: filepath.Join(dir, "latest.md"),
-		logFile:  filepath.Join(dir, "agent.log"),
+		logDir:     dir,
+		latestJSON: filepath.Join(dir, "latest.json"),
+		jsonlFile:  filepath.Join(dir, "agent.jsonl"),
+		events:     make([]TraceEvent, 0),
 	}
+}
+
+// Traces 返回当前轮次已收集到的全部全量结构化追踪事件切片副本
+func (l *LoggingMiddleware) Traces() []TraceEvent {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return append([]TraceEvent(nil), l.events...)
 }
 
 func (l *LoggingMiddleware) ensureDirLocked() {
 	_ = os.MkdirAll(l.logDir, 0o755)
 }
 
-func (l *LoggingMiddleware) writeLatestLocked() {
+func (l *LoggingMiddleware) writeLatestJSONLocked() {
 	l.ensureDirLocked()
-	_ = os.WriteFile(l.latestMD, []byte(l.turnBuf.String()), 0o644)
+	data, err := json.MarshalIndent(l.events, "", "  ")
+	if err == nil {
+		_ = os.WriteFile(l.latestJSON, data, 0o644)
+	}
 }
 
-func (l *LoggingMiddleware) appendLogLocked(line string) {
+func (l *LoggingMiddleware) appendJSONLLocked(ev TraceEvent) {
 	l.ensureDirLocked()
-	f, err := os.OpenFile(l.logFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(l.jsonlFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
 	if err == nil {
 		defer f.Close()
-		_, _ = f.WriteString(line + "\n")
+		line, err := json.Marshal(ev)
+		if err == nil {
+			_, _ = f.WriteString(string(line) + "\n")
+		}
 	}
+}
+
+func (l *LoggingMiddleware) recordEvent(ev TraceEvent) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	l.events = append(l.events, ev)
+	l.writeLatestJSONLocked()
+	l.appendJSONLLocked(ev)
 }
 
 // OnTurnStart 单轮交互开始
 func (l *LoggingMiddleware) OnTurnStart(ctx context.Context, turnID string, prompt string) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
+	l.events = make([]TraceEvent, 0)
+	l.mu.Unlock()
 
-	l.turnBuf.Reset()
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	l.turnBuf.WriteString("# 🚀 Coustea Agent Execution Trace\n\n")
-	l.turnBuf.WriteString(fmt.Sprintf("- **Turn ID**: `%s`\n", turnID))
-	l.turnBuf.WriteString(fmt.Sprintf("- **Time**: `%s`\n", nowStr))
-	l.turnBuf.WriteString(fmt.Sprintf("- **User Prompt**: `%s`\n\n", prompt))
-	l.turnBuf.WriteString("---\n\n")
-	l.writeLatestLocked()
-
-	l.appendLogLocked(fmt.Sprintf("[%s] [TURN START] id=%s prompt=%q", nowStr, turnID, prompt))
+	l.recordEvent(TraceEvent{
+		Step:      -1,
+		Type:      "turn_start",
+		Title:     "👤 用户提问 · 新轮次开启",
+		Timestamp: time.Now(),
+		Payload: map[string]any{
+			"turn_id":   turnID,
+			"prompt":    prompt,
+			"timestamp": time.Now().Format(time.RFC3339),
+		},
+	})
 }
 
 // OnLLMRequest 每步发起大模型调用前
 func (l *LoggingMiddleware) OnLLMRequest(ctx context.Context, req *LLMRequestTrace) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.turnBuf.WriteString(fmt.Sprintf("## 🔁 Step %d: LLM Reasoning & Decision\n\n", req.Step))
-	l.turnBuf.WriteString("### 1. Request Context\n")
-	if req.Provider != "" || req.ModelName != "" {
-		l.turnBuf.WriteString(fmt.Sprintf("- **Provider / Model**: `%s` • `%s`\n", req.Provider, req.ModelName))
-	}
-	l.turnBuf.WriteString(fmt.Sprintf("- **Context Messages**: %d messages\n", len(req.Messages)))
-	if len(req.Tools) > 0 {
-		names := make([]string, 0, len(req.Tools))
-		for _, t := range req.Tools {
-			names = append(names, t.Name)
-		}
-		l.turnBuf.WriteString(fmt.Sprintf("- **Available Tools**: `[%s]`\n", strings.Join(names, ", ")))
-	}
-	l.turnBuf.WriteString("\n")
-	l.writeLatestLocked()
-
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	l.appendLogLocked(fmt.Sprintf("[%s] [LLM REQ] step=%d provider=%s model=%s messages=%d", nowStr, req.Step, req.Provider, req.ModelName, len(req.Messages)))
+	l.recordEvent(TraceEvent{
+		Step:      req.Step,
+		Type:      "llm_req",
+		Title:     fmt.Sprintf("Step %d · 📤 LLM 请求上下文 (%s • %s)", req.Step, req.Provider, req.ModelName),
+		Timestamp: req.Timestamp,
+		Payload: map[string]any{
+			"step":          req.Step,
+			"provider":      req.Provider,
+			"model":         req.ModelName,
+			"system_prompt": req.SystemPrompt,
+			"messages":      req.Messages,
+			"tools":         req.Tools,
+		},
+	})
 }
 
 // OnLLMResponse 大模型决策返回完毕后
 func (l *LoggingMiddleware) OnLLMResponse(ctx context.Context, resp *LLMResponseTrace) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-
-	if resp.ReasoningContent != "" {
-		l.turnBuf.WriteString("### 2. LLM Raw Thinking Process (思考链)\n")
-		lines := strings.Split(strings.TrimSpace(resp.ReasoningContent), "\n")
-		for _, line := range lines {
-			l.turnBuf.WriteString("> " + line + "\n")
+	var toolCallsParsed []map[string]any
+	for _, tc := range resp.ToolCalls {
+		tcItem := map[string]any{
+			"id":            tc.ID,
+			"name":          tc.Name,
+			"raw_arguments": tc.Arguments,
 		}
-		l.turnBuf.WriteString("\n")
+		var parsedArgs any
+		if err := json.Unmarshal([]byte(tc.Arguments), &parsedArgs); err == nil {
+			tcItem["arguments"] = parsedArgs
+		}
+		toolCallsParsed = append(toolCallsParsed, tcItem)
 	}
 
-	if len(resp.ToolCalls) > 0 {
-		l.turnBuf.WriteString("### 3. LLM Decision (Assistant Output)\n")
-		if resp.Reply != "" {
-			l.turnBuf.WriteString(fmt.Sprintf("- **Direct Reply**: %s\n", resp.Reply))
-		} else {
-			l.turnBuf.WriteString("- **Direct Reply**: *(none, decided to invoke tool)*\n")
-		}
-		l.turnBuf.WriteString("- **Tool Calls**:\n")
-		for _, tc := range resp.ToolCalls {
-			l.turnBuf.WriteString(fmt.Sprintf("  - `%s` (id: `%s`) with arguments: `%s`\n", tc.Name, tc.ID, tc.Arguments))
-		}
-		l.turnBuf.WriteString("\n")
+	respPayload := map[string]any{
+		"step":              resp.Step,
+		"duration_ms":       resp.Duration.Milliseconds(),
+		"reply":             resp.Reply,
+		"reasoning_content": resp.ReasoningContent,
+		"tool_calls":        toolCallsParsed,
+		"usage":             resp.Usage,
+	}
+	if resp.Error != nil {
+		respPayload["error"] = resp.Error.Error()
+	}
+
+	title := fmt.Sprintf("Step %d · 📥 LLM 决策回复", resp.Step)
+	if resp.ReasoningContent != "" && len(resp.ToolCalls) > 0 {
+		title = fmt.Sprintf("Step %d · 💭 思考链推演并调用 %d 个工具", resp.Step, len(resp.ToolCalls))
+	} else if len(resp.ToolCalls) > 0 {
+		title = fmt.Sprintf("Step %d · ⚡ 发起 %d 个工具调用", resp.Step, len(resp.ToolCalls))
 	} else if resp.Reply != "" {
-		l.turnBuf.WriteString("### 3. LLM Final Output\n\n")
-		l.turnBuf.WriteString(resp.Reply + "\n\n")
+		title = fmt.Sprintf("Step %d · 💬 大模型生成最终回答", resp.Step)
 	}
 
-	if resp.Usage != nil && resp.Usage.TotalTokens > 0 {
-		l.turnBuf.WriteString(fmt.Sprintf("- **Step Usage**: %d tokens (Prompt: %d, Completion: %d)\n\n",
-			resp.Usage.TotalTokens, resp.Usage.PromptTokens, resp.Usage.CompletionTokens))
-	}
-	l.writeLatestLocked()
-
-	toolCallsCount := len(resp.ToolCalls)
-	totalTokens := 0
-	if resp.Usage != nil {
-		totalTokens = resp.Usage.TotalTokens
-	}
-	l.appendLogLocked(fmt.Sprintf("[%s] [LLM RESP] step=%d duration=%s tokens=%d tool_calls=%d",
-		nowStr, resp.Step, resp.Duration.Round(time.Millisecond), totalTokens, toolCallsCount))
+	l.recordEvent(TraceEvent{
+		Step:      resp.Step,
+		Type:      "llm_resp",
+		Title:     title,
+		Timestamp: time.Now(),
+		Duration:  resp.Duration,
+		Payload:   respPayload,
+	})
 }
 
 // OnToolStart 工具调用开始前
 func (l *LoggingMiddleware) OnToolStart(ctx context.Context, step int, call protocol.ToolCall) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	var parsedArgs any
+	if err := json.Unmarshal([]byte(call.Arguments), &parsedArgs); err != nil {
+		parsedArgs = call.Arguments
+	}
 
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	l.appendLogLocked(fmt.Sprintf("[%s] [TOOL START] step=%d name=%s id=%s", nowStr, step, call.Name, call.ID))
+	l.recordEvent(TraceEvent{
+		Step:      step,
+		Type:      "tool_start",
+		Title:     fmt.Sprintf("Step %d · ⚙️ 开始调用工具: %s", step, call.Name),
+		Timestamp: time.Now(),
+		Payload: map[string]any{
+			"step":         step,
+			"tool_call_id": call.ID,
+			"tool_name":    call.Name,
+			"arguments":    parsedArgs,
+		},
+	})
 }
 
 // OnToolEnd 工具调用执行完毕后
 func (l *LoggingMiddleware) OnToolEnd(ctx context.Context, trace *ToolTrace) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.turnBuf.WriteString(fmt.Sprintf("### 4. Tool Execution: `%s`\n\n", trace.Call.Name))
-	l.turnBuf.WriteString(fmt.Sprintf("- **Call ID**: `%s`\n", trace.Call.ID))
-	l.turnBuf.WriteString(fmt.Sprintf("- **Duration**: `%s` | ", trace.Duration.Round(time.Millisecond)))
-	if trace.Result.IsError {
-		l.turnBuf.WriteString("**Status**: `❌ Error`\n")
-	} else {
-		l.turnBuf.WriteString("**Status**: `✔ Success`\n")
+	var parsedArgs any
+	if err := json.Unmarshal([]byte(trace.Call.Arguments), &parsedArgs); err != nil {
+		parsedArgs = trace.Call.Arguments
 	}
-	l.turnBuf.WriteString("- **Output**:\n```\n" + trace.Result.Content + "\n```\n\n")
-	l.writeLatestLocked()
 
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	l.appendLogLocked(fmt.Sprintf("[%s] [TOOL END] step=%d name=%s id=%s duration=%s is_error=%v",
-		nowStr, trace.Step, trace.Call.Name, trace.Call.ID, trace.Duration.Round(time.Millisecond), trace.Result.IsError))
+	statusText := "✔ 成功"
+	if trace.Result.IsError {
+		statusText = "❌ 异常"
+	}
+
+	l.recordEvent(TraceEvent{
+		Step:      trace.Step,
+		Type:      "tool_end",
+		Title:     fmt.Sprintf("Step %d · 🔧 工具执行结果: %s (%s)", trace.Step, trace.Call.Name, statusText),
+		Timestamp: trace.Timestamp,
+		Duration:  trace.Duration,
+		Payload: map[string]any{
+			"step":         trace.Step,
+			"tool_call_id": trace.Call.ID,
+			"tool_name":    trace.Call.Name,
+			"arguments":    parsedArgs,
+			"duration_ms":  trace.Duration.Milliseconds(),
+			"is_error":     trace.Result.IsError,
+			"output":       trace.Result.Content,
+		},
+	})
 }
 
 // OnTurnEnd 单轮交互完整收敛结束
 func (l *LoggingMiddleware) OnTurnEnd(ctx context.Context, summary *TurnSummaryTrace) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-
-	l.turnBuf.WriteString("---\n\n")
-	l.turnBuf.WriteString("## 🏁 Turn Summary\n\n")
-	l.turnBuf.WriteString(fmt.Sprintf("- **Total Steps**: %d steps\n", summary.TotalSteps))
-	l.turnBuf.WriteString(fmt.Sprintf("- **Total Tokens**: %d (Prompt: %d, Completion: %d)\n",
-		summary.TotalUsage.TotalTokens, summary.TotalUsage.PromptTokens, summary.TotalUsage.CompletionTokens))
-	l.turnBuf.WriteString(fmt.Sprintf("- **Total Duration**: %s\n", summary.Duration.Round(time.Millisecond)))
-	if summary.Success {
-		l.turnBuf.WriteString("- **Status**: `✔ Completed Successfully`\n\n")
-	} else {
-		errMsg := "Unknown"
-		if summary.Error != nil {
-			errMsg = summary.Error.Error()
-		}
-		l.turnBuf.WriteString(fmt.Sprintf("- **Status**: `❌ Failed: %s`\n\n", errMsg))
+	status := "completed"
+	if !summary.Success {
+		status = "failed"
 	}
-	l.writeLatestLocked()
+	var errStr string
+	if summary.Error != nil {
+		errStr = summary.Error.Error()
+	}
 
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
-	l.appendLogLocked(fmt.Sprintf("[%s] [TURN END] id=%s steps=%d tokens=%d duration=%s success=%v",
-		nowStr, summary.TurnID, summary.TotalSteps, summary.TotalUsage.TotalTokens, summary.Duration.Round(time.Millisecond), summary.Success))
+	l.recordEvent(TraceEvent{
+		Step:      -1,
+		Type:      "turn_end",
+		Title:     fmt.Sprintf("🏁 轮次收敛总结 (%d 步, %d tokens, %v)", summary.TotalSteps, summary.TotalUsage.TotalTokens, summary.Duration.Round(time.Millisecond)),
+		Timestamp: time.Now(),
+		Duration:  summary.Duration,
+		Payload: map[string]any{
+			"turn_id":     summary.TurnID,
+			"prompt":      summary.Prompt,
+			"total_steps": summary.TotalSteps,
+			"total_usage": summary.TotalUsage,
+			"duration_ms": summary.Duration.Milliseconds(),
+			"status":      status,
+			"error":       errStr,
+		},
+	})
 }

@@ -42,5 +42,12 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 		return newM, cmd, true
 	}
 
+	// 3. 全系统结构化 JSON 追踪审计看板指令
+	if trimmed == "/log" || trimmed == "/trace" {
+		m.chatInput.Reset()
+		newM := m.openTraceInspector()
+		return newM, nil, true
+	}
+
 	return m, nil, false
 }

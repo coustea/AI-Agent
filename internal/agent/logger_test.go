@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,7 +14,7 @@ import (
 	"my-agent/internal/tool"
 )
 
-// TestLoggingMiddleware_FullLifecycle 验证完整 ReAct 循环（思考链、工具调用、回复、用量汇总）被透明记录并落盘
+// TestLoggingMiddleware_FullLifecycle 验证完整 ReAct 循环被透明记录为 100% 原始 JSON 并落盘
 func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -70,77 +71,75 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	}
 
 	// 排空事件通道
-	for ev := range stream {
-		_ = ev
+	for range stream {
 	}
 
-	// 1. 验证 latest.md 内容排版与关键要素
-	latestPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.md")
-	mdBytes, err := os.ReadFile(latestPath)
-	if err != nil {
-		t.Fatalf("failed to read latest.md: %v", err)
-	}
-	md := string(mdBytes)
-
-	expectedSnippets := []string{
-		"# 🚀 Coustea Agent Execution Trace",
-		"What is the host and port in config?",
-		"## 🔁 Step 0: LLM Reasoning & Decision",
-		"### 2. LLM Raw Thinking Process (思考链)",
-		"> I need to read the config file first.",
-		"> Then I can answer the user.",
-		"### 3. LLM Decision (Assistant Output)",
-		"`read_file` (id: `call_test_1`) with arguments: `{\"path\": \"config.yaml\"}`",
-		"### 4. Tool Execution: `read_file`",
-		"- **Call ID**: `call_test_1`",
-		"**Status**: `✔ Success`",
-		"host: 127.0.0.1",
-		"## 🔁 Step 1: LLM Reasoning & Decision",
-		"The host is 127.0.0.1 and port is 8080.",
-		"## 🏁 Turn Summary",
-		"- **Total Steps**: 2 steps",
-		"- **Total Tokens**: 300 (Prompt: 250, Completion: 50)",
-		"- **Status**: `✔ Completed Successfully`",
+	// 1. 验证内核 Traces() 方法返回的内存数据完整性
+	traces := ag.Traces()
+	if len(traces) == 0 {
+		t.Fatalf("expected non-empty traces from ag.Traces()")
 	}
 
-	for _, snippet := range expectedSnippets {
-		if !strings.Contains(md, snippet) {
-			t.Errorf("expected latest.md to contain snippet:\n%s\n\nFull latest.md:\n%s", snippet, md)
+	// 验证包含必要事件类型
+	eventTypes := make(map[string]bool)
+	for _, ev := range traces {
+		eventTypes[ev.Type] = true
+		// 验证每个事件的 PrettyJSON 可以成功生成且非空
+		pj := ev.PrettyJSON()
+		if len(pj) == 0 {
+			t.Errorf("empty PrettyJSON for event: %v", ev.Title)
+		}
+	}
+	expectedTypes := []string{"turn_start", "llm_req", "llm_resp", "tool_start", "tool_end", "turn_end"}
+	for _, et := range expectedTypes {
+		if !eventTypes[et] {
+			t.Errorf("missing expected event type %q in Traces()", et)
 		}
 	}
 
-	// 2. 验证 agent.log 追加流
-	logPath := filepath.Join(tmpDir, ".coustea", "logs", "agent.log")
-	logBytes, err := os.ReadFile(logPath)
+	// 2. 验证 latest.json 是合法、完整的 JSON 数组
+	latestJSONPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.json")
+	jsonBytes, err := os.ReadFile(latestJSONPath)
 	if err != nil {
-		t.Fatalf("failed to read agent.log: %v", err)
-	}
-	logStr := string(logBytes)
-
-	logSnippets := []string{
-		"[TURN START]",
-		"prompt=\"What is the host and port in config?\"",
-		"[LLM REQ] step=0",
-		"[LLM RESP] step=0",
-		"tool_calls=1",
-		"[TOOL START] step=0 name=read_file id=call_test_1",
-		"[TOOL END] step=0 name=read_file id=call_test_1",
-		"[LLM REQ] step=1",
-		"[LLM RESP] step=1",
-		"[TURN END]",
-		"steps=2 tokens=300",
-		"success=true",
+		t.Fatalf("failed to read latest.json: %v", err)
 	}
 
-	for _, s := range logSnippets {
-		if !strings.Contains(logStr, s) {
-			t.Errorf("expected agent.log to contain snippet %q, got:\n%s", s, logStr)
+	var loadedEvents []TraceEvent
+	if err := json.Unmarshal(jsonBytes, &loadedEvents); err != nil {
+		t.Fatalf("latest.json is not valid JSON array: %v", err)
+	}
+	if len(loadedEvents) != len(traces) {
+		t.Errorf("expected %d events in latest.json, got %d", len(traces), len(loadedEvents))
+	}
+
+	// 3. 验证 agent.jsonl 逐行有效
+	jsonlPath := filepath.Join(tmpDir, ".coustea", "logs", "agent.jsonl")
+	f, err := os.Open(jsonlPath)
+	if err != nil {
+		t.Fatalf("failed to read agent.jsonl: %v", err)
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	lineCount := 0
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
 		}
+		var ev TraceEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Errorf("invalid json line in agent.jsonl: %v", err)
+		}
+		lineCount++
+	}
+	if lineCount == 0 {
+		t.Errorf("expected lines in agent.jsonl, got 0")
 	}
 }
 
-// TestLoggingMiddleware_MultipleTurns_LatestOverwritten_LogAppended 验证 latest.md 每轮覆盖，而 agent.log 持续追加
-func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_LogAppended(t *testing.T) {
+// TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended 验证 latest.json 覆盖最新轮次，而 agent.jsonl 持续追加
+func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	mockGW := newMockGateway("Reply 1", "Reply 2")
@@ -157,10 +156,10 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_LogAppended(t *testin
 	for range stream1 {
 	}
 
-	latestPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.md")
-	md1, _ := os.ReadFile(latestPath)
-	if !strings.Contains(string(md1), "Question One") {
-		t.Errorf("expected latest.md to contain Turn 1 question")
+	latestPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.json")
+	data1, _ := os.ReadFile(latestPath)
+	if !strings.Contains(string(data1), "Question One") {
+		t.Errorf("expected latest.json to contain Turn 1 question")
 	}
 
 	// 第二轮对话
@@ -168,29 +167,35 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_LogAppended(t *testin
 	for range stream2 {
 	}
 
-	md2, _ := os.ReadFile(latestPath)
-	md2Str := string(md2)
-	if !strings.Contains(md2Str, "Question Two") {
-		t.Errorf("expected latest.md to contain Turn 2 question")
-	}
-	if strings.Contains(md2Str, "Question One") {
-		t.Errorf("expected latest.md to NOT contain Turn 1 question after being overwritten by Turn 2")
+	data2, _ := os.ReadFile(latestPath)
+	var eventsTurn2 []TraceEvent
+	if err := json.Unmarshal(data2, &eventsTurn2); err != nil {
+		t.Fatalf("failed to unmarshal latest.json after turn 2: %v", err)
 	}
 
-	// 验证 agent.log 同时保留两轮对话
-	logPath := filepath.Join(tmpDir, ".coustea", "logs", "agent.log")
-	logBytes, _ := os.ReadFile(logPath)
-	logStr := string(logBytes)
-	if !strings.Contains(logStr, "Question One") || !strings.Contains(logStr, "Question Two") {
-		t.Errorf("expected agent.log to append and retain both turns, got:\n%s", logStr)
+	if len(eventsTurn2) == 0 {
+		t.Fatalf("latest.json empty after turn 2")
+	}
+
+	// 验证第一项和最后一项为 Turn 2
+	startPayload := eventsTurn2[0].Payload.(map[string]any)
+	if startPayload["prompt"] != "Question Two" {
+		t.Errorf("expected latest.json turn_start prompt to be 'Question Two', got %v", startPayload["prompt"])
+	}
+
+	// 验证 agent.jsonl 同时保留两轮对话
+	jsonlPath := filepath.Join(tmpDir, ".coustea", "logs", "agent.jsonl")
+	jsonlBytes, _ := os.ReadFile(jsonlPath)
+	jsonlStr := string(jsonlBytes)
+	if !strings.Contains(jsonlStr, "Question One") || !strings.Contains(jsonlStr, "Question Two") {
+		t.Errorf("expected agent.jsonl to retain both turns, got:\n%s", jsonlStr)
 	}
 }
 
-// TestLoggingMiddleware_ErrorTurn 验证错误或熔断轮次被清晰记录
+// TestLoggingMiddleware_ErrorTurn 验证错误或熔断轮次被清晰记录为结构化 JSON
 func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// 模拟网关返回严重错误
 	gwErr := &toolCallStepGateway{
 		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
 			func(req *protocol.ChatRequest) []protocol.ChatResponse {
@@ -210,21 +215,13 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 	for range stream {
 	}
 
-	latestPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.md")
-	mdBytes, err := os.ReadFile(latestPath)
+	latestPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.json")
+	data, err := os.ReadFile(latestPath)
 	if err != nil {
-		t.Fatalf("failed to read latest.md: %v", err)
+		t.Fatalf("failed to read latest.json: %v", err)
 	}
-	md := string(mdBytes)
-
-	if !strings.Contains(md, "❌ Failed: upstream service unavailable 503") {
-		t.Errorf("expected latest.md to record failure status, got:\n%s", md)
-	}
-
-	logPath := filepath.Join(tmpDir, ".coustea", "logs", "agent.log")
-	logBytes, _ := os.ReadFile(logPath)
-	logStr := string(logBytes)
-	if !strings.Contains(logStr, "success=false") {
-		t.Errorf("expected agent.log to record success=false, got:\n%s", logStr)
+	str := string(data)
+	if !strings.Contains(str, "upstream service unavailable 503") {
+		t.Errorf("expected latest.json to record error, got:\n%s", str)
 	}
 }

@@ -2,10 +2,31 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"my-agent/internal/protocol"
 )
+
+// TraceEvent 记录全系统单次结构化执行链路事件，支持 100% 原始数据格式化为完整 JSON
+type TraceEvent struct {
+	Step      int           `json:"step"`               // 所属 ReAct 步骤 (-1 为全局轮次事件)
+	Type      string        `json:"type"`               // "turn_start", "llm_req", "llm_resp", "tool_start", "tool_end", "turn_end"
+	Title     string        `json:"title"`              // 列表摘要标题
+	Timestamp time.Time     `json:"timestamp"`          // 记录时间戳
+	Duration  time.Duration `json:"duration,omitempty"` // 耗时 (若有)
+	Payload   any           `json:"payload"`            // 原始结构体数据对象 (如 ChatRequest, ToolCall, ToolResult, Usage)
+}
+
+// PrettyJSON 将 Payload 格式化为 2 格缩进的完整 JSON 字符串，保留所有真实字段与参数
+func (e TraceEvent) PrettyJSON() string {
+	b, err := json.MarshalIndent(e.Payload, "", "  ")
+	if err != nil {
+		return fmt.Sprintf("{\n  \"error\": %q\n}", err.Error())
+	}
+	return string(b)
+}
 
 // ============================================================================
 // Agent 生命周期切面钩子与追踪数据契约 (零侵入可观测性中间件)
