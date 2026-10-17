@@ -65,9 +65,9 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 		t.Fatalf("NewAgent failed: %v", err)
 	}
 
-	stream, err := ag.StreamRun(context.Background(), "What is the host and port in config?")
+	stream, err := ag.Run(context.Background(), "What is the host and port in config?")
 	if err != nil {
-		t.Fatalf("StreamRun failed: %v", err)
+		t.Fatalf("Run failed: %v", err)
 	}
 
 	// 排空事件通道
@@ -152,7 +152,7 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *test
 	}
 
 	// 第一轮对话
-	stream1, _ := ag.StreamRun(context.Background(), "Question One")
+	stream1, _ := ag.Run(context.Background(), "Question One")
 	for range stream1 {
 	}
 
@@ -163,7 +163,7 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *test
 	}
 
 	// 第二轮对话
-	stream2, _ := ag.StreamRun(context.Background(), "Question Two")
+	stream2, _ := ag.Run(context.Background(), "Question Two")
 	for range stream2 {
 	}
 
@@ -211,7 +211,7 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 		WithLoggingMiddleware(tmpDir),
 	)
 
-	stream, _ := ag.StreamRun(context.Background(), "Will Fail")
+	stream, _ := ag.Run(context.Background(), "Will Fail")
 	for range stream {
 	}
 

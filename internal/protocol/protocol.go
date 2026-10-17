@@ -216,8 +216,8 @@ type TurnSummaryTrace struct {
 
 // Agent 定义智能体调用的对外核心契约，任何前端（TUI、桌面端、无头宿主）直接依赖该接口
 type Agent interface {
-	// StreamRun 开启单轮对话交互，返回原生支持序列化的纯数据事件流
-	StreamRun(ctx context.Context, prompt string) (<-chan Event, error)
+	// Run 开启单轮对话交互，返回原生支持序列化的纯数据事件流
+	Run(ctx context.Context, prompt string) (<-chan Event, error)
 
 	// RespondPermission 异步审批权限请求（基于 requestID 关联）
 	RespondPermission(requestID string, decision Decision) error

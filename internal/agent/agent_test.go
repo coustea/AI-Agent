@@ -94,9 +94,9 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 	defer cancel()
 
 	// ========== 第一轮对话 ==========
-	stream1, err := ag.StreamRun(ctx, "Hello, my name is Coustea.")
+	stream1, err := ag.Run(ctx, "Hello, my name is Coustea.")
 	if err != nil {
-		t.Fatalf("turn 1 StreamRun failed: %v", err)
+		t.Fatalf("turn 1 Run failed: %v", err)
 	}
 
 	var text1 strings.Builder
@@ -139,9 +139,9 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 	}
 
 	// ========== 第二轮对话 ==========
-	stream2, err := ag.StreamRun(ctx, "What is my name?")
+	stream2, err := ag.Run(ctx, "What is my name?")
 	if err != nil {
-		t.Fatalf("turn 2 StreamRun failed: %v", err)
+		t.Fatalf("turn 2 Run failed: %v", err)
 	}
 
 	var text2 strings.Builder
@@ -192,7 +192,7 @@ func TestCoreAgent_Reset(t *testing.T) {
 	mockGW := newMockGateway("Hi")
 	ag, _ := NewAgent(mockGW)
 
-	stream, _ := ag.StreamRun(context.Background(), "Msg")
+	stream, _ := ag.Run(context.Background(), "Msg")
 	for range stream {
 	}
 	if len(ag.History()) == 0 {
@@ -210,7 +210,7 @@ func TestCoreAgent_SetGateway(t *testing.T) {
 	mockGW1 := newMockGateway("Reply 1")
 	ag, _ := NewAgent(mockGW1)
 
-	stream1, _ := ag.StreamRun(context.Background(), "Question 1")
+	stream1, _ := ag.Run(context.Background(), "Question 1")
 	for range stream1 {
 	}
 	if len(ag.History()) != 2 {
@@ -227,9 +227,9 @@ func TestCoreAgent_SetGateway(t *testing.T) {
 	}
 
 	// 运行新对话由新网关承接
-	stream, err := ag.StreamRun(context.Background(), "Question 2")
+	stream, err := ag.Run(context.Background(), "Question 2")
 	if err != nil {
-		t.Fatalf("StreamRun failed after SetGateway: %v", err)
+		t.Fatalf("Run failed after SetGateway: %v", err)
 	}
 
 	var text strings.Builder
@@ -255,13 +255,13 @@ func TestCoreAgent_ConcurrentRun_Lock(t *testing.T) {
 	ctx := context.Background()
 
 	// 启动第一个轮次
-	stream1, err := ag.StreamRun(ctx, "Turn 1")
+	stream1, err := ag.Run(ctx, "Turn 1")
 	if err != nil {
 		t.Fatalf("first run failed: %v", err)
 	}
 
 	// 立即尝试启动第二个轮次，应该被拒绝
-	_, err2 := ag.StreamRun(ctx, "Turn 2")
+	_, err2 := ag.Run(ctx, "Turn 2")
 	if err2 != ErrRunInProgress {
 		t.Errorf("expected ErrRunInProgress, got: %v", err2)
 	}
@@ -272,7 +272,7 @@ func TestCoreAgent_ConcurrentRun_Lock(t *testing.T) {
 	}
 
 	// 第一个轮次结束后，再次启动应该成功
-	stream3, err3 := ag.StreamRun(ctx, "Turn 3")
+	stream3, err3 := ag.Run(ctx, "Turn 3")
 	if err3 != nil {
 		t.Errorf("expected run to succeed after completion, got: %v", err3)
 	}
@@ -305,12 +305,12 @@ func TestCoreAgent_Validation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected nil gateway to assemble an unready agent, got: %v", err)
 	}
-	if _, err := unready.StreamRun(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "no model gateway") {
-		t.Errorf("expected unready agent StreamRun to fail with configuration guidance, got: %v", err)
+	if _, err := unready.Run(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "no model gateway") {
+		t.Errorf("expected unready agent Run to fail with configuration guidance, got: %v", err)
 	}
 
 	ag, _ := NewAgent(&mockGateway{}, WithMemory(memory.NewSlidingWindowMemory(10)), WithMaxSteps(5))
-	_, err = ag.StreamRun(context.Background(), "   ")
+	_, err = ag.Run(context.Background(), "   ")
 	if !errors.Is(err, ErrEmptyPrompt) {
 		t.Errorf("expected ErrEmptyPrompt, got: %v", err)
 	}
@@ -332,8 +332,8 @@ func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 	if ag.Config().HasAPIKey {
 		t.Errorf("expected remote provider without key to be unready")
 	}
-	if _, err := ag.StreamRun(context.Background(), "hello"); err == nil {
-		t.Errorf("expected StreamRun to fail before gateway is attached")
+	if _, err := ag.Run(context.Background(), "hello"); err == nil {
+		t.Errorf("expected Run to fail before gateway is attached")
 	}
 
 	// 模拟 /model 向导补齐密钥：热装网关后恢复就绪
@@ -446,9 +446,9 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 		t.Fatalf("failed to create agent: %v", err)
 	}
 
-	stream, err := ag.StreamRun(context.Background(), "Please calculate 2 + 3")
+	stream, err := ag.Run(context.Background(), "Please calculate 2 + 3")
 	if err != nil {
-		t.Fatalf("StreamRun failed: %v", err)
+		t.Fatalf("Run failed: %v", err)
 	}
 
 	var events []protocol.Event
@@ -523,9 +523,9 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 	}
 
 	ag, _ := NewAgent(gw, WithTools(reg))
-	stream, err := ag.StreamRun(context.Background(), "Calculate -5 + 3")
+	stream, err := ag.Run(context.Background(), "Calculate -5 + 3")
 	if err != nil {
-		t.Fatalf("StreamRun failed: %v", err)
+		t.Fatalf("Run failed: %v", err)
 	}
 
 	var errorObsSeen bool
@@ -589,9 +589,9 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 
 	// 限制最多 2 步
 	ag, _ := NewAgent(gw, WithTools(reg), WithMaxSteps(2))
-	stream, err := ag.StreamRun(context.Background(), "Loop forever")
+	stream, err := ag.Run(context.Background(), "Loop forever")
 	if err != nil {
-		t.Fatalf("StreamRun failed: %v", err)
+		t.Fatalf("Run failed: %v", err)
 	}
 
 	var maxStepsErrSeen bool
@@ -676,9 +676,9 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	ctx := context.Background()
 
 	// 第一轮：记忆库此时尚无该内容
-	stream1, err := ag.StreamRun(ctx, "first turn")
+	stream1, err := ag.Run(ctx, "first turn")
 	if err != nil {
-		t.Fatalf("turn 1 StreamRun failed: %v", err)
+		t.Fatalf("turn 1 Run failed: %v", err)
 	}
 	for range stream1 {
 	}
@@ -690,9 +690,9 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	}
 
 	// 第二轮：新沉淀的记忆应已出现在本轮系统提示词中
-	stream2, err := ag.StreamRun(ctx, "second turn")
+	stream2, err := ag.Run(ctx, "second turn")
 	if err != nil {
-		t.Fatalf("turn 2 StreamRun failed: %v", err)
+		t.Fatalf("turn 2 Run failed: %v", err)
 	}
 	for range stream2 {
 	}
@@ -768,9 +768,9 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 		t.Fatalf("failed to create agent: %v", err)
 	}
 
-	stream, err := ag.StreamRun(context.Background(), "please clean up the disk")
+	stream, err := ag.Run(context.Background(), "please clean up the disk")
 	if err != nil {
-		t.Fatalf("StreamRun failed: %v", err)
+		t.Fatalf("Run failed: %v", err)
 	}
 	for range stream {
 	}
@@ -831,9 +831,9 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 	}
 
 	// 场景 A: 默认路由到 Gemini 模型调用
-	streamA, err := ag.StreamRun(context.Background(), "Hello")
+	streamA, err := ag.Run(context.Background(), "Hello")
 	if err != nil {
-		t.Fatalf("StreamRun to Gemini failed: %v", err)
+		t.Fatalf("Run to Gemini failed: %v", err)
 	}
 	var replyA strings.Builder
 	for ev := range streamA {
@@ -847,9 +847,9 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 
 	// 场景 B: 运行时切换网关默认分配为 DeepSeek，验证深度思考与回答
 	router.SetActive("deepseek")
-	streamB, err := ag.StreamRun(context.Background(), "Think carefully")
+	streamB, err := ag.Run(context.Background(), "Think carefully")
 	if err != nil {
-		t.Fatalf("StreamRun to DeepSeek failed: %v", err)
+		t.Fatalf("Run to DeepSeek failed: %v", err)
 	}
 	var replyB strings.Builder
 	for ev := range streamB {
@@ -902,9 +902,9 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 		t.Fatalf("failed to create agent: %v", err)
 	}
 
-	streamAllow, err := agAllow.StreamRun(context.Background(), "Run test command")
+	streamAllow, err := agAllow.Run(context.Background(), "Run test command")
 	if err != nil {
-		t.Fatalf("StreamRun failed: %v", err)
+		t.Fatalf("Run failed: %v", err)
 	}
 
 	permissionPromptReceived := false
@@ -959,9 +959,9 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 		t.Fatalf("failed to create agent: %v", err)
 	}
 
-	streamDeny, err := agDeny.StreamRun(context.Background(), "Run command to deny")
+	streamDeny, err := agDeny.Run(context.Background(), "Run command to deny")
 	if err != nil {
-		t.Fatalf("StreamRun failed: %v", err)
+		t.Fatalf("Run failed: %v", err)
 	}
 
 	permissionDenyReceived := false

@@ -69,7 +69,7 @@ func newMockAgent(replies ...string) *mockTestAgent {
 	}
 }
 
-func (m *mockTestAgent) StreamRun(ctx context.Context, prompt string) (<-chan protocol.Event, error) {
+func (m *mockTestAgent) Run(ctx context.Context, prompt string) (<-chan protocol.Event, error) {
 	ch := make(chan protocol.Event, 4)
 	reply := "Default reply"
 	if m.replyIdx < len(m.replies) {

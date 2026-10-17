@@ -137,7 +137,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			ctx, cancel := context.WithCancel(context.Background())
 			m.cancel = cancel
-			ch, err := m.agent.StreamRun(ctx, text)
+			ch, err := m.agent.Run(ctx, text)
 			if err != nil {
 				m.cancel = nil
 				m.messages[len(m.messages)-1].Content = fmt.Sprintf("[请求失败: %v]", err)

@@ -10,8 +10,8 @@ import (
 	"my-agent/internal/protocol"
 )
 
-// StreamRun 驱动 Harness 核心 ReAct 状态循环，返回纯数据事件流
-func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protocol.Event, error) {
+// Run 严格实现 protocol.Agent 契约，负责轮次生命周期、并发互斥与事件通道管理
+func (a *CoreAgent) Run(ctx context.Context, prompt string) (<-chan protocol.Event, error) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" {
 		return nil, ErrEmptyPrompt
@@ -46,80 +46,85 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 			a.mu.Unlock()
 		}()
 
-		// 1. 将事件通道装载入 context，供装配期挂载的横切钩子（如权限交互审批桥）回传事件
-		ctx = withEventSink(ctx, outCh)
-
-		turnID := fmt.Sprintf("turn_%d", time.Now().UnixNano())
-		turnStart := time.Now()
-		a.dispatchTurnStart(ctx, turnID, prompt)
-
-		var (
-			totalTurnUsage protocol.Usage
-			turnErr        error
-			stepCount      int
-		)
-
-		defer func() {
-			a.dispatchTurnEnd(ctx, &protocol.TurnSummaryTrace{
-				TurnID:     turnID,
-				Prompt:     prompt,
-				TotalSteps: stepCount,
-				TotalUsage: totalTurnUsage,
-				Duration:   time.Since(turnStart),
-				Success:    turnErr == nil,
-				Error:      turnErr,
-			})
-		}()
-
-		// 2. 将用户问题存入 Memory
-		userMsg := protocol.Message{Role: protocol.RoleUser, Content: prompt}
-		_ = a.memory.Append(ctx, userMsg)
-
-		// 3. 每用户轮次开始时动态合成系统提示词
-		a.mu.RLock()
-		sysPrompt := composeSystemPrompt(a.persona, a.workDir)
-		a.mu.RUnlock()
-
-		// 4. 驱动 Harness 循环 (最多迭代 maxSteps 步)
-		for step := 0; step < a.maxSteps; step++ {
-			stepCount = step + 1
-			select {
-			case <-ctx.Done():
-				turnErr = ctx.Err()
-				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: ctx.Err().Error()})
-				return
-			default:
-			}
-
-			stepUsage, finished, err := a.runStep(ctx, outCh, sysPrompt, step)
-			if err != nil {
-				turnErr = err
-				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
-				return
-			}
-			totalTurnUsage.Add(stepUsage)
-			if finished {
-				sendEvent(ctx, outCh, protocol.Event{
-					Type:  protocol.EventDone,
-					Usage: &totalTurnUsage,
-				})
-				return
-			}
-		}
-
-		turnErr = ErrMaxSteps
-		sendEvent(ctx, outCh, protocol.Event{
-			Type:  protocol.EventError,
-			Error: ErrMaxSteps.Error(),
-		})
+		a.agentLoop(ctx, prompt, outCh)
 	}()
 
 	return outCh, nil
 }
 
-// runStep 执行单步 ReAct：一次流式模型调用，必要时执行其发起的工具调用。
-// 返回本步 token 用量；finished 为 true 表示模型已给出最终答复，循环应终止。
-func (a *CoreAgent) runStep(ctx context.Context, eventCh chan<- protocol.Event, sysPrompt string, step int) (stepUsage protocol.Usage, finished bool, err error) {
+// agentLoop 是驱动 Agent 运转的核心循环：负责单轮生命周期追踪、用户输入归档、动态提示词组装与 ReAct 状态机推进
+func (a *CoreAgent) agentLoop(ctx context.Context, prompt string, eventCh chan<- protocol.Event) {
+	// 1. 将事件通道装载入 context，供装配期挂载的横切钩子（如权限交互审批桥）回传事件
+	ctx = withEventSink(ctx, eventCh)
+
+	turnID := fmt.Sprintf("turn_%d", time.Now().UnixNano())
+	turnStart := time.Now()
+	a.dispatchTurnStart(ctx, turnID, prompt)
+
+	var (
+		totalTurnUsage protocol.Usage
+		turnErr        error
+		stepCount      int
+	)
+
+	defer func() {
+		a.dispatchTurnEnd(ctx, &protocol.TurnSummaryTrace{
+			TurnID:     turnID,
+			Prompt:     prompt,
+			TotalSteps: stepCount,
+			TotalUsage: totalTurnUsage,
+			Duration:   time.Since(turnStart),
+			Success:    turnErr == nil,
+			Error:      turnErr,
+		})
+	}()
+
+	// 2. 将用户问题存入 Memory
+	userMsg := protocol.Message{Role: protocol.RoleUser, Content: prompt}
+	_ = a.memory.Append(ctx, userMsg)
+
+	// 3. 每用户轮次开始时动态合成系统提示词
+	a.mu.RLock()
+	sysPrompt := composeSystemPrompt(a.persona, a.workDir)
+	a.mu.RUnlock()
+
+	// 4. 驱动 ReAct 循环 (最多迭代 maxSteps 步)
+	for step := 0; step < a.maxSteps; step++ {
+		stepCount = step + 1
+		select {
+		case <-ctx.Done():
+			turnErr = ctx.Err()
+			sendEvent(ctx, eventCh, protocol.Event{Type: protocol.EventError, Error: ctx.Err().Error()})
+			return
+		default:
+		}
+
+		stepUsage, finished, err := a.executeStep(ctx, eventCh, sysPrompt, step)
+		if err != nil {
+			turnErr = err
+			sendEvent(ctx, eventCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
+			return
+		}
+		totalTurnUsage.Add(stepUsage)
+		if finished {
+			sendEvent(ctx, eventCh, protocol.Event{
+				Type:  protocol.EventDone,
+				Usage: &totalTurnUsage,
+			})
+			return
+		}
+	}
+
+	turnErr = ErrMaxSteps
+	sendEvent(ctx, eventCh, protocol.Event{
+		Type:  protocol.EventError,
+		Error: ErrMaxSteps.Error(),
+	})
+}
+
+// executeStep 执行单步 ReAct：调用一次流式大模型，解析思考过程与文本内容，并在有工具调用时驱动工具流水线。
+// 返回本步 token 用量；finished 为 true 表示模型已给出最终答复，无需继续迭代。
+func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Event, sysPrompt string, step int) (stepUsage protocol.Usage, finished bool, err error) {
 	a.mu.RLock()
 	var providerName, modelName string
 	if a.cfg != nil {
