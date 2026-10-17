@@ -19,10 +19,10 @@ func main() {
 		cfg = config.DefaultConfig()
 	}
 
-	ag, err := agent.NewFromConfig(cfg)
+	ag, err := agent.NewFromConfig(cfg, agent.WithLoggingMiddleware())
 	if err != nil {
 		// 配置语义无效（如未知厂商）时同样回退，保证前端始终获得可注入的内核
-		ag, err = agent.NewFromConfig(config.DefaultConfig())
+		ag, err = agent.NewFromConfig(config.DefaultConfig(), agent.WithLoggingMiddleware())
 	}
 	if err != nil {
 		fmt.Printf("coustea 内核装配失败: %v\n", err)

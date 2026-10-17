@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"my-agent/internal/config"
 	"my-agent/internal/gateway"
@@ -63,6 +64,7 @@ type CoreAgent struct {
 	persona      string
 	maxSteps     int
 	running      bool
+	hooks        []AgentHook
 	pendingMu    sync.Mutex
 	pendingPerms map[string]chan protocol.Decision
 	permSeq      uint64
@@ -170,6 +172,26 @@ func WithConfig(cfg *config.Config, cfgPath ...string) Option {
 		if len(cfgPath) > 0 && cfgPath[0] != "" {
 			a.cfgPath = cfgPath[0]
 		}
+	}
+}
+
+// WithHook 挂载自定义生命周期横切切面钩子 (审计、链路监控等)
+func WithHook(hook AgentHook) Option {
+	return func(a *CoreAgent) {
+		if hook != nil {
+			a.hooks = append(a.hooks, hook)
+		}
+	}
+}
+
+// WithLoggingMiddleware 为 Agent 一键挂载透明可观测性日志中间件
+func WithLoggingMiddleware(workDir ...string) Option {
+	return func(a *CoreAgent) {
+		dir := a.workDir
+		if len(workDir) > 0 && strings.TrimSpace(workDir[0]) != "" {
+			dir = strings.TrimSpace(workDir[0])
+		}
+		a.hooks = append(a.hooks, NewLoggingMiddleware(dir))
 	}
 }
 
@@ -422,6 +444,28 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 		// 1. 将事件通道装载入 context，供装配期挂载的横切钩子（如权限交互审批桥）回传事件
 		ctx = withEventSink(ctx, outCh)
 
+		turnID := fmt.Sprintf("turn_%d", time.Now().UnixNano())
+		turnStart := time.Now()
+		a.dispatchTurnStart(ctx, turnID, prompt)
+
+		var (
+			totalTurnUsage protocol.Usage
+			turnErr        error
+			stepCount      int
+		)
+
+		defer func() {
+			a.dispatchTurnEnd(ctx, &TurnSummaryTrace{
+				TurnID:     turnID,
+				Prompt:     prompt,
+				TotalSteps: stepCount,
+				TotalUsage: totalTurnUsage,
+				Duration:   time.Since(turnStart),
+				Success:    turnErr == nil,
+				Error:      turnErr,
+			})
+		}()
+
 		// 2. 将用户问题存入 Memory
 		userMsg := protocol.Message{Role: protocol.RoleUser, Content: prompt}
 		_ = a.memory.Append(ctx, userMsg)
@@ -431,19 +475,20 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 		sysPrompt := composeSystemPrompt(a.persona, a.workDir)
 		a.mu.RUnlock()
 
-		var totalTurnUsage protocol.Usage
-
 		// 4. 驱动 Harness 循环 (最多迭代 maxSteps 步)
 		for step := 0; step < a.maxSteps; step++ {
+			stepCount = step + 1
 			select {
 			case <-ctx.Done():
+				turnErr = ctx.Err()
 				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: ctx.Err().Error()})
 				return
 			default:
 			}
 
-			stepUsage, finished, err := a.runStep(ctx, outCh, sysPrompt)
+			stepUsage, finished, err := a.runStep(ctx, outCh, sysPrompt, step)
 			if err != nil {
+				turnErr = err
 				sendEvent(ctx, outCh, protocol.Event{Type: protocol.EventError, Error: err.Error()})
 				return
 			}
@@ -457,6 +502,7 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 			}
 		}
 
+		turnErr = ErrMaxSteps
 		sendEvent(ctx, outCh, protocol.Event{
 			Type:  protocol.EventError,
 			Error: ErrMaxSteps.Error(),
@@ -468,10 +514,15 @@ func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protoc
 
 // runStep 执行单步 ReAct：一次流式模型调用，必要时执行其发起的工具调用。
 // 返回本步 token 用量；finished 为 true 表示模型已给出最终答复，循环应终止。
-func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sysPrompt string) (protocol.Usage, bool, error) {
+func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sysPrompt string, step int) (protocol.Usage, bool, error) {
 	var stepUsage protocol.Usage
 
 	a.mu.RLock()
+	var providerName, modelName string
+	if a.cfg != nil {
+		providerName = string(a.cfg.Provider)
+		modelName = a.cfg.ModelName
+	}
 	gw := a.gw
 	toolDefs := a.tools.Definitions()
 	a.mu.RUnlock()
@@ -485,12 +536,29 @@ func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sy
 		return stepUsage, false, err
 	}
 
+	// 触发 OnLLMRequest 钩子
+	stepStart := time.Now()
+	a.dispatchLLMRequest(ctx, &LLMRequestTrace{
+		Step:         step,
+		Provider:     providerName,
+		ModelName:    modelName,
+		SystemPrompt: sysPrompt,
+		Messages:     reqMsgs,
+		Tools:        toolDefs,
+		Timestamp:    stepStart,
+	})
+
 	// 发起网关流式调用
 	stream, err := gw.ChatStream(ctx, &gateway.ChatRequest{
 		Messages: reqMsgs,
 		Tools:    toolDefs,
 	})
 	if err != nil {
+		a.dispatchLLMResponse(ctx, &LLMResponseTrace{
+			Step:     step,
+			Duration: time.Since(stepStart),
+			Error:    err,
+		})
 		return stepUsage, false, err
 	}
 
@@ -499,6 +567,11 @@ func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sy
 	for chunk := range stream {
 		if chunk.Err != nil {
 			// 流式异常回滚：本步 assistant 消息不入记忆
+			a.dispatchLLMResponse(ctx, &LLMResponseTrace{
+				Step:     step,
+				Duration: time.Since(stepStart),
+				Error:    chunk.Err,
+			})
 			return stepUsage, false, chunk.Err
 		}
 		if chunk.ReasoningContent != "" {
@@ -523,6 +596,16 @@ func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sy
 		}
 	}
 
+	// 触发 OnLLMResponse 钩子
+	a.dispatchLLMResponse(ctx, &LLMResponseTrace{
+		Step:             step,
+		Duration:         time.Since(stepStart),
+		Reply:            replyBuilder.String(),
+		ReasoningContent: reasoningBuilder.String(),
+		ToolCalls:        toolCalls,
+		Usage:            &stepUsage,
+	})
+
 	// 将模型本轮完整回复存入记忆
 	_ = a.memory.Append(ctx, protocol.Message{
 		Role:             protocol.RoleAssistant,
@@ -541,12 +624,24 @@ func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sy
 	tools := a.tools
 	a.mu.RUnlock()
 	for _, tc := range toolCalls {
+		a.dispatchToolStart(ctx, step, tc)
+
 		sendEvent(ctx, outCh, protocol.Event{
 			Type:     protocol.EventToolCallStart,
 			ToolCall: &tc,
 		})
 
+		toolStart := time.Now()
 		res := tools.Execute(ctx, tc)
+		toolDuration := time.Since(toolStart)
+
+		a.dispatchToolEnd(ctx, &ToolTrace{
+			Step:      step,
+			Call:      tc,
+			Result:    res,
+			Duration:  toolDuration,
+			Timestamp: toolStart,
+		})
 
 		sendEvent(ctx, outCh, protocol.Event{
 			Type:       protocol.EventToolCallResult,
@@ -560,6 +655,60 @@ func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sy
 	}
 
 	return stepUsage, false, nil
+}
+
+func (a *CoreAgent) dispatchTurnStart(ctx context.Context, turnID string, prompt string) {
+	a.mu.RLock()
+	hooks := a.hooks
+	a.mu.RUnlock()
+	for _, h := range hooks {
+		h.OnTurnStart(ctx, turnID, prompt)
+	}
+}
+
+func (a *CoreAgent) dispatchLLMRequest(ctx context.Context, req *LLMRequestTrace) {
+	a.mu.RLock()
+	hooks := a.hooks
+	a.mu.RUnlock()
+	for _, h := range hooks {
+		h.OnLLMRequest(ctx, req)
+	}
+}
+
+func (a *CoreAgent) dispatchLLMResponse(ctx context.Context, resp *LLMResponseTrace) {
+	a.mu.RLock()
+	hooks := a.hooks
+	a.mu.RUnlock()
+	for _, h := range hooks {
+		h.OnLLMResponse(ctx, resp)
+	}
+}
+
+func (a *CoreAgent) dispatchToolStart(ctx context.Context, step int, call protocol.ToolCall) {
+	a.mu.RLock()
+	hooks := a.hooks
+	a.mu.RUnlock()
+	for _, h := range hooks {
+		h.OnToolStart(ctx, step, call)
+	}
+}
+
+func (a *CoreAgent) dispatchToolEnd(ctx context.Context, trace *ToolTrace) {
+	a.mu.RLock()
+	hooks := a.hooks
+	a.mu.RUnlock()
+	for _, h := range hooks {
+		h.OnToolEnd(ctx, trace)
+	}
+}
+
+func (a *CoreAgent) dispatchTurnEnd(ctx context.Context, summary *TurnSummaryTrace) {
+	a.mu.RLock()
+	hooks := a.hooks
+	a.mu.RUnlock()
+	for _, h := range hooks {
+		h.OnTurnEnd(ctx, summary)
+	}
 }
 
 func sendEvent(ctx context.Context, ch chan<- protocol.Event, ev protocol.Event) bool {
