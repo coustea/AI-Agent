@@ -315,30 +315,6 @@ func (m Model) renderInputBox() string {
 		Render(dockContent)
 }
 
-// renderFooterBar 渲染底部快捷键提示胶囊（已集成于 Command Dock 中）
-func (m Model) renderFooterBar() string {
-	if m.pendingPerm != nil {
-		return permissionWarnStyle.Render("等待权限决策: [y] 允许单次  [a] 会话始终允许  [n/Esc] 阻断执行  [Ctrl+C] 退出")
-	}
-
-	sep := dimStyle.Render("  ")
-	item := func(key, desc string) string {
-		return fmt.Sprintf("%s %s", keycapPillStyle.Render(key), dimStyle.Render(desc))
-	}
-
-	return fmt.Sprintf(" %s%s%s%s%s%s%s%s%s\n",
-		item("Enter", "发送"),
-		sep,
-		item("PgUp/PgDn", "翻页滚动"),
-		sep,
-		item("/model", "切换模型"),
-		sep,
-		item("/clear", "清屏"),
-		sep,
-		item("Ctrl+C", "退出"),
-	)
-}
-
 // renderChatMessages 将所有历史消息格式化为适用于 Viewport 渲染的高质量通透呼吸文本 (无生硬封闭边框)
 func (m Model) renderChatMessages() string {
 	cardWidth := max(60, m.width-6)

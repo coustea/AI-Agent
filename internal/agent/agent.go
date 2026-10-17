@@ -549,7 +549,7 @@ func (a *CoreAgent) runStep(ctx context.Context, outCh chan<- protocol.Event, sy
 	})
 
 	// 发起网关流式调用
-	stream, err := gw.ChatStream(ctx, &gateway.ChatRequest{
+	stream, err := gw.ChatStream(ctx, &protocol.ChatRequest{
 		Messages: reqMsgs,
 		Tools:    toolDefs,
 	})

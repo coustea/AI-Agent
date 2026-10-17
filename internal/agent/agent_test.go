@@ -24,7 +24,7 @@ import (
 // mockGateway 用于测试 Agent 多轮对话与流式输出的测试桩
 type mockGateway struct {
 	mu       sync.Mutex
-	requests []*gateway.ChatRequest
+	requests []*protocol.ChatRequest
 	replies  []string
 	callIdx  int
 }
@@ -35,7 +35,7 @@ func newMockGateway(replies ...string) *mockGateway {
 	}
 }
 
-func (m *mockGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) (<-chan gateway.StreamChunk, error) {
+func (m *mockGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
 	m.mu.Lock()
 	m.requests = append(m.requests, req)
 	idx := m.callIdx
@@ -47,7 +47,7 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) 
 		reply = m.replies[idx]
 	}
 
-	ch := make(chan gateway.StreamChunk, 8)
+	ch := make(chan protocol.ChatResponse, 8)
 	go func() {
 		defer close(ch)
 
@@ -58,10 +58,10 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) 
 			if i < len(parts)-1 {
 				delta += " "
 			}
-			ch <- gateway.StreamChunk{Delta: delta}
+			ch <- protocol.ChatResponse{Delta: delta}
 		}
 
-		ch <- gateway.StreamChunk{
+		ch <- protocol.ChatResponse{
 			Done: true,
 			Usage: &protocol.Usage{
 				PromptTokens:     10,
@@ -284,12 +284,12 @@ type blockingGateway struct {
 	blockCh <-chan struct{}
 }
 
-func (b *blockingGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) (<-chan gateway.StreamChunk, error) {
-	ch := make(chan gateway.StreamChunk, 2)
+func (b *blockingGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
+	ch := make(chan protocol.ChatResponse, 2)
 	go func() {
 		defer close(ch)
 		<-b.blockCh
-		ch <- gateway.StreamChunk{Delta: "Done", Done: true}
+		ch <- protocol.ChatResponse{Delta: "Done", Done: true}
 	}()
 	return ch, nil
 }
@@ -347,17 +347,17 @@ func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 
 type toolCallStepGateway struct {
 	mu    sync.Mutex
-	steps []func(req *gateway.ChatRequest) []gateway.StreamChunk
+	steps []func(req *protocol.ChatRequest) []protocol.ChatResponse
 	calls int
 }
 
-func (m *toolCallStepGateway) ChatStream(ctx context.Context, req *gateway.ChatRequest) (<-chan gateway.StreamChunk, error) {
+func (m *toolCallStepGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
 	m.mu.Lock()
 	idx := m.calls
 	m.calls++
 	m.mu.Unlock()
 
-	ch := make(chan gateway.StreamChunk, 4)
+	ch := make(chan protocol.ChatResponse, 4)
 	go func() {
 		defer close(ch)
 		if idx < len(m.steps) {
@@ -407,13 +407,13 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 	reg := tool.NewRegistry(&mockAdderTool{})
 
 	gw := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
 			// Step 1: 模型返回工具调用
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
 				if len(req.Tools) != 1 || req.Tools[0].Name != "adder" {
 					t.Errorf("expected 1 tool 'adder' in request, got %v", req.Tools)
 				}
-				return []gateway.StreamChunk{
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{
@@ -427,13 +427,13 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 				}
 			},
 			// Step 2: 模型收到工具结果后生成最终文本答复
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
 				// 验证上下文历史中已经包含了 RoleTool
 				lastMsg := req.Messages[len(req.Messages)-1]
 				if lastMsg.Role != protocol.RoleTool || lastMsg.ToolResult == nil || lastMsg.ToolResult.IsError {
 					t.Errorf("expected successful RoleTool message, got: %+v", lastMsg)
 				}
-				return []gateway.StreamChunk{
+				return []protocol.ChatResponse{
 					{Delta: "The sum is 5."},
 					{Done: true},
 				}
@@ -492,10 +492,10 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 	reg := tool.NewRegistry(&mockAdderTool{})
 
 	gw := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
 			// Step 1: 模型传入非法负数参数触发工具报错
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{
@@ -509,12 +509,12 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 				}
 			},
 			// Step 2: 模型收到错误 Observation，进行自愈回答
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
 				lastMsg := req.Messages[len(req.Messages)-1]
 				if lastMsg.Role != protocol.RoleTool || lastMsg.ToolResult == nil || !lastMsg.ToolResult.IsError {
 					t.Errorf("expected RoleTool with IsError=true, got: %+v", lastMsg)
 				}
-				return []gateway.StreamChunk{
+				return []protocol.ChatResponse{
 					{Delta: "I cannot compute this because negative numbers are not supported."},
 					{Done: true},
 				}
@@ -553,9 +553,9 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 
 	// 模拟无限调用工具的模型
 	gw := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{ID: "c1", Name: "adder", Arguments: `{"a":1,"b":1}`},
@@ -564,8 +564,8 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 					},
 				}
 			},
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{ID: "c2", Name: "adder", Arguments: `{"a":1,"b":1}`},
@@ -574,8 +574,8 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 					},
 				}
 			},
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{ID: "c3", Name: "adder", Arguments: `{"a":1,"b":1}`},
@@ -698,7 +698,7 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	}
 
 	gw.mu.Lock()
-	reqs := append([]*gateway.ChatRequest(nil), gw.requests...)
+	reqs := append([]*protocol.ChatRequest(nil), gw.requests...)
 	gw.mu.Unlock()
 
 	if len(reqs) != 2 {
@@ -726,10 +726,10 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 // 破坏性 bash 命令被拦截、不会真正执行，且拒绝文案原样回灌给模型。
 func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 	gw := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
 			// Step 1: 模型请求执行破坏性命令
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{ID: "call_1", Name: "bash", Arguments: `{"command": "rm -rf /"}`},
@@ -739,15 +739,15 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 				}
 			},
 			// Step 2: 断言模型收到的是策略拒绝的精确文案，而非被泛化的「执行错误」
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
 				if len(req.Messages) == 0 {
 					t.Errorf("expected a non-empty message history")
-					return []gateway.StreamChunk{{Delta: "blocked"}, {Done: true}}
+					return []protocol.ChatResponse{{Delta: "blocked"}, {Done: true}}
 				}
 				last := req.Messages[len(req.Messages)-1]
 				if last.Role != protocol.RoleTool || last.ToolResult == nil {
 					t.Errorf("expected a RoleTool message, got %+v", last)
-					return []gateway.StreamChunk{{Delta: "blocked"}, {Done: true}}
+					return []protocol.ChatResponse{{Delta: "blocked"}, {Done: true}}
 				}
 				if !last.ToolResult.IsError {
 					t.Errorf("expected the blocked command to be reported as an error")
@@ -758,7 +758,7 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 				if strings.Contains(last.ToolResult.Content, "Tool execution error") {
 					t.Errorf("policy message was overwritten by the generic error text: %q", last.ToolResult.Content)
 				}
-				return []gateway.StreamChunk{{Delta: "Blocked."}, {Done: true}}
+				return []protocol.ChatResponse{{Delta: "Blocked."}, {Done: true}}
 			},
 		},
 	}
@@ -868,10 +868,10 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 
 	// 1. 测试允许流程 (AllowOnce)
 	gwAllow := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
 			// Step 1: 模型发起命令调用
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{ID: "call_bash_1", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'harness_approval_test'"}`},
@@ -881,7 +881,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				}
 			},
 			// Step 2: 模型接收到工具执行输出并生成最终回复
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
 				last := req.Messages[len(req.Messages)-1]
 				if last.Role != protocol.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
@@ -892,7 +892,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "harness_approval_test") {
 					t.Errorf("expected tool output to contain 'harness_approval_test', got: %s", last.ToolResult.Content)
 				}
-				return []gateway.StreamChunk{{Delta: "Done executed."}, {Done: true}}
+				return []protocol.ChatResponse{{Delta: "Done executed."}, {Done: true}}
 			},
 		},
 	}
@@ -925,10 +925,10 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 
 	// 2. 测试拒绝流程 (User Deny -> Error as Observation)
 	gwDeny := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
 			// Step 1: 模型发起命令调用
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{
 						ToolCalls: []protocol.ToolCall{
 							{ID: "call_bash_2", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'will_be_denied'"}`},
@@ -938,7 +938,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				}
 			},
 			// Step 2: 模型接收到人类拒绝的观察结果，完成自愈回复
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
 				last := req.Messages[len(req.Messages)-1]
 				if last.Role != protocol.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
@@ -949,7 +949,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "permission denied by user") {
 					t.Errorf("expected content to mention permission denied by user, got: %s", last.ToolResult.Content)
 				}
-				return []gateway.StreamChunk{{Delta: "Understood, command was cancelled by user."}, {Done: true}}
+				return []protocol.ChatResponse{{Delta: "Understood, command was cancelled by user."}, {Done: true}}
 			},
 		},
 	}

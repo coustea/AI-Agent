@@ -76,7 +76,7 @@ func (c *compatClient) endpoint() string {
 }
 
 // ChatStream 执行流式调用
-func (c *compatClient) ChatStream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
+func (c *compatClient) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
 	httpReq, err := buildHTTPRequest(ctx, c.endpoint(), c.model, req, true)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func (c *compatClient) ChatStream(ctx context.Context, req *ChatRequest) (<-chan
 		return nil, fmt.Errorf("%s: stream status %d: %s", c.name, resp.StatusCode, string(body))
 	}
 
-	out := make(chan StreamChunk, 32)
+	out := make(chan protocol.ChatResponse, 32)
 	go func() {
 		defer resp.Body.Close()
 		defer close(out)

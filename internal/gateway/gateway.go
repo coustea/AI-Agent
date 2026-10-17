@@ -15,16 +15,10 @@ var (
 	ErrEmptyMessages = errors.New("gateway: messages cannot be empty")
 )
 
-// ChatRequest 统一采用 protocol.ChatRequest
-type ChatRequest = protocol.ChatRequest
-
-// StreamChunk 统一采用 protocol.ChatResponse
-type StreamChunk = protocol.ChatResponse
-
 // Gateway 统一 AI 网关接口
 type Gateway interface {
-	// ChatStream 执行流式调用，逐个 chunk 返回生成内容
-	ChatStream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error)
+	// ChatStream 执行流式调用，逐个返回流式生成块与响应
+	ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error)
 
 	// TotalUsage 获取当前网关实例累计消耗的总 Token 用量
 	TotalUsage() protocol.Usage

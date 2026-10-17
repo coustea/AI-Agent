@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"my-agent/internal/gateway"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 )
@@ -30,9 +29,9 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	// Step 0: 思考并请求调用 read_file 工具
 	// Step 1: 思考并给出最终文本回复
 	gw := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{ReasoningContent: "I need to read the config file first.\nThen I can answer the user."},
 					{
 						ToolCalls: []protocol.ToolCall{
@@ -43,8 +42,8 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 					},
 				}
 			},
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{ReasoningContent: "I have received the config content.\nNow answering."},
 					{Delta: "The host is 127.0.0.1 and port is 8080."},
 					{
@@ -193,9 +192,9 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 
 	// 模拟网关返回严重错误
 	gwErr := &toolCallStepGateway{
-		steps: []func(req *gateway.ChatRequest) []gateway.StreamChunk{
-			func(req *gateway.ChatRequest) []gateway.StreamChunk {
-				return []gateway.StreamChunk{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
 					{Err: errors.New("upstream service unavailable 503")},
 				}
 			},

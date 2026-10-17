@@ -15,9 +15,8 @@ var (
 	colorUser       = lipgloss.Color("#38BDF8") // 用户输入与高亮 (Sky Blue)
 	colorUserSubtle = lipgloss.Color("#162938") // 用户卡片微暗底
 
-	colorReasoning       = lipgloss.Color("#A78BFA") // 思考链薰衣草紫 (Violet)
-	colorReasoningSubtle = lipgloss.Color("#231E33") // 思考链微暗底
-	colorReasoningText   = lipgloss.Color("#DDD6FE") // 思考链柔和高对比文本
+	colorReasoning     = lipgloss.Color("#A78BFA") // 思考链薰衣草紫 (Violet)
+	colorReasoningText = lipgloss.Color("#DDD6FE") // 思考链柔和高对比文本
 
 	colorGreen       = lipgloss.Color("#34D399") // 成功、激活与就绪 (Emerald)
 	colorGreenSubtle = lipgloss.Color("#132F23") // 成功微绿暗底
@@ -38,12 +37,6 @@ var (
 	colorTextNormal = lipgloss.Color("#E2E8F0") // 正文高对比度白灰
 	colorTextMuted  = lipgloss.Color("#94A3B8") // 辅助文本浅灰
 	colorDim        = lipgloss.Color("#64748B") // 弱化文本暗灰
-
-	// 兼容旧别名
-	colorCoral      = colorBrand
-	colorCoralLight = colorBrandLight
-	colorPurple     = colorReasoning
-	colorBgSubtle   = colorSurface
 
 	// ==========================================
 	// 2. 顶部 Header 状态栏样式
@@ -102,38 +95,16 @@ var (
 			Foreground(colorTextMuted).
 			Padding(0, 1)
 
-	userPrefixStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(colorUser)
-
-	assistantPrefixStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(colorBrand)
-
-	systemPrefixStyle = lipgloss.NewStyle().
-				Foreground(colorTextMuted)
-
 	dimStyle = lipgloss.NewStyle().
 			Foreground(colorTextMuted)
-
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(colorBrand)
 
 	promptPrefixStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(colorBrand)
 
 	// ==========================================
-	// 4. 可折叠深度思考链 (Reasoning Box)
+	// 4. 深度思考链样式
 	// ==========================================
-	reasoningBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder(), false, false, false, true).
-				BorderForeground(colorReasoning).
-				Background(colorReasoningSubtle).
-				Padding(0, 1).
-				Foreground(colorReasoningText)
-
 	reasoningTextStyle = lipgloss.NewStyle().
 				Foreground(colorReasoningText).
 				Italic(true)
@@ -145,12 +116,6 @@ var (
 	// ==========================================
 	// 5. 工具卡片与状态芯片样式
 	// ==========================================
-	toolCardBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorBorder).
-				Background(colorSurface).
-				Padding(0, 1)
-
 	toolHeaderStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(colorOrange)
@@ -173,12 +138,6 @@ var (
 	// ==========================================
 	// 6. 权限审批 Gate 3 交互卡片样式
 	// ==========================================
-	permissionBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorYellow).
-				Background(colorYellowSubtle).
-				Padding(0, 1)
-
 	permissionWarnStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(colorYellow)
@@ -204,11 +163,6 @@ var (
 	// ==========================================
 	// 7. 运行状态、滚动条与按键胶囊
 	// ==========================================
-	statusBarBoxStyle = lipgloss.NewStyle().
-				Background(colorSurface).
-				Foreground(colorTextNormal).
-				Padding(0, 1)
-
 	statusReadyStyle = lipgloss.NewStyle().
 				Foreground(colorGreen).
 				Bold(true)
@@ -216,13 +170,6 @@ var (
 	statusThinkingStyle = lipgloss.NewStyle().
 				Foreground(colorYellow).
 				Bold(true)
-
-	statusToolStyle = lipgloss.NewStyle().
-			Foreground(colorOrange).
-			Bold(true)
-
-	statusUnsetStyle = lipgloss.NewStyle().
-				Foreground(colorDim)
 
 	cursorStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -234,10 +181,6 @@ var (
 
 	footerStyle = lipgloss.NewStyle().
 			Foreground(colorTextMuted)
-
-	keycapStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(colorBrandLight)
 
 	keycapPillStyle = lipgloss.NewStyle().
 			Background(colorSurface).

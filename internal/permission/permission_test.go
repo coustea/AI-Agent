@@ -11,9 +11,9 @@ import (
 
 func TestPermission_Gate1_HardDeny(t *testing.T) {
 	approverCalled := false
-	approver := ApproverFunc(func(ctx context.Context, req Request) (Decision, error) {
+	approver := ApproverFunc(func(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
 		approverCalled = true
-		return DecisionAllowOnce, nil
+		return protocol.DecisionAllowOnce, nil
 	})
 
 	mgr := NewManager("/tmp/test-workspace", WithApprover(approver))
@@ -58,10 +58,10 @@ func TestPermission_Gate2_WorkspaceEscape(t *testing.T) {
 	tmpDir := t.TempDir()
 	workDir := filepath.Join(tmpDir, "project")
 
-	var lastReq Request
-	approver := ApproverFunc(func(ctx context.Context, req Request) (Decision, error) {
+	var lastReq protocol.PermissionRequest
+	approver := ApproverFunc(func(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
 		lastReq = req
-		return DecisionAllowOnce, nil
+		return protocol.DecisionAllowOnce, nil
 	})
 
 	mgr := NewManager(workDir, WithApprover(approver))
@@ -85,7 +85,7 @@ func TestPermission_Gate2_WorkspaceEscape(t *testing.T) {
 	}
 
 	// 2. 工作区内的常规只读文件，直接放行，无需调用 approver
-	lastReq = Request{}
+	lastReq = protocol.PermissionRequest{}
 	safeCall := protocol.ToolCall{
 		ID:        "tc-safe",
 		Name:      "read_file",
@@ -106,9 +106,9 @@ func TestPermission_Gate2_WorkspaceEscape(t *testing.T) {
 func TestPermission_Gate3_UserApproval_DenyAndSession(t *testing.T) {
 	tmpDir := t.TempDir()
 	callCount := 0
-	var nextDecision Decision = DecisionDeny
+	var nextDecision protocol.Decision = protocol.DecisionDeny
 
-	approver := ApproverFunc(func(ctx context.Context, req Request) (Decision, error) {
+	approver := ApproverFunc(func(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
 		callCount++
 		return nextDecision, nil
 	})
@@ -122,7 +122,7 @@ func TestPermission_Gate3_UserApproval_DenyAndSession(t *testing.T) {
 	}
 
 	// 1. 用户拒绝
-	nextDecision = DecisionDeny
+	nextDecision = protocol.DecisionDeny
 	allowed, reason, err := mgr.Evaluate(context.Background(), call)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -138,7 +138,7 @@ func TestPermission_Gate3_UserApproval_DenyAndSession(t *testing.T) {
 	}
 
 	// 2. 用户选择本次会话始终允许
-	nextDecision = DecisionAllowSession
+	nextDecision = protocol.DecisionAllowSession
 	allowed, _, err = mgr.Evaluate(context.Background(), call)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -184,9 +184,9 @@ func TestPermission_AutoApprove(t *testing.T) {
 
 func TestPermission_SafeCommands_AutoPass(t *testing.T) {
 	approverCalled := false
-	approver := ApproverFunc(func(ctx context.Context, req Request) (Decision, error) {
+	approver := ApproverFunc(func(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
 		approverCalled = true
-		return DecisionDeny, nil
+		return protocol.DecisionDeny, nil
 	})
 
 	mgr := NewManager(t.TempDir(), WithApprover(approver))
@@ -254,11 +254,11 @@ func TestPermission_DangerousCommands_Intercept(t *testing.T) {
 
 	for _, cmd := range dangerousCommands {
 		approverCalled := false
-		var interceptedReq Request
-		approver := ApproverFunc(func(ctx context.Context, req Request) (Decision, error) {
+		var interceptedReq protocol.PermissionRequest
+		approver := ApproverFunc(func(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
 			approverCalled = true
 			interceptedReq = req
-			return DecisionAllowOnce, nil
+			return protocol.DecisionAllowOnce, nil
 		})
 
 		mgr := NewManager(t.TempDir(), WithApprover(approver))

@@ -46,7 +46,7 @@ func (r *Router) SetActive(name string) {
 }
 
 // Route 根据请求参数智能分配具体的模型网关
-func (r *Router) Route(req *ChatRequest) (Gateway, error) {
+func (r *Router) Route(req *protocol.ChatRequest) (Gateway, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -93,7 +93,7 @@ func (r *Router) Route(req *ChatRequest) (Gateway, error) {
 }
 
 // ChatStream 经过网关进行模型分配后执行流式对话
-func (r *Router) ChatStream(ctx context.Context, req *ChatRequest) (<-chan StreamChunk, error) {
+func (r *Router) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
 	gw, err := r.Route(req)
 	if err != nil {
 		return nil, err

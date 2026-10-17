@@ -147,7 +147,7 @@ func chatURL(base string) string {
 }
 
 // buildHTTPRequest 构建 OpenAI 协议的 HTTP 请求体
-func buildHTTPRequest(ctx context.Context, url string, model string, req *ChatRequest, stream bool) (*http.Request, error) {
+func buildHTTPRequest(ctx context.Context, url string, model string, req *protocol.ChatRequest, stream bool) (*http.Request, error) {
 	if req == nil || len(req.Messages) == 0 {
 		return nil, ErrEmptyMessages
 	}
@@ -193,7 +193,7 @@ type tcBuilder struct {
 }
 
 // readSSE 读取 SSE 流并向 channel 逐块发送，返回累计 Usage
-func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) protocol.Usage {
+func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResponse) protocol.Usage {
 	scanner := bufio.NewReader(reader)
 	var turnUsage protocol.Usage
 	tcMap := make(map[int]*tcBuilder)
@@ -204,7 +204,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) prot
 			if err == io.EOF {
 				break
 			}
-			sendChunk(ctx, out, StreamChunk{Err: fmt.Errorf("gateway: stream read: %w", err)})
+			sendChunk(ctx, out, protocol.ChatResponse{Err: fmt.Errorf("gateway: stream read: %w", err)})
 			return turnUsage
 		}
 
@@ -240,10 +240,10 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) prot
 
 		choice := chunk.Choices[0]
 		if choice.Delta.ReasoningContent != "" {
-			sendChunk(ctx, out, StreamChunk{ReasoningContent: choice.Delta.ReasoningContent})
+			sendChunk(ctx, out, protocol.ChatResponse{ReasoningContent: choice.Delta.ReasoningContent})
 		}
 		if choice.Delta.Content != "" {
-			if !sendChunk(ctx, out, StreamChunk{Delta: choice.Delta.Content}) {
+			if !sendChunk(ctx, out, protocol.ChatResponse{Delta: choice.Delta.Content}) {
 				return turnUsage
 			}
 		}
@@ -287,7 +287,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) prot
 		}
 	}
 
-	sendChunk(ctx, out, StreamChunk{
+	sendChunk(ctx, out, protocol.ChatResponse{
 		Done:      true,
 		ToolCalls: finalTCs,
 		Usage:     &turnUsage,
@@ -296,8 +296,8 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- StreamChunk) prot
 	return turnUsage
 }
 
-// sendChunk 安全地向 channel 发送一个 StreamChunk
-func sendChunk(ctx context.Context, ch chan<- StreamChunk, chunk StreamChunk) bool {
+// sendChunk 安全地向 channel 发送一个 protocol.ChatResponse
+func sendChunk(ctx context.Context, ch chan<- protocol.ChatResponse, chunk protocol.ChatResponse) bool {
 	select {
 	case ch <- chunk:
 		return true

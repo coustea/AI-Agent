@@ -106,7 +106,7 @@ func TestSpark_Chat(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	stream, err := gw.ChatStream(ctx, &ChatRequest{
+	stream, err := gw.ChatStream(ctx, &protocol.ChatRequest{
 		Messages: []protocol.Message{
 			{Role: protocol.RoleUser, Content: "Hello Spark!"},
 		},
@@ -166,7 +166,7 @@ func TestSpark_ChatStream(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	stream, err := gw.ChatStream(ctx, &ChatRequest{
+	stream, err := gw.ChatStream(ctx, &protocol.ChatRequest{
 		Messages: []protocol.Message{
 			{Role: protocol.RoleUser, Content: "Hi"},
 		},
@@ -197,7 +197,7 @@ func TestSpark_ChatStream(t *testing.T) {
 func TestSpark_Errors(t *testing.T) {
 	// 1. 空消息校验
 	gw, _ := NewSpark("http://127.0.0.1:9999/v2", "key", "", nil)
-	_, err := gw.ChatStream(context.Background(), &ChatRequest{Messages: nil})
+	_, err := gw.ChatStream(context.Background(), &protocol.ChatRequest{Messages: nil})
 	if err != ErrEmptyMessages {
 		t.Errorf("expected ErrEmptyMessages, got: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestSpark_Errors(t *testing.T) {
 	defer errServer.Close()
 
 	gwErr, _ := NewSpark(errServer.URL+"/v2", "key", "", errServer.Client())
-	_, err = gwErr.ChatStream(context.Background(), &ChatRequest{
+	_, err = gwErr.ChatStream(context.Background(), &protocol.ChatRequest{
 		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hello"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "403") {

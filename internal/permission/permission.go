@@ -13,27 +13,15 @@ import (
 	"my-agent/internal/protocol"
 )
 
-// Decision 统一采用 protocol.Decision 决策枚举
-type Decision = protocol.Decision
-
-const (
-	DecisionDeny         = protocol.DecisionDeny
-	DecisionAllowOnce    = protocol.DecisionAllowOnce
-	DecisionAllowSession = protocol.DecisionAllowSession
-)
-
-// Request 统一采用 protocol.PermissionRequest 纯数据契约
-type Request = protocol.PermissionRequest
-
 // Approver 定义人机交互或外部策略决策接口
 type Approver interface {
-	RequestApproval(ctx context.Context, req Request) (Decision, error)
+	RequestApproval(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error)
 }
 
 // ApproverFunc 便捷的函数式 Approver 实现
-type ApproverFunc func(ctx context.Context, req Request) (Decision, error)
+type ApproverFunc func(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error)
 
-func (f ApproverFunc) RequestApproval(ctx context.Context, req Request) (Decision, error) {
+func (f ApproverFunc) RequestApproval(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
 	return f(ctx, req)
 }
 
@@ -245,7 +233,7 @@ func (m *Manager) Evaluate(ctx context.Context, call protocol.ToolCall) (allowed
 		return false, fmt.Sprintf("permission denied: risk detected (%s) but no approver configured", ruleReason), nil
 	}
 
-	req := Request{
+	req := protocol.PermissionRequest{
 		ToolCallID: call.ID,
 		ToolName:   call.Name,
 		Arguments:  call.Arguments,
@@ -259,16 +247,16 @@ func (m *Manager) Evaluate(ctx context.Context, call protocol.ToolCall) (allowed
 	}
 
 	switch decision {
-	case DecisionAllowSession:
+	case protocol.DecisionAllowSession:
 		m.mu.Lock()
 		m.sessionAllowed[sig] = true
 		m.mu.Unlock()
 		return true, "", nil
 
-	case DecisionAllowOnce:
+	case protocol.DecisionAllowOnce:
 		return true, "", nil
 
-	case DecisionDeny:
+	case protocol.DecisionDeny:
 		fallthrough
 	default:
 		return false, fmt.Sprintf("permission denied by user: %s", ruleReason), nil

@@ -23,7 +23,7 @@ type streamResult struct {
 }
 
 // collectStream 排空流式通道并聚合文本、思维链、工具调用与用量。
-func collectStream(t *testing.T, stream <-chan StreamChunk) streamResult {
+func collectStream(t *testing.T, stream <-chan protocol.ChatResponse) streamResult {
 	t.Helper()
 	var r streamResult
 	for chunk := range stream {
@@ -104,7 +104,7 @@ func TestLlamaCpp_Chat_Text(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	stream, err := gw.ChatStream(ctx, &ChatRequest{
+	stream, err := gw.ChatStream(ctx, &protocol.ChatRequest{
 		Messages: []protocol.Message{
 			{Role: protocol.RoleSystem, Content: "You are a helpful assistant."},
 			{Role: protocol.RoleUser, Content: "Hello!"},
@@ -155,7 +155,7 @@ func TestLlamaCpp_Chat_WithToolCalls(t *testing.T) {
 
 	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
-	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
+	stream, err := gw.ChatStream(context.Background(), &protocol.ChatRequest{
 		Messages: []protocol.Message{
 			{Role: protocol.RoleUser, Content: "Read main.go"},
 		},
@@ -220,7 +220,7 @@ func TestLlamaCpp_Chat_WithToolResult(t *testing.T) {
 
 	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
-	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
+	stream, err := gw.ChatStream(context.Background(), &protocol.ChatRequest{
 		Messages: []protocol.Message{
 			{Role: protocol.RoleUser, Content: "Read main.go"},
 			{
@@ -277,7 +277,7 @@ func TestLlamaCpp_ChatStream_Text(t *testing.T) {
 
 	gw, _ := NewLlamaCpp(mockServer.URL, "", "local-model", mockServer.Client())
 
-	stream, err := gw.ChatStream(context.Background(), &ChatRequest{
+	stream, err := gw.ChatStream(context.Background(), &protocol.ChatRequest{
 		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hi"}},
 	})
 	if err != nil {
@@ -343,7 +343,7 @@ func TestDeepSeek_Chat_Text_WithReasoning(t *testing.T) {
 		t.Fatalf("NewDeepSeek failed: %v", err)
 	}
 
-	stream, err := ds.ChatStream(context.Background(), &ChatRequest{
+	stream, err := ds.ChatStream(context.Background(), &protocol.ChatRequest{
 		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hello"}},
 	})
 	if err != nil {
@@ -401,7 +401,7 @@ func TestGemini_Chat_Text_AndAuth(t *testing.T) {
 		t.Fatalf("NewGemini failed: %v", err)
 	}
 
-	stream, err := gemini.ChatStream(context.Background(), &ChatRequest{
+	stream, err := gemini.ChatStream(context.Background(), &protocol.ChatRequest{
 		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hello Gemini"}},
 	})
 	if err != nil {
@@ -452,7 +452,7 @@ func TestRouter_ModelAllocation(t *testing.T) {
 
 	route := func(modelName, want string) {
 		t.Helper()
-		stream, err := router.ChatStream(context.Background(), &ChatRequest{
+		stream, err := router.ChatStream(context.Background(), &protocol.ChatRequest{
 			Model:    modelName,
 			Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hi"}},
 		})
@@ -495,7 +495,7 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("expected *Router, got %T", gw)
 	}
 
-	activeGW, err := router.Route(&ChatRequest{})
+	activeGW, err := router.Route(&protocol.ChatRequest{})
 	if err != nil {
 		t.Fatalf("failed to route active gateway: %v", err)
 	}
@@ -518,7 +518,7 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("failed to create deepseek gateway: %v", err)
 	}
 	dsRouter := dsGw.(*Router)
-	dsSubGW, _ := dsRouter.Route(&ChatRequest{})
+	dsSubGW, _ := dsRouter.Route(&protocol.ChatRequest{})
 	if _, ok := dsSubGW.(*DeepSeek); !ok {
 		t.Fatalf("expected *DeepSeek, got %T", dsSubGW)
 	}
@@ -533,7 +533,7 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("failed to create gemini gateway: %v", err)
 	}
 	geminiRouter := geminiGw.(*Router)
-	geminiSubGW, _ := geminiRouter.Route(&ChatRequest{})
+	geminiSubGW, _ := geminiRouter.Route(&protocol.ChatRequest{})
 	if _, ok := geminiSubGW.(*Gemini); !ok {
 		t.Fatalf("expected *Gemini, got %T", geminiSubGW)
 	}
@@ -548,13 +548,13 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("failed to create spark gateway: %v", err)
 	}
 	sparkRouter := sparkGw.(*Router)
-	sparkSubGW, _ := sparkRouter.Route(&ChatRequest{})
+	sparkSubGW, _ := sparkRouter.Route(&protocol.ChatRequest{})
 	if _, ok := sparkSubGW.(*Spark); !ok {
 		t.Fatalf("expected *Spark, got %T", sparkSubGW)
 	}
 
 	// 测试根据 spark-* 模型前缀动态路由
-	prefixGW, err := sparkRouter.Route(&ChatRequest{Model: "spark-x2.5"})
+	prefixGW, err := sparkRouter.Route(&protocol.ChatRequest{Model: "spark-x2.5"})
 	if err != nil {
 		t.Fatalf("failed to route spark-x2.5: %v", err)
 	}
