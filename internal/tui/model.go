@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"my-agent/internal/config"
 	"my-agent/internal/protocol"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -16,10 +17,14 @@ func (m Model) getProviders() []protocol.ProviderInfo {
 	return m.agent.Config().Providers
 }
 
-// isLocalProviderName 判断是否为免密钥本地服务
-func isLocalProviderName(provider string) bool {
-	p := strings.ToLower(strings.TrimSpace(provider))
-	return p == "llamacpp" || p == "llama" || p == "local"
+// isLocalProvider 判断指定平台是否为无需鉴权的本地服务（单源元数据驱动）
+func (m Model) isLocalProvider(provider string) bool {
+	for _, p := range m.getProviders() {
+		if strings.EqualFold(p.ID, provider) {
+			return p.IsLocal
+		}
+	}
+	return config.IsLocalProvider(config.Provider(provider))
 }
 
 // syncActiveProvider 同步当前激活厂商并重置光标与选中索引
@@ -205,7 +210,7 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentModel = chosen
 
 				// 检查当前平台是否已就绪 (新输入 Key、已存 Key 或本地)
-				isConfigured := m.currentAPIKey != "" || isLocalProviderName(m.currentProvider)
+				isConfigured := m.currentAPIKey != "" || m.isLocalProvider(m.currentProvider)
 				if !isConfigured {
 					for _, p := range m.getProviders() {
 						if p.ID == m.currentProvider && p.IsConfigured {
@@ -280,7 +285,7 @@ func (m Model) updateInputAPIKey(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			// 验证当前是否有可用密钥 (用户刚输入的、之前保存过的、或本地服务)
-			hasKey := m.currentAPIKey != "" || isLocalProviderName(m.currentProvider)
+			hasKey := m.currentAPIKey != "" || m.isLocalProvider(m.currentProvider)
 			if !hasKey {
 				for _, p := range m.getProviders() {
 					if p.ID == m.currentProvider && p.IsConfigured {
@@ -521,7 +526,7 @@ func (m Model) viewInputAPIKey() string {
 
 	if m.currentAPIKey != "" {
 		s.WriteString(fmt.Sprintf("检测到已输入 %s 的 API Key。直接按 Enter 保留，或输入新 Key 覆盖：\n\n", provider))
-	} else if isLocalProviderName(m.currentProvider) {
+	} else if m.isLocalProvider(m.currentProvider) {
 		s.WriteString(fmt.Sprintf("本地服务 %s 无需鉴权密钥，直接按 Enter 继续即可：\n\n", provider))
 	} else {
 		s.WriteString(fmt.Sprintf("请输入 %s 的 API Key：\n\n", provider))
@@ -600,17 +605,14 @@ func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// 2. 尝试匹配平台名称或常见别名
+	// 2. 尝试匹配平台名称或别名 (单源元数据驱动归一化)
 	pKey := strings.ToLower(strings.TrimSpace(arg))
+	canonicalID := config.ProviderID(config.Provider(pKey))
 	cfgView := m.agent.Config()
 	var targetProvider *protocol.ProviderInfo
 	for i := range cfgView.Providers {
 		p := &cfgView.Providers[i]
-		if strings.EqualFold(p.ID, pKey) ||
-			(p.ID == "llamacpp" && (pKey == "llama" || pKey == "local")) ||
-			(p.ID == "gemini" && pKey == "google") ||
-			(p.ID == "deepseek" && pKey == "ds") ||
-			(p.ID == "spark" && (pKey == "maas" || pKey == "xfyun")) {
+		if strings.EqualFold(p.ID, canonicalID) {
 			targetProvider = p
 			break
 		}

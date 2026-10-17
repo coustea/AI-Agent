@@ -37,7 +37,11 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 		return newM, cmd, true
 	}
 	if strings.HasPrefix(trimmed, "/model ") || strings.HasPrefix(trimmed, "/config ") {
-		arg := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(trimmed, "/model "), "/config "))
+		parts := strings.SplitN(trimmed, " ", 2)
+		arg := ""
+		if len(parts) > 1 {
+			arg = strings.TrimSpace(parts[1])
+		}
 		newM, cmd := m.handleModelCommand(arg)
 		return newM, cmd, true
 	}

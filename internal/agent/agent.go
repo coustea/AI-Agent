@@ -228,20 +228,6 @@ func (a *CoreAgent) WorkDir() string {
 	return a.workDir
 }
 
-// Permission 获取权限管理器实例
-func (a *CoreAgent) Permission() *permission.Manager {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	return a.permission
-}
-
-// RegisterTools 动态增加工具
-func (a *CoreAgent) RegisterTools(ts ...tool.Tool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.tools.Register(ts...)
-}
-
 // StreamRun 驱动 Harness 核心 ReAct 状态循环，返回纯数据事件流
 func (a *CoreAgent) StreamRun(ctx context.Context, prompt string) (<-chan protocol.Event, error) {
 	prompt = strings.TrimSpace(prompt)

@@ -164,13 +164,6 @@ func (m *Manager) SetApprover(approver Approver) {
 	m.approver = approver
 }
 
-// Approver 获取当前配置的审批器
-func (m *Manager) Approver() Approver {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.approver
-}
-
 // SetAutoApprove 动态设置是否全自动放行非硬拒绝操作
 func (m *Manager) SetAutoApprove(auto bool) {
 	m.mu.Lock()
