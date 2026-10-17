@@ -2,11 +2,13 @@ package gateway
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"my-agent/internal/protocol"
 )
@@ -75,24 +77,11 @@ func (c *compatClient) endpoint() string {
 	return chatURL(c.baseURL)
 }
 
-// ChatStream 执行流式调用
+// ChatStream 执行流式调用（内置网络抖动与 429/5xx 指数退避重试）
 func (c *compatClient) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
-	httpReq, err := buildHTTPRequest(ctx, c.endpoint(), c.model, req, true)
+	resp, err := c.executeWithRetry(ctx, req)
 	if err != nil {
 		return nil, err
-	}
-	if c.auth != nil {
-		c.auth(httpReq)
-	}
-
-	resp, err := c.httpClient.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("%s: http stream error: %w", c.name, err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		return nil, fmt.Errorf("%s: stream status %d: %s", c.name, resp.StatusCode, string(body))
 	}
 
 	out := make(chan protocol.ChatResponse, 32)
@@ -108,6 +97,86 @@ func (c *compatClient) ChatStream(ctx context.Context, req *protocol.ChatRequest
 	}()
 
 	return out, nil
+}
+
+// executeWithRetry 执行 HTTP 请求并在遇到 429、5xx 或临时网络错误时自动指数退避重试（最多 3 次）
+func (c *compatClient) executeWithRetry(ctx context.Context, req *protocol.ChatRequest) (*http.Response, error) {
+	payload, err := buildRequestPayload(c.model, req, true)
+	if err != nil {
+		return nil, err
+	}
+
+	const maxAttempts = 3
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		httpReq, err := buildHTTPRequestFromPayload(ctx, c.endpoint(), payload, true)
+		if err != nil {
+			return nil, err
+		}
+		if c.auth != nil {
+			c.auth(httpReq)
+		}
+
+		resp, err := c.httpClient.Do(httpReq)
+		if err != nil {
+			lastErr = fmt.Errorf("%s: http stream error: %w", c.name, err)
+			if attempt < maxAttempts && isRetryableNetworkError(err) {
+				if waitErr := sleepBackoff(ctx, attempt); waitErr != nil {
+					return nil, waitErr
+				}
+				continue
+			}
+			return nil, lastErr
+		}
+
+		if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		}
+
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		lastErr = fmt.Errorf("%s: stream status %d: %s", c.name, resp.StatusCode, string(body))
+
+		// 429 (Rate Limit) 或 5xx (Server Error) 触发退避重试
+		if attempt < maxAttempts && (resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500) {
+			if waitErr := sleepBackoff(ctx, attempt); waitErr != nil {
+				return nil, waitErr
+			}
+			continue
+		}
+
+		return nil, lastErr
+	}
+
+	return nil, lastErr
+}
+
+func isRetryableNetworkError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	return true
+}
+
+func sleepBackoff(ctx context.Context, attempt int) error {
+	baseDelay := 150 * time.Millisecond
+	delay := time.Duration(1<<(attempt-1)) * baseDelay
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // TotalUsage 获取累计 Token 用量

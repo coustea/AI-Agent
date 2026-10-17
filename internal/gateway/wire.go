@@ -146,8 +146,8 @@ func chatURL(base string) string {
 	return base + "/v1/chat/completions"
 }
 
-// buildHTTPRequest 构建 OpenAI 协议的 HTTP 请求体
-func buildHTTPRequest(ctx context.Context, url string, model string, req *protocol.ChatRequest, stream bool) (*http.Request, error) {
+// buildRequestPayload 序列化 OpenAI 协议请求体
+func buildRequestPayload(model string, req *protocol.ChatRequest, stream bool) ([]byte, error) {
 	if req == nil || len(req.Messages) == 0 {
 		return nil, ErrEmptyMessages
 	}
@@ -172,7 +172,11 @@ func buildHTTPRequest(ctx context.Context, url string, model string, req *protoc
 	if err != nil {
 		return nil, fmt.Errorf("gateway: marshal request: %w", err)
 	}
+	return payload, nil
+}
 
+// buildHTTPRequestFromPayload 从已序列化的 payload 构建 HTTP 请求
+func buildHTTPRequestFromPayload(ctx context.Context, url string, payload []byte, stream bool) (*http.Request, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
 		return nil, fmt.Errorf("gateway: create request: %w", err)
@@ -184,6 +188,15 @@ func buildHTTPRequest(ctx context.Context, url string, model string, req *protoc
 	}
 
 	return httpReq, nil
+}
+
+// buildHTTPRequest 构建 OpenAI 协议的 HTTP 请求体
+func buildHTTPRequest(ctx context.Context, url string, model string, req *protocol.ChatRequest, stream bool) (*http.Request, error) {
+	payload, err := buildRequestPayload(model, req, stream)
+	if err != nil {
+		return nil, err
+	}
+	return buildHTTPRequestFromPayload(ctx, url, payload, stream)
 }
 
 type tcBuilder struct {

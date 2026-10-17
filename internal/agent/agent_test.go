@@ -1133,3 +1133,22 @@ func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
 		t.Fatalf("expected full content in file, length was %d", len(data))
 	}
 }
+
+func TestCoreAgent_EnvironmentContext(t *testing.T) {
+	mockGW := newMockGateway("hi")
+	ag, err := NewAgent(mockGW)
+	if err != nil {
+		t.Fatalf("NewAgent failed: %v", err)
+	}
+
+	sysPrompt := ag.SystemPrompt()
+	if !strings.Contains(sysPrompt, "## Environment Context (环境与时空状态)") {
+		t.Errorf("expected system prompt to contain Environment Context, got: %s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "- Current Time:") {
+		t.Errorf("expected Current Time in prompt, got: %s", sysPrompt)
+	}
+	if !strings.Contains(sysPrompt, "- Host Platform:") {
+		t.Errorf("expected Host Platform in prompt, got: %s", sysPrompt)
+	}
+}

@@ -302,8 +302,8 @@ func (m *Manager) checkRules(call protocol.ToolCall) (bool, string) {
 			return true, fmt.Sprintf("file access outside workspace (%s): %s", call.Name, targetAbs)
 		}
 
-	case "glob":
-		// glob 搜索默认属于安全只读操作，直接放行
+	case "glob", "grep":
+		// glob 与 grep 搜索默认属于安全只读操作，直接放行
 		return false, ""
 	}
 

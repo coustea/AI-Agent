@@ -278,4 +278,81 @@ func TestBashTool(t *testing.T) {
 	if err == nil {
 		t.Errorf("expected timeout error")
 	}
+
+	// 5. 进程组取消杀死测试 (防止子进程孤儿化)
+	ctxCancel, cancelFn := context.WithCancel(context.Background())
+	argsSleep, _ := json.Marshal(BashInput{Command: "sh -c 'sleep 10'"})
+	start := time.Now()
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		cancelFn()
+	}()
+	_, err = tool.Execute(ctxCancel, argsSleep)
+	if err == nil {
+		t.Errorf("expected error when context canceled")
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Errorf("expected bash to terminate promptly on cancel, took %v", time.Since(start))
+	}
+}
+
+func TestGrepTool(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	_ = os.WriteFile(filepath.Join(tmpDir, "file1.go"), []byte("package main\n\nfunc Hello() string {\n\treturn \"coustea\"\n}\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(tmpDir, "file2.txt"), []byte("Hello coustea personal agent!\nLine 2 without keyword\nAnother coustea match\n"), 0o644)
+	_ = os.MkdirAll(filepath.Join(tmpDir, "sub"), 0o755)
+	_ = os.WriteFile(filepath.Join(tmpDir, "sub", "sub.go"), []byte("package sub\n\nfunc TargetFunc() {}\n"), 0o644)
+
+	tool := NewGrepTool(tmpDir)
+
+	// 1. 全局检索模式
+	args1, _ := json.Marshal(GrepInput{Pattern: `coustea`})
+	out1, err := tool.Execute(context.Background(), args1)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out1, "file1.go:4:") || !strings.Contains(out1, "file2.txt:1:") || !strings.Contains(out1, "file2.txt:3:") {
+		t.Errorf("expected multiple matches across files, got:\n%s", out1)
+	}
+
+	// 2. 带 include 通配过滤检索
+	args2, _ := json.Marshal(GrepInput{Pattern: `coustea`, Include: "*.go"})
+	out2, err := tool.Execute(context.Background(), args2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out2, "file1.go:4:") {
+		t.Errorf("expected match in file1.go, got: %s", out2)
+	}
+	if strings.Contains(out2, "file2.txt") {
+		t.Errorf("file2.txt should be excluded by include filter, got: %s", out2)
+	}
+
+	// 3. 最大匹配数截断
+	args3, _ := json.Marshal(GrepInput{Pattern: `coustea`, MaxResults: 1})
+	out3, err := tool.Execute(context.Background(), args3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(out3, "limit of 1 results reached") {
+		t.Errorf("expected truncation notice for max_results=1, got:\n%s", out3)
+	}
+
+	// 4. 无匹配项
+	args4, _ := json.Marshal(GrepInput{Pattern: `NonExistentPattern12345`})
+	out4, err := tool.Execute(context.Background(), args4)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out4 != "(no matches)" {
+		t.Errorf("expected '(no matches)', got: %q", out4)
+	}
+
+	// 5. 路径逃逸安全拦截
+	args5, _ := json.Marshal(GrepInput{Pattern: `coustea`, Path: "../../escaped"})
+	_, err = tool.Execute(context.Background(), args5)
+	if err == nil {
+		t.Errorf("expected error for escaping path")
+	}
 }

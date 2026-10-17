@@ -78,7 +78,7 @@ func WithWorkDir(dir string) Option {
 	}
 }
 
-// WithDefaultTools 注册内置核心工具集，学习自 learn-claude-code (read_file, write_file, edit_file, glob, bash)
+// WithDefaultTools 注册内置核心工具集，学习自 learn-claude-code (read_file, write_file, edit_file, glob, grep, bash)
 func WithDefaultTools(workDir ...string) Option {
 	return func(a *CoreAgent) {
 		wd := a.workDir
@@ -90,6 +90,7 @@ func WithDefaultTools(workDir ...string) Option {
 			builtin.NewWriteFileTool(wd),
 			builtin.NewEditFileTool(wd),
 			builtin.NewGlobTool(wd),
+			builtin.NewGrepTool(wd),
 			builtin.NewBashTool(wd),
 		)
 	}

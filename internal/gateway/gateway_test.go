@@ -580,3 +580,52 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Errorf("expected ErrEmptyAPIKey for gemini without api key, got: %v", err)
 	}
 }
+
+// 测试 compatClient 在遭遇 429 或 5xx 时自动指数退避重试并在第三次成功
+func TestCompatClient_RetryOn429And5xx(t *testing.T) {
+	var attempts int
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts == 1 {
+			http.Error(w, `{"error":"rate limited"}`, http.StatusTooManyRequests)
+			return
+		}
+		if attempts == 2 {
+			http.Error(w, `{"error":"temporary gateway timeout"}`, http.StatusBadGateway)
+			return
+		}
+		// 第三次成功返回 200
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		flusher := w.(http.Flusher)
+		_, _ = fmt.Fprintf(w, "data: %s\n\n", `{"choices":[{"delta":{"content":"recovered"}}]}`)
+		flusher.Flush()
+		_, _ = fmt.Fprintf(w, "data: [DONE]\n\n")
+		flusher.Flush()
+	}))
+	defer mockServer.Close()
+
+	client, err := NewDeepSeek(mockServer.URL, "test-key", "deepseek-flash", mockServer.Client())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+
+	stream, err := client.ChatStream(context.Background(), &protocol.ChatRequest{
+		Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "hi"}},
+	})
+	if err != nil {
+		t.Fatalf("expected successful retry, got error: %v", err)
+	}
+
+	var content string
+	for chunk := range stream {
+		content += chunk.Delta
+	}
+
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts, got %d", attempts)
+	}
+	if content != "recovered" {
+		t.Errorf("expected content 'recovered', got %q", content)
+	}
+}

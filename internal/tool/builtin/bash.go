@@ -64,6 +64,7 @@ func (t *BashTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	}
 
 	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	setupProcessGroup(cmd)
 	if t.workDir != "" {
 		cmd.Dir = t.workDir
 	}
