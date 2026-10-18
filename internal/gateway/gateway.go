@@ -149,29 +149,19 @@ func NewSpark(baseURL, apiKey, model string, client *http.Client) (*Client, erro
 	return NewClient(config.ProviderSpark, baseURL, apiKey, model, client)
 }
 
-// CheckHealth 检查服务端点健康与模型加载状态（如 llama-server 的 /health 端点）
-func (c *Client) CheckHealth(ctx context.Context) error {
-	url := c.baseURL + "/health"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+// NewGatewayFromConfig 根据配置直接构造对应厂商的传输客户端。
+// 厂商切换由 CoreAgent.UpdateConfig 热装网关完成，无需路由层。
+func NewGatewayFromConfig(cfg *config.Config) (Gateway, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("gateway: configuration cannot be nil")
+	}
+	// 显式判错：直接 return NewClient 会把 nil *Client 包成非 nil 接口，
+	// 使上层"未就绪内核"判定失效
+	c, err := NewClient(cfg.Provider, cfg.BaseURL, cfg.APIKey, cfg.ModelName, nil)
 	if err != nil {
-		return fmt.Errorf("%s: create health request: %w", c.name, err)
+		return nil, err
 	}
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("%s: server unreachable at %s: %w", c.name, c.baseURL, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		return nil
-	}
-	if resp.StatusCode == http.StatusServiceUnavailable {
-		return fmt.Errorf("%s: server is still loading model (503 Service Unavailable)", c.name)
-	}
-
-	body, _ := io.ReadAll(resp.Body)
-	return fmt.Errorf("%s: health check status %d: %s", c.name, resp.StatusCode, string(body))
+	return c, nil
 }
 
 func (c *Client) endpoint() string {

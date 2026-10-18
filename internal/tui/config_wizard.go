@@ -1,8 +1,11 @@
 package tui
 
 import (
+	"context"
 	"fmt"
+	"net/http"
 	"strings"
+	"time"
 
 	"my-agent/internal/protocol"
 
@@ -10,6 +13,40 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// llamaCppProbeURL 本地推理服务默认探测端点
+const llamaCppProbeURL = "http://127.0.0.1:8080/v1/models"
+
+// probeLlamaCpp 探测本地 llama-server 是否就绪（2s 超时）。
+// 返回非空提示文案表示未就绪；探测不阻断配置——服务可能稍后启动。
+func probeLlamaCpp() string {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, llamaCppProbeURL, nil)
+	if err != nil {
+		return fmt.Sprintf("[提示] 本地服务探测失败: %v（配置已保留，可稍后启动 llama-server）", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "[提示] 本地服务未就绪（连接失败），配置已保留。启动 llama-server 后即可直接对话。"
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Sprintf("[提示] 本地服务未就绪（HTTP %d），配置已保留。启动 llama-server 后即可直接对话。", resp.StatusCode)
+	}
+	return ""
+}
+
+// appendLocalProviderNotice 在切换到本地厂商后追加就绪探测提示
+func (m *Model) appendLocalProviderNotice(provider string) {
+	if !strings.EqualFold(strings.TrimSpace(provider), "llamacpp") {
+		return
+	}
+	if notice := probeLlamaCpp(); notice != "" {
+		m.messages = append(m.messages, ChatMessage{Sender: "System", Content: notice})
+	}
+}
 
 // getProviders 从 Agent 协议契约获取完整的平台状态列表
 func (m Model) getProviders() []protocol.ProviderInfo {
@@ -98,6 +135,7 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Sender:  "System",
 						Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
 					})
+					m.appendLocalProviderNotice(cfgView.Provider)
 				}
 				m.state = stateChat
 				m.chatInput.Focus()
@@ -249,6 +287,7 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Sender:  "System",
 						Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
 					})
+					m.appendLocalProviderNotice(cfgView.Provider)
 				}
 
 				m.state = stateChat
@@ -358,6 +397,7 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Sender:  "System",
 						Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", cfgView.Provider, cfgView.ModelName),
 					})
+					m.appendLocalProviderNotice(cfgView.Provider)
 				}
 
 				m.state = stateChat
@@ -648,6 +688,7 @@ func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
 					Sender:  "System",
 					Content: fmt.Sprintf("已成功切换至大模型平台: %s (模型: %s)", targetProvider.Name, newView.ModelName),
 				})
+				m.appendLocalProviderNotice(newView.Provider)
 			}
 			if m.viewportReady {
 				m.viewport.SetContent(m.renderChatMessages())
@@ -679,6 +720,7 @@ func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
 			Sender:  "System",
 			Content: fmt.Sprintf("已成功切换模型！当前平台: %s, 模型: %s", newView.Provider, newView.ModelName),
 		})
+		m.appendLocalProviderNotice(newView.Provider)
 	}
 
 	if m.viewportReady {

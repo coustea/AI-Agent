@@ -75,9 +75,19 @@ func formatTraceJSON(ev protocol.TraceEvent, raw bool) string {
 	return string(b)
 }
 
+// TraceSource 提供当前/最近一轮对话的结构化追踪事件（/log 面板数据源）。
+// 由装配层注入具体实现（如日志中间件），TUI 不感知其类型。
+type TraceSource interface {
+	Traces() []protocol.TraceEvent
+}
+
 // openTraceInspector 呼出上下折叠结构的执行链路与底层 JSON 追踪看板
 func (m Model) openTraceInspector() Model {
-	m.traceEvents = m.agent.Traces()
+	if m.traces != nil {
+		m.traceEvents = m.traces.Traces()
+	} else {
+		m.traceEvents = nil
+	}
 	m.traceCursor = 0
 	m.traceFocusJSON = false
 	m.traceRawMode = false

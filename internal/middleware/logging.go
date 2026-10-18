@@ -1,4 +1,4 @@
-package agent
+package middleware
 
 import (
 	"context"
@@ -58,13 +58,13 @@ func (l *LoggingMiddleware) writeLatestJSONLocked() {
 	l.ensureDirLocked()
 	data, err := json.MarshalIndent(l.events, "", "  ")
 	if err == nil {
-		_ = os.WriteFile(l.latestJSON, data, 0o644)
+		_ = os.WriteFile(l.latestJSON, data, 0o600)
 	}
 }
 
 func (l *LoggingMiddleware) appendJSONLLocked(ev protocol.TraceEvent) {
 	l.ensureDirLocked()
-	f, err := os.OpenFile(l.jsonlFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(l.jsonlFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err == nil {
 		defer f.Close()
 		line, err := json.Marshal(ev)
@@ -74,12 +74,13 @@ func (l *LoggingMiddleware) appendJSONLLocked(ev protocol.TraceEvent) {
 	}
 }
 
+// recordEvent 内存追加 + JSONL 追加（O(1) 逐事件审计通道）。
+// latest.json 不在事件路径上重写——轮末统一快照，避免流式回调路径上的写放大。
 func (l *LoggingMiddleware) recordEvent(ev protocol.TraceEvent) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	l.events = append(l.events, ev)
-	l.writeLatestJSONLocked()
 	l.appendJSONLLocked(ev)
 }
 
@@ -250,4 +251,9 @@ func (l *LoggingMiddleware) OnTurnEnd(ctx context.Context, summary *protocol.Tur
 			"error":       errStr,
 		},
 	})
+
+	// 轮末快照：一次性写入本轮全量事件（轮内数据已由 agent.jsonl 保证完整）
+	l.mu.Lock()
+	l.writeLatestJSONLocked()
+	l.mu.Unlock()
 }

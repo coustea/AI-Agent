@@ -454,7 +454,7 @@ func (m Model) renderChatMessages() string {
 						if m.isGenerating && i == len(m.messages)-1 && isLastBlock {
 							text = block.Text + cursorStyle.Render(" ▊")
 						} else {
-							text = renderMarkdown(block.Text, cardWidth)
+							text = renderMarkdownCached(block.Text, cardWidth)
 						}
 						sbTide.WriteString(text + "\n\n")
 					}
@@ -475,7 +475,11 @@ func (m Model) renderChatMessages() string {
 				header := assistantBadgeStyle.Render(" 🌊 Tide ")
 				var bodyText string
 				if msg.Content != "" {
-					bodyText = renderMarkdown(msg.Content, cardWidth)
+					if m.isGenerating && i == len(m.messages)-1 {
+						bodyText = renderMarkdown(msg.Content, cardWidth)
+					} else {
+						bodyText = renderMarkdownCached(msg.Content, cardWidth)
+					}
 				} else {
 					bodyText = m.spinner.View() + dimStyle.Render(" 正在思考中...")
 				}

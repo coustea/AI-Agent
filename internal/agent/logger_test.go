@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"my-agent/internal/middleware"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 )
@@ -56,10 +57,11 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 		},
 	}
 
+	lm := middleware.NewLoggingMiddleware(tmpDir)
 	ag, err := NewAgent(gw,
 		WithWorkDir(tmpDir),
 		WithTools(reg),
-		WithLoggingMiddleware(tmpDir),
+		WithHook(lm),
 	)
 	if err != nil {
 		t.Fatalf("NewAgent failed: %v", err)
@@ -74,8 +76,8 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	for range stream {
 	}
 
-	// 1. 验证内核 Traces() 方法返回的内存数据完整性
-	traces := ag.Traces()
+	// 1. 验证日志中间件 Traces() 返回的内存数据完整性
+	traces := lm.Traces()
 	if len(traces) == 0 {
 		t.Fatalf("expected non-empty traces from ag.Traces()")
 	}
@@ -84,10 +86,9 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	eventTypes := make(map[string]bool)
 	for _, ev := range traces {
 		eventTypes[ev.Type] = true
-		// 验证每个事件的 PrettyJSON 可以成功生成且非空
-		pj := ev.PrettyJSON()
-		if len(pj) == 0 {
-			t.Errorf("empty PrettyJSON for event: %v", ev.Title)
+		// 验证每个事件可被序列化
+		if b, err := json.Marshal(ev); err != nil || len(b) == 0 {
+			t.Errorf("event not serializable: %v (err=%v)", ev.Title, err)
 		}
 	}
 	expectedTypes := []string{"turn_start", "llm_req", "llm_resp", "tool_start", "tool_end", "turn_end"}
@@ -143,9 +144,10 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *test
 	tmpDir := t.TempDir()
 
 	mockGW := newMockGateway("Reply 1", "Reply 2")
+	lm := middleware.NewLoggingMiddleware(tmpDir)
 	ag, err := NewAgent(mockGW,
 		WithWorkDir(tmpDir),
-		WithLoggingMiddleware(tmpDir),
+		WithHook(lm),
 	)
 	if err != nil {
 		t.Fatalf("NewAgent failed: %v", err)
@@ -206,9 +208,10 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 		},
 	}
 
+	lm := middleware.NewLoggingMiddleware(tmpDir)
 	ag, _ := NewAgent(gwErr,
 		WithWorkDir(tmpDir),
-		WithLoggingMiddleware(tmpDir),
+		WithHook(lm),
 	)
 
 	stream, _ := ag.Run(context.Background(), "Will Fail")
@@ -223,5 +226,53 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 	str := string(data)
 	if !strings.Contains(str, "upstream service unavailable 503") {
 		t.Errorf("expected latest.json to record error, got:\n%s", str)
+	}
+}
+
+// 验收 D6：latest.json 只在轮末快照写入，且落盘权限为 0600
+func TestLoggingMiddleware_LatestJSONTurnEndOnly(t *testing.T) {
+	dir := t.TempDir()
+	lm := middleware.NewLoggingMiddleware(dir)
+	latest := filepath.Join(dir, ".tide", "logs", "latest.json")
+	jsonl := filepath.Join(dir, ".tide", "logs", "agent.jsonl")
+	ctx := context.Background()
+
+	lm.OnTurnStart(ctx, "turn_x", "hello")
+	lm.OnLLMRequest(ctx, &protocol.LLMRequestTrace{Step: 0, Provider: "p", ModelName: "m", SystemPrompt: "sys"})
+
+	if _, err := os.Stat(latest); !os.IsNotExist(err) {
+		t.Fatalf("latest.json must NOT be written mid-turn (err=%v)", err)
+	}
+	if _, err := os.Stat(jsonl); err != nil {
+		t.Fatalf("agent.jsonl must be appended per event: %v", err)
+	}
+
+	lm.OnTurnEnd(ctx, &protocol.TurnSummaryTrace{TurnID: "turn_x", Success: true})
+
+	info, err := os.Stat(latest)
+	if err != nil {
+		t.Fatalf("latest.json must exist after turn end: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("latest.json must be 0600, got %o", perm)
+	}
+	jinfo, err := os.Stat(jsonl)
+	if err != nil {
+		t.Fatalf("agent.jsonl stat failed: %v", err)
+	}
+	if perm := jinfo.Mode().Perm(); perm != 0o600 {
+		t.Errorf("agent.jsonl must be 0600, got %o", perm)
+	}
+
+	data, err := os.ReadFile(latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var evs []protocol.TraceEvent
+	if err := json.Unmarshal(data, &evs); err != nil {
+		t.Fatalf("latest.json must be valid JSON: %v", err)
+	}
+	if len(evs) != 3 {
+		t.Errorf("expected full turn snapshot with 3 events, got %d", len(evs))
 	}
 }

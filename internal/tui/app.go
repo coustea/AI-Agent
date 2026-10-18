@@ -104,10 +104,14 @@ type Model struct {
 
 	// 注入的 Agent 智能体核心契约接口
 	agent protocol.Agent
+
+	// 结构化追踪事件数据源（/log 面板），可为 nil
+	traces TraceSource
 }
 
-// NewModel 初始化并返回主 Model；ag 由装配入口保证非 nil，未就绪状态经 ConfigView 表达
-func NewModel(ag protocol.Agent) Model {
+// NewModel 初始化并返回主 Model；ag 由装配入口保证非 nil，未就绪状态经 ConfigView 表达。
+// traces 为 /log 面板的数据源，未装配日志中间件时传 nil。
+func NewModel(ag protocol.Agent, traces TraceSource) Model {
 	// 1. API Key 输入框
 	apiKeyInput := textinput.New()
 	apiKeyInput.Placeholder = "在此粘贴或输入你的 API Key (按 Enter 确认)"
@@ -165,6 +169,7 @@ func NewModel(ag protocol.Agent) Model {
 		messages:        []ChatMessage{},
 		cachedMemCount:  ag.MemoryCount(),
 		agent:           ag,
+		traces:          traces,
 		spinner:         sp,
 		viewport:        vp,
 	}

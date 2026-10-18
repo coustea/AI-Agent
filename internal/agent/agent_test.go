@@ -17,6 +17,7 @@ import (
 	"my-agent/internal/config"
 	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
+	"my-agent/internal/middleware"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 )
@@ -205,46 +206,6 @@ func TestCoreAgent_Reset(t *testing.T) {
 	}
 }
 
-// 测试 SetGateway 无损热切换底层模型并保留当前记忆
-func TestCoreAgent_SetGateway(t *testing.T) {
-	mockGW1 := newMockGateway("Reply 1")
-	ag, _ := NewAgent(mockGW1)
-
-	stream1, _ := ag.Run(context.Background(), "Question 1")
-	for range stream1 {
-	}
-	if len(ag.History()) != 2 {
-		t.Fatalf("expected 2 messages in history, got %d", len(ag.History()))
-	}
-
-	// 热切换为网关 2
-	mockGW2 := newMockGateway("Reply 2 from new model")
-	ag.SetGateway(mockGW2)
-
-	// 记忆未丢失
-	if len(ag.History()) != 2 {
-		t.Errorf("expected history to be preserved after SetGateway, got %d", len(ag.History()))
-	}
-
-	// 运行新对话由新网关承接
-	stream, err := ag.Run(context.Background(), "Question 2")
-	if err != nil {
-		t.Fatalf("Run failed after SetGateway: %v", err)
-	}
-
-	var text strings.Builder
-	for ev := range stream {
-		if ev.Delta != "" {
-			text.WriteString(ev.Delta)
-		}
-	}
-
-	if text.String() != "Reply 2 from new model" {
-		t.Errorf("expected response from new gateway, got %q", text.String())
-	}
-}
-
-// 测试防止并发重复进入的防重锁
 func TestCoreAgent_ConcurrentRun_Lock(t *testing.T) {
 	blockCh := make(chan struct{})
 	mockGW := &mockGateway{}
@@ -309,7 +270,7 @@ func TestCoreAgent_Validation(t *testing.T) {
 		t.Errorf("expected unready agent Run to fail with configuration guidance, got: %v", err)
 	}
 
-	ag, _ := NewAgent(&mockGateway{}, WithMemory(memory.NewSlidingWindowMemory(10)), WithMaxSteps(5))
+	ag, _ := NewAgent(&mockGateway{}, WithMemory(memory.NewSlidingWindowMemory(10, 0)), WithMaxSteps(5))
 	_, err = ag.Run(context.Background(), "   ")
 	if !errors.Is(err, ErrEmptyPrompt) {
 		t.Errorf("expected ErrEmptyPrompt, got: %v", err)
@@ -810,7 +771,7 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 	}))
 	defer dsServer.Close()
 
-	// 3. 构建独立提供商网关实例并装入网关路由器
+	// 3. 构建各厂商客户端并注入 Agent 内核
 	geminiGW, err := gateway.NewGemini(geminiServer.URL, "gemini-secret", "gemini-2.5-flash", geminiServer.Client())
 	if err != nil {
 		t.Fatalf("failed to create gemini gateway: %v", err)
@@ -820,17 +781,12 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 		t.Fatalf("failed to create deepseek gateway: %v", err)
 	}
 
-	router := gateway.NewRouter("gemini")
-	router.Register("gemini", geminiGW)
-	router.Register("deepseek", dsGW)
-
-	// 4. 将网关注入 Agent 内核并挂载工具
-	ag, err := NewAgent(router, WithDefaultTools())
+	ag, err := NewAgent(geminiGW, WithDefaultTools())
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
 
-	// 场景 A: 默认路由到 Gemini 模型调用
+	// 场景 A: Gemini 模型调用
 	streamA, err := ag.Run(context.Background(), "Hello")
 	if err != nil {
 		t.Fatalf("Run to Gemini failed: %v", err)
@@ -845,8 +801,11 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 		t.Errorf("expected 'Hello from Gemini', got %q", replyA.String())
 	}
 
-	// 场景 B: 运行时切换网关默认分配为 DeepSeek，验证深度思考与回答
-	router.SetActive("deepseek")
+	// 场景 B: 运行时切换到 DeepSeek 网关，验证深度思考与回答
+	// （生产路径为 UpdateConfig 热装网关；测试直接替换内核网关字段）
+	ag.mu.Lock()
+	ag.gw = dsGW
+	ag.mu.Unlock()
 	streamB, err := ag.Run(context.Background(), "Think carefully")
 	if err != nil {
 		t.Fatalf("Run to DeepSeek failed: %v", err)
@@ -1105,7 +1064,10 @@ func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	mockGW := newMockGateway("hi")
-	ag, err := NewAgent(mockGW, WithWorkDir(tmpDir))
+	ag, err := NewAgent(mockGW,
+		WithWorkDir(tmpDir),
+		WithPostToolUse(middleware.LargeResultSpill(tmpDir)),
+	)
 	if err != nil {
 		t.Fatalf("NewAgent failed: %v", err)
 	}
@@ -1195,5 +1157,40 @@ func TestAgentRun_PanicInLoop(t *testing.T) {
 		t.Fatalf("second Run rejected (%v), running flag not reset after panic", err)
 	}
 	for range stream2 {
+	}
+}
+
+// 验收 D5：WithDefaultTools 在 WithWorkDir 之前装配时，工具沙箱仍以最终工作目录为根
+func TestCoreAgent_WorkDirRef_ToolsFollowWithWorkDir(t *testing.T) {
+	base := t.TempDir()
+	sub := filepath.Join(base, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(base, "root.txt"), []byte("root"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "inner.txt"), []byte("inner"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// 故意先装配工具、后设置工作目录（装配顺序无关性验证）
+	ag, err := NewAgent(newMockGateway("ok"), WithDefaultTools(), WithWorkDir(sub))
+	if err != nil {
+		t.Fatalf("NewAgent failed: %v", err)
+	}
+
+	ctx := context.Background()
+	inside := ag.tools.Execute(ctx, protocol.ToolCall{ID: "c1", Name: "read_file", Arguments: `{"path":"inner.txt"}`})
+	if inside.IsError {
+		t.Fatalf("expected read inside workdir to succeed, got: %s", inside.Content)
+	}
+	if inside.Content != "inner" {
+		t.Errorf("unexpected content: %q", inside.Content)
+	}
+
+	outside := ag.tools.Execute(ctx, protocol.ToolCall{ID: "c2", Name: "read_file", Arguments: `{"path":"../root.txt"}`})
+	if !outside.IsError {
+		t.Fatalf("expected read outside workdir to be blocked, got content: %q", outside.Content)
 	}
 }

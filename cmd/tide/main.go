@@ -8,6 +8,7 @@ import (
 
 	"my-agent/internal/agent"
 	"my-agent/internal/config"
+	"my-agent/internal/middleware"
 	"my-agent/internal/tui"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -54,18 +55,26 @@ func main() {
 		cfg = config.DefaultConfig()
 	}
 
-	ag, err := agent.NewFromConfig(cfg, agent.WithLoggingMiddleware())
+	// 可替换策略（日志审计、大结果落盘）由宿主显式装配，内核只保留挂载机制
+	wd, _ := os.Getwd()
+	traceLogger := middleware.NewLoggingMiddleware(wd)
+	opts := []agent.Option{
+		agent.WithHook(traceLogger),
+		agent.WithPostToolUse(middleware.LargeResultSpill(wd)),
+	}
+
+	ag, err := agent.NewFromConfig(cfg, opts...)
 	if err != nil {
 		// 配置语义无效（如未知厂商）时同样回退，保证前端始终获得可注入的内核
-		ag, err = agent.NewFromConfig(config.DefaultConfig(), agent.WithLoggingMiddleware())
+		ag, err = agent.NewFromConfig(config.DefaultConfig(), opts...)
 	}
 	if err != nil {
 		fmt.Printf("tide 内核装配失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 启动 TUI 终端界面，注入解耦后的 agent 实例，开启鼠标滚轮事件与全屏缓冲
-	m := tui.NewModel(ag)
+	// 启动 TUI 终端界面，注入解耦后的 agent 实例与追踪数据源
+	m := tui.NewModel(ag, traceLogger)
 
 	p := tea.NewProgram(m, tea.WithMouseCellMotion(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

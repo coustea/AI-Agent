@@ -21,15 +21,11 @@ const (
 // 本工具是纯执行器：不含任何安全策略。命令是否允许执行由
 // 三道闸门权限管线统一裁决（见 internal/permission）。
 type BashTool struct {
-	workDir string
+	workDir *WorkDirRef
 }
 
-func NewBashTool(workDir ...string) *BashTool {
-	wd := ""
-	if len(workDir) > 0 {
-		wd = workDir[0]
-	}
-	return &BashTool{workDir: wd}
+func NewBashTool(workDir *WorkDirRef) *BashTool {
+	return &BashTool{workDir: workDir}
 }
 
 func (t *BashTool) Name() string {
@@ -91,9 +87,7 @@ func (t *BashTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 
 	cmd := createShellCmd(cmdCtx, command)
 	setupProcessGroup(cmd)
-	if t.workDir != "" {
-		cmd.Dir = t.workDir
-	}
+	cmd.Dir = t.workDir.Get()
 
 	var combinedBuf bytes.Buffer
 	cmd.Stdout = &combinedBuf

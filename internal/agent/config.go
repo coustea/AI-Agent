@@ -75,12 +75,3 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 	a.gw = gw
 	return nil
 }
-
-// SetGateway 支持运行时热切换大模型网关
-func (a *CoreAgent) SetGateway(gw gateway.Gateway) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if gw != nil {
-		a.gw = gw
-	}
-}

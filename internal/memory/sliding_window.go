@@ -10,20 +10,24 @@ import (
 
 // SlidingWindowMemory 基于滑动窗口并严格保证轮次原子性（Turn Atomicity）的记忆实现。
 // 裁剪历史时，保证 User -> Assistant(ToolCalls) -> Tool(ToolResult) 永远同生共死，绝不产生孤立的 RoleTool。
+// 同时按字符预算（近似 token）从最新向前累计，防止长任务撑爆模型上下文。
 type SlidingWindowMemory struct {
-	mu          sync.RWMutex
-	messages    []protocol.Message
-	maxMessages int
+	mu              sync.RWMutex
+	messages        []protocol.Message
+	maxMessages     int
+	maxContextBytes int
 }
 
-// NewSlidingWindowMemory 创建一个指定最大消息数量的滑动窗口记忆实例。
-func NewSlidingWindowMemory(maxMessages int) *SlidingWindowMemory {
+// NewSlidingWindowMemory 创建滑动窗口记忆实例。
+// maxMessages 限制保留条数，maxContextBytes 限制保留上下文的字符预算（≤0 表示不限制）。
+func NewSlidingWindowMemory(maxMessages, maxContextBytes int) *SlidingWindowMemory {
 	if maxMessages <= 0 {
 		maxMessages = 40
 	}
 	return &SlidingWindowMemory{
-		messages:    make([]protocol.Message, 0),
-		maxMessages: maxMessages,
+		messages:        make([]protocol.Message, 0),
+		maxMessages:     maxMessages,
+		maxContextBytes: maxContextBytes,
 	}
 }
 
@@ -93,6 +97,29 @@ func (m *SlidingWindowMemory) BuildContext(ctx context.Context, systemPrompt str
 		startIdx--
 	}
 
+	// 字符预算裁剪：以轮次（User 起点）为最小裁剪单位整轮丢弃，
+	// 直到上下文 ≤ 预算；最后一轮始终保留（否则无法继续对话）。
+	// 字符近似 token ≈ 4:1，不引入 tokenizer 依赖。
+	if m.maxContextBytes > 0 {
+		for startIdx < total {
+			used := 0
+			for i := startIdx; i < total; i++ {
+				used += messageBytes(raw[i])
+			}
+			if used <= m.maxContextBytes {
+				break
+			}
+			next := startIdx + 1
+			for next < total && raw[next].Role != protocol.RoleUser {
+				next++
+			}
+			if next >= total {
+				break // 只剩最后一轮，保留
+			}
+			startIdx = next
+		}
+	}
+
 	selected := raw[startIdx:]
 	result := make([]protocol.Message, 0, len(selected)+1)
 	if systemPrompt != "" {
@@ -100,4 +127,16 @@ func (m *SlidingWindowMemory) BuildContext(ctx context.Context, systemPrompt str
 	}
 	result = append(result, selected...)
 	return result, nil
+}
+
+// messageBytes 估算单条消息的出站字符量（reasoning_content 不出站，不计入）
+func messageBytes(m protocol.Message) int {
+	n := len(m.Content)
+	for _, tc := range m.ToolCalls {
+		n += len(tc.Name) + len(tc.Arguments)
+	}
+	if m.ToolResult != nil {
+		n += len(m.ToolResult.Content)
+	}
+	return n
 }

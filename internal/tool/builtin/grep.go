@@ -15,15 +15,11 @@ import (
 
 // GrepTool 在工作区内按正则表达式搜索代码与文件内容，学习自 learn-claude-code 中的 run_grep
 type GrepTool struct {
-	workDir string
+	workDir *WorkDirRef
 }
 
-func NewGrepTool(workDir ...string) *GrepTool {
-	wd := ""
-	if len(workDir) > 0 {
-		wd = workDir[0]
-	}
-	return &GrepTool{workDir: wd}
+func NewGrepTool(workDir *WorkDirRef) *GrepTool {
+	return &GrepTool{workDir: workDir}
 }
 
 func (t *GrepTool) Name() string {
@@ -96,19 +92,12 @@ func (t *GrepTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		searchPath = "."
 	}
 
-	targetPath, err := SafePath(t.workDir, searchPath)
+	targetPath, err := SafePath(t.workDir.Get(), searchPath)
 	if err != nil {
 		return "", err
 	}
 
-	workDirAbs := t.workDir
-	if workDirAbs == "" {
-		if wd, err := os.Getwd(); err == nil {
-			workDirAbs = wd
-		} else {
-			workDirAbs = "."
-		}
-	}
+	workDirAbs := t.workDir.Get()
 	if abs, err := filepath.Abs(workDirAbs); err == nil {
 		workDirAbs = abs
 	}

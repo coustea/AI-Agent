@@ -63,12 +63,16 @@ func WithAutoApprove(auto bool) Option {
 	}
 }
 
-// WithWorkDir 配置工作目录，并播种该工作区的记忆模板与刷新静态 persona
+// WithWorkDir 配置工作目录，并播种该工作区的记忆模板与刷新静态 persona。
+// 工具沙箱与权限判定共享同一个 WorkDirRef，此处 Set 后即时生效。
 func WithWorkDir(dir string) Option {
 	return func(a *CoreAgent) {
 		cleanDir := strings.TrimSpace(dir)
 		if cleanDir != "" {
 			a.workDir = cleanDir
+			if a.workDirRef != nil {
+				a.workDirRef.Set(cleanDir)
+			}
 			_ = memory.InitTemplates(a.workDir)
 			a.persona = defaultPersona(a.workDir)
 			if a.permission != nil {
@@ -78,20 +82,17 @@ func WithWorkDir(dir string) Option {
 	}
 }
 
-// WithDefaultTools 注册内置核心工具集，学习自 learn-claude-code (read_file, write_file, edit_file, glob, grep, bash)
-func WithDefaultTools(workDir ...string) Option {
+// WithDefaultTools 注册内置核心工具集，学习自 learn-claude-code (read_file, write_file, edit_file, glob, grep, bash)。
+// 工具只持有共享 WorkDirRef，装配顺序无关。
+func WithDefaultTools() Option {
 	return func(a *CoreAgent) {
-		wd := a.workDir
-		if len(workDir) > 0 && strings.TrimSpace(workDir[0]) != "" {
-			wd = strings.TrimSpace(workDir[0])
-		}
 		a.tools.Register(
-			builtin.NewReadFileTool(wd),
-			builtin.NewWriteFileTool(wd),
-			builtin.NewEditFileTool(wd),
-			builtin.NewGlobTool(wd),
-			builtin.NewGrepTool(wd),
-			builtin.NewBashTool(wd),
+			builtin.NewReadFileTool(a.workDirRef),
+			builtin.NewWriteFileTool(a.workDirRef),
+			builtin.NewEditFileTool(a.workDirRef),
+			builtin.NewGlobTool(a.workDirRef),
+			builtin.NewGrepTool(a.workDirRef),
+			builtin.NewBashTool(a.workDirRef),
 		)
 	}
 }
@@ -133,14 +134,12 @@ func WithHook(hook AgentHook) Option {
 	}
 }
 
-// WithLoggingMiddleware 为 Agent 一键挂载透明可观测性日志中间件
-func WithLoggingMiddleware(workDir ...string) Option {
+// WithPostToolUse 在工具执行流水线末尾挂载后置钩子（大结果落盘、审计等策略由宿主装配）
+func WithPostToolUse(h tool.PostToolUse) Option {
 	return func(a *CoreAgent) {
-		dir := a.workDir
-		if len(workDir) > 0 && strings.TrimSpace(workDir[0]) != "" {
-			dir = strings.TrimSpace(workDir[0])
+		if h != nil {
+			a.tools.UsePostToolUse(h)
 		}
-		a.hooks = append(a.hooks, NewLoggingMiddleware(dir))
 	}
 }
 
@@ -153,7 +152,8 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 	a := &CoreAgent{
 		gw:           gw,
 		workDir:      wd,
-		memory:       memory.NewSlidingWindowMemory(40),
+		workDirRef:   builtin.NewWorkDirRef(wd),
+		memory:       memory.NewSlidingWindowMemory(40, 160_000),
 		tools:        tool.NewRegistry(),
 		persona:      defaultPersona(wd),
 		maxSteps:     10,
@@ -167,9 +167,8 @@ func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
 		opt(a)
 	}
 
-	// 装配期在 tool.Registry 上挂载横切机制钩子（核心：机制挂上去，而不是嵌在循环里）
+	// 装配期在 tool.Registry 上挂载内核机制钩子（权限闸门属内核安全机制）
 	a.tools.UsePreToolUse(a.permissionPreHook)
-	a.tools.UsePostToolUse(a.largeResultPostHook)
 
 	return a, nil
 }

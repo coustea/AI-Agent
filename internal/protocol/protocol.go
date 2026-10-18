@@ -3,7 +3,6 @@ package protocol
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 )
 
@@ -160,15 +159,6 @@ type TraceEvent struct {
 	Payload   any           `json:"payload"`            // 原始结构体数据对象 (如 LLMRequestTrace, ToolTrace 等)
 }
 
-// PrettyJSON 将 Payload 格式化为 2 格缩进的完整 JSON 字符串，保留所有真实字段与参数
-func (e TraceEvent) PrettyJSON() string {
-	b, err := json.MarshalIndent(e.Payload, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("{\n  \"error\": %q\n}", err.Error())
-	}
-	return string(b)
-}
-
 // LLMRequestTrace 记录向大模型发送的完整请求快照
 type LLMRequestTrace struct {
 	Step         int              `json:"step"`
@@ -237,7 +227,4 @@ type Agent interface {
 
 	// WorkDir 获取当前绑定的工作目录
 	WorkDir() string
-
-	// Traces 返回当前/最近一轮对话的完整详细结构化追踪事件切片
-	Traces() []TraceEvent
 }

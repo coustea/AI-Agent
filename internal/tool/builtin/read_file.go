@@ -11,15 +11,11 @@ import (
 
 // ReadFileTool 读取工作区内指定文件的文本内容，学习自 learn-claude-code 中的 run_read
 type ReadFileTool struct {
-	workDir string
+	workDir *WorkDirRef
 }
 
-func NewReadFileTool(workDir ...string) *ReadFileTool {
-	wd := ""
-	if len(workDir) > 0 {
-		wd = workDir[0]
-	}
-	return &ReadFileTool{workDir: wd}
+func NewReadFileTool(workDir *WorkDirRef) *ReadFileTool {
+	return &ReadFileTool{workDir: workDir}
 }
 
 func (t *ReadFileTool) Name() string {
@@ -58,7 +54,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		return "", fmt.Errorf("failed to parse read_file arguments: %w", err)
 	}
 
-	targetPath, err := SafePath(t.workDir, input.Path)
+	targetPath, err := SafePath(t.workDir.Get(), input.Path)
 	if err != nil {
 		return "", err
 	}

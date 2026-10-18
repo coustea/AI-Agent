@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"my-agent/internal/protocol"
@@ -9,7 +10,7 @@ import (
 
 // 测试基本的追加、历史获取与清空
 func TestSlidingWindowMemory_Basic(t *testing.T) {
-	mem := NewSlidingWindowMemory(10)
+	mem := NewSlidingWindowMemory(10, 0)
 	ctx := context.Background()
 
 	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleUser, Content: "Hello"})
@@ -44,7 +45,7 @@ func TestSlidingWindowMemory_Basic(t *testing.T) {
 
 // 测试轮次原子性（Turn Atomicity）：绝不裁出孤立的 RoleTool
 func TestSlidingWindowMemory_TurnAtomicity(t *testing.T) {
-	mem := NewSlidingWindowMemory(3) // 仅保留 3 条消息的极小窗口，测试回溯
+	mem := NewSlidingWindowMemory(3, 0) // 仅保留 3 条消息的极小窗口，测试回溯
 	ctx := context.Background()
 
 	// 轮次 1
@@ -77,7 +78,7 @@ func TestSlidingWindowMemory_TurnAtomicity(t *testing.T) {
 	// 但如果 maxMessages 设为 4，理论切片起点为 index 4 (RoleTool)。
 	// 验证：无论怎么切，绝不能以 RoleTool 或孤立的 ToolCalls 开头！
 	for max := 2; max <= 6; max++ {
-		testMem := NewSlidingWindowMemory(max)
+		testMem := NewSlidingWindowMemory(max, 0)
 		for _, m := range mem.History() {
 			_ = testMem.Append(ctx, m)
 		}
@@ -108,6 +109,95 @@ func TestSlidingWindowMemory_TurnAtomicity(t *testing.T) {
 					t.Errorf("max=%d: RoleTool at %d preceded by illegal %s", max, i, prev.Role)
 				}
 			}
+		}
+	}
+}
+
+// 验收 D7：字符预算裁剪 + 工具调用配对完整性
+func TestSlidingWindowMemory_ContextByteBudget(t *testing.T) {
+	const budget = 500
+	mem := NewSlidingWindowMemory(100, budget)
+
+	// 20 条各 100 字符的 user/assistant 交替消息，总量远超预算
+	for i := 0; i < 20; i++ {
+		role := protocol.RoleUser
+		if i%2 == 1 {
+			role = protocol.RoleAssistant
+		}
+		_ = mem.Append(context.Background(), protocol.Message{
+			Role:    role,
+			Content: strings.Repeat("x", 100),
+		})
+	}
+
+	ctxMsgs, err := mem.BuildContext(context.Background(), "sys")
+	if err != nil {
+		t.Fatalf("BuildContext failed: %v", err)
+	}
+
+	total := 0
+	for _, m := range ctxMsgs {
+		if m.Role == protocol.RoleSystem {
+			continue
+		}
+		total += len(m.Content)
+	}
+	if total > budget {
+		t.Errorf("context bytes %d exceed budget %d", total, budget)
+	}
+	if len(ctxMsgs) < 2 {
+		t.Fatalf("expected some recent history retained, got %d", len(ctxMsgs))
+	}
+	// 必须保留最新一条
+	if ctxMsgs[len(ctxMsgs)-1].Content != strings.Repeat("x", 100) {
+		t.Errorf("latest message must be retained")
+	}
+}
+
+// 预算裁剪不得拆散 assistant(tool_calls) 与其 tool 结果
+func TestSlidingWindowMemory_ByteBudgetKeepsToolPairs(t *testing.T) {
+	const budget = 200
+	mem := NewSlidingWindowMemory(100, budget)
+	ctx := context.Background()
+
+	_ = mem.Append(ctx, protocol.Message{Role: protocol.RoleUser, Content: "run it"})
+	_ = mem.Append(ctx, protocol.Message{
+		Role:    protocol.RoleAssistant,
+		Content: strings.Repeat("a", 120),
+		ToolCalls: []protocol.ToolCall{
+			{ID: "tc1", Name: "bash", Arguments: `{"command":"ls"}`},
+		},
+	})
+	_ = mem.Append(ctx, protocol.Message{
+		Role:       protocol.RoleTool,
+		ToolResult: &protocol.ToolResult{ToolCallID: "tc1", Name: "bash", Content: strings.Repeat("b", 120)},
+	})
+
+	ctxMsgs, err := mem.BuildContext(ctx, "")
+	if err != nil {
+		t.Fatalf("BuildContext failed: %v", err)
+	}
+	if len(ctxMsgs) == 0 {
+		t.Fatalf("expected tool pair retained")
+	}
+	// 首条不得是孤立 RoleTool
+	if ctxMsgs[0].Role == protocol.RoleTool {
+		t.Fatalf("context must not start with orphan tool result")
+	}
+	// 若包含 tool 结果，其配对的 assistant(tool_calls) 必须在前面
+	for i, m := range ctxMsgs {
+		if m.Role != protocol.RoleTool {
+			continue
+		}
+		found := false
+		for j := 0; j < i; j++ {
+			if ctxMsgs[j].Role == protocol.RoleAssistant && len(ctxMsgs[j].ToolCalls) > 0 {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("orphan tool result at index %d", i)
 		}
 	}
 }

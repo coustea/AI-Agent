@@ -40,40 +40,6 @@ func collectStream(t *testing.T, stream <-chan protocol.ChatResponse) streamResu
 	return r
 }
 
-// 测试 llama-server 健康检查与模型就绪检测
-func TestLlamaCpp_HealthCheck(t *testing.T) {
-	serverOK := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"ok"}`))
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer serverOK.Close()
-
-	gwOK, _ := NewLlamaCpp(serverOK.URL, "", "local-model", serverOK.Client())
-	if err := gwOK.CheckHealth(context.Background()); err != nil {
-		t.Errorf("expected health check to pass, got: %v", err)
-	}
-
-	serverLoading := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/health" {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"status":"loading model"}`))
-			return
-		}
-		http.NotFound(w, r)
-	}))
-	defer serverLoading.Close()
-
-	gwLoading, _ := NewLlamaCpp(serverLoading.URL, "", "local-model", serverLoading.Client())
-	err := gwLoading.CheckHealth(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "loading model") {
-		t.Errorf("expected loading model error, got: %v", err)
-	}
-}
-
 // 测试 llama.cpp 流式对话与 Token 统计
 func TestLlamaCpp_Chat_Text(t *testing.T) {
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -417,169 +383,44 @@ func TestGemini_Chat_Text_AndAuth(t *testing.T) {
 	}
 }
 
-// 测试整个系统通过先经过 Agent 然后经过 Gateway Router 进行模型分配与路由
-func TestRouter_ModelAllocation(t *testing.T) {
-	newSSEServer := func(content string) *httptest.Server {
-		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "text/event-stream")
-			w.WriteHeader(http.StatusOK)
-			flusher := w.(http.Flusher)
-			for _, ev := range []string{
-				fmt.Sprintf(`data: {"choices":[{"delta":{"content":%q}}]}`, content),
-				`data: [DONE]`,
-			} {
-				_, _ = fmt.Fprintf(w, "%s\n\n", ev)
-				flusher.Flush()
-			}
-		}))
-	}
-
-	geminiServer := newSSEServer("from-gemini")
-	defer geminiServer.Close()
-	dsServer := newSSEServer("from-deepseek")
-	defer dsServer.Close()
-	llamaServer := newSSEServer("from-llamacpp")
-	defer llamaServer.Close()
-
-	geminiGW, _ := NewGemini(geminiServer.URL, "key", "gemini-2.5-flash", geminiServer.Client())
-	dsGW, _ := NewDeepSeek(dsServer.URL, "key", "deepseek-flash", dsServer.Client())
-	llamaGW, _ := NewLlamaCpp(llamaServer.URL, "", "local-model", llamaServer.Client())
-
-	router := NewRouter("llamacpp")
-	router.Register("gemini", geminiGW)
-	router.Register("deepseek", dsGW)
-	router.Register("llamacpp", llamaGW)
-
-	route := func(modelName, want string) {
-		t.Helper()
-		stream, err := router.ChatStream(context.Background(), &protocol.ChatRequest{
-			Model:    modelName,
-			Messages: []protocol.Message{{Role: protocol.RoleUser, Content: "Hi"}},
-		})
-		if err != nil {
-			t.Fatalf("route(%q) failed: %v", modelName, err)
-		}
-		if got := collectStream(t, stream).content; got != want {
-			t.Fatalf("route(%q): expected content %q, got %q", modelName, want, got)
-		}
-	}
-
-	// 1. 请求指定 gemini 模型 -> 自动分配到 gemini
-	route("gemini-2.5-flash", "from-gemini")
-
-	// 2. 请求指定 deepseek 模型 -> 自动分配到 deepseek
-	route("deepseek-flash", "from-deepseek")
-
-	// 3. 请求未指定模型 -> 自动分配到默认激活的 llamacpp
-	route("", "from-llamacpp")
-
-	// 4. 切换默认激活为 deepseek
-	router.SetActive("deepseek")
-	route("", "from-deepseek")
-}
-
-// 测试工厂方法 NewGatewayFromConfig
+// 测试工厂方法 NewGatewayFromConfig：直接构造对应厂商的 *Client
 func TestNewGatewayFromConfig(t *testing.T) {
-	cfg := &config.Config{
-		Provider: config.ProviderLlamaCpp,
-		BaseURL:  "http://localhost:8080",
+	cases := []struct {
+		name     string
+		cfg      *config.Config
+		wantProv config.Provider
+		wantURL  string
+	}{
+		{"llamacpp", &config.Config{Provider: config.ProviderLlamaCpp, BaseURL: "http://localhost:8080"}, config.ProviderLlamaCpp, "http://localhost:8080"},
+		{"deepseek", &config.Config{Provider: config.ProviderDeepSeek, APIKey: "sk-deepseek-test"}, config.ProviderDeepSeek, ""},
+		{"gemini", &config.Config{Provider: config.ProviderGemini, APIKey: "sk-gemini-test-key"}, config.ProviderGemini, ""},
+		{"spark", &config.Config{Provider: config.ProviderSpark, APIKey: "sk-spark-test-key"}, config.ProviderSpark, ""},
 	}
 
-	gw, err := NewGatewayFromConfig(cfg)
-	if err != nil {
-		t.Fatalf("failed to create gateway from config: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			gw, err := NewGatewayFromConfig(tc.cfg)
+			if err != nil {
+				t.Fatalf("NewGatewayFromConfig failed: %v", err)
+			}
+			client, ok := gw.(*Client)
+			if !ok {
+				t.Fatalf("expected *Client, got %T", gw)
+			}
+			if client.Provider() != tc.wantProv {
+				t.Errorf("expected provider %s, got %s", tc.wantProv, client.Provider())
+			}
+			if tc.wantURL != "" && client.BaseURL() != tc.wantURL {
+				t.Errorf("expected baseURL %s, got %s", tc.wantURL, client.BaseURL())
+			}
+		})
 	}
 
-	router, ok := gw.(*Router)
-	if !ok {
-		t.Fatalf("expected *Router, got %T", gw)
-	}
-
-	activeGW, err := router.Route(&protocol.ChatRequest{})
-	if err != nil {
-		t.Fatalf("failed to route active gateway: %v", err)
-	}
-
-	lgw, ok := activeGW.(*Client)
-	if !ok || lgw.Provider() != config.ProviderLlamaCpp {
-		t.Fatalf("expected *Client for llamacpp, got %T", activeGW)
-	}
-	if lgw.baseURL != "http://localhost:8080" {
-		t.Errorf("expected baseURL http://localhost:8080, got %s", lgw.baseURL)
-	}
-
-	// 测试 DeepSeek 官方配置
-	dsCfg := &config.Config{
-		Provider: config.ProviderDeepSeek,
-		APIKey:   "sk-deepseek-test",
-	}
-	dsGw, err := NewGatewayFromConfig(dsCfg)
-	if err != nil {
-		t.Fatalf("failed to create deepseek gateway: %v", err)
-	}
-	dsRouter := dsGw.(*Router)
-	dsSubGW, _ := dsRouter.Route(&protocol.ChatRequest{})
-	if client, ok := dsSubGW.(*Client); !ok || client.Provider() != config.ProviderDeepSeek {
-		t.Fatalf("expected *Client for deepseek, got %T", dsSubGW)
-	}
-
-	// 测试 Google Gemini 官方配置
-	geminiCfg := &config.Config{
-		Provider: config.ProviderGemini,
-		APIKey:   "sk-gemini-test-key",
-	}
-	geminiGw, err := NewGatewayFromConfig(geminiCfg)
-	if err != nil {
-		t.Fatalf("failed to create gemini gateway: %v", err)
-	}
-	geminiRouter := geminiGw.(*Router)
-	geminiSubGW, _ := geminiRouter.Route(&protocol.ChatRequest{})
-	if client, ok := geminiSubGW.(*Client); !ok || client.Provider() != config.ProviderGemini {
-		t.Fatalf("expected *Client for gemini, got %T", geminiSubGW)
-	}
-
-	// 测试 Spark (星辰 MaaS) 配置与动态路由
-	sparkCfg := &config.Config{
-		Provider: config.ProviderSpark,
-		APIKey:   "sk-spark-test-key",
-	}
-	sparkGw, err := NewGatewayFromConfig(sparkCfg)
-	if err != nil {
-		t.Fatalf("failed to create spark gateway: %v", err)
-	}
-	sparkRouter := sparkGw.(*Router)
-	sparkSubGW, _ := sparkRouter.Route(&protocol.ChatRequest{})
-	if client, ok := sparkSubGW.(*Client); !ok || client.Provider() != config.ProviderSpark {
-		t.Fatalf("expected *Client for spark, got %T", sparkSubGW)
-	}
-
-	// 测试根据 spark-* 模型前缀动态路由 (支持 spark-2.5, spark-2.5-4b, spark-x2.5 等)
-	for _, mName := range []string{"spark-2.5", "spark-2.5-4b", "spark-x2.5", "spark-x2.5-4b"} {
-		prefixGW, err := sparkRouter.Route(&protocol.ChatRequest{Model: mName})
-		if err != nil {
-			t.Fatalf("failed to route %s: %v", mName, err)
+	// 远程厂商缺密钥必须返回 ErrEmptyAPIKey
+	for _, p := range []config.Provider{config.ProviderSpark, config.ProviderGemini, config.ProviderDeepSeek} {
+		if _, err := NewGatewayFromConfig(&config.Config{Provider: p}); err != ErrEmptyAPIKey {
+			t.Errorf("expected ErrEmptyAPIKey for %s, got: %v", p, err)
 		}
-		if client, ok := prefixGW.(*Client); !ok || client.Provider() != config.ProviderSpark {
-			t.Fatalf("expected *Client for %s model prefix, got %T", mName, prefixGW)
-		}
-	}
-
-	// 测试 Spark 缺少 APIKey 返回 ErrEmptyAPIKey
-	sparkNoKeyCfg := &config.Config{
-		Provider: config.ProviderSpark,
-		APIKey:   "",
-	}
-	if _, err := NewGatewayFromConfig(sparkNoKeyCfg); err != ErrEmptyAPIKey {
-		t.Errorf("expected ErrEmptyAPIKey for spark without api key, got: %v", err)
-	}
-
-	// 测试 Gemini 缺少 APIKey 返回 ErrEmptyAPIKey
-	geminiNoKeyCfg := &config.Config{
-		Provider: config.ProviderGemini,
-		APIKey:   "",
-	}
-	if _, err := NewGatewayFromConfig(geminiNoKeyCfg); err != ErrEmptyAPIKey {
-		t.Errorf("expected ErrEmptyAPIKey for gemini without api key, got: %v", err)
 	}
 }
 

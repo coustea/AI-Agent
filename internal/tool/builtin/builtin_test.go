@@ -72,7 +72,7 @@ func TestReadFileTool(t *testing.T) {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	tool := NewReadFileTool(tmpDir)
+	tool := NewReadFileTool(NewWorkDirRef(tmpDir))
 
 	// 1. 全量读取
 	args, _ := json.Marshal(ReadFileInput{Path: testFile})
@@ -117,7 +117,7 @@ func TestReadFileTool(t *testing.T) {
 
 func TestWriteFileTool(t *testing.T) {
 	tmpDir := t.TempDir()
-	tool := NewWriteFileTool(tmpDir)
+	tool := NewWriteFileTool(NewWorkDirRef(tmpDir))
 
 	// 1. 自动递归创建父目录并写入文件
 	target := "nested/sub/hello.txt"
@@ -154,7 +154,7 @@ func TestEditFileTool(t *testing.T) {
 	initialContent := "func main() {\n\tfmt.Println(\"Old Message\")\n\tfmt.Println(\"Old Message\")\n}"
 	_ = os.WriteFile(filepath.Join(tmpDir, testFile), []byte(initialContent), 0644)
 
-	tool := NewEditFileTool(tmpDir)
+	tool := NewEditFileTool(NewWorkDirRef(tmpDir))
 
 	// 1. 精确单次替换
 	args, _ := json.Marshal(EditFileInput{
@@ -201,7 +201,7 @@ func TestGlobTool(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(tmpDir, "src", "pkg", "lib.go"), []byte("package pkg"), 0644)
 	_ = os.WriteFile(filepath.Join(tmpDir, "src", "pkg", "lib_test.go"), []byte("package pkg"), 0644)
 
-	tool := NewGlobTool(tmpDir)
+	tool := NewGlobTool(NewWorkDirRef(tmpDir))
 
 	// 1. 递归匹配所有 .go 文件 (**/*.go)
 	argsRec, _ := json.Marshal(GlobInput{Pattern: "**/*.go"})
@@ -245,7 +245,7 @@ func TestGlobTool(t *testing.T) {
 
 func TestBashTool(t *testing.T) {
 	tmpDir := t.TempDir()
-	tool := NewBashTool(tmpDir)
+	tool := NewBashTool(NewWorkDirRef(tmpDir))
 
 	// 1. 正常执行
 	args, _ := json.Marshal(BashInput{Command: "echo 'Coustea Test'"})
@@ -309,7 +309,7 @@ func TestGrepTool(t *testing.T) {
 	_ = os.MkdirAll(filepath.Join(tmpDir, "sub"), 0o755)
 	_ = os.WriteFile(filepath.Join(tmpDir, "sub", "sub.go"), []byte("package sub\n\nfunc TargetFunc() {}\n"), 0o644)
 
-	tool := NewGrepTool(tmpDir)
+	tool := NewGrepTool(NewWorkDirRef(tmpDir))
 
 	// 1. 全局检索模式
 	args1, _ := json.Marshal(GrepInput{Pattern: `coustea`})
@@ -365,7 +365,7 @@ func TestGrepTool(t *testing.T) {
 // 验收 D2：timeout_ms 参数夹取与超时杀进程组
 func TestBashTool_ToolTimeoutMs(t *testing.T) {
 	tmpDir := t.TempDir()
-	tool := NewBashTool(tmpDir)
+	tool := NewBashTool(NewWorkDirRef(tmpDir))
 
 	// 1. timeout_ms 生效：sleep 5 + 300ms 超时应快速返回
 	timeoutMs := int64(300)

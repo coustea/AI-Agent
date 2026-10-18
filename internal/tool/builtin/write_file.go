@@ -10,15 +10,11 @@ import (
 
 // WriteFileTool 向工作区内的文件写入文本，学习自 learn-claude-code 中的 run_write
 type WriteFileTool struct {
-	workDir string
+	workDir *WorkDirRef
 }
 
-func NewWriteFileTool(workDir ...string) *WriteFileTool {
-	wd := ""
-	if len(workDir) > 0 {
-		wd = workDir[0]
-	}
-	return &WriteFileTool{workDir: wd}
+func NewWriteFileTool(workDir *WorkDirRef) *WriteFileTool {
+	return &WriteFileTool{workDir: workDir}
 }
 
 func (t *WriteFileTool) Name() string {
@@ -57,7 +53,7 @@ func (t *WriteFileTool) Execute(ctx context.Context, args json.RawMessage) (stri
 		return "", fmt.Errorf("failed to parse write_file arguments: %w", err)
 	}
 
-	targetPath, err := SafePath(t.workDir, input.Path)
+	targetPath, err := SafePath(t.workDir.Get(), input.Path)
 	if err != nil {
 		return "", err
 	}

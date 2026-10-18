@@ -4,11 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
 	"sync/atomic"
-	"unicode/utf8"
 
 	"my-agent/internal/protocol"
 )
@@ -100,76 +96,4 @@ func (a *CoreAgent) permissionPreHook(ctx context.Context, call protocol.ToolCal
 		return errors.New(reason)
 	}
 	return nil
-}
-
-const (
-	toolResultBudgetRunes  = 8000 // 单条工具结果落盘阈值（字符数）
-	toolResultPreviewRunes = 2000 // 落盘后保留的预览字符数
-)
-
-// largeResultPostHook 作为 PostToolUse 钩子挂载在 tool.Registry 流水线上。
-// 学习自 learn-claude-code 的 PostToolUse 机制：
-// 工具执行已完成，若输出内容过大（超过阈值），则全量落盘并改写为“前缀预览 + 完整路径提示”，
-// 既防止单条工具大输出打爆模型上下文，又保留模型通过 read_file 回读全量内容的能力。
-func (a *CoreAgent) largeResultPostHook(ctx context.Context, call protocol.ToolCall, res *protocol.ToolResult) {
-	if res == nil || res.Content == "" {
-		return
-	}
-
-	totalRunes := utf8.RuneCountInString(res.Content)
-	if totalRunes <= toolResultBudgetRunes {
-		return
-	}
-
-	a.mu.RLock()
-	workDir := a.workDir
-	a.mu.RUnlock()
-	if workDir == "" {
-		workDir = "."
-	}
-
-	resultsDir := filepath.Join(workDir, ".tide", "tool-results")
-	if err := os.MkdirAll(resultsDir, 0o755); err != nil {
-		// 落盘目录创建失败则降级原样返回
-		return
-	}
-
-	safeCallID := sanitizeFileName(call.ID)
-	if safeCallID == "" {
-		safeCallID = "result"
-	}
-	fileName := fmt.Sprintf("%s.txt", safeCallID)
-	fullPath := filepath.Join(resultsDir, fileName)
-
-	// 若存在同名冲突，追加数字后缀
-	for i := 1; ; i++ {
-		if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-			break
-		}
-		fileName = fmt.Sprintf("%s_%d.txt", safeCallID, i)
-		fullPath = filepath.Join(resultsDir, fileName)
-	}
-
-	// 写入全量输出
-	if err := os.WriteFile(fullPath, []byte(res.Content), 0o600); err != nil {
-		// 写入失败降级保留原文本，不丢弃信息
-		return
-	}
-
-	// 截取前预览字符
-	runes := []rune(res.Content)
-	preview := string(runes[:toolResultPreviewRunes])
-
-	relPath, err := filepath.Rel(workDir, fullPath)
-	if err != nil {
-		relPath = fullPath
-	}
-
-	res.Content = fmt.Sprintf("%s\n\n... [output truncated: %d characters total; full content saved to %s — use read_file to view]", preview, totalRunes, filepath.ToSlash(relPath))
-}
-
-func sanitizeFileName(name string) string {
-	clean := strings.TrimSpace(name)
-	replacer := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
-	return replacer.Replace(clean)
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -14,15 +13,11 @@ import (
 
 // GlobTool 基于模式匹配查找工作区内的文件，学习自 learn-claude-code 中的 run_glob
 type GlobTool struct {
-	workDir string
+	workDir *WorkDirRef
 }
 
-func NewGlobTool(workDir ...string) *GlobTool {
-	wd := ""
-	if len(workDir) > 0 {
-		wd = workDir[0]
-	}
-	return &GlobTool{workDir: wd}
+func NewGlobTool(workDir *WorkDirRef) *GlobTool {
+	return &GlobTool{workDir: workDir}
 }
 
 func (t *GlobTool) Name() string {
@@ -61,15 +56,7 @@ func (t *GlobTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("pattern cannot be empty")
 	}
 
-	workDir := t.workDir
-	if workDir == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return "", fmt.Errorf("failed to get current working directory: %w", err)
-		}
-		workDir = wd
-	}
-	workDirAbs, err := filepath.Abs(workDir)
+	workDirAbs, err := filepath.Abs(t.workDir.Get())
 	if err != nil {
 		return "", fmt.Errorf("failed to get absolute workdir: %w", err)
 	}

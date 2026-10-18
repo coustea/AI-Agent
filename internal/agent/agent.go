@@ -10,6 +10,7 @@ import (
 	"my-agent/internal/permission"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
+	"my-agent/internal/tool/builtin"
 )
 
 var (
@@ -28,6 +29,7 @@ type CoreAgent struct {
 	cfg          *config.Config
 	cfgPath      string
 	workDir      string
+	workDirRef   *builtin.WorkDirRef
 	memory       memory.Memory
 	tools        *tool.Registry
 	permission   *permission.Manager
@@ -64,33 +66,6 @@ func (a *CoreAgent) MemoryCount() int {
 	a.mu.RUnlock()
 	bundle := memory.LoadBundle(wd)
 	return len(bundle.GlobalFiles) + len(bundle.ProjectFiles)
-}
-
-// Traces 返回当前/最近一轮对话由日志中间件捕获的全量结构化追踪事件
-func (a *CoreAgent) Traces() []protocol.TraceEvent {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	for _, h := range a.hooks {
-		if lm, ok := h.(*LoggingMiddleware); ok {
-			return lm.Traces()
-		}
-	}
-	return nil
-}
-
-// TotalUsage 获取当前实例累计消耗的总 Token 用量
-func (a *CoreAgent) TotalUsage() protocol.Usage {
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-	if a.gw != nil {
-		u := a.gw.TotalUsage()
-		return protocol.Usage{
-			PromptTokens:     u.PromptTokens,
-			CompletionTokens: u.CompletionTokens,
-			TotalTokens:      u.TotalTokens,
-		}
-	}
-	return protocol.Usage{}
 }
 
 // Reset 清空当前会话记忆

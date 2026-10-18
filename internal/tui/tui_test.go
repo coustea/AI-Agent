@@ -172,7 +172,7 @@ func (m *mockTestAgent) Traces() []protocol.TraceEvent {
 
 func TestTUIFlow(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// 1. 验证主线设计：初始状态必须直接是对话页面（输入框交互）
 	if m.state != stateChat {
@@ -254,7 +254,7 @@ func TestTUIFlow(t *testing.T) {
 
 func TestTUIToolEventRendering(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 	m.messages = append(m.messages, ChatMessage{
 		Sender:  "Tide",
 		Content: "Thinking...",
@@ -323,7 +323,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 
 func TestTUI_SequentialBlocksRendering(t *testing.T) {
 	ag := newMockAgent("mock")
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// 初始一条 Tide 正在生成的消息
 	m.messages = append(m.messages, ChatMessage{
@@ -407,7 +407,7 @@ func TestTUI_EndToEnd_MultiTurn_Chat(t *testing.T) {
 		"Hello Alice! Nice to meet you.",
 		"Your name is Alice.",
 	)
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// ====== 轮次 1 ======
 	m.chatInput.SetValue("My name is Alice")
@@ -455,7 +455,7 @@ func TestTUI_EndToEnd_MultiTurn_Chat(t *testing.T) {
 
 func TestTUIFlow_Gemini(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// 触发 /model
 	m.chatInput.SetValue("/model")
@@ -515,7 +515,7 @@ func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 	ag.cfgView.Providers[1].IsConfigured = true
 	ag.cfgView.Providers[1].CurrentModel = "deepseek-flash"
 
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 	m.currentAPIKey = "sk-deepseek-preserved-key"
 
 	// 1. 切换到 Gemini 并配置
@@ -563,7 +563,7 @@ func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 
 // 测试键盘按键操作：退出 (Ctrl+C, Ctrl+D, /exit, /quit, /q) 以及生成中断 (Ctrl+C, Esc)
 func TestTUI_KeyOperations_ExitAndInterrupt(t *testing.T) {
-	m := NewModel(newMockAgent())
+	m := NewModel(newMockAgent(), nil)
 
 	// 1. 空闲聊天状态下按 Ctrl+C 直接退出
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
@@ -632,7 +632,7 @@ func TestTUI_KeyOperations_ExitAndInterrupt(t *testing.T) {
 // 测试 TUI 界面对 Harness EventPermissionReq 的交互响应与审批反馈
 func TestTUI_PermissionApproval_InteractiveFlow(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 	m.messages = []ChatMessage{{Sender: "Tide", Content: ""}}
 	m.isGenerating = true
 
@@ -707,7 +707,7 @@ func TestTUI_PermissionApproval_InteractiveFlow(t *testing.T) {
 
 func TestTUIFlow_Spark(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// 1. 触发 /model
 	m.chatInput.SetValue("/model")
@@ -763,7 +763,7 @@ func TestTUIFlow_Spark(t *testing.T) {
 // 测试聊天框直接输入 /model <args> 快捷切换指令
 func TestTUI_ChatInlineModelSwitching(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// 1. 输入 /model gemini (未配置 Key 时直接拉起 API Key 输入向导)
 	m.chatInput.SetValue("/model gemini")
@@ -810,7 +810,7 @@ func TestTUI_ChatInlineModelSwitching(t *testing.T) {
 func TestTUI_PresetModelSpecsMenu(t *testing.T) {
 	ag := newMockAgent()
 	ag.cfgView.Providers[1].IsConfigured = true // DeepSeek 已就绪
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// 1. 呼出看板
 	m.chatInput.SetValue("/model")
@@ -881,7 +881,7 @@ func TestTUI_PresetModelSpecsMenu(t *testing.T) {
 
 // 测试顶栏目录展示取自 Agent 契约 (WorkDir)，而非进程自身 cwd
 func TestTUI_HeaderUsesAgentWorkDir(t *testing.T) {
-	m := NewModel(newMockAgent())
+	m := NewModel(newMockAgent(), nil)
 	view := ansi.Strip(m.View())
 	if !strings.Contains(view, "目录: /mock/workdir") {
 		t.Fatalf("expected header to show agent workdir, got:\n%s", view)
@@ -894,7 +894,7 @@ func TestTUI_UnreadyAgent_GuidesToConfiguration(t *testing.T) {
 	ag.cfgView.Provider = "deepseek"
 	ag.cfgView.ModelName = "deepseek-flash"
 	ag.cfgView.HasAPIKey = false
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 
 	// 1. 欢迎语提示尚未配置密钥
 	welcomeShown := false
@@ -924,7 +924,7 @@ func TestTUI_UnreadyAgent_GuidesToConfiguration(t *testing.T) {
 
 func TestTUI_TraceInspector_Flow(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 	m.width = 100
 	m.height = 30
 
@@ -1109,7 +1109,7 @@ func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 
 func TestTUI_ThinkingViewer_Flow(t *testing.T) {
 	ag := newMockAgent()
-	m := NewModel(ag)
+	m := NewModel(ag, ag)
 	m.width = 100
 	m.height = 30
 
@@ -1239,5 +1239,30 @@ func TestTUI_ThinkingViewer_Flow(t *testing.T) {
 	m = mIntf.(Model)
 	if m.state != stateChat {
 		t.Fatalf("expected stateChat after toggling Ctrl+T, got %v", m.state)
+	}
+}
+
+// 验收 D8：块级渲染缓存命中与宽度隔离
+func TestRenderMarkdownCache_HitAndWidthIsolation(t *testing.T) {
+	mdCacheMu.Lock()
+	mdCache = make(map[uint64]string)
+	mdCacheMu.Unlock()
+
+	out1 := renderMarkdownCached("**bold** and `code`", 80)
+	if len(mdCache) != 1 {
+		t.Fatalf("expected 1 cache entry, got %d", len(mdCache))
+	}
+
+	out2 := renderMarkdownCached("**bold** and `code`", 80)
+	if out1 != out2 {
+		t.Errorf("cached render must be stable")
+	}
+	if len(mdCache) != 1 {
+		t.Errorf("cache hit must not add entries, got %d", len(mdCache))
+	}
+
+	_ = renderMarkdownCached("**bold** and `code`", 60)
+	if len(mdCache) != 2 {
+		t.Errorf("different width must produce a separate cache entry, got %d", len(mdCache))
 	}
 }

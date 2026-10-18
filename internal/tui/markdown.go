@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"encoding/binary"
+	"hash/fnv"
 	"strings"
 	"sync"
 
@@ -10,6 +12,12 @@ import (
 var (
 	rendererMu    sync.RWMutex
 	rendererCache = make(map[int]*glamour.TermRenderer)
+
+	// 块级渲染缓存：key = FNV64(内容 + 宽度)。
+	// 已完成的历史块内容不再变化，命中后无需重复 glamour 渲染；
+	// 流式中的当前块内容每帧变化，由调用方走 renderMarkdown 不入缓存。
+	mdCacheMu sync.RWMutex
+	mdCache   = make(map[uint64]string)
 )
 
 func getRenderer(width int) (*glamour.TermRenderer, error) {
@@ -27,7 +35,7 @@ func getRenderer(width int) (*glamour.TermRenderer, error) {
 	}
 
 	newR, err := glamour.NewTermRenderer(
-		glamour.WithStandardStyle("dark"),
+		glamour.WithAutoStyle(),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {
@@ -56,4 +64,37 @@ func renderMarkdown(content string, width int) string {
 	}
 
 	return strings.TrimSpace(rendered)
+}
+
+// renderMarkdownCached 渲染已完成的历史块，命中缓存则直接复用。
+func renderMarkdownCached(content string, width int) string {
+	content = strings.TrimSpace(content)
+	if content == "" {
+		return ""
+	}
+
+	key := mdCacheKey(content, width)
+	mdCacheMu.RLock()
+	if v, ok := mdCache[key]; ok {
+		mdCacheMu.RUnlock()
+		return v
+	}
+	mdCacheMu.RUnlock()
+
+	out := renderMarkdown(content, width)
+
+	mdCacheMu.Lock()
+	mdCache[key] = out
+	mdCacheMu.Unlock()
+	return out
+}
+
+func mdCacheKey(content string, width int) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(content))
+	_, _ = h.Write([]byte{0})
+	var buf [4]byte
+	binary.LittleEndian.PutUint32(buf[:], uint32(width))
+	_, _ = h.Write(buf[:])
+	return h.Sum64()
 }

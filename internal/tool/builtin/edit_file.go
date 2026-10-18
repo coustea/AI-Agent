@@ -10,15 +10,11 @@ import (
 
 // EditFileTool 精确单次替换文件内的指定文本，学习自 learn-claude-code 中的 run_edit
 type EditFileTool struct {
-	workDir string
+	workDir *WorkDirRef
 }
 
-func NewEditFileTool(workDir ...string) *EditFileTool {
-	wd := ""
-	if len(workDir) > 0 {
-		wd = workDir[0]
-	}
-	return &EditFileTool{workDir: wd}
+func NewEditFileTool(workDir *WorkDirRef) *EditFileTool {
+	return &EditFileTool{workDir: workDir}
 }
 
 func (t *EditFileTool) Name() string {
@@ -62,7 +58,7 @@ func (t *EditFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 		return "", fmt.Errorf("failed to parse edit_file arguments: %w", err)
 	}
 
-	targetPath, err := SafePath(t.workDir, input.Path)
+	targetPath, err := SafePath(t.workDir.Get(), input.Path)
 	if err != nil {
 		return "", err
 	}
