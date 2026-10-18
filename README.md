@@ -375,14 +375,17 @@ flowchart TD
 AI-Agent/
 ├── cmd/tide/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
 ├── internal/
-│   ├── agent/                 # Harness 核心：ReAct 循环、Persona 合成与事件分发
+│   ├── agent/                 # Harness 核心：ReAct 循环、装配、审批桥、事件分发
 │   ├── config/                # 配置加载、持久化与环境变量补全
-│   ├── gateway/               # 统一网关、OpenAI wire 层、Router、四家 Provider
+│   ├── fsutil/                # 工作区边界判定的唯一实现（含符号链接解析）
+│   ├── gateway/               # 统一网关、OpenAI wire 层与四家 Provider
 │   ├── memory/                # 滑动窗口记忆与两级长期记忆
-│   ├── permission/            # 三道闸门权限管线
+│   ├── middleware/            # 横切关注点：链路日志、大结果落盘
+│   ├── permission/            # 三道闸门权限管线与命令规范化
 │   ├── protocol/              # 纯数据契约：事件流、权限请求、配置视图
+│   ├── textutil/              # 文本工具（UTF-8 安全截断）
 │   ├── tool/                  # 工具接口、注册表、PreToolUse 钩子
-│   │   └── builtin/           # 内置工具与 SafePath 沙箱
+│   │   └── builtin/           # 内置工具、WorkDirRef 沙箱与 SafePath
 │   └── tui/                   # Bubble Tea 终端界面
 ├── outputs/                   # 设计文档
 ├── Makefile
@@ -523,6 +526,8 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 | 命令 | 说明 |
 |---|---|
+| **`make verify`** | **提交前必跑**：格式检查 + `go vet` + 竞态测试 + 构建，与 CI 核心门禁一致 |
+| `make lint` | `golangci-lint` 静态分析（需本地安装 v2，CI 亦执行） |
 | `make build` | 编译 `./cmd/tide` 为当前平台的本地 `tide` 可执行文件 |
 | `make install` | 编译并安装 `tide` 到 `/usr/local/bin` 系统路径 |
 | `make release` | 跨平台交叉编译全量发布包（macOS/Linux/Windows 压缩包与 SHA256 校验和） |
@@ -533,10 +538,10 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 ### 当前测试规模
 
-10 个测试文件、70 个测试用例，覆盖 `agent`、`config`、`gateway`、`memory`、`permission`、`tool`、`tool/builtin`、`tui` 八个包（`cmd` 为纯装配入口、`protocol` 为纯数据契约，无独立测试）。
+14 个测试文件、101 个测试用例，覆盖 `agent`、`config`、`fsutil`、`gateway`、`memory`、`middleware`、`permission`、`textutil`、`tool`、`tool/builtin`、`tui` 十一个包（`cmd` 为纯装配入口、`protocol` 为纯数据契约，无独立测试）。
 
 ```bash
-$ go test -count=1 ./...
+$ go test -race -count=1 ./...
 ?   	my-agent/cmd/tide	[no test files]
 ok  	my-agent/internal/agent	1.146s
 ok  	my-agent/internal/config	1.853s
@@ -568,6 +573,15 @@ ok  	my-agent/internal/tui	4.483s
 5. 各阶段分别验收并暂停，通过后再进入下一阶段。
 
 > 纯文档修订（如本 README）不触发上述流程。
+
+### 代码审查
+
+所有变更遵循 [`outputs/CODE_REVIEW_STANDARD.md`](./outputs/CODE_REVIEW_STANDARD.md)：
+
+- **变更分级**：T0 文档免审；T1 修复（≤200 行）1 人审；T2 功能 1 人审 + 新路径测试；T3 结构性变更需设计文档批准 + 2 人审。
+- **严重度**：P0（安全/数据/崩溃/契约破坏）无豁免阻断；P1（常见路径失效/缺兜底/死代码）阻断或书面豁免；P2 记入待办；P3 作者自定。
+- **提交前**：必须跑 `make verify` 并在 PR 中贴出结果。
+- **闭环**：任何 P0/P1 缺陷须在 48 小时内转成一条测试用例、lint 规则或清单条目。
 
 ### 代码风格
 
@@ -618,6 +632,9 @@ ok  	my-agent/internal/tui	4.483s
 
 | 文档 | 内容 |
 |---|---|
+| [`outputs/CODE_REVIEW_STANDARD.md`](./outputs/CODE_REVIEW_STANDARD.md) | **代码审查标准与流程**：分级、严重度、分域清单、门禁与闭环 |
+| [`outputs/CODE_REVIEW_R2_2026-10-18.md`](./outputs/CODE_REVIEW_R2_2026-10-18.md) | 全仓架构与代码评审结论（第二轮） |
+| [`outputs/DESIGN_HARDENING_2026-10-18.md`](./outputs/DESIGN_HARDENING_2026-10-18.md) | 加固设计方案（D1–D13，已实施） |
 | [`outputs/ARCHITECTURE_PLAN.md`](./outputs/ARCHITECTURE_PLAN.md) | 架构演进与统一协议分步实施计划 |
 | [`outputs/HARNESS_ARCHITECTURE.md`](./outputs/HARNESS_ARCHITECTURE.md) | Harness 架构设计：循环、接缝与参考实现对照 |
 | [`outputs/PURE_CONTRACT_DECOUPLING_PLAN.md`](./outputs/PURE_CONTRACT_DECOUPLING_PLAN.md) | 纯数据契约（Protocol）解耦与规范化重构方案 |
