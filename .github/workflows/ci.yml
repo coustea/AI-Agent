@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, my-agent ]
+  pull_request:
+    branches: [ main, my-agent ]
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: Verify Dependencies
+        run: go mod verify
+
+      - name: Run Tests
+        run: go test -v ./...
+
+      - name: Build Local Binary
+        run: make build
+
+      - name: Test Cross Compilation (Linux / Windows / Darwin)
+        run: |
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/tide
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/tide
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./cmd/tide

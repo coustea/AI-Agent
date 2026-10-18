@@ -3,6 +3,7 @@
 package builtin
 
 import (
+	"context"
 	"os/exec"
 	"syscall"
 )
@@ -17,4 +18,9 @@ func setupProcessGroup(cmd *exec.Cmd) {
 		// 向负数 PID（即整个进程组）发送 SIGKILL 信号
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
+}
+
+// createShellCmd 在类 Unix 系统下调用 bash 执行命令
+func createShellCmd(ctx context.Context, command string) *exec.Cmd {
+	return exec.CommandContext(ctx, "bash", "-c", command)
 }

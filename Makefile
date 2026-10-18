@@ -1,10 +1,11 @@
-.PHONY: build run test clean
+.PHONY: build run test clean install release
 
-# 编译参数：支持自动从本地环境变量提取 SPARK_API_KEY 作为内置免费凭证注入
+# 版本与编译参数
+VERSION ?= v1.0.0
 SPARK_FREE_KEY ?= $(shell echo $${SPARK_API_KEY:-$$MAAS_API_KEY})
-LDFLAGS := -X my-agent/internal/config.DefaultSparkAPIKey=$(SPARK_FREE_KEY)
+LDFLAGS := -s -w -X my-agent/internal/config.DefaultSparkAPIKey=$(SPARK_FREE_KEY) -X my-agent/internal/config.Version=$(VERSION)
 
-# 编译生成名为 tide 的可执行程序
+# 编译生成名为 tide 的当前平台可执行程序
 build:
 	go build -ldflags "$(LDFLAGS)" -o tide ./cmd/tide
 
@@ -16,6 +17,38 @@ run:
 test:
 	go test -v ./internal/...
 
+# 安装至本地系统路径 (/usr/local/bin)
+install: build
+	@echo "==> 安装 tide 至 /usr/local/bin..."
+	@install -d /usr/local/bin 2>/dev/null || sudo install -d /usr/local/bin
+	@install -m 755 tide /usr/local/bin/tide 2>/dev/null || sudo install -m 755 tide /usr/local/bin/tide
+	@echo "==> 安装完成！运行 'tide' 即可启动。"
+
 # 清理构建产物与临时文件
 clean:
-	rm -f tide coustea test_config.json
+	rm -rf tide coustea test_config.json dist
+
+# 跨平台全量构建发布包 (Darwin amd64/arm64, Linux amd64/arm64, Windows amd64)
+release:
+	@rm -rf dist
+	@mkdir -p dist
+	@echo "==> 构建 Darwin (macOS Intel) amd64..."
+	@mkdir -p dist/tide-darwin-amd64 && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/tide-darwin-amd64/tide ./cmd/tide
+	@tar -czf dist/tide-darwin-amd64.tar.gz -C dist/tide-darwin-amd64 tide
+	@echo "==> 构建 Darwin (macOS Apple Silicon) arm64..."
+	@mkdir -p dist/tide-darwin-arm64 && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/tide-darwin-arm64/tide ./cmd/tide
+	@tar -czf dist/tide-darwin-arm64.tar.gz -C dist/tide-darwin-arm64 tide
+	@echo "==> 构建 Linux amd64..."
+	@mkdir -p dist/tide-linux-amd64 && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/tide-linux-amd64/tide ./cmd/tide
+	@tar -czf dist/tide-linux-amd64.tar.gz -C dist/tide-linux-amd64 tide
+	@echo "==> 构建 Linux arm64..."
+	@mkdir -p dist/tide-linux-arm64 && CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags "$(LDFLAGS)" -o dist/tide-linux-arm64/tide ./cmd/tide
+	@tar -czf dist/tide-linux-arm64.tar.gz -C dist/tide-linux-arm64 tide
+	@echo "==> 构建 Windows amd64..."
+	@mkdir -p dist/tide-windows-amd64 && CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags "$(LDFLAGS)" -o dist/tide-windows-amd64/tide.exe ./cmd/tide
+	@cd dist/tide-windows-amd64 && zip -q ../tide-windows-amd64.zip tide.exe
+	@echo "==> 生成 SHA256 校验和..."
+	@cd dist && (shasum -a 256 *.tar.gz *.zip > checksums.txt 2>/dev/null || sha256sum *.tar.gz *.zip > checksums.txt)
+	@rm -rf dist/tide-darwin-amd64 dist/tide-darwin-arm64 dist/tide-linux-amd64 dist/tide-linux-arm64 dist/tide-windows-amd64
+	@echo "==> 发布包已就绪！"
+	@ls -lh dist/

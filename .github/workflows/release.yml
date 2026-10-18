@@ -1,0 +1,80 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '发布版本标签 (例如 v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          check-latest: true
+
+      - name: Determine Version
+        id: get_version
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "VERSION=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          fi
+
+      - name: Run Tests
+        run: go test -v ./...
+
+      - name: Build Multi-Platform Release Assets
+        run: |
+          sudo apt-get update && sudo apt-get install -y zip
+          VERSION="${{ env.VERSION }}" make release
+
+      - name: Create GitHub Release and Upload Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Tide ${{ env.VERSION }}"
+          tag_name: ${{ env.VERSION }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/*.tar.gz
+            dist/*.zip
+            dist/checksums.txt
+          generate_release_notes: true
+          body: |
+            ## 🌊 Tide ${{ env.VERSION }} 发布
+
+            通用终端 AI 个人助手（ReAct + Harness 架构），支持 macOS、Linux 与 Windows 多平台。
+
+            ### 🚀 一键快速安装
+
+            **macOS / Linux:**
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/my-agent/install.sh | bash
+            ```
+
+            **Windows (PowerShell):**
+            ```powershell
+            irm https://raw.githubusercontent.com/${{ github.repository }}/my-agent/install.ps1 | iex
+            ```
+
+            ### 📦 预编译二进制下载
+            各平台二进制压缩包及 SHA256 校验和见下方 Assets 列表。

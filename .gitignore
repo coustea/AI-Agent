@@ -1,6 +1,7 @@
 # 编译二进制文件
 /tide
 /coustea
+/dist/
 *.exe
 *.exe~
 *.dll

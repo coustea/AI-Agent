@@ -4,14 +4,15 @@
 
 **一个运行在本地终端的通用 AI 个人助手**
 
-ReAct 循环 · Harness 可插拔接缝 · 多模型网关 · 三道闸门权限
+ReAct 循环 · Harness 可插拔接缝 · 多模型网关 · 三道闸门权限 · 沉浸思考看板
 
-[![Go Version](https://img.shields.io/badge/Go-1.26.2+-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
+[![Release](https://img.shields.io/github/v/release/coustea/AI-Agent?color=00ADD8&logo=github)](https://github.com/coustea/AI-Agent/releases)
+[![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux%20%7C%20Windows-lightgrey.svg)](#环境要求)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](./README.md#贡献指南)
+[![CI](https://github.com/coustea/AI-Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/coustea/AI-Agent/actions)
 
-[项目简介](#项目简介) · [快速开始](#快速开始) · [配置说明](#配置说明) · [使用示例](#使用示例) · [架构总览](#架构总览) · [贡献指南](#贡献指南)
+[项目简介](#项目简介) · [快速开始](#快速开始) · [安装方式](#安装方式) · [配置说明](#配置说明) · [使用示例](#使用示例) · [架构总览](#架构总览) · [贡献指南](#贡献指南)
 
 </div>
 
@@ -26,9 +27,9 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 |---|---|
 | 运行形态 | 单机终端 TUI（[Bubble Tea](https://github.com/charmbracelet/bubbletea)），面向本地单用户 |
 | 模型协议 | 所有厂商统一走 **OpenAI Chat Completions** 协议，无需为每家 SDK 单独适配 |
-| 交互美学 | Claude Code 风格圆角卡片、流式打字机光标、深度思考链气泡、Glamour 富文本 Markdown、Token 用量统计 |
+| 交互美学 | Claude Code 风格圆角卡片、流式打字机光标、深度思考看板（`/think` / `Ctrl+T`）、Glamour 富文本 Markdown、Token 用量统计 |
 | 自主心智 | 拒绝被动拒答，遵循 ReAct 思考循环，面对实时信息与环境问题主动调用工具破局 |
-| 安全模型 | 工作区沙箱 + 三道闸门权限管线：常规操作自主放行，高风险操作触发人工审批，永不静默执行 |
+| 安全模型 | 工作区沙箱 + 三道闸门权限管线：常规操作自主放行，高风险操作精准触发人工审批，永不静默执行 |
 | 跨端契约 | `internal/protocol` 纯数据事件流与配置视图，TUI 与内核零 UI 耦合，可复用于桌面端与无头宿主 |
 
 ---
@@ -38,8 +39,8 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 - [项目简介](#项目简介)
 - [核心特性](#核心特性)
 - [快速开始](#快速开始)
+- [安装方式](#安装方式)
 - [环境要求](#环境要求)
-- [安装步骤](#安装步骤)
 - [配置说明](#配置说明)
 - [使用示例](#使用示例)
 - [架构总览](#架构总览)
@@ -63,6 +64,7 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 | **纯数据契约** | `internal/protocol` 零依赖事件流、权限请求与配置视图，TUI 与内核零 UI 耦合，可平滑扩展桌面端与无头宿主 |
 | **自主解题心智** | 打破大模型"我无法获取实时信息"的消极惯性，遇到实时数据（如天气、网络诊断、Git 状态）主动调用工具探查 |
 | **多模型网关** | 内置 `llamacpp`（本地）、`deepseek`、`gemini`、`spark`（讯飞星辰 MaaS）四家 Provider，统一 OpenAI 协议，按模型名前缀动态路由，运行时热切换且不丢上下文 |
+| **深度思考独立看板** | 专属全屏沉浸式推理链看板（快捷键 `Ctrl+T` 或 `/think`），支持多轮导航、Markdown/Raw 双模式切换与流式增量刷新 |
 | **ReAct 工具循环** | 单轮最多 10 步推理-行动迭代，工具结果以 Observation 形式回灌模型，支持错误自愈 |
 | **三道闸门权限** | 硬拒绝表 → 风险规则精准匹配（删除 / 提权 / 越界写入等）→ 交互式审批（支持会话级信任），常规命令自主放行，高危操作永不静默执行 |
 | **分层长期记忆** | 全局 + 项目两级 Markdown 记忆，每轮对话开始时重新读取，运行期沉淀即时生效 |
@@ -75,24 +77,61 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 
 ## 快速开始
 
+### 方式一：一键自动安装（推荐，全平台自动化）
+
+**macOS / Linux 用户：**
 ```bash
-# 1. 克隆仓库（SSH）
-git clone git@github.com:tide/AI-Agent.git
-# 或使用 HTTPS
-# git clone https://github.com/tide/AI-Agent.git
-
-cd AI-Agent
-
-# 2. 拉取依赖并编译
-go mod download
-make build
-
-# 3. 启动
-./tide
+curl -fsSL https://raw.githubusercontent.com/coustea/AI-Agent/my-agent/install.sh | bash
 ```
 
-首次启动后，在输入框输入 `/model` 打开配置向导：**平台看板 → API Key → 模型规格点选**，已就绪平台按 Enter 一键直切。
-若已有 `DEEPSEEK_API_KEY`、`GEMINI_API_KEY` 或 `SPARK_API_KEY` 环境变量，也可跳过向导直接对话。
+**Windows 用户（在 PowerShell 中运行）：**
+```powershell
+irm https://raw.githubusercontent.com/coustea/AI-Agent/my-agent/install.ps1 | iex
+```
+
+安装完成后，直接在终端中运行 `tide` 即可启动！首次启动后输入 `/model` 打开配置向导：**平台看板 → API Key → 模型规格点选**，已就绪平台按 Enter 一键直切。
+
+---
+
+## 安装方式
+
+### 方式二：下载官方预编译包（免 Go 环境）
+
+直接访问 [GitHub Releases 页面](https://github.com/coustea/AI-Agent/releases) 下载对应系统的预编译包，解压即用：
+
+| 操作系统 / 架构 | 下载文件 | 解压与运行命令 |
+|---|---|---|
+| **macOS (Apple Silicon M1/M2/M3/M4)** | `tide-darwin-arm64.tar.gz` | `tar -xzf tide-darwin-arm64.tar.gz && ./tide` |
+| **macOS (Intel x86_64)** | `tide-darwin-amd64.tar.gz` | `tar -xzf tide-darwin-amd64.tar.gz && ./tide` |
+| **Linux (x86_64 / amd64)** | `tide-linux-amd64.tar.gz` | `tar -xzf tide-linux-amd64.tar.gz && ./tide` |
+| **Linux (aarch64 / arm64)** | `tide-linux-arm64.tar.gz` | `tar -xzf tide-linux-arm64.tar.gz && ./tide` |
+| **Windows (x64)** | `tide-windows-amd64.zip` | 解压后直接在终端运行 `tide.exe` |
+
+---
+
+### 方式三：使用 Go 工具链安装
+
+若本地已安装 Go（1.24+）：
+```bash
+go install github.com/coustea/AI-Agent/cmd/tide@latest
+```
+
+---
+
+### 方式四：源码编译与安装
+
+```bash
+# 1. 克隆仓库
+git clone https://github.com/coustea/AI-Agent.git
+cd AI-Agent
+
+# 2. 编译并安装到 /usr/local/bin
+make build
+make install   # 或 sudo make install
+
+# 3. 运行
+tide
+```
 
 ---
 
@@ -100,59 +139,12 @@ make build
 
 | 依赖 | 版本 |
 |---|---|
-| Go | **1.26.2 或更高**（见 [`go.mod`](./go.mod)） |
+| Go（若从源码编译） | **1.24 或更高**（推荐 1.26.2+，见 [`go.mod`](./go.mod)） |
 | 终端 | 支持 ANSI 转义的现代终端（iTerm2 / Windows Terminal / Alacritty 等） |
 | 操作系统 | macOS / Linux / Windows |
 | 模型服务 | 本地 `llama-server`，或 DeepSeek / Gemini / 讯飞星辰 MaaS 的 API Key（任选其一） |
 
-第三方依赖仅四个直接依赖：`bubbles`、`bubbletea`、`lipgloss`、`glamour`，其余均为间接依赖。
-
----
-
-## 安装步骤
-
-### 1. 克隆仓库
-
-```bash
-git clone git@github.com:tide/AI-Agent.git   # SSH
-# 或
-git clone https://github.com/tide/AI-Agent.git  # HTTPS
-
-cd AI-Agent
-```
-
-### 2. 拉取依赖
-
-```bash
-go mod download
-```
-
-### 3. 编译
-
-```bash
-make build          # 生成当前目录下的 tide 可执行文件
-```
-
-或直接使用 Go 工具链：
-
-```bash
-go build -o tide ./cmd/tide
-```
-
-### 4. 验证安装
-
-```bash
-./tide
-```
-
-首次启动若未检测到可用密钥，界面会提示「欢迎使用 tide！当前模型尚未配置 API Key」，输入 `/model` 即可调出配置向导。
-
-### 5. （可选）加入 PATH
-
-```bash
-sudo mv tide /usr/local/bin/
-tide
-```
+第三方依赖仅四个直接依赖：`bubbles`、`bubbletea`、`lipgloss`、`glamour`，无 CGO 依赖，100% 静态编译。
 
 ---
 
@@ -531,15 +523,17 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 | 命令 | 说明 |
 |---|---|
-| `make build` | 编译 `./cmd/tide` 为本地 `tide` 可执行文件 |
-| `make run` | 以 `go run` 启动终端界面 |
-| `make test` | 运行 `./internal/...` 下的包测试（verbose） |
+| `make build` | 编译 `./cmd/tide` 为当前平台的本地 `tide` 可执行文件 |
+| `make install` | 编译并安装 `tide` 到 `/usr/local/bin` 系统路径 |
+| `make release` | 跨平台交叉编译全量发布包（macOS/Linux/Windows 压缩包与 SHA256 校验和） |
+| `make run` | 以 `go run` 启动交互式终端界面 |
+| `make test` | 运行 `./internal/...` 下的全部单元测试（verbose） |
 | `go test ./...` | 运行全部包的测试，含命令包 |
-| `make clean` | 删除可执行文件与 `test_config.json` |
+| `make clean` | 删除构建产物、`dist` 发布包与 `test_config.json` |
 
 ### 当前测试规模
 
-10 个测试文件、69 个测试用例，覆盖 `agent`、`config`、`gateway`、`memory`、`permission`、`tool`、`tool/builtin`、`tui` 八个包（`cmd` 为纯装配入口、`protocol` 为纯数据契约，无独立测试）。
+10 个测试文件、70 个测试用例，覆盖 `agent`、`config`、`gateway`、`memory`、`permission`、`tool`、`tool/builtin`、`tui` 八个包（`cmd` 为纯装配入口、`protocol` 为纯数据契约，无独立测试）。
 
 ```bash
 $ go test -count=1 ./...
@@ -561,7 +555,7 @@ ok  	my-agent/internal/tui	4.483s
 
 ## 贡献指南
 
-欢迎通过 [Issue](https://github.com/tide/AI-Agent/issues) 与 Pull Request 参与共建。
+欢迎通过 [Issue](https://github.com/coustea/AI-Agent/issues) 与 Pull Request 参与共建。
 
 ### 前置约定（重要）
 
@@ -616,7 +610,7 @@ ok  	my-agent/internal/tui	4.483s
 - **命令执行**：`bash` 命中 Gate 2 风险规则（破坏性删除、提权、系统目录写入等）时触发人工确认，无审批通道时默认拒绝；硬拒绝表中的危险指令永不执行。
 - **记忆文件**：长期记忆为明文 Markdown，请避免在其中写入敏感信息。
 
-如发现安全问题，请通过 [Issue](https://github.com/tide/AI-Agent/issues) 私下联系维护者，勿直接公开披露。
+如发现安全问题，请通过 [Issue](https://github.com/coustea/AI-Agent/issues) 私下联系维护者，勿直接公开披露。
 
 ---
 

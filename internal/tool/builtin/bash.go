@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
@@ -63,7 +62,7 @@ func (t *BashTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		return "", fmt.Errorf("command cannot be empty")
 	}
 
-	cmd := exec.CommandContext(ctx, "bash", "-c", command)
+	cmd := createShellCmd(ctx, command)
 	setupProcessGroup(cmd)
 	if t.workDir != "" {
 		cmd.Dir = t.workDir

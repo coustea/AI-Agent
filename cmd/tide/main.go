@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 
+	"runtime"
+
 	"my-agent/internal/agent"
 	"my-agent/internal/config"
 	"my-agent/internal/tui"
@@ -11,7 +13,40 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func printHelp() {
+	fmt.Printf(`tide - 本地终端通用 AI 个人助手 (ReAct + Harness)
+
+版本:
+  %s (%s/%s)
+
+用法:
+  tide                启动交互式终端全屏界面 (TUI)
+  tide --version, -v  显示当前版本信息
+  tide --help, -h     显示命令行帮助信息
+
+快捷指令 (在 TUI 中使用):
+  /model              切换模型平台与配置 API Key
+  /think              打开深度思考过程独立看板 (或按 Ctrl+T)
+  /log                打开全量调用链路与 JSON 追踪看板 (或按 Ctrl+L)
+  /clear              清空当前屏幕对话
+  /exit, /quit        退出程序 (或按 Ctrl+C / Ctrl+D)
+
+更多信息与文档:
+  https://github.com/coustea/AI-Agent
+`, config.Version, runtime.GOOS, runtime.GOARCH)
+}
+
 func main() {
+	for _, arg := range os.Args[1:] {
+		switch arg {
+		case "-v", "--version", "version":
+			fmt.Printf("tide %s (%s/%s)\n", config.Version, runtime.GOOS, runtime.GOARCH)
+			return
+		case "-h", "--help", "help":
+			printHelp()
+			return
+		}
+	}
 	// 组装调用链：LLM -> Gateway -> Agent (驱动 ReAct 循环与内置工具) -> TUI
 	// 配置文件损坏时回退全新默认装配；未就绪状态由 ConfigView 表达，交由 /model 向导修复
 	cfg, err := config.LoadConfig("")
