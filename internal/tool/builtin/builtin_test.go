@@ -11,7 +11,12 @@ import (
 )
 
 func TestSafePath(t *testing.T) {
+	// SafePath 经 fsutil 解析符号链接后返回真实路径（macOS /var → /private/var），
+	// 期望值需同样以 EvalSymlinks 之后的 workDir 为基准
 	tmpDir := t.TempDir()
+	if resolved, err := filepath.EvalSymlinks(tmpDir); err == nil {
+		tmpDir = resolved
+	}
 
 	// 1. 正常工作区内部路径
 	p, err := SafePath(tmpDir, "file.txt")

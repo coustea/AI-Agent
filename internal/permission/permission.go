@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"my-agent/internal/fsutil"
 	"my-agent/internal/protocol"
 )
 
@@ -25,17 +26,19 @@ func (f ApproverFunc) RequestApproval(ctx context.Context, req protocol.Permissi
 	return f(ctx, req)
 }
 
-// 默认硬拒绝列表 (Gate 1: 永远禁止执行)
-var defaultHardDenyList = []string{
-	"rm -rf /",
-	"rm -rf /*",
-	"sudo ",
-	"shutdown",
-	"reboot",
-	"mkfs",
-	"dd if=",
-	"> /dev/sda",
-	":(){ :|:& };:",
+// Gate 1 硬拒绝正则表（永远禁止执行，无需人工审批）。
+// 注意 rm 作用于根或根下通配才硬拒；rm -rf /tmp/x 等落到 Gate 2 走人工审批。
+var defaultHardDenyPatterns = []*regexp.Regexp{
+	// rm 任何形式作用于根目录或根下通配
+	regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60])\s*rm\s+(?:-{1,2}[a-zA-Z]+\s+)*(?:/(?:\s|\*|$)|/\*)`),
+	// 提权与系统级电源/格式化操作
+	regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60])\s*(?:sudo|shutdown|reboot|mkfs)\b`),
+	// 低级磁盘镜像写入
+	regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60])\s*dd\s+[^|]*\bif=`),
+	// 直接向块设备写入
+	regexp.MustCompile(`>{1,2}\s*/dev/(?:sd|disk|nvme)`),
+	// fork 炸弹
+	regexp.MustCompile(`:\(\)\s*\{\s*:\|:&\s*\}\s*;:`),
 }
 
 var (
@@ -101,12 +104,12 @@ func checkDangerousBashCommand(cmd string) (isDangerous bool, reason string) {
 
 // Manager 实现基于 Harness 思想的三道闸门权限管线
 type Manager struct {
-	mu             sync.RWMutex
-	workDir        string
-	approver       Approver
-	hardDenyList   []string
-	sessionAllowed map[string]bool // key 格式: "tool:signature"
-	autoApprove    bool
+	mu               sync.RWMutex
+	workDir          string
+	approver         Approver
+	hardDenyPatterns []*regexp.Regexp
+	sessionAllowed   map[string]bool // key 格式: "tool:signature"
+	autoApprove      bool
 }
 
 // Option 定义 Manager 配置项
@@ -119,11 +122,14 @@ func WithApprover(approver Approver) Option {
 	}
 }
 
-// WithHardDenyList 自定义硬拒绝规则列表
-func WithHardDenyList(denyList []string) Option {
+// WithHardDenyList 向硬拒绝表追加自定义正则（默认表内置，不可清空）
+func WithHardDenyList(denyPatterns []string) Option {
 	return func(m *Manager) {
-		if len(denyList) > 0 {
-			m.hardDenyList = append([]string(nil), denyList...)
+		for _, p := range denyPatterns {
+			if p == "" {
+				continue
+			}
+			m.hardDenyPatterns = append(m.hardDenyPatterns, regexp.MustCompile(p))
 		}
 	}
 }
@@ -151,9 +157,9 @@ func NewManager(workDir string, opts ...Option) *Manager {
 	}
 
 	m := &Manager{
-		workDir:        cleanDir,
-		hardDenyList:   append([]string(nil), defaultHardDenyList...),
-		sessionAllowed: make(map[string]bool),
+		workDir:          cleanDir,
+		hardDenyPatterns: append([]*regexp.Regexp(nil), defaultHardDenyPatterns...),
+		sessionAllowed:   make(map[string]bool),
 	}
 
 	for _, opt := range opts {
@@ -273,9 +279,13 @@ func (m *Manager) checkHardDeny(call protocol.ToolCall) (blocked bool, denyReaso
 		return false, ""
 	}
 
-	for _, pattern := range m.hardDenyList {
-		if strings.Contains(cmd, pattern) {
-			return true, fmt.Sprintf("blocked by Gate 1 (Hard Deny): '%s' is on the deny list", pattern)
+	m.mu.RLock()
+	patterns := m.hardDenyPatterns
+	m.mu.RUnlock()
+
+	for _, re := range patterns {
+		if re.MatchString(cmd) {
+			return true, fmt.Sprintf("blocked by Gate 1 (Hard Deny): command matches deny pattern %q", re.String())
 		}
 	}
 
@@ -291,9 +301,24 @@ func (m *Manager) checkRules(call protocol.ToolCall) (needsApproval bool, ruleRe
 			return true, "empty shell command"
 		}
 
-		// 检查是否命中危险/破坏性操作特征 (未命中则直接放行)
-		if isDangerous, reason := checkDangerousBashCommand(cmd); isDangerous {
-			return true, fmt.Sprintf("potentially destructive shell command: %s", reason)
+		// 命令规范化分析：展开包装与间接执行，收集叶子段与重定向目标
+		analysis := analyzeCommand(cmd)
+		if analysis.suspicious {
+			return true, "command uses indirect execution (interpreter inline / eval / command substitution) and cannot be statically analyzed"
+		}
+
+		// 叶子段逐个跑危险特征正则表
+		for _, leaf := range analysis.leaves {
+			if isDangerous, reason := checkDangerousBashCommand(leaf); isDangerous {
+				return true, fmt.Sprintf("potentially destructive shell command: %s", reason)
+			}
+		}
+
+		// 覆盖重定向：目标为工作区内已存在文件时才升级审批（新建文件与 write_file 行为等价，放行）
+		for _, target := range analysis.redirectTargets {
+			if m.overwritesExistingFile(target) {
+				return true, fmt.Sprintf("overwrite redirection to existing file: %s", target)
+			}
 		}
 
 		return false, ""
@@ -316,37 +341,31 @@ func (m *Manager) checkRules(call protocol.ToolCall) (needsApproval bool, ruleRe
 	return false, ""
 }
 
-// isPathEscapingWorkspace 校验目标文件路径是否逃逸了当前项目工作区和用户 ~/.tide 目录
+// isPathEscapingWorkspace 校验目标文件路径是否逃逸了当前项目工作区和用户 ~/.tide 目录。
+// 边界判定（含符号链接解析）统一由 internal/fsutil 提供。
 func (m *Manager) isPathEscapingWorkspace(targetPath string) (escapes bool, resolvedAbs string) {
-	cleanPath := strings.TrimSpace(targetPath)
-	if cleanPath == "" {
-		return true, ""
-	}
+	m.mu.RLock()
+	workDir := m.workDir
+	m.mu.RUnlock()
 
-	var targetAbs string
-	if filepath.IsAbs(cleanPath) {
-		targetAbs = filepath.Clean(cleanPath)
-	} else {
-		targetAbs = filepath.Clean(filepath.Join(m.workDir, cleanPath))
-	}
+	abs, inside := fsutil.ResolveInWorkspace(workDir, targetPath)
+	return !inside, abs
+}
 
-	// 1. 位于当前项目工作区内，合法
-	relWork, errWork := filepath.Rel(m.workDir, targetAbs)
-	if errWork == nil && !strings.HasPrefix(relWork, "..") && relWork != ".." {
-		return false, targetAbs
+// overwritesExistingFile 判定重定向目标是否为工作区内已存在的常规文件
+func (m *Manager) overwritesExistingFile(target string) bool {
+	clean := strings.TrimSpace(target)
+	if clean == "" {
+		return false
 	}
-
-	// 2. 位于用户 ~/.tide 目录下（全局记忆/配置），合法
-	home, errHome := os.UserHomeDir()
-	if errHome == nil && home != "" {
-		globalTideAbs := filepath.Clean(filepath.Join(home, ".tide"))
-		relGlobal, errRelGlobal := filepath.Rel(globalTideAbs, targetAbs)
-		if errRelGlobal == nil && !strings.HasPrefix(relGlobal, "..") && relGlobal != ".." {
-			return false, targetAbs
-		}
+	abs := clean
+	if !filepath.IsAbs(clean) {
+		m.mu.RLock()
+		abs = filepath.Join(m.workDir, clean)
+		m.mu.RUnlock()
 	}
-
-	return true, targetAbs
+	info, err := os.Stat(abs)
+	return err == nil && info.Mode().IsRegular()
 }
 
 func (m *Manager) callSignature(call protocol.ToolCall) string {

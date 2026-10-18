@@ -2,7 +2,9 @@ package permission
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -287,5 +289,91 @@ func TestPermission_DangerousCommands_Intercept(t *testing.T) {
 		if interceptedReq.Reason == "" {
 			t.Errorf("expected risk reason for %q, got empty", cmd)
 		}
+	}
+}
+
+// 验收 D3：命令规范化管线 + Gate 1 正则化的表驱动行为验证
+func TestPermission_NormalizationPipeline(t *testing.T) {
+	tmpDir := t.TempDir()
+	existingFile := filepath.Join(tmpDir, "main.go")
+	if err := os.WriteFile(existingFile, []byte("package main"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name    string
+		command string
+		// "deny" = Gate1 硬拒; "approve" = Gate2 升级审批; "pass" = 直接放行
+		want string
+	}{
+		// 解释器内联执行
+		{"python inline rmtree", `python3 -c "import shutil; shutil.rmtree('x')"`, "approve"},
+		{"node inline eval", `node -e "require('fs').rmSync('x')`, "approve"},
+		{"python script file", `python3 main.py`, "pass"},
+		// 命令替换
+		{"cmd substitution with rm", `echo $(rm -rf ~/data)`, "approve"},
+		{"backtick substitution with rm", "echo `rm -rf ~/data`", "approve"},
+		{"cmd substitution harmless", `echo $(date)`, "pass"},
+		{"unterminated substitution", `echo $(rm -rf x`, "approve"},
+		// eval 包装
+		{"eval git reset", `eval "git reset --hard"`, "approve"},
+		// 前导包装剥离
+		{"nohup rm build", `nohup rm -rf ./build &`, "approve"},
+		{"env wrapper rm", `env FOO=1 rm -rf ./build`, "approve"},
+		{"timeout wrapper rm", `timeout 30 rm -rf ./build`, "approve"},
+		// Gate 1 正则化：根目录才硬拒，/tmp 落到审批
+		{"rm root", `rm -rf /`, "deny"},
+		{"rm root glob", `rm -rf /*`, "deny"},
+		{"rm tmp path", `rm -rf /tmp/x`, "approve"},
+		{"rm workspace", `rm -rf ./build`, "approve"},
+		// 覆盖重定向 stat 判定
+		{"redirect to new file", `go build ./... > build.log 2>&1`, "pass"},
+		{"redirect to existing file", `echo x > main.go`, "approve"},
+		{"append redirect existing", `echo x >> main.go`, "approve"},
+		{"redirect to devnull", `go test ./... > /dev/null`, "pass"},
+		// 嵌套包装递归
+		{"bash -c rm", `bash -c 'rm -rf /tmp/x'`, "approve"},
+		{"sh -c python inline", `sh -c "python3 -c \"import shutil; shutil.rmtree('x')\""`, "approve"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			approverCalled := false
+			approver := ApproverFunc(func(ctx context.Context, req protocol.PermissionRequest) (protocol.Decision, error) {
+				approverCalled = true
+				return protocol.DecisionDeny, nil
+			})
+			mgr := NewManager(tmpDir, WithApprover(approver))
+
+			call := protocol.ToolCall{ID: "tc", Name: "bash", Arguments: `{"command":` + strconv.Quote(tc.command) + `}`}
+			allowed, reason, err := mgr.Evaluate(context.Background(), call)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			switch tc.want {
+			case "deny":
+				if allowed {
+					t.Fatalf("expected Gate 1 hard deny, got allowed")
+				}
+				if !strings.Contains(reason, "Hard Deny") {
+					t.Fatalf("expected Hard Deny reason, got: %s", reason)
+				}
+				if approverCalled {
+					t.Fatalf("hard deny must not invoke approver")
+				}
+			case "approve":
+				if !approverCalled {
+					t.Fatalf("expected Gate 2 to escalate to approver (allowed=%v reason=%q)", allowed, reason)
+				}
+			case "pass":
+				if approverCalled {
+					t.Fatalf("expected direct pass, approver was invoked (reason=%q)", reason)
+				}
+				if !allowed {
+					t.Fatalf("expected allowed, got blocked: %s", reason)
+				}
+			}
+		})
 	}
 }
