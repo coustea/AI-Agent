@@ -1157,3 +1157,43 @@ func TestCoreAgent_EnvironmentContext(t *testing.T) {
 		t.Errorf("expected Host Platform in prompt, got: %s", sysPrompt)
 	}
 }
+
+// panicGateway 在流式调用时直接 panic，用于验证 Run 的 goroutine recover 兜底
+type panicGateway struct{}
+
+func (p *panicGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
+	panic("gateway exploded")
+}
+
+func (p *panicGateway) TotalUsage() protocol.Usage { return protocol.Usage{} }
+
+// 验收 D2：agentLoop 崩溃时通道正常关闭、以 EventError 收敛、running 复位可再次 Run
+func TestAgentRun_PanicInLoop(t *testing.T) {
+	ag, err := NewAgent(&panicGateway{}, WithSystemPrompt("test"))
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	stream, err := ag.Run(context.Background(), "trigger panic")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	var gotPanicErr bool
+	for ev := range stream {
+		if ev.Type == protocol.EventError && strings.Contains(ev.Error, "panic") {
+			gotPanicErr = true
+		}
+	}
+	if !gotPanicErr {
+		t.Fatalf("expected EventError containing panic, stream closed without it")
+	}
+
+	// running 标志必须已复位：第二次 Run 不应被 ErrRunInProgress 拒绝
+	stream2, err := ag.Run(context.Background(), "second turn")
+	if err != nil {
+		t.Fatalf("second Run rejected (%v), running flag not reset after panic", err)
+	}
+	for range stream2 {
+	}
+}

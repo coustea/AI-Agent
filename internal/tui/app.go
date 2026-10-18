@@ -194,6 +194,34 @@ func (m Model) Init() tea.Cmd {
 	return tea.Batch(textinput.Blink, m.spinner.Tick)
 }
 
+// interruptTurn 中断当前生成轮次：取消 context（连带收割 bash 进程组）、
+// 清除挂起审批态（cancel 后审批桥自动以 Deny 收敛，无需逐个回传）。
+func (m *Model) interruptTurn() {
+	if m.cancel != nil {
+		m.cancel()
+		m.cancel = nil
+	}
+	m.pendingPerm = nil
+	if m.isGenerating {
+		m.isGenerating = false
+		m.activeToolName = ""
+		m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+		m.chatInput.Focus()
+		if len(m.messages) > 0 {
+			m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
+		}
+		if m.viewportReady {
+			m.viewport.SetContent(m.renderChatMessages())
+			m.viewport.GotoBottom()
+		}
+	}
+}
+
+// shutdown 退出前统一清理：中断运行中的轮次，杜绝孤儿 bash 进程与残留审批态
+func (m *Model) shutdown() {
+	m.interruptTurn()
+}
+
 // Update 事件分发总入口
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -216,29 +244,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyCtrlC:
 			// 若当前正在流式生成，按下 Ctrl+C 优先中断当前会话生成，不退出应用
 			if m.isGenerating {
-				if m.cancel != nil {
-					m.cancel()
-					m.cancel = nil
-				}
-				m.isGenerating = false
-				m.activeToolName = ""
-				m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
-				m.chatInput.Focus()
-				if len(m.messages) > 0 {
-					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
-				}
-				if m.viewportReady {
-					m.viewport.SetContent(m.renderChatMessages())
-					m.viewport.GotoBottom()
-				}
+				m.interruptTurn()
 				return m, nil
 			}
 			// 非生成状态下，Ctrl+C 全局立即退出应用
+			m.shutdown()
 			return m, tea.Quit
 
 		case tea.KeyCtrlD:
 			// 在选单页面或聊天输入框为空时，Ctrl+D 触发退出
 			if m.state != stateChat || m.chatInput.Value() == "" {
+				m.shutdown()
 				return m, tea.Quit
 			}
 
@@ -263,21 +279,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEsc:
 			// 若在生成中按 Esc，同样支持快速中断当前生成
 			if m.isGenerating {
-				if m.cancel != nil {
-					m.cancel()
-					m.cancel = nil
-				}
-				m.isGenerating = false
-				m.activeToolName = ""
-				m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
-				m.chatInput.Focus()
-				if len(m.messages) > 0 {
-					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
-				}
-				if m.viewportReady {
-					m.viewport.SetContent(m.renderChatMessages())
-					m.viewport.GotoBottom()
-				}
+				m.interruptTurn()
 				return m, nil
 			}
 		}

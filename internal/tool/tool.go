@@ -137,8 +137,8 @@ func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) protocol
 		}
 	}
 
-	// 3. 工具本体执行
-	output, err := t.Execute(ctx, args)
+	// 3. 工具本体执行（panic 转为 IsError 结果，单工具崩溃不击穿整轮）
+	output, err := executeTool(t, ctx, args)
 	var res protocol.ToolResult
 	if err != nil {
 		res = protocol.ToolResult{
@@ -162,4 +162,15 @@ func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) protocol
 	}
 
 	return res
+}
+
+// executeTool 执行工具并捕获 panic，将其转为普通错误返回
+func executeTool(t Tool, ctx context.Context, args json.RawMessage) (output string, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			output = ""
+			err = fmt.Errorf("tool panicked: %v", r)
+		}
+	}()
+	return t.Execute(ctx, args)
 }

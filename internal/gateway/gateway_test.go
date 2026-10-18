@@ -631,3 +631,43 @@ func TestApiClient_RetryOn429And5xx(t *testing.T) {
 		t.Errorf("expected content 'recovered', got %q", content)
 	}
 }
+
+// 验收 D1：出站请求体必须完全不含 reasoning_content（含空串场景）
+func TestBuildRequestPayload_StripsReasoningContent(t *testing.T) {
+	req := &protocol.ChatRequest{
+		Messages: []protocol.Message{
+			{Role: protocol.RoleUser, Content: "hi"},
+			{Role: protocol.RoleAssistant, Content: "thinking...", ReasoningContent: "secret chain of thought"},
+			{Role: protocol.RoleAssistant, Content: "calling tool", ReasoningContent: "", ToolCalls: []protocol.ToolCall{
+				{ID: "tc1", Name: "bash", Arguments: `{"command":"ls"}`},
+			}},
+			{Role: protocol.RoleTool, ToolResult: &protocol.ToolResult{ToolCallID: "tc1", Name: "bash", Content: "file.go"}},
+		},
+	}
+
+	payload, err := buildRequestPayload("test-model", req, true)
+	if err != nil {
+		t.Fatalf("buildRequestPayload failed: %v", err)
+	}
+
+	var body struct {
+		Messages []map[string]any `json:"messages"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if len(body.Messages) != 4 {
+		t.Fatalf("expected 4 messages, got %d", len(body.Messages))
+	}
+	for i, msg := range body.Messages {
+		if _, ok := msg["reasoning_content"]; ok {
+			t.Errorf("message[%d] must not contain reasoning_content on outbound payload", i)
+		}
+	}
+	// 带 ToolCalls 的 assistant 消息其余字段保持完整
+	tcMsg := body.Messages[2]
+	tcs, ok := tcMsg["tool_calls"].([]any)
+	if !ok || len(tcs) != 1 {
+		t.Fatalf("expected tool_calls preserved on assistant message, got: %v", tcMsg)
+	}
+}

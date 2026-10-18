@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -21,6 +22,22 @@ var (
 	ErrEmptyAPIKey   = errors.New("gateway: api key cannot be empty")
 	ErrEmptyMessages = errors.New("gateway: messages cannot be empty")
 )
+
+// streamHardLimit 单次流式调用的整体兜底超时。
+// 本地单用户场景取粗粒度：不做逐 chunk 空闲超时（需侵入连接层，收益不成比例）。
+const streamHardLimit = 10 * time.Minute
+
+// newTransportClient 构造带网络阶段超时的 HTTP 客户端（连接 10s / TLS 握手 10s / 首响应头 120s）。
+// 响应体不设整体超时——由 ChatStream 的 streamHardLimit 统一兜底。
+func newTransportClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext:           (&net.Dialer{Timeout: 10 * time.Second}).DialContext,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 120 * time.Second,
+		},
+	}
+}
 
 // Gateway 统一 AI 网关接口
 type Gateway interface {
@@ -71,7 +88,7 @@ func NewClient(provider config.Provider, baseURL, apiKey, model string, httpClie
 
 	client := httpClient
 	if client == nil {
-		client = http.DefaultClient
+		client = newTransportClient()
 	}
 
 	c := &Client{
@@ -161,18 +178,21 @@ func (c *Client) endpoint() string {
 	return chatURL(c.baseURL)
 }
 
-// ChatStream 执行流式调用（内置网络抖动与 429/5xx 指数退避重试）
+// ChatStream 执行流式调用（内置网络抖动与 429/5xx 指数退避重试，整体受 streamHardLimit 兜底）
 func (c *Client) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
-	resp, err := c.executeWithRetry(ctx, req)
+	streamCtx, cancel := context.WithTimeout(ctx, streamHardLimit)
+	resp, err := c.executeWithRetry(streamCtx, req)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 
 	out := make(chan protocol.ChatResponse, 32)
 	go func() {
+		defer cancel()
 		defer resp.Body.Close()
 		defer close(out)
-		usage := readSSE(ctx, resp.Body, out)
+		usage := readSSE(streamCtx, resp.Body, out)
 		if usage.TotalTokens > 0 {
 			c.mu.Lock()
 			c.totalUsage.Add(usage)

@@ -356,3 +356,32 @@ func TestGrepTool(t *testing.T) {
 		t.Errorf("expected error for escaping path")
 	}
 }
+
+// 验收 D2：timeout_ms 参数夹取与超时杀进程组
+func TestBashTool_ToolTimeoutMs(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool := NewBashTool(tmpDir)
+
+	// 1. timeout_ms 生效：sleep 5 + 300ms 超时应快速返回
+	timeoutMs := int64(300)
+	args, _ := json.Marshal(BashInput{Command: "sleep 5", TimeoutMs: &timeoutMs})
+	start := time.Now()
+	_, err := tool.Execute(context.Background(), args)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatalf("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "timed out after 300ms") {
+		t.Errorf("unexpected timeout error: %v", err)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("expected fast timeout, took %v", elapsed)
+	}
+
+	// 2. 非法值夹取：timeout_ms=0 走默认 120s（此处仅验证执行成功不被夹为 0）
+	argsOk, _ := json.Marshal(BashInput{Command: "echo fast"})
+	out, err := tool.Execute(context.Background(), argsOk)
+	if err != nil || out != "fast" {
+		t.Errorf("expected normal execution, got out=%q err=%v", out, err)
+	}
+}

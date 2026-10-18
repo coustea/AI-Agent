@@ -18,6 +18,7 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 	// 1. 系统控制类指令
 	switch trimmed {
 	case "/exit", "/quit", "/q":
+		m.shutdown()
 		return m, tea.Quit, true
 
 	case "/clear":

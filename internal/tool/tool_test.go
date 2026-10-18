@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"my-agent/internal/protocol"
@@ -276,5 +277,26 @@ func TestRegistry_PostToolUse_ExecutionError(t *testing.T) {
 	}
 	if !res.IsError || res.Content != "boom" {
 		t.Errorf("expected error result: %+v", res)
+	}
+}
+
+// 验收 D2：工具 panic 转为 IsError 结果，不击穿 Registry
+func TestRegistryExecute_PanicRecovery(t *testing.T) {
+	boom := &mockTool{
+		name:   "boom",
+		desc:   "always panics",
+		schema: json.RawMessage(`{"type":"object","properties":{}}`),
+		runFn: func(ctx context.Context, args json.RawMessage) (string, error) {
+			panic("kaboom")
+		},
+	}
+	r := NewRegistry(boom)
+
+	res := r.Execute(context.Background(), protocol.ToolCall{ID: "c1", Name: "boom", Arguments: "{}"})
+	if !res.IsError {
+		t.Fatalf("expected IsError result from panicked tool, got: %+v", res)
+	}
+	if !strings.Contains(res.Content, "tool panicked") || !strings.Contains(res.Content, "kaboom") {
+		t.Errorf("unexpected panic content: %q", res.Content)
 	}
 }

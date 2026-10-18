@@ -41,6 +41,13 @@ func (a *CoreAgent) Run(ctx context.Context, prompt string) (<-chan protocol.Eve
 	go func() {
 		defer close(outCh)
 		defer func() {
+			// panic 兜底：agentLoop 崩溃时保证 running 复位与通道正常关闭，整轮以 EventError 收敛
+			if r := recover(); r != nil {
+				sendEvent(context.Background(), outCh, protocol.Event{
+					Type:  protocol.EventError,
+					Error: fmt.Sprintf("agent: internal panic: %v", r),
+				})
+			}
 			a.mu.Lock()
 			a.running = false
 			a.mu.Unlock()

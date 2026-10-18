@@ -34,12 +34,11 @@ type wireTool struct {
 }
 
 type wireMsg struct {
-	Role             string         `json:"role"`
-	Content          *string        `json:"content"`
-	ReasoningContent *string        `json:"reasoning_content,omitempty"`
-	Name             string         `json:"name,omitempty"`
-	ToolCallID       string         `json:"tool_call_id,omitempty"`
-	ToolCalls        []wireToolCall `json:"tool_calls,omitempty"`
+	Role       string         `json:"role"`
+	Content    *string        `json:"content"`
+	Name       string         `json:"name,omitempty"`
+	ToolCallID string         `json:"tool_call_id,omitempty"`
+	ToolCalls  []wireToolCall `json:"tool_calls,omitempty"`
 }
 
 type wireReq struct {
@@ -86,10 +85,8 @@ func toWireMessages(messages []protocol.Message) []wireMsg {
 			msg.Content = &s
 		}
 
-		if m.ReasoningContent != "" {
-			s := m.ReasoningContent
-			msg.ReasoningContent = &s
-		}
+		// reasoning_content 只进不出：入站解析、本地展示与存档保留，
+		// 但严禁回传请求体（DeepSeek 等厂商输入含该字段直接 400）。
 
 		if m.Role == protocol.RoleTool && m.ToolResult != nil {
 			msg.ToolCallID = m.ToolResult.ToolCallID
@@ -99,10 +96,6 @@ func toWireMessages(messages []protocol.Message) []wireMsg {
 		}
 
 		if m.Role == protocol.RoleAssistant && len(m.ToolCalls) > 0 {
-			if msg.ReasoningContent == nil {
-				empty := ""
-				msg.ReasoningContent = &empty
-			}
 			tcs := make([]wireToolCall, 0, len(m.ToolCalls))
 			for _, tc := range m.ToolCalls {
 				tcs = append(tcs, wireToolCall{
