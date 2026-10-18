@@ -40,7 +40,6 @@ const (
 	SparkX25Model       = "spark-x2.5"    // 官方主力免费体验模型 (256K 超长上下文，带深度推理)
 	SparkX254BModel     = "spark-x2.5-4b" // 端侧 4B 免费开源模型 (原生 1M 超长上下文，0元/tokens)
 	DefaultSparkModel   = SparkX25Model   // 默认主力模型 spark-x2.5
-	Spark254BModel      = SparkX254BModel // 别名兼容
 	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
 
@@ -61,7 +60,6 @@ type providerMeta struct {
 	IsLocal           bool
 	ModelPrefixes     []string
 	ModelSubstrings   []string
-	ExactModels       []string
 }
 
 // providerRegistry 是全部厂商元数据的唯一注册表，按展示顺序排列。
@@ -477,11 +475,6 @@ func ProviderDescription(p Provider) string {
 func InferProviderFromModel(model string) Provider {
 	m := strings.ToLower(strings.TrimSpace(model))
 	for _, pm := range providerRegistry {
-		for _, exact := range pm.ExactModels {
-			if m == exact {
-				return Provider(pm.ID)
-			}
-		}
 		for _, prefix := range pm.ModelPrefixes {
 			if strings.HasPrefix(m, prefix) {
 				return Provider(pm.ID)

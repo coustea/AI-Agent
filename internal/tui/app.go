@@ -322,7 +322,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case protocol.EventReasoningDelta:
-			m.messages[lastIdx].ReasoningContent += msg.event.Reasoning
 			blocks := &m.messages[lastIdx].Blocks
 			if len(*blocks) > 0 && (*blocks)[len(*blocks)-1].Kind == BlockReasoning {
 				(*blocks)[len(*blocks)-1].Text += msg.event.Reasoning
@@ -364,15 +363,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case protocol.EventToolCallStart:
 			if msg.event.ToolCall != nil {
 				m.activeToolName = msg.event.ToolCall.Name
-				tcRec := ToolCallRecord{
-					Call:   *msg.event.ToolCall,
-					Result: nil,
-				}
-				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, tcRec)
 				// 顺序追加工具调用块
 				m.messages[lastIdx].Blocks = append(m.messages[lastIdx].Blocks, MessageBlock{
 					Kind: BlockTool,
-					Tool: &m.messages[lastIdx].ToolCalls[len(m.messages[lastIdx].ToolCalls)-1],
+					Tool: &ToolCallRecord{
+						Call:   *msg.event.ToolCall,
+						Result: nil,
+					},
 				})
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -384,24 +381,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case protocol.EventToolCallResult:
 			if msg.event.ToolResult != nil {
 				m.activeToolName = ""
-				tcs := m.messages[lastIdx].ToolCalls
-				found := false
-				for i := len(tcs) - 1; i >= 0; i-- {
-					if tcs[i].Call.ID == msg.event.ToolResult.ToolCallID || tcs[i].Call.Name == msg.event.ToolResult.Name {
-						m.messages[lastIdx].ToolCalls[i].Result = msg.event.ToolResult
-						found = true
-						break
-					}
-				}
-				if !found {
-					m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
-						Call: protocol.ToolCall{
-							ID:   msg.event.ToolResult.ToolCallID,
-							Name: msg.event.ToolResult.Name,
-						},
-						Result: msg.event.ToolResult,
-					})
-				}
 				// 顺序更新 Blocks 中对应的工具结果
 				for i := len(m.messages[lastIdx].Blocks) - 1; i >= 0; i-- {
 					b := &m.messages[lastIdx].Blocks[i]

@@ -43,12 +43,10 @@ type MessageBlock struct {
 
 // ChatMessage 用于在界面上展示发送和接收的消息
 type ChatMessage struct {
-	Sender           string           // "You", "Tide", "System"
-	Content          string           // 最终回复文本 (兼容单测与快照)
-	ReasoningContent string           // 深度思考链 (兼容单测与快照)
-	ToolCalls        []ToolCallRecord // 结构化工具调用列表 (兼容单测与快照)
-	Blocks           []MessageBlock   // 严格按时间线性排列的展示块，彻底杜绝乱序插入展示
-	Usage            *protocol.Usage  // 携带的 Token 用量统计（可选）
+	Sender  string          // "You", "Tide", "System"
+	Content string          // 文本内容 (用户输入、系统提示或回退兜底)
+	Blocks  []MessageBlock  // 严格按时间线性排列的结构化块 (思考、文本、工具、权限)
+	Usage   *protocol.Usage // 携带的 Token 用量统计（可选）
 }
 
 // updateChat 处理聊天页面的键盘输入和发送逻辑
@@ -470,26 +468,12 @@ func (m Model) renderChatMessages() string {
 				continue
 			}
 
-			// 回退兼容逻辑 (当无显式 Blocks 时保持向后兼容)
-			if msg.ReasoningContent != "" {
-				thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):")
-				thoughtText := reasoningTextStyle.Render(msg.ReasoningContent)
-				sb.WriteString(fmt.Sprintf("  %s\n  %s\n\n", thoughtHeader, thoughtText))
-			}
-
-			for _, tc := range msg.ToolCalls {
-				sb.WriteString(renderToolCard(tc, cardWidth) + "\n\n")
-			}
-
-			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1 && len(msg.ToolCalls) == 0 && msg.ReasoningContent == "") {
+			// 若暂无结构化块（例如刚发起连接或直接包含文本）
+			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1) {
 				header := assistantBadgeStyle.Render(" 🌊 Tide ")
 				var bodyText string
 				if msg.Content != "" {
-					if m.isGenerating && i == len(m.messages)-1 {
-						bodyText = msg.Content + cursorStyle.Render(" ▊")
-					} else {
-						bodyText = renderMarkdown(msg.Content, cardWidth)
-					}
+					bodyText = renderMarkdown(msg.Content, cardWidth)
 				} else {
 					bodyText = m.spinner.View() + dimStyle.Render(" 正在思考中...")
 				}

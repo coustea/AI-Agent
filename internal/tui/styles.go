@@ -124,17 +124,6 @@ var (
 				Bold(true).
 				Foreground(colorYellow)
 
-	toolResultSuccessStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(colorGreen)
-
-	toolResultErrorStyle = lipgloss.NewStyle().
-				Bold(true).
-				Foreground(colorRed)
-
-	toolSnippetStyle = lipgloss.NewStyle().
-				Foreground(colorTextMuted)
-
 	// 工具 Bento 卡片容器与徽章样式
 	toolCardRunningStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).

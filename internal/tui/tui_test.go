@@ -274,8 +274,15 @@ func TestTUIToolEventRendering(t *testing.T) {
 	m = mIntf.(Model)
 
 	lastMsg := m.messages[len(m.messages)-1]
-	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Call.Name != "read_file" {
-		t.Fatalf("expected tool call to be recorded in ToolCalls, got: %+v", lastMsg.ToolCalls)
+	var tcRec *ToolCallRecord
+	for _, b := range lastMsg.Blocks {
+		if b.Kind == BlockTool && b.Tool != nil {
+			tcRec = b.Tool
+			break
+		}
+	}
+	if tcRec == nil || tcRec.Call.Name != "read_file" {
+		t.Fatalf("expected tool call to be recorded in blocks, got: %+v", lastMsg.Blocks)
 	}
 
 	// 2. 模拟收到 EventToolCallResult
@@ -293,8 +300,15 @@ func TestTUIToolEventRendering(t *testing.T) {
 	m = mIntf.(Model)
 
 	lastMsg = m.messages[len(m.messages)-1]
-	if len(lastMsg.ToolCalls) == 0 || lastMsg.ToolCalls[0].Result == nil || !strings.Contains(lastMsg.ToolCalls[0].Result.Content, "package main") {
-		t.Fatalf("expected tool result to be recorded, got: %+v", lastMsg.ToolCalls)
+	tcRec = nil
+	for _, b := range lastMsg.Blocks {
+		if b.Kind == BlockTool && b.Tool != nil {
+			tcRec = b.Tool
+			break
+		}
+	}
+	if tcRec == nil || tcRec.Result == nil || !strings.Contains(tcRec.Result.Content, "package main") {
+		t.Fatalf("expected tool result to be recorded in blocks, got: %+v", lastMsg.Blocks)
 	}
 
 	// 3. 验证 View 渲染正常不崩溃
