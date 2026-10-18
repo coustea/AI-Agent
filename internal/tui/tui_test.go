@@ -1106,3 +1106,138 @@ func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 		t.Errorf("unexpected deny audit card: %s", denyCard)
 	}
 }
+
+func TestTUI_ThinkingViewer_Flow(t *testing.T) {
+	ag := newMockAgent()
+	m := NewModel(ag)
+	m.width = 100
+	m.height = 30
+
+	// 1. 无思考记录时打开看空提示
+	m.chatInput.SetValue("/think")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if m.state != stateThinkingViewer {
+		t.Fatalf("expected stateThinkingViewer after /think, got %v", m.state)
+	}
+
+	viewEmpty := m.View()
+	if !strings.Contains(viewEmpty, "当前会话暂无思考过程记录") {
+		t.Errorf("expected view to contain empty notice, got:\n%s", viewEmpty)
+	}
+
+	// 按 q 退出返回对话
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
+	m = mIntf.(Model)
+	if m.state != stateChat {
+		t.Fatalf("expected stateChat after q, got %v", m.state)
+	}
+
+	// 2. 构造包含两轮对话思考记录的数据
+	m.messages = []ChatMessage{
+		{
+			Sender:  "You",
+			Content: "提问一：如何设计网关？",
+		},
+		{
+			Sender: "Tide",
+			Blocks: []MessageBlock{
+				{
+					Kind: BlockReasoning,
+					Text: "思考网关架构：首先需要支持多厂商，其次需要统一协议与动态路由。",
+				},
+				{
+					Kind: BlockText,
+					Text: "网关设计方案如下...",
+				},
+			},
+		},
+		{
+			Sender:  "You",
+			Content: "提问二：如何设计权限？",
+		},
+		{
+			Sender: "Tide",
+			Blocks: []MessageBlock{
+				{
+					Kind: BlockReasoning,
+					Text: "思考权限体系：采用三道闸门设计，Gate 1 硬拒绝，Gate 2 规则匹配，Gate 3 交互审批。",
+				},
+				{
+					Kind: BlockText,
+					Text: "权限设计方案如下...",
+				},
+			},
+		},
+	}
+
+	// 3. 测试通过 Ctrl+T 快捷键打开思考看板
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	m = mIntf.(Model)
+	if m.state != stateThinkingViewer {
+		t.Fatalf("expected stateThinkingViewer after Ctrl+T, got %v", m.state)
+	}
+	if len(m.thinkingEntries) != 2 {
+		t.Fatalf("expected 2 thinking entries, got %d", len(m.thinkingEntries))
+	}
+	// 默认光标定位在最新的思考过程 (第 2 项，索引 1)
+	if m.thinkingCursor != 1 {
+		t.Fatalf("expected thinkingCursor to be 1, got %d", m.thinkingCursor)
+	}
+
+	view := m.View()
+	if !strings.Contains(view, "三道闸门设计") {
+		t.Errorf("expected view to contain latest thinking text, got:\n%s", view)
+	}
+
+	// 4. 按左键切换至第一项思考过程
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	m = mIntf.(Model)
+	if m.thinkingCursor != 0 {
+		t.Fatalf("expected thinkingCursor to be 0, got %d", m.thinkingCursor)
+	}
+	view = m.View()
+	if !strings.Contains(view, "思考网关架构") {
+		t.Errorf("expected view to contain first thinking text, got:\n%s", view)
+	}
+
+	// 5. 按 Tab 循环切回第二项
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = mIntf.(Model)
+	if m.thinkingCursor != 1 {
+		t.Fatalf("expected thinkingCursor to be 1 after Tab, got %d", m.thinkingCursor)
+	}
+
+	// 6. 按 'r' 键切换 Raw 模式
+	if m.thinkingRawMode {
+		t.Fatalf("expected thinkingRawMode initially false")
+	}
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = mIntf.(Model)
+	if !m.thinkingRawMode {
+		t.Fatalf("expected thinkingRawMode true after r")
+	}
+
+	// 7. 测试在思考看板打开期间，流式增量实时同步更新
+	m.isGenerating = true
+	mIntf, _ = m.Update(agentStreamEventMsg{
+		event: protocol.Event{
+			Type:      protocol.EventReasoningDelta,
+			Reasoning: "【实时增量推理中...】",
+		},
+	})
+	m = mIntf.(Model)
+
+	viewUpdated := m.View()
+	if !strings.Contains(viewUpdated, "【实时增量推理中...】") {
+		t.Errorf("expected real-time streaming reasoning update in view, got:\n%s", viewUpdated)
+	}
+
+	// 8. 再次按 Ctrl+T 返回对话页面
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlT})
+	m = mIntf.(Model)
+	if m.state != stateChat {
+		t.Fatalf("expected stateChat after toggling Ctrl+T, got %v", m.state)
+	}
+}

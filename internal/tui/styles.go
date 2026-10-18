@@ -103,7 +103,7 @@ var (
 				Foreground(colorBrand)
 
 	// ==========================================
-	// 4. 深度思考链样式
+	// 4. 深度思考链与思考看板专用样式
 	// ==========================================
 	reasoningTextStyle = lipgloss.NewStyle().
 				Foreground(colorReasoningText).
@@ -112,6 +112,29 @@ var (
 	reasoningTitleStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(colorReasoning)
+
+	thinkingBadgeStyle = lipgloss.NewStyle().
+				Bold(true).
+				Background(colorReasoning).
+				Foreground(lipgloss.Color("#1A1D24")).
+				Padding(0, 1)
+
+	thinkingTabActiveStyle = lipgloss.NewStyle().
+				Bold(true).
+				Background(colorReasoning).
+				Foreground(lipgloss.Color("#1A1D24")).
+				Padding(0, 1)
+
+	thinkingTabInactiveStyle = lipgloss.NewStyle().
+					Background(colorSurface).
+					Foreground(colorTextMuted).
+					Padding(0, 1)
+
+	thinkingCardStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorReasoning).
+				Background(colorSurface).
+				Padding(0, 1)
 
 	// ==========================================
 	// 5. 工具卡片与状态芯片样式

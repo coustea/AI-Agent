@@ -24,6 +24,7 @@ const (
 	stateInputModel                            // 状态 4: 输入自定义模型名称并保存
 	stateChat                                  // 状态 5: 主聊天页面（在 chat.go 中处理）
 	stateTraceInspector                        // 状态 6: 终端全量 JSON 追踪看板（在 inspector.go 中处理）
+	stateThinkingViewer                        // 状态 7: 深度思考过程沉浸看板（在 thinking.go 中处理）
 )
 
 // agentStreamEventMsg 封装来自 Agent 的单次纯数据流式事件
@@ -86,6 +87,13 @@ type Model struct {
 	traceViewport  viewport.Model
 	traceFocusJSON bool // false: 焦点在上方步骤列表; true: 焦点在下方全宽 JSON 视口
 	traceRawMode   bool // false: 纯净底层 JSON 模式; true: 全量原始 Wire 报文模式
+
+	// 状态 7: 深度思考过程看板 (在 thinking.go 中处理)
+	thinkingEntries   []ReasoningEntry
+	thinkingCursor    int
+	thinkingFocusText bool
+	thinkingRawMode   bool
+	thinkingViewport  viewport.Model
 
 	// 终端宽高适配
 	width  int
@@ -239,6 +247,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m.openTraceInspector(), nil
 
+		case tea.KeyCtrlT:
+			// Ctrl+T 快捷键呼出深度思考过程看板
+			if m.state == stateThinkingViewer {
+				m.state = stateChat
+				m.chatInput.Focus()
+				return m, nil
+			}
+			return m.openThinkingViewer(), nil
+
 		case tea.KeyEsc:
 			// 若在生成中按 Esc，同样支持快速中断当前生成
 			if m.isGenerating {
@@ -319,6 +336,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.SetContent(m.renderChatMessages())
 				m.viewport.GotoBottom()
 			}
+			if m.state == stateThinkingViewer {
+				m.syncThinkingViewerContent()
+			}
 			return m, nil
 
 		case protocol.EventReasoningDelta:
@@ -337,6 +357,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if atBottom {
 					m.viewport.GotoBottom()
 				}
+			}
+			if m.state == stateThinkingViewer {
+				m.syncThinkingViewerContent()
 			}
 			return m, waitForAgentEvent(msg.ch)
 
@@ -427,6 +450,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateChat(msg)
 	case stateTraceInspector:
 		return m.updateTraceInspector(msg)
+	case stateThinkingViewer:
+		return m.updateThinkingViewer(msg)
 	default:
 		return m, nil
 	}
@@ -447,6 +472,8 @@ func (m Model) View() string {
 		return m.viewChat()
 	case stateTraceInspector:
 		return m.viewTraceInspector()
+	case stateThinkingViewer:
+		return m.viewThinkingViewer()
 	default:
 		return "未知界面状态"
 	}

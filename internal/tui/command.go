@@ -53,5 +53,12 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 		return newM, nil, true
 	}
 
+	// 4. 深度思考过程沉浸看板指令
+	if trimmed == "/think" || trimmed == "/thinking" || trimmed == "/reasoning" || trimmed == "/cot" {
+		m.chatInput.Reset()
+		newM := m.openThinkingViewer()
+		return newM, nil, true
+	}
+
 	return m, nil, false
 }

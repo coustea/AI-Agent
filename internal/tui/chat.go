@@ -353,10 +353,12 @@ func (m Model) renderInputBox() string {
 		item := func(key, desc string) string {
 			return fmt.Sprintf("%s %s", keycapPillStyle.Render(key), dimStyle.Render(desc))
 		}
-		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s%s%s",
+		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s%s%s%s%s",
 			item("Enter", "发送"),
 			sep,
 			item("滚轮/↑↓/PgUp", "翻看记录"),
+			sep,
+			item("/think", "思考看板"),
 			sep,
 			item("/log", "JSON追踪"),
 			sep,
@@ -427,7 +429,7 @@ func (m Model) renderChatMessages() string {
 					switch block.Kind {
 					case BlockReasoning:
 						if strings.TrimSpace(block.Text) != "" {
-							thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):")
+							thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):") + " " + dimStyle.Render("[按 Ctrl+T 打开独立看板]")
 							thoughtText := reasoningTextStyle.Render(block.Text)
 							sbTide.WriteString(fmt.Sprintf("  %s\n  %s\n\n", thoughtHeader, thoughtText))
 						}
