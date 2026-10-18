@@ -9,6 +9,7 @@ import (
 	"my-agent/internal/protocol"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -822,7 +823,7 @@ func TestTUI_TraceInspector_Flow(t *testing.T) {
 
 	// 2. 验证渲染视图包含看板标题与 JSON 关键字段
 	view := m.View()
-	if !strings.Contains(view, "全系统执行链路与详细 JSON 追踪看板") {
+	if !strings.Contains(view, "全系统执行链路与底层 JSON 追踪看板") {
 		t.Errorf("expected view to contain trace inspector header, got:\n%s", view)
 	}
 	if !strings.Contains(view, "turn_mock_123") {
@@ -840,11 +841,26 @@ func TestTUI_TraceInspector_Flow(t *testing.T) {
 		t.Errorf("expected view to update to second event JSON, got:\n%s", view)
 	}
 
-	// 4. 按 Tab 切换焦点到右侧 JSON 视口
+	// 4. 按 Tab 切换焦点到下方全宽 JSON 视口
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = mIntf.(Model)
-	if !m.traceFocusRight {
-		t.Errorf("expected traceFocusRight to be true after Tab")
+	if !m.traceFocusJSON {
+		t.Errorf("expected traceFocusJSON to be true after Tab")
+	}
+
+	// 测试按 'r' 键在 Clean JSON 与 Raw JSON 之间自由切换
+	if m.traceRawMode {
+		t.Errorf("expected default traceRawMode to be false")
+	}
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = mIntf.(Model)
+	if !m.traceRawMode {
+		t.Errorf("expected traceRawMode to be true after pressing r")
+	}
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	m = mIntf.(Model)
+	if m.traceRawMode {
+		t.Errorf("expected traceRawMode to toggle back to false after pressing r again")
 	}
 
 	// 5. 按 Esc 返回主对话页面
@@ -866,5 +882,29 @@ func TestTUI_TraceInspector_Flow(t *testing.T) {
 	m = mIntf.(Model)
 	if m.state != stateChat {
 		t.Fatalf("expected stateChat after q, got %v", m.state)
+	}
+}
+
+func TestLipglossBoxModelWidth(t *testing.T) {
+	cardW := 80
+	// 外层: Width(80), Border(2), Padding(0, 1)(2)
+	// 内层期望总宽: 80 - 2 = 78
+	// 内层带 Border(2)，所以内层 Width 应为 78 - 2 = 76
+	inner := lipgloss.NewStyle().
+		Width(76).
+		Border(lipgloss.RoundedBorder()).
+		Padding(0, 1).
+		Render("inner content")
+	if lipgloss.Width(inner) != 78 {
+		t.Fatalf("expected inner width 78, got %d", lipgloss.Width(inner))
+	}
+
+	outer := lipgloss.NewStyle().
+		Width(cardW).
+		Border(lipgloss.RoundedBorder()).
+		Padding(0, 1).
+		Render(inner)
+	if lipgloss.Width(outer) != 82 { // 80 + 2
+		t.Fatalf("expected outer width 82, got %d", lipgloss.Width(outer))
 	}
 }
