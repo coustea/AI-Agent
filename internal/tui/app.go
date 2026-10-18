@@ -291,7 +291,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if errMsg == "" {
 				errMsg = "未知异常"
 			}
-			m.messages[lastIdx].Content += fmt.Sprintf("\n[出错: %s]", errMsg)
+			errText := fmt.Sprintf("\n[出错: %s]", errMsg)
+			m.messages[lastIdx].Content += errText
+			m.messages[lastIdx].Blocks = append(m.messages[lastIdx].Blocks, MessageBlock{
+				Kind: BlockText,
+				Text: errText,
+			})
 			m.isGenerating = false
 			m.activeToolName = ""
 			m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
@@ -318,6 +323,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case protocol.EventReasoningDelta:
 			m.messages[lastIdx].ReasoningContent += msg.event.Reasoning
+			blocks := &m.messages[lastIdx].Blocks
+			if len(*blocks) > 0 && (*blocks)[len(*blocks)-1].Kind == BlockReasoning {
+				(*blocks)[len(*blocks)-1].Text += msg.event.Reasoning
+			} else {
+				*blocks = append(*blocks, MessageBlock{
+					Kind: BlockReasoning,
+					Text: msg.event.Reasoning,
+				})
+			}
 			if m.viewportReady {
 				atBottom := m.viewport.AtBottom()
 				m.viewport.SetContent(m.renderChatMessages())
@@ -329,6 +343,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case protocol.EventDelta:
 			m.messages[lastIdx].Content += msg.event.Delta
+			blocks := &m.messages[lastIdx].Blocks
+			if len(*blocks) > 0 && (*blocks)[len(*blocks)-1].Kind == BlockText {
+				(*blocks)[len(*blocks)-1].Text += msg.event.Delta
+			} else {
+				*blocks = append(*blocks, MessageBlock{
+					Kind: BlockText,
+					Text: msg.event.Delta,
+				})
+			}
 			if m.viewportReady {
 				atBottom := m.viewport.AtBottom()
 				m.viewport.SetContent(m.renderChatMessages())
@@ -341,9 +364,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case protocol.EventToolCallStart:
 			if msg.event.ToolCall != nil {
 				m.activeToolName = msg.event.ToolCall.Name
-				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, ToolCallRecord{
+				tcRec := ToolCallRecord{
 					Call:   *msg.event.ToolCall,
 					Result: nil,
+				}
+				m.messages[lastIdx].ToolCalls = append(m.messages[lastIdx].ToolCalls, tcRec)
+				// 顺序追加工具调用块
+				m.messages[lastIdx].Blocks = append(m.messages[lastIdx].Blocks, MessageBlock{
+					Kind: BlockTool,
+					Tool: &m.messages[lastIdx].ToolCalls[len(m.messages[lastIdx].ToolCalls)-1],
 				})
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
@@ -359,7 +388,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				found := false
 				for i := len(tcs) - 1; i >= 0; i-- {
 					if tcs[i].Call.ID == msg.event.ToolResult.ToolCallID || tcs[i].Call.Name == msg.event.ToolResult.Name {
-						tcs[i].Result = msg.event.ToolResult
+						m.messages[lastIdx].ToolCalls[i].Result = msg.event.ToolResult
 						found = true
 						break
 					}
@@ -372,6 +401,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						},
 						Result: msg.event.ToolResult,
 					})
+				}
+				// 顺序更新 Blocks 中对应的工具结果
+				for i := len(m.messages[lastIdx].Blocks) - 1; i >= 0; i-- {
+					b := &m.messages[lastIdx].Blocks[i]
+					if b.Kind == BlockTool && b.Tool != nil {
+						if b.Tool.Call.ID == msg.event.ToolResult.ToolCallID || b.Tool.Call.Name == msg.event.ToolResult.Name {
+							b.Tool.Result = msg.event.ToolResult
+							break
+						}
+					}
 				}
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())

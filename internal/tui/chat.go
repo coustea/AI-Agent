@@ -17,12 +17,29 @@ type ToolCallRecord struct {
 	Result *protocol.ToolResult
 }
 
+// BlockKind 定义消息片段类型
+type BlockKind int
+
+const (
+	BlockReasoning BlockKind = iota // 思考链片段
+	BlockText                       // 普通文本片段
+	BlockTool                       // 工具调用与结果片段
+)
+
+// MessageBlock 描述消息内部的一个有序展示块，严格按照到达先后顺序线性排列
+type MessageBlock struct {
+	Kind BlockKind
+	Text string
+	Tool *ToolCallRecord
+}
+
 // ChatMessage 用于在界面上展示发送和接收的消息
 type ChatMessage struct {
 	Sender           string           // "You", "Tide", "System"
-	Content          string           // 最终回复文本
-	ReasoningContent string           // 深度思考链 (DeepSeek 等)
-	ToolCalls        []ToolCallRecord // 结构化工具调用列表
+	Content          string           // 最终回复文本 (兼容单测与快照)
+	ReasoningContent string           // 深度思考链 (兼容单测与快照)
+	ToolCalls        []ToolCallRecord // 结构化工具调用列表 (兼容单测与快照)
+	Blocks           []MessageBlock   // 严格按时间线性排列的展示块，彻底杜绝乱序插入展示
 	Usage            *protocol.Usage  // 携带的 Token 用量统计（可选）
 }
 
@@ -365,44 +382,62 @@ func (m Model) renderChatMessages() string {
 			sb.WriteString(fmt.Sprintf("%s\n%s\n\n", badge, indented.String()))
 
 		case "Tide":
-			// 1. 若有深度思考链，独立优雅呈现
+			// 严格按时间发生的真实先后顺序线性渲染，杜绝任何乱序插入
+			if len(msg.Blocks) > 0 {
+				var sbTide strings.Builder
+				headerShown := false
+
+				for bIdx, block := range msg.Blocks {
+					switch block.Kind {
+					case BlockReasoning:
+						if strings.TrimSpace(block.Text) != "" {
+							thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):")
+							thoughtText := reasoningTextStyle.Render(block.Text)
+							sbTide.WriteString(fmt.Sprintf("  %s\n  %s\n\n", thoughtHeader, thoughtText))
+						}
+
+					case BlockTool:
+						if block.Tool != nil {
+							sbTide.WriteString(renderToolBlock(*block.Tool))
+						}
+
+					case BlockText:
+						if !headerShown {
+							sbTide.WriteString(assistantBadgeStyle.Render(" 🌊 Tide ") + "\n")
+							headerShown = true
+						}
+						var text string
+						isLastBlock := bIdx == len(msg.Blocks)-1
+						if m.isGenerating && i == len(m.messages)-1 && isLastBlock {
+							text = block.Text + lipgloss.NewStyle().Foreground(colorBrand).Render(" ▊")
+						} else {
+							text = renderMarkdown(block.Text, cardWidth)
+						}
+						sbTide.WriteString(text + "\n\n")
+					}
+				}
+
+				if msg.Usage != nil && msg.Usage.TotalTokens > 0 {
+					usageText := tokenBadgeStyle.Render(fmt.Sprintf("📊 Token 用量: %d (输入 %d / 输出 %d)",
+						msg.Usage.TotalTokens, msg.Usage.PromptTokens, msg.Usage.CompletionTokens))
+					sbTide.WriteString("  " + usageText + "\n\n")
+				}
+
+				sb.WriteString(sbTide.String())
+				continue
+			}
+
+			// 回退兼容逻辑 (当无显式 Blocks 时保持向后兼容)
 			if msg.ReasoningContent != "" {
 				thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):")
 				thoughtText := reasoningTextStyle.Render(msg.ReasoningContent)
 				sb.WriteString(fmt.Sprintf("  %s\n  %s\n\n", thoughtHeader, thoughtText))
 			}
 
-			// 2. 若有工具调用，彩色紧凑结构化呈现
 			for _, tc := range msg.ToolCalls {
-				var header string
-				if tc.Result == nil {
-					header = toolRunningStyle.Render("⚙️  正在执行工具: ") + toolHeaderStyle.Render(tc.Call.Name)
-				} else if tc.Result.IsError {
-					header = toolResultErrorStyle.Render("✖  工具执行报错: ") + toolHeaderStyle.Render(tc.Call.Name)
-				} else {
-					header = toolResultSuccessStyle.Render("✔  工具执行完成: ") + toolHeaderStyle.Render(tc.Call.Name)
-				}
-
-				var body strings.Builder
-				body.WriteString(fmt.Sprintf("  %s\n", header))
-
-				if tc.Call.Arguments != "" && tc.Call.Arguments != "{}" {
-					body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("参数: "+tc.Call.Arguments)))
-				}
-				if tc.Result != nil && tc.Result.Content != "" {
-					snippet := strings.TrimSpace(tc.Result.Content)
-					lines := strings.Split(snippet, "\n")
-					if len(lines) > 4 {
-						snippet = strings.Join(lines[:4], "\n") + fmt.Sprintf("\n    ... (共 %d 行，其余已折叠)", len(lines))
-					} else if len(snippet) > 240 {
-						snippet = snippet[:240] + "... (已截断)"
-					}
-					body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("结果: ")+snippet))
-				}
-				sb.WriteString(body.String() + "\n")
+				sb.WriteString(renderToolBlock(tc))
 			}
 
-			// 3. 回复正文：完全释放 Markdown 富文本能力，通透自然排版
 			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1 && len(msg.ToolCalls) == 0 && msg.ReasoningContent == "") {
 				header := assistantBadgeStyle.Render(" 🌊 Tide ")
 				var bodyText string
@@ -459,4 +494,35 @@ func (m Model) viewChat() string {
 	s.WriteString(m.renderInputBox() + "\n")
 
 	return s.String()
+}
+
+// renderToolBlock 渲染单个工具调用的执行中/成功/报错状态卡片
+func renderToolBlock(tc ToolCallRecord) string {
+	var header string
+	if tc.Result == nil {
+		header = toolRunningStyle.Render("⚙️  正在执行工具: ") + toolHeaderStyle.Render(tc.Call.Name)
+	} else if tc.Result.IsError {
+		header = toolResultErrorStyle.Render("✖  工具执行报错: ") + toolHeaderStyle.Render(tc.Call.Name)
+	} else {
+		header = toolResultSuccessStyle.Render("✔  工具执行完成: ") + toolHeaderStyle.Render(tc.Call.Name)
+	}
+
+	var body strings.Builder
+	body.WriteString(fmt.Sprintf("  %s\n", header))
+
+	if tc.Call.Arguments != "" && tc.Call.Arguments != "{}" {
+		body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("参数: "+tc.Call.Arguments)))
+	}
+	if tc.Result != nil && tc.Result.Content != "" {
+		snippet := strings.TrimSpace(tc.Result.Content)
+		lines := strings.Split(snippet, "\n")
+		if len(lines) > 4 {
+			snippet = strings.Join(lines[:4], "\n") + fmt.Sprintf("\n    ... (共 %d 行，其余已折叠)", len(lines))
+		} else if len(snippet) > 240 {
+			snippet = snippet[:240] + "... (已截断)"
+		}
+		body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("结果: ")+snippet))
+	}
+	body.WriteString("\n")
+	return body.String()
 }

@@ -307,6 +307,87 @@ func TestTUIToolEventRendering(t *testing.T) {
 	}
 }
 
+func TestTUI_SequentialBlocksRendering(t *testing.T) {
+	ag := newMockAgent("mock")
+	m := NewModel(ag)
+
+	// 初始一条 Tide 正在生成的消息
+	m.messages = append(m.messages, ChatMessage{
+		Sender: "Tide",
+	})
+
+	// 1. 模拟收到思考事件
+	mIntf, _ := m.Update(agentStreamEventMsg{
+		event: protocol.Event{
+			Type:      protocol.EventReasoningDelta,
+			Reasoning: "AlphaThinking",
+		},
+	})
+	m = mIntf.(Model)
+
+	// 2. 模拟调用工具前输出的引导说明文字
+	mIntf, _ = m.Update(agentStreamEventMsg{
+		event: protocol.Event{
+			Type:  protocol.EventDelta,
+			Delta: "BetaPreToolText",
+		},
+	})
+	m = mIntf.(Model)
+
+	// 3. 模拟工具调用开始
+	mIntf, _ = m.Update(agentStreamEventMsg{
+		event: protocol.Event{
+			Type: protocol.EventToolCallStart,
+			ToolCall: &protocol.ToolCall{
+				ID:        "c_1",
+				Name:      "GammaToolBash",
+				Arguments: `{"command": "ls"}`,
+			},
+		},
+	})
+	m = mIntf.(Model)
+
+	// 4. 模拟工具调用结束
+	mIntf, _ = m.Update(agentStreamEventMsg{
+		event: protocol.Event{
+			Type: protocol.EventToolCallResult,
+			ToolResult: &protocol.ToolResult{
+				ToolCallID: "c_1",
+				Name:       "GammaToolBash",
+				Content:    "DeltaToolResultFiles",
+			},
+		},
+	})
+	m = mIntf.(Model)
+
+	// 5. 模拟工具返回后，模型继续输出的最终总结说明
+	mIntf, _ = m.Update(agentStreamEventMsg{
+		event: protocol.Event{
+			Type:  protocol.EventDelta,
+			Delta: "EpsilonPostToolText",
+		},
+	})
+	m = mIntf.(Model)
+
+	rendered := m.renderChatMessages()
+
+	idx1 := strings.Index(rendered, "AlphaThinking")
+	idx2 := strings.Index(rendered, "BetaPreToolText")
+	idx3 := strings.Index(rendered, "GammaToolBash")
+	idx4 := strings.Index(rendered, "DeltaToolResultFiles")
+	idx5 := strings.Index(rendered, "EpsilonPostToolText")
+
+	if idx1 == -1 || idx2 == -1 || idx3 == -1 || idx4 == -1 || idx5 == -1 {
+		t.Fatalf("expected all steps to be present in rendered content, got: %s", rendered)
+	}
+
+	// 严格断言位置必须是按时间发生顺序递增，绝不能发生插入或乱序颠倒
+	if !(idx1 < idx2 && idx2 < idx3 && idx3 < idx4 && idx4 < idx5) {
+		t.Fatalf("expected strictly sequential rendering (idx1 < idx2 < idx3 < idx4 < idx5), but got: %d, %d, %d, %d, %d",
+			idx1, idx2, idx3, idx4, idx5)
+	}
+}
+
 func TestTUI_EndToEnd_MultiTurn_Chat(t *testing.T) {
 	ag := newMockAgent(
 		"Hello Alice! Nice to meet you.",
