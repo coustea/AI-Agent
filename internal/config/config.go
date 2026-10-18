@@ -41,7 +41,6 @@ const (
 	SparkX254BModel     = "spark-x2.5-4b" // 端侧 4B 免费开源模型 (原生 1M 超长上下文，0元/tokens)
 	DefaultSparkModel   = SparkX25Model   // 默认主力模型 spark-x2.5
 	Spark254BModel      = SparkX254BModel // 别名兼容
-	SparkLiteModel      = "spark-lite"    // 轻量免费基础模型
 	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
 
@@ -104,14 +103,12 @@ var providerRegistry = []providerMeta{
 		DefaultBaseURL: DefaultSparkBaseURL,
 		DefaultModel:   DefaultSparkModel,
 		RecommendedModels: []string{
-			SparkX25Model,   // spark-x2.5
-			SparkX254BModel, // spark-x2.5-4b
-			SparkLiteModel,  // spark-lite
+			SparkX25Model,   // spark-x2.5 (官方主力免费体验模型，256K 超长上下文)
+			SparkX254BModel, // spark-x2.5-4b (端侧 4B 免费开源模型，1M 超长上下文，0元)
 		},
 		DisplayName:   "讯飞星辰 MaaS",
 		Description:   "官方免费模型 - 默认 spark-x2.5 (主力) / spark-x2.5-4b (1M上下文)",
 		ModelPrefixes: []string{"spark"},
-		ExactModels:   []string{"lite"},
 	},
 }
 
