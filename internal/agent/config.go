@@ -44,9 +44,11 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 
 	// 3. 检查并更新 ModelName
 	if mStr != "" {
-		a.cfg.ModelName = mStr
+		a.cfg.ModelName = config.NormalizeModelName(newProvider, mStr)
 	} else if a.cfg.ModelName == "" {
 		a.cfg.ModelName = config.DefaultModel(newProvider)
+	} else {
+		a.cfg.ModelName = config.NormalizeModelName(newProvider, a.cfg.ModelName)
 	}
 
 	// 4. 远程厂商必须具备有效 APIKey

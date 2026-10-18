@@ -37,10 +37,10 @@ const (
 	GeminiBaseURL      = "https://generativelanguage.googleapis.com/v1beta/openai"
 
 	// 讯飞星辰 MaaS 官方最新模型规范 (https://maas.xfyun.cn/modelSquare)
-	DefaultSparkModel   = "spark-2.5"     // 官方主力免费体验模型 (亦兼容 spark-x2.5)
-	Spark254BModel      = "spark-2.5-4b"  // 端侧 4B 免费开源模型 (原生 1M 超长上下文，0元/tokens)
-	SparkX25Model       = "spark-x2.5"    // MaaS 平台官方代号
-	SparkX254BModel     = "spark-x2.5-4b" // MaaS 平台官方代号
+	SparkX25Model       = "spark-x2.5"    // 官方主力免费体验模型 (256K 超长上下文，带深度推理)
+	SparkX254BModel     = "spark-x2.5-4b" // 端侧 4B 免费开源模型 (原生 1M 超长上下文，0元/tokens)
+	DefaultSparkModel   = SparkX25Model   // 默认主力模型 spark-x2.5
+	Spark254BModel      = SparkX254BModel // 别名兼容
 	SparkLiteModel      = "spark-lite"    // 轻量免费基础模型
 	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
@@ -104,14 +104,12 @@ var providerRegistry = []providerMeta{
 		DefaultBaseURL: DefaultSparkBaseURL,
 		DefaultModel:   DefaultSparkModel,
 		RecommendedModels: []string{
-			DefaultSparkModel, // spark-2.5
-			Spark254BModel,    // spark-2.5-4b
-			SparkX25Model,     // spark-x2.5
-			SparkX254BModel,   // spark-x2.5-4b
-			SparkLiteModel,    // spark-lite
+			SparkX25Model,   // spark-x2.5
+			SparkX254BModel, // spark-x2.5-4b
+			SparkLiteModel,  // spark-lite
 		},
 		DisplayName:   "讯飞星辰 MaaS",
-		Description:   "官方免费模型 - 默认 spark-2.5 (主力) / spark-2.5-4b (1M上下文)",
+		Description:   "官方免费模型 - 默认 spark-x2.5 (主力) / spark-x2.5-4b (1M上下文)",
 		ModelPrefixes: []string{"spark"},
 		ExactModels:   []string{"lite"},
 	},
@@ -238,7 +236,7 @@ func (c *Config) SwitchProvider(p Provider) {
 	}
 
 	if pcfg.ModelName != "" {
-		c.ModelName = pcfg.ModelName
+		c.ModelName = NormalizeModelName(p, pcfg.ModelName)
 	} else {
 		c.ModelName = DefaultModel(p)
 	}
@@ -390,6 +388,12 @@ func LoadConfig(path string) (*Config, error) {
 			cfg.ModelName = DefaultModel(cfg.Provider)
 		}
 	}
+	cfg.ModelName = NormalizeModelName(cfg.Provider, cfg.ModelName)
+	for pName, pcfg := range cfg.Providers {
+		pcfg.ModelName = NormalizeModelName(Provider(pName), pcfg.ModelName)
+		cfg.Providers[pName] = pcfg
+	}
+
 	if cfg.BaseURL == "" {
 		if activePcfg.BaseURL != "" {
 			cfg.BaseURL = activePcfg.BaseURL
@@ -493,6 +497,25 @@ func InferProviderFromModel(model string) Provider {
 		}
 	}
 	return ""
+}
+
+// NormalizeModelName 归一化各厂商的模型名称，自动修复星火平台缺少 x 前缀的笔误（如 spark-2.5 修正为 spark-x2.5）
+func NormalizeModelName(p Provider, model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		return DefaultModel(p)
+	}
+	canon := canonicalProvider(p)
+	if canon == "spark" {
+		low := strings.ToLower(m)
+		switch low {
+		case "spark-2.5", "2.5":
+			return SparkX25Model
+		case "spark-2.5-4b", "2.5-4b", "spark-4b", "4b":
+			return SparkX254BModel
+		}
+	}
+	return m
 }
 
 // ToView 将当前配置映射为面向前端只读呈现的纯数据 ConfigView 契约

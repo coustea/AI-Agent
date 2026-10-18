@@ -64,6 +64,7 @@ func NewClient(provider config.Provider, baseURL, apiKey, model string, httpClie
 	}
 
 	cleanModel := strings.TrimSpace(model)
+	cleanModel = config.NormalizeModelName(p, cleanModel)
 	if cleanModel == "" {
 		cleanModel = config.DefaultModel(p)
 	}
