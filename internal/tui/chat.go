@@ -78,13 +78,25 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// 2. 翻页与视口滚动快捷键支持 (PgUp, PgDown)
+		// 2. 翻页与视口滚动快捷键支持 (PgUp, PgDown, Ctrl+U, Ctrl+B, Ctrl+F，以及输入框为空时的上下键)
 		switch msg.Type {
-		case tea.KeyPgUp, tea.KeyPgDown:
+		case tea.KeyPgUp, tea.KeyPgDown, tea.KeyCtrlU, tea.KeyCtrlB, tea.KeyCtrlF:
 			if m.viewportReady {
 				var cmd tea.Cmd
 				m.viewport, cmd = m.viewport.Update(msg)
 				return m, cmd
+			}
+
+		case tea.KeyUp:
+			if m.viewportReady && m.chatInput.Value() == "" {
+				m.viewport.LineUp(2)
+				return m, nil
+			}
+
+		case tea.KeyDown:
+			if m.viewportReady && m.chatInput.Value() == "" {
+				m.viewport.LineDown(2)
+				return m, nil
 			}
 
 		case tea.KeyEnter:
@@ -291,7 +303,7 @@ func (m Model) renderInputBox() string {
 		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s%s%s",
 			item("Enter", "发送"),
 			sep,
-			item("PgUp/PgDn", "翻页"),
+			item("滚轮/↑↓/PgUp", "翻看记录"),
 			sep,
 			item("/log", "JSON追踪"),
 			sep,

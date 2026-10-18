@@ -319,16 +319,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case protocol.EventReasoningDelta:
 			m.messages[lastIdx].ReasoningContent += msg.event.Reasoning
 			if m.viewportReady {
+				atBottom := m.viewport.AtBottom()
 				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
+				if atBottom {
+					m.viewport.GotoBottom()
+				}
 			}
 			return m, waitForAgentEvent(msg.ch)
 
 		case protocol.EventDelta:
 			m.messages[lastIdx].Content += msg.event.Delta
 			if m.viewportReady {
+				atBottom := m.viewport.AtBottom()
 				m.viewport.SetContent(m.renderChatMessages())
-				m.viewport.GotoBottom()
+				if atBottom {
+					m.viewport.GotoBottom()
+				}
 			}
 			return m, waitForAgentEvent(msg.ch)
 

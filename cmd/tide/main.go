@@ -29,10 +29,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 启动 TUI 终端界面，注入解耦后的 agent 实例
+	// 启动 TUI 终端界面，注入解耦后的 agent 实例，开启鼠标滚轮事件与全屏缓冲
 	m := tui.NewModel(ag)
 
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, tea.WithMouseCellMotion(), tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("tide 运行异常: %v\n", err)
 		os.Exit(1)
