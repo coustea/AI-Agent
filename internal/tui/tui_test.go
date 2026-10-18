@@ -1317,3 +1317,29 @@ func TestTUI_WizardAPIKeyNotLeakedAcrossProviders(t *testing.T) {
 		t.Fatalf("empty key must not pass validation via stale state, state=%v", m.state)
 	}
 }
+
+// 验收 D9：shutdown 必须取消运行中轮次并清除挂起审批态
+func TestTUI_ShutdownClearsPendingPermission(t *testing.T) {
+	ag := newMockAgent()
+	m := NewModel(ag, ag)
+
+	cancelled := false
+	m.cancel = func() { cancelled = true }
+	m.isGenerating = true
+	m.pendingPerm = &protocol.PermissionRequest{RequestID: "perm_1", ToolName: "bash"}
+
+	m.shutdown()
+
+	if !cancelled {
+		t.Errorf("shutdown must cancel the running turn")
+	}
+	if m.cancel != nil {
+		t.Errorf("cancel must be released after shutdown")
+	}
+	if m.pendingPerm != nil {
+		t.Errorf("pending permission must be cleared on shutdown")
+	}
+	if m.isGenerating {
+		t.Errorf("isGenerating must be reset on shutdown")
+	}
+}
