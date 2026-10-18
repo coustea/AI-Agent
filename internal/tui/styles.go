@@ -135,12 +135,107 @@ var (
 	toolSnippetStyle = lipgloss.NewStyle().
 				Foreground(colorTextMuted)
 
+	// 工具 Bento 卡片容器与徽章样式
+	toolCardRunningStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorYellow).
+				Background(colorYellowSubtle).
+				Padding(0, 1)
+
+	toolCardSuccessStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorGreen).
+				Background(colorGreenSubtle).
+				Padding(0, 1)
+
+	toolCardErrorStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorRed).
+				Background(colorRedSubtle).
+				Padding(0, 1)
+
+	toolBadgeRunning = lipgloss.NewStyle().
+				Bold(true).
+				Background(colorYellow).
+				Foreground(lipgloss.Color("#1A1D24")).
+				Padding(0, 1)
+
+	toolBadgeSuccess = lipgloss.NewStyle().
+				Bold(true).
+				Background(colorGreen).
+				Foreground(lipgloss.Color("#1A1D24")).
+				Padding(0, 1)
+
+	toolBadgeError = lipgloss.NewStyle().
+			Bold(true).
+			Background(colorRed).
+			Foreground(lipgloss.Color("#FFFFFF")).
+			Padding(0, 1)
+
 	// ==========================================
-	// 6. 权限审批 Gate 3 交互卡片样式
+	// 6. 权限审批 Gate 3 交互与审计卡片样式
 	// ==========================================
 	permissionWarnStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(colorYellow)
+
+	permissionAuditAllowedStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(colorGreen).
+					Background(colorGreenSubtle).
+					Padding(0, 1)
+
+	permissionAuditDeniedStyle = lipgloss.NewStyle().
+					Border(lipgloss.RoundedBorder()).
+					BorderForeground(colorRed).
+					Background(colorRedSubtle).
+					Padding(0, 1)
+
+	permissionAuditBadgeAllowed = lipgloss.NewStyle().
+					Bold(true).
+					Background(colorGreen).
+					Foreground(lipgloss.Color("#1A1D24")).
+					Padding(0, 1)
+
+	permissionAuditBadgeDenied = lipgloss.NewStyle().
+					Bold(true).
+					Background(colorRed).
+					Foreground(lipgloss.Color("#FFFFFF")).
+					Padding(0, 1)
+
+	permissionAuditDecisionAllow = lipgloss.NewStyle().
+					Bold(true).
+					Foreground(colorGreen)
+
+	permissionAuditDecisionDeny = lipgloss.NewStyle().
+					Bold(true).
+					Foreground(colorRed)
+
+	// 卡片通用字段标签与代码块样式
+	cardLabelOrange = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorOrange)
+
+	cardLabelCyan = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorCyan)
+
+	cardLabelRed = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorRed)
+
+	cardLabelGreen = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorGreen)
+
+	cardLabelYellow = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(colorYellow)
+
+	codeArgStyle = lipgloss.NewStyle().
+			Background(colorSurface).
+			Foreground(colorCyan).
+			Padding(0, 1)
 
 	keycapAllowStyle = lipgloss.NewStyle().
 				Bold(true).

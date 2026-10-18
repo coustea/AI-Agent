@@ -668,6 +668,27 @@ func TestTUI_PermissionApproval_InteractiveFlow(t *testing.T) {
 	if ag.lastDecision != protocol.DecisionAllowOnce {
 		t.Errorf("expected DecisionAllowOnce, got %v", ag.lastDecision)
 	}
+
+	// 4. 验证权限审批完成后，审计卡片已沉淀到消息历史的 Blocks 中
+	lastMsg := m.messages[len(m.messages)-1]
+	if len(lastMsg.Blocks) == 0 {
+		t.Fatalf("expected permission block to be appended to message blocks")
+	}
+	lastBlock := lastMsg.Blocks[len(lastMsg.Blocks)-1]
+	if lastBlock.Kind != BlockPermission || lastBlock.Permission == nil {
+		t.Fatalf("expected last block to be BlockPermission, got: %+v", lastBlock)
+	}
+	if lastBlock.Permission.Decision != protocol.DecisionAllowOnce {
+		t.Fatalf("expected recorded decision DecisionAllowOnce, got: %v", lastBlock.Permission.Decision)
+	}
+
+	renderedChat := m.renderChatMessages()
+	if !strings.Contains(renderedChat, "Gate 3 审计存根") {
+		t.Errorf("expected rendered chat to contain audit card title, got:\n%s", renderedChat)
+	}
+	if !strings.Contains(renderedChat, "允许本次执行 (单次放行)") {
+		t.Errorf("expected rendered chat to contain decision details, got:\n%s", renderedChat)
+	}
 }
 
 func TestTUIFlow_Spark(t *testing.T) {
@@ -987,5 +1008,87 @@ func TestLipglossBoxModelWidth(t *testing.T) {
 		Render(inner)
 	if lipgloss.Width(outer) != 82 { // 80 + 2
 		t.Fatalf("expected outer width 82, got %d", lipgloss.Width(outer))
+	}
+}
+
+func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
+	// 1. 测试工具执行中卡片
+	runningCard := renderToolCard(ToolCallRecord{
+		Call: protocol.ToolCall{
+			ID:        "c_run",
+			Name:      "bash",
+			Arguments: `{"command": "sleep 1"}`,
+		},
+		Result: nil,
+	}, 80)
+	if !strings.Contains(runningCard, "TOOL RUNNING") || !strings.Contains(runningCard, "sleep 1") {
+		t.Errorf("unexpected running tool card: %s", runningCard)
+	}
+
+	// 2. 测试工具成功卡片
+	successCard := renderToolCard(ToolCallRecord{
+		Call: protocol.ToolCall{
+			ID:        "c_succ",
+			Name:      "read_file",
+			Arguments: `{"path": "main.go"}`,
+		},
+		Result: &protocol.ToolResult{
+			ToolCallID: "c_succ",
+			Name:       "read_file",
+			Content:    "package main\n\nfunc main() {}",
+			IsError:    false,
+		},
+	}, 80)
+	if !strings.Contains(successCard, "TOOL SUCCESS") || !strings.Contains(successCard, "package main") {
+		t.Errorf("unexpected success tool card: %s", successCard)
+	}
+
+	// 3. 测试工具报错卡片
+	errorCard := renderToolCard(ToolCallRecord{
+		Call: protocol.ToolCall{
+			ID:        "c_err",
+			Name:      "bash",
+			Arguments: `{"command": "exit 1"}`,
+		},
+		Result: &protocol.ToolResult{
+			ToolCallID: "c_err",
+			Name:       "bash",
+			Content:    "exit status 1: command not found",
+			IsError:    true,
+		},
+	}, 80)
+	if !strings.Contains(errorCard, "TOOL ERROR") || !strings.Contains(errorCard, "exit status 1") {
+		t.Errorf("unexpected error tool card: %s", errorCard)
+	}
+
+	// 4. 测试权限审计卡片 (三种决策)
+	permReq := protocol.PermissionRequest{
+		ToolName:  "bash",
+		Arguments: `{"command": "rm -rf ."}`,
+		Reason:    "destructive rm",
+	}
+
+	onceCard := renderPermissionAuditCard(PermissionRecord{
+		Request:  permReq,
+		Decision: protocol.DecisionAllowOnce,
+	}, 80)
+	if !strings.Contains(onceCard, "Gate 3 审计存根") || !strings.Contains(onceCard, "允许本次执行 (单次放行)") {
+		t.Errorf("unexpected once audit card: %s", onceCard)
+	}
+
+	sessionCard := renderPermissionAuditCard(PermissionRecord{
+		Request:  permReq,
+		Decision: protocol.DecisionAllowSession,
+	}, 80)
+	if !strings.Contains(sessionCard, "本会话始终信任同类命令") {
+		t.Errorf("unexpected session audit card: %s", sessionCard)
+	}
+
+	denyCard := renderPermissionAuditCard(PermissionRecord{
+		Request:  permReq,
+		Decision: protocol.DecisionDeny,
+	}, 80)
+	if !strings.Contains(denyCard, "拒绝执行并安全阻断") {
+		t.Errorf("unexpected deny audit card: %s", denyCard)
 	}
 }

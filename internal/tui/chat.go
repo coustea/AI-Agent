@@ -21,16 +21,24 @@ type ToolCallRecord struct {
 type BlockKind int
 
 const (
-	BlockReasoning BlockKind = iota // 思考链片段
-	BlockText                       // 普通文本片段
-	BlockTool                       // 工具调用与结果片段
+	BlockReasoning  BlockKind = iota // 思考链片段
+	BlockText                        // 普通文本片段
+	BlockTool                        // 工具调用与结果卡片
+	BlockPermission                  // 权限拦截与审批审计卡片
 )
+
+// PermissionRecord 记录一次权限拦截与用户的审批决策结果
+type PermissionRecord struct {
+	Request  protocol.PermissionRequest
+	Decision protocol.Decision
+}
 
 // MessageBlock 描述消息内部的一个有序展示块，严格按照到达先后顺序线性排列
 type MessageBlock struct {
-	Kind BlockKind
-	Text string
-	Tool *ToolCallRecord
+	Kind       BlockKind
+	Text       string
+	Tool       *ToolCallRecord
+	Permission *PermissionRecord
 }
 
 // ChatMessage 用于在界面上展示发送和接收的消息
@@ -53,6 +61,15 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "y", "Y":
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowOnce)
+				if len(m.messages) > 0 {
+					m.messages[len(m.messages)-1].Blocks = append(m.messages[len(m.messages)-1].Blocks, MessageBlock{
+						Kind: BlockPermission,
+						Permission: &PermissionRecord{
+							Request:  *m.pendingPerm,
+							Decision: protocol.DecisionAllowOnce,
+						},
+					})
+				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -62,6 +79,15 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "a", "A":
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowSession)
+				if len(m.messages) > 0 {
+					m.messages[len(m.messages)-1].Blocks = append(m.messages[len(m.messages)-1].Blocks, MessageBlock{
+						Kind: BlockPermission,
+						Permission: &PermissionRecord{
+							Request:  *m.pendingPerm,
+							Decision: protocol.DecisionAllowSession,
+						},
+					})
+				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -71,6 +97,15 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "n", "N":
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
+				if len(m.messages) > 0 {
+					m.messages[len(m.messages)-1].Blocks = append(m.messages[len(m.messages)-1].Blocks, MessageBlock{
+						Kind: BlockPermission,
+						Permission: &PermissionRecord{
+							Request:  *m.pendingPerm,
+							Decision: protocol.DecisionDeny,
+						},
+					})
+				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -82,6 +117,15 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			if msg.Type == tea.KeyEsc {
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
+				if len(m.messages) > 0 {
+					m.messages[len(m.messages)-1].Blocks = append(m.messages[len(m.messages)-1].Blocks, MessageBlock{
+						Kind: BlockPermission,
+						Permission: &PermissionRecord{
+							Request:  *m.pendingPerm,
+							Decision: protocol.DecisionDeny,
+						},
+					})
+				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
@@ -245,15 +289,15 @@ func (m Model) renderPermissionCard() string {
 	req := m.pendingPerm
 
 	var sb strings.Builder
-	title := lipgloss.NewStyle().Bold(true).Foreground(colorYellow).Render("🛡️  [权限审批 Gate 3] · 拦截潜在高危行为")
+	title := cardLabelYellow.Render("🛡️  [权限审批 Gate 3] · 拦截潜在高危行为")
 	sb.WriteString(title + "\n\n")
 
-	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorOrange).Render("⚡ 工具目标:"), req.ToolName))
-	argPreview := lipgloss.NewStyle().Background(colorSurface).Foreground(colorCyan).Padding(0, 1).Render(req.Arguments)
-	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Render("📝 风险调用:"), argPreview))
-	sb.WriteString(fmt.Sprintf("  %s %s\n", lipgloss.NewStyle().Bold(true).Foreground(colorRed).Render("⚠️  拦截原因:"), req.Reason))
+	sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelOrange.Render("⚡ 工具目标:"), req.ToolName))
+	argPreview := codeArgStyle.Render(req.Arguments)
+	sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelCyan.Render("📝 风险调用:"), argPreview))
+	sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelRed.Render("⚠️  拦截原因:"), req.Reason))
 
-	divider := lipgloss.NewStyle().Foreground(colorBorder).Render(strings.Repeat("─", max(20, cardWidth-6)))
+	divider := dockDividerStyle.Render(strings.Repeat("─", max(20, cardWidth-6)))
 	sb.WriteString("\n" + divider + "\n")
 
 	actions := fmt.Sprintf("  %s %s   %s %s   %s %s",
@@ -266,13 +310,7 @@ func (m Model) renderPermissionCard() string {
 	)
 	sb.WriteString(actions)
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(colorYellow).
-		Background(colorYellowSubtle).
-		Padding(0, 1).
-		Width(cardWidth).
-		Render(sb.String())
+	return toolCardRunningStyle.Width(cardWidth).Render(sb.String())
 }
 
 // renderInputBox 渲染高视觉重心的 Command Dock 交互控制台驾驶舱
@@ -398,7 +436,12 @@ func (m Model) renderChatMessages() string {
 
 					case BlockTool:
 						if block.Tool != nil {
-							sbTide.WriteString(renderToolBlock(*block.Tool))
+							sbTide.WriteString(renderToolCard(*block.Tool, cardWidth) + "\n\n")
+						}
+
+					case BlockPermission:
+						if block.Permission != nil {
+							sbTide.WriteString(renderPermissionAuditCard(*block.Permission, cardWidth) + "\n\n")
 						}
 
 					case BlockText:
@@ -409,7 +452,7 @@ func (m Model) renderChatMessages() string {
 						var text string
 						isLastBlock := bIdx == len(msg.Blocks)-1
 						if m.isGenerating && i == len(m.messages)-1 && isLastBlock {
-							text = block.Text + lipgloss.NewStyle().Foreground(colorBrand).Render(" ▊")
+							text = block.Text + cursorStyle.Render(" ▊")
 						} else {
 							text = renderMarkdown(block.Text, cardWidth)
 						}
@@ -435,7 +478,7 @@ func (m Model) renderChatMessages() string {
 			}
 
 			for _, tc := range msg.ToolCalls {
-				sb.WriteString(renderToolBlock(tc))
+				sb.WriteString(renderToolCard(tc, cardWidth) + "\n\n")
 			}
 
 			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1 && len(msg.ToolCalls) == 0 && msg.ReasoningContent == "") {
@@ -443,7 +486,7 @@ func (m Model) renderChatMessages() string {
 				var bodyText string
 				if msg.Content != "" {
 					if m.isGenerating && i == len(m.messages)-1 {
-						bodyText = msg.Content + lipgloss.NewStyle().Foreground(colorBrand).Render(" ▊")
+						bodyText = msg.Content + cursorStyle.Render(" ▊")
 					} else {
 						bodyText = renderMarkdown(msg.Content, cardWidth)
 					}
@@ -496,33 +539,101 @@ func (m Model) viewChat() string {
 	return s.String()
 }
 
-// renderToolBlock 渲染单个工具调用的执行中/成功/报错状态卡片
-func renderToolBlock(tc ToolCallRecord) string {
-	var header string
+// renderToolCard 将工具调用的执行状态、输入参数及输出结果渲染为精致的 Bento 圆角卡片
+func renderToolCard(tc ToolCallRecord, cardWidth int) string {
+	innerW := max(40, cardWidth-2)
+
+	var (
+		cardStyle lipgloss.Style
+		badge     string
+	)
+
 	if tc.Result == nil {
-		header = toolRunningStyle.Render("⚙️  正在执行工具: ") + toolHeaderStyle.Render(tc.Call.Name)
+		cardStyle = toolCardRunningStyle
+		badge = toolBadgeRunning.Render(" ⚙️ TOOL RUNNING ")
 	} else if tc.Result.IsError {
-		header = toolResultErrorStyle.Render("✖  工具执行报错: ") + toolHeaderStyle.Render(tc.Call.Name)
+		cardStyle = toolCardErrorStyle
+		badge = toolBadgeError.Render(" ✖ TOOL ERROR ")
 	} else {
-		header = toolResultSuccessStyle.Render("✔  工具执行完成: ") + toolHeaderStyle.Render(tc.Call.Name)
+		cardStyle = toolCardSuccessStyle
+		badge = toolBadgeSuccess.Render(" ✔ TOOL SUCCESS ")
 	}
 
-	var body strings.Builder
-	body.WriteString(fmt.Sprintf("  %s\n", header))
+	var sb strings.Builder
+	// 顶部状态栏：徽章 + 工具名称
+	sb.WriteString(fmt.Sprintf("%s %s\n", badge, toolHeaderStyle.Render(tc.Call.Name)))
 
+	// 参数区
 	if tc.Call.Arguments != "" && tc.Call.Arguments != "{}" {
-		body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("参数: "+tc.Call.Arguments)))
+		sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelOrange.Render("⚡ 参数:"), codeArgStyle.Render(tc.Call.Arguments)))
 	}
+
+	// 结果输出区
 	if tc.Result != nil && tc.Result.Content != "" {
-		snippet := strings.TrimSpace(tc.Result.Content)
-		lines := strings.Split(snippet, "\n")
-		if len(lines) > 4 {
-			snippet = strings.Join(lines[:4], "\n") + fmt.Sprintf("\n    ... (共 %d 行，其余已折叠)", len(lines))
-		} else if len(snippet) > 240 {
-			snippet = snippet[:240] + "... (已截断)"
+		divider := dockDividerStyle.Render(strings.Repeat("─", max(20, innerW-4)))
+		sb.WriteString("  " + divider + "\n")
+
+		if tc.Result.IsError {
+			errText := strings.TrimSpace(tc.Result.Content)
+			sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelRed.Render("❌ 错误:"), errText))
+		} else {
+			snippet := strings.TrimSpace(tc.Result.Content)
+			lines := strings.Split(snippet, "\n")
+			if len(lines) > 5 {
+				snippet = strings.Join(lines[:5], "\n") + fmt.Sprintf("\n  ... (共 %d 行，其余已折叠)", len(lines))
+			} else if len(snippet) > 300 {
+				snippet = snippet[:300] + "... (已截断)"
+			}
+			sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelGreen.Render("📄 结果:"), snippet))
 		}
-		body.WriteString(fmt.Sprintf("    ↳ %s\n", toolSnippetStyle.Render("结果: ")+snippet))
 	}
-	body.WriteString("\n")
-	return body.String()
+
+	return cardStyle.Width(innerW).Render(sb.String())
+}
+
+// renderPermissionAuditCard 渲染已完成审批的权限拦截历史审计存根卡片
+func renderPermissionAuditCard(pr PermissionRecord, cardWidth int) string {
+	innerW := max(40, cardWidth-2)
+
+	var (
+		cardStyle    lipgloss.Style
+		badge        string
+		decisionText string
+	)
+
+	switch pr.Decision {
+	case protocol.DecisionAllowOnce:
+		cardStyle = permissionAuditAllowedStyle
+		badge = permissionAuditBadgeAllowed.Render(" 🛡️ 权限审批 · 已放行 ")
+		decisionText = permissionAuditDecisionAllow.Render("✔ 用户决策: 允许本次执行 (单次放行)")
+	case protocol.DecisionAllowSession:
+		cardStyle = permissionAuditAllowedStyle
+		badge = permissionAuditBadgeAllowed.Render(" 🛡️ 权限审批 · 会话信任 ")
+		decisionText = permissionAuditDecisionAllow.Render("✔ 用户决策: 本会话始终信任同类命令")
+	default: // DecisionDeny
+		cardStyle = permissionAuditDeniedStyle
+		badge = permissionAuditBadgeDenied.Render(" 🛡️ 权限审批 · 已阻断 ")
+		decisionText = permissionAuditDecisionDeny.Render("✖ 用户决策: 拒绝执行并安全阻断")
+	}
+
+	var sb strings.Builder
+	// 顶部凭证栏
+	sb.WriteString(fmt.Sprintf("%s %s\n", badge, dimStyle.Render("Gate 3 审计存根")))
+
+	// 详情行
+	if pr.Request.ToolName != "" {
+		sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelOrange.Render("⚡ 目标工具:"), pr.Request.ToolName))
+	}
+	if pr.Request.Arguments != "" {
+		sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelCyan.Render("📝 风险调用:"), codeArgStyle.Render(pr.Request.Arguments)))
+	}
+	if pr.Request.Reason != "" {
+		sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelRed.Render("⚠️  拦截原因:"), pr.Request.Reason))
+	}
+
+	divider := dockDividerStyle.Render(strings.Repeat("─", max(20, innerW-4)))
+	sb.WriteString("  " + divider + "\n")
+	sb.WriteString("  " + decisionText)
+
+	return cardStyle.Width(innerW).Render(sb.String())
 }

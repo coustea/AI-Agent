@@ -81,9 +81,9 @@ type Model struct {
 	activeToolName string
 
 	// 状态 6: 终端全量 JSON 追踪审计看板 (在 inspector.go 中处理)
-	traceEvents   []protocol.TraceEvent
-	traceCursor   int
-	traceViewport viewport.Model
+	traceEvents    []protocol.TraceEvent
+	traceCursor    int
+	traceViewport  viewport.Model
 	traceFocusJSON bool // false: 焦点在上方步骤列表; true: 焦点在下方全宽 JSON 视口
 	traceRawMode   bool // false: 纯净底层 JSON 模式; true: 全量原始 Wire 报文模式
 
