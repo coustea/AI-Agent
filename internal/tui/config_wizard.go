@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"my-agent/internal/config"
 	"my-agent/internal/protocol"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -80,6 +79,7 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyEnter:
 			p := providers[m.cursor]
+			m.currentAPIKey = ""
 			m.currentProvider = p.ID
 			m.currentModel = p.CurrentModel
 
@@ -133,6 +133,7 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e":
 			// 按 'e' 键修改/重置当前平台的 API Key
 			p := providers[m.cursor]
+			m.currentAPIKey = ""
 			m.currentProvider = p.ID
 			m.currentModel = p.CurrentModel
 			m.state = stateInputAPIKey
@@ -151,6 +152,9 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // openModelPresetMenu 打开指定厂商的预设模型规格菜单
 func (m Model) openModelPresetMenu(p protocol.ProviderInfo) (tea.Model, tea.Cmd) {
+	if m.currentProvider != p.ID {
+		m.currentAPIKey = ""
+	}
 	m.currentProvider = p.ID
 	m.currentModel = p.CurrentModel
 	m.presetChoices = nil
@@ -230,7 +234,9 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				// 平台已就绪，立即热切换模型并返回对话
-				if err := m.agent.UpdateConfig(m.currentProvider, m.currentAPIKey, m.currentModel); err != nil {
+				apiKeyToSend := m.currentAPIKey
+				m.currentAPIKey = ""
+				if err := m.agent.UpdateConfig(m.currentProvider, apiKeyToSend, m.currentModel); err != nil {
 					m.messages = append(m.messages, ChatMessage{
 						Sender:  "System",
 						Content: fmt.Sprintf("[配置切换失败: %v]", err),
@@ -280,9 +286,7 @@ func (m Model) updateInputAPIKey(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case tea.KeyEnter:
 			keyVal := strings.TrimSpace(m.apiKeyInput.Value())
-			if keyVal != "" {
-				m.currentAPIKey = keyVal
-			}
+			m.currentAPIKey = keyVal
 
 			// 验证当前是否有可用密钥 (用户刚输入的、之前保存过的、或本地服务)
 			hasKey := m.currentAPIKey != "" || m.isLocalProvider(m.currentProvider)
@@ -339,7 +343,9 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if nameVal != "" {
 				m.currentModel = nameVal
 
-				if err := m.agent.UpdateConfig(m.currentProvider, m.currentAPIKey, m.currentModel); err != nil {
+				apiKeyToSend := m.currentAPIKey
+				m.currentAPIKey = ""
+				if err := m.agent.UpdateConfig(m.currentProvider, apiKeyToSend, m.currentModel); err != nil {
 					m.messages = append(m.messages, ChatMessage{
 						Sender:  "System",
 						Content: fmt.Sprintf("[配置切换失败: %v]", err),
@@ -605,15 +611,23 @@ func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// 2. 尝试匹配平台名称或别名 (单源元数据驱动归一化)
+	// 2. 尝试匹配平台名称或别名 (基于协议契约 ID 与 Aliases 单源匹配)
 	pKey := strings.ToLower(strings.TrimSpace(arg))
-	canonicalID := config.ProviderID(config.Provider(pKey))
 	cfgView := m.agent.Config()
 	var targetProvider *protocol.ProviderInfo
 	for i := range cfgView.Providers {
 		p := &cfgView.Providers[i]
-		if strings.EqualFold(p.ID, canonicalID) {
+		if strings.EqualFold(p.ID, pKey) {
 			targetProvider = p
+			break
+		}
+		for _, alias := range p.Aliases {
+			if strings.EqualFold(alias, pKey) {
+				targetProvider = p
+				break
+			}
+		}
+		if targetProvider != nil {
 			break
 		}
 	}

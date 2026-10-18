@@ -244,7 +244,9 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 
 		choice := chunk.Choices[0]
 		if choice.Delta.ReasoningContent != "" {
-			sendChunk(ctx, out, protocol.ChatResponse{ReasoningContent: choice.Delta.ReasoningContent})
+			if !sendChunk(ctx, out, protocol.ChatResponse{ReasoningContent: choice.Delta.ReasoningContent}) {
+				return turnUsage
+			}
 		}
 		if choice.Delta.Content != "" {
 			if !sendChunk(ctx, out, protocol.ChatResponse{Delta: choice.Delta.Content}) {

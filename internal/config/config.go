@@ -154,6 +154,14 @@ func ProviderID(p Provider) string {
 	return canonicalProvider(p)
 }
 
+// ProviderAliases 返回厂商的快捷别名列表
+func ProviderAliases(p Provider) []string {
+	if pm := lookupProvider(p); pm != nil {
+		return append([]string(nil), pm.Aliases...)
+	}
+	return nil
+}
+
 // ProviderConfig 保存各厂商的专属模型与密钥配置
 type ProviderConfig struct {
 	BaseURL   string `json:"base_url,omitempty"`   // 服务端点地址
@@ -240,6 +248,21 @@ func (c *Config) SwitchProvider(p Provider) {
 	}
 
 	c.APIKey = pcfg.APIKey
+}
+
+// Clone 返回当前配置对象的深拷贝副本，确保更新时事务原子性
+func (c *Config) Clone() *Config {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	if c.Providers != nil {
+		cp.Providers = make(map[string]ProviderConfig, len(c.Providers))
+		for k, v := range c.Providers {
+			cp.Providers[k] = v
+		}
+	}
+	return &cp
 }
 
 // envFallback 描述一个厂商的环境变量密钥来源与默认端点/模型。
@@ -531,6 +554,7 @@ func (c *Config) ToView() protocol.ConfigView {
 			ID:                pStr,
 			Name:              ProviderDisplayName(p),
 			Description:       ProviderDescription(p),
+			Aliases:           ProviderAliases(p),
 			IsLocal:           IsLocalProvider(p),
 			RecommendedModels: RecommendedModels(p),
 		}

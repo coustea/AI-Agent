@@ -39,17 +39,20 @@ var defaultHardDenyList = []string{
 }
 
 var (
-	// 文件与目录破坏性删除 (rm, rmdir, unlink, shred, del)
-	destructiveWordPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:rm|rmdir|unlink|shred|del)(?:\s+-[a-zA-Z]+)*\s+`)
+	// 文件与目录破坏性删除 (rm, rmdir, unlink, shred, del)，支持前置引号、反引号以及 xargs 包装
+	destructiveWordPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60]|\bxargs\s+)\s*(?:rm|rmdir|unlink|shred|del)(?:\s+-[a-zA-Z]+)*\s+`)
 
-	// Git 破坏性或强覆盖操作 (强制回滚、强制推送、强制清理、丢弃更改)
-	gitDangerousPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*git\s+(?:reset\s+--hard|clean\s+-[a-zA-Z]*f|restore\s+\.|checkout\s+\.|push\s+.*(?:-f|--force))(?:\s+|$)`)
+	// find 命令中携带破坏性删除 (-delete)
+	findDeletePattern = regexp.MustCompile(`(?i)\bfind\b.*\s+-delete(?:\s+|$)`)
+
+	// Git 破坏性或强覆盖操作 (强制回滚、强制推送、强制清理、丢弃更改)，支持前置引号包装
+	gitDangerousPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60])\s*git\s+(?:reset\s+--hard|clean\s+-[a-zA-Z]*f|restore\s+\.|checkout\s+\.|push\s+.*(?:-f|--force))(?:\s+|["'\x60]|$)`)
 
 	// 权限与属组篡改
-	permChangePattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:chmod|chown|chgrp)\s+`)
+	permChangePattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60]|\bxargs\s+)\s*(?:chmod|chown|chgrp)\s+`)
 
 	// 进程销毁与强制终止
-	processKillPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:kill|pkill|killall)\s+`)
+	processKillPattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60]|\bxargs\s+)\s*(?:kill|pkill|killall)\s+`)
 
 	// 远程脚本管道直接执行 (如 curl ... | sh, wget ... | bash)
 	remotePipeExecPattern = regexp.MustCompile(`(?i)(?:curl|wget)\s+[^|;]+\|\s*(?:sh|bash|zsh)`)
@@ -58,7 +61,7 @@ var (
 	systemDirWritePattern = regexp.MustCompile(`(?:>|>>)\s*/(?:etc|usr|bin|sbin|System|Library)/`)
 
 	// 磁盘擦除与低级分区操作
-	diskManipulatePattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n])\s*(?:dd|fdisk|parted|mkfs|format)\s+`)
+	diskManipulatePattern = regexp.MustCompile(`(?i)(?:^|[;&|()\n"'\x60])\s*(?:dd|fdisk|parted|mkfs|format)\s+`)
 )
 
 // checkDangerousBashCommand 判定命令是否属于破坏性或高风险操作
@@ -70,6 +73,9 @@ func checkDangerousBashCommand(cmd string) (isDangerous bool, reason string) {
 
 	if destructiveWordPattern.MatchString(clean) {
 		return true, fmt.Sprintf("file deletion: %s", clean)
+	}
+	if findDeletePattern.MatchString(clean) {
+		return true, fmt.Sprintf("find with deletion: %s", clean)
 	}
 	if gitDangerousPattern.MatchString(clean) {
 		return true, fmt.Sprintf("destructive git operation: %s", clean)

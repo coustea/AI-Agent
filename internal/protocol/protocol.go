@@ -134,6 +134,7 @@ type ProviderInfo struct {
 	IsConfigured      bool     `json:"is_configured"`      // 是否已配置就绪 (已存 Key 或本地服务)
 	CurrentModel      string   `json:"current_model"`      // 当前或最近使用的模型
 	RecommendedModels []string `json:"recommended_models"` // 常用预设推荐模型清单
+	Aliases           []string `json:"aliases,omitempty"`  // 平台快捷别名列表 (如 "ds", "google", "maas")
 }
 
 // ConfigView 暴露给前端只读呈现的配置视图结构体

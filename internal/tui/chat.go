@@ -242,8 +242,8 @@ func (m Model) renderHeaderBar() string {
 	brandBadge := headerBadgeStyle.Render(" Tide ")
 	modelTag := headerTagStyle.Render("● " + modelInfo)
 
-	// 计算长效记忆激活篇数
-	memCount := m.agent.MemoryCount()
+	// 使用缓存的长效记忆篇数（避免每帧重复读取 5 个 Markdown 文件）
+	memCount := m.cachedMemCount
 	memTag := headerMemoryStyle.Render(fmt.Sprintf("🧠 %d 篇记忆生效", memCount))
 
 	dirTag := headerDirStyle.Render(" 📂 目录: " + m.agent.WorkDir())

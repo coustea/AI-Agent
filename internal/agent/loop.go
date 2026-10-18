@@ -231,13 +231,46 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 	a.mu.RLock()
 	tools := a.tools
 	a.mu.RUnlock()
-	for _, tc := range toolCalls {
+	for i, tc := range toolCalls {
+		if ctx.Err() != nil {
+			// 中途被取消时，为剩余全部未完成的 toolCalls 补齐取消状态，杜绝历史消息残缺导致后续 API 400
+			for j := i; j < len(toolCalls); j++ {
+				remTc := toolCalls[j]
+				cancelRes := protocol.ToolResult{
+					ToolCallID: remTc.ID,
+					Name:       remTc.Name,
+					Content:    "[Execution cancelled by user]",
+					IsError:    true,
+				}
+				_ = a.memory.Append(context.Background(), protocol.Message{
+					Role:       protocol.RoleTool,
+					ToolResult: &cancelRes,
+				})
+			}
+			return stepUsage, false, ctx.Err()
+		}
+
 		a.dispatchToolStart(ctx, step, tc)
 
-		sendEvent(ctx, eventCh, protocol.Event{
+		if !sendEvent(ctx, eventCh, protocol.Event{
 			Type:     protocol.EventToolCallStart,
 			ToolCall: &tc,
-		})
+		}) {
+			for j := i; j < len(toolCalls); j++ {
+				remTc := toolCalls[j]
+				cancelRes := protocol.ToolResult{
+					ToolCallID: remTc.ID,
+					Name:       remTc.Name,
+					Content:    "[Execution cancelled by user]",
+					IsError:    true,
+				}
+				_ = a.memory.Append(context.Background(), protocol.Message{
+					Role:       protocol.RoleTool,
+					ToolResult: &cancelRes,
+				})
+			}
+			return stepUsage, false, ctx.Err()
+		}
 
 		toolStart := time.Now()
 		res := tools.Execute(ctx, tc)
@@ -251,15 +284,30 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 			Timestamp: toolStart,
 		})
 
-		sendEvent(ctx, eventCh, protocol.Event{
-			Type:       protocol.EventToolCallResult,
-			ToolResult: &res,
-		})
-
-		_ = a.memory.Append(ctx, protocol.Message{
+		_ = a.memory.Append(context.Background(), protocol.Message{
 			Role:       protocol.RoleTool,
 			ToolResult: &res,
 		})
+
+		if !sendEvent(ctx, eventCh, protocol.Event{
+			Type:       protocol.EventToolCallResult,
+			ToolResult: &res,
+		}) {
+			for j := i + 1; j < len(toolCalls); j++ {
+				remTc := toolCalls[j]
+				cancelRes := protocol.ToolResult{
+					ToolCallID: remTc.ID,
+					Name:       remTc.Name,
+					Content:    "[Execution cancelled by user]",
+					IsError:    true,
+				}
+				_ = a.memory.Append(context.Background(), protocol.Message{
+					Role:       protocol.RoleTool,
+					ToolResult: &cancelRes,
+				})
+			}
+			return stepUsage, false, ctx.Err()
+		}
 	}
 
 	return stepUsage, false, nil

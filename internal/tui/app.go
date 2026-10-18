@@ -99,6 +99,9 @@ type Model struct {
 	width  int
 	height int
 
+	// 长期记忆篇数缓存，避免每帧触发重复文件 I/O
+	cachedMemCount int
+
 	// 注入的 Agent 智能体核心契约接口
 	agent protocol.Agent
 }
@@ -160,6 +163,7 @@ func NewModel(ag protocol.Agent) Model {
 		modelInput:      modelInput,
 		chatInput:       chatInput,
 		messages:        []ChatMessage{},
+		cachedMemCount:  ag.MemoryCount(),
 		agent:           ag,
 		spinner:         sp,
 		viewport:        vp,
@@ -304,6 +308,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		switch msg.event.Type {
 		case protocol.EventError:
+			if m.cancel != nil {
+				m.cancel()
+				m.cancel = nil
+			}
 			errMsg := msg.event.Error
 			if errMsg == "" {
 				errMsg = "未知异常"
@@ -316,6 +324,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			})
 			m.isGenerating = false
 			m.activeToolName = ""
+			m.cachedMemCount = m.agent.MemoryCount()
 			m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
 			if m.viewportReady {
@@ -325,8 +334,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case protocol.EventDone:
+			if m.cancel != nil {
+				m.cancel()
+				m.cancel = nil
+			}
 			m.isGenerating = false
 			m.activeToolName = ""
+			m.cachedMemCount = m.agent.MemoryCount()
 			m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
 			if msg.event.Usage != nil && msg.event.Usage.TotalTokens > 0 {

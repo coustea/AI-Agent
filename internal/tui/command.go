@@ -42,6 +42,7 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 		if len(parts) > 1 {
 			arg = strings.TrimSpace(parts[1])
 		}
+		m.currentAPIKey = ""
 		newM, cmd := m.handleModelCommand(arg)
 		return newM, cmd, true
 	}

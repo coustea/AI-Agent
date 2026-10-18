@@ -1036,6 +1036,11 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 	if err := ag.UpdateConfig("", "", "deepseek-reasoner"); err == nil {
 		t.Fatalf("expected error when switching to unconfigured deepseek model, got nil")
 	}
+	// 验证事务原子性：失败后配置与网关状态未被污染，仍保持 Gemini
+	cvAfterFail := ag.Config()
+	if cvAfterFail.Provider != "gemini" || cvAfterFail.ModelName != "gemini-2.5-flash" {
+		t.Fatalf("expected provider to remain untouched after failed update, got: %+v", cvAfterFail)
+	}
 
 	// 4. 配置 DeepSeek 密钥
 	if err := ag.UpdateConfig("deepseek", "sk-deepseek-test-secret", "deepseek-flash"); err != nil {
