@@ -1,0 +1,69 @@
+# Tide 静态检查配置（golangci-lint v2）
+# 定位：只保留"能指出真实缺陷"的检查项，不做风格洁癖。
+# 灰度策略见 outputs/CODE_REVIEW_STANDARD.md 第 7.3 节。
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: standard
+  enable:
+    # 响应体未关闭：网关 SSE / 健康探测路径的经典泄漏点
+    - bodyclose
+    # 错误比较用 == 而非 errors.Is：会漏掉包装后的错误
+    - errorlint
+    # 可疑构造：无效赋值、空分支、误用 append、循环变量捕获
+    - gocritic
+    # 拼写：注释与用户可见文案统一走中文，英文标识符仍需检查
+    - misspell
+    # 错误处理后仍返回 nil，或忽略错误后继续使用零值
+    - nilerr
+    # http 请求未携带 context：本项目要求全链路可取消
+    - noctx
+    # 无意义的类型转换
+    - unconvert
+    # 永远相同的参数、永远为 nil 的返回值
+    - unparam
+    # 未使用的导出标识符与字段（死代码清理的自动化防线）
+    - unused
+
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+      disabled-checks:
+        # TUI 渲染函数参数为值类型，按值传递是刻意选择
+        - hugeParam
+        # 状态机分支用 if-else 链比 switch 更贴合 Bubble Tea 的 Update 结构
+        - ifElseChain
+    revive:
+      rules:
+        # 导出标识符注释：本仓库已统一用中文注释，revive 的英文模板会误报
+        - name: exported
+          disabled: true
+
+  exclusions:
+    rules:
+      # 测试代码放宽：httptest 场景下 context 与响应体由 t.Cleanup 统一处理
+      - path: _test\.go
+        linters:
+          - noctx
+          - bodyclose
+          - errcheck
+          - unparam
+      # TUI 渲染层的错误多为终端写入失败，无处上报，允许显式忽略
+      - path: internal/tui/
+        linters:
+          - errcheck
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - my-agent

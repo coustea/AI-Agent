@@ -14,17 +14,33 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
+      # 版本以 go.mod 为唯一来源：此前硬编码 1.24 与 go.mod 的 1.26.2 漂移，
+      # 导致 CI 在编译阶段即失败，门禁形同虚设。
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version-file: go.mod
           check-latest: true
 
       - name: Verify Dependencies
         run: go mod verify
 
+      # 格式门禁：gofmt 有任何输出即失败
+      - name: Check Formatting
+        run: |
+          out=$(gofmt -l cmd internal)
+          if [ -n "$out" ]; then
+            echo "以下文件未格式化："
+            echo "$out"
+            exit 1
+          fi
+
+      - name: Run Vet
+        run: go vet ./...
+
+      # 竞态检测：跨 goroutine 共享状态（agent.running、TUI 渲染缓存、工具沙箱目录）
       - name: Run Tests
-        run: go test -v ./...
+        run: go test -race -count=1 -v ./...
 
       - name: Build Local Binary
         run: make build
@@ -34,3 +50,26 @@ jobs:
           CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /dev/null ./cmd/tide
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -o /dev/null ./cmd/tide
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /dev/null ./cmd/tide
+
+  lint:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+
+      # 灰度期（CODE_REVIEW_STANDARD 7.3）：仅拦新增代码，且不阻断合入。
+      # 存量告警清零后移除 continue-on-error，改为硬门禁。
+      - name: golangci-lint
+        continue-on-error: true
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          only-new-issues: true
+          args: --timeout=5m

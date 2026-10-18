@@ -1,4 +1,4 @@
-.PHONY: build run test clean install release
+.PHONY: build run test clean install release verify fmt-check vet test-race lint
 
 # 版本与编译参数
 VERSION ?= v1.0.0
@@ -16,6 +16,26 @@ run:
 # 运行单元测试
 test:
 	go test -v ./internal/...
+
+# 提交前统一验证：格式 → 静态检查 → 竞态测试 → 构建（与 CI 核心检查一致）
+verify: fmt-check vet test-race build
+	@echo "==> verify 全部通过"
+
+# 格式检查：gofmt 有输出即视为失败
+fmt-check:
+	@out=$$(gofmt -l cmd internal); if [ -n "$$out" ]; then echo "以下文件未格式化（执行 gofmt -w）："; echo "$$out"; exit 1; fi
+
+# 静态检查：可疑构造、无效赋值、错误处理缺陷
+vet:
+	go vet ./...
+
+# 竞态检测：本仓库存在跨 goroutine 共享状态（agent.running、TUI 渲染缓存、工具沙箱目录）
+test-race:
+	go test -race -count=1 ./...
+
+# 静态分析（需本地安装 golangci-lint v2，CI 亦执行）
+lint:
+	golangci-lint run ./...
 
 # 安装至本地系统路径 (/usr/local/bin)
 install: build
