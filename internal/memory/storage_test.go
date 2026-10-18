@@ -12,13 +12,13 @@ func TestStorage_Dirs(t *testing.T) {
 	if !filepath.IsAbs(globalDir) {
 		t.Errorf("expected globalDir to be absolute, got %s", globalDir)
 	}
-	if !strings.HasSuffix(globalDir, filepath.Join(".coustea", "memory")) {
-		t.Errorf("expected globalDir to end with .coustea/memory, got %s", globalDir)
+	if !strings.HasSuffix(globalDir, filepath.Join(".tide", "memory")) {
+		t.Errorf("expected globalDir to end with .tide/memory, got %s", globalDir)
 	}
 
 	workDir := "/Users/test/workspace"
 	projDir := ProjectDir(workDir)
-	expectedProj := filepath.Join(workDir, ".coustea", "memory")
+	expectedProj := filepath.Join(workDir, ".tide", "memory")
 	if projDir != expectedProj {
 		t.Errorf("expected %s, got %s", expectedProj, projDir)
 	}
@@ -42,7 +42,7 @@ func TestStorage_LoadAndFormatBundle(t *testing.T) {
 	}
 
 	// 2. 写入项目特定记忆
-	projectMemDir := filepath.Join(tmpDir, ".coustea", "memory")
+	projectMemDir := filepath.Join(tmpDir, ".tide", "memory")
 	if err := os.MkdirAll(projectMemDir, 0o755); err != nil {
 		t.Fatalf("failed to create project mem dir: %v", err)
 	}
@@ -100,7 +100,7 @@ func TestStorage_EnsureDirsAndTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read created project template: %v", err)
 	}
-	if !strings.Contains(string(data), "coustea 通用个人本地 AI 智能助手") {
+	if !strings.Contains(string(data), "Tide 智能助手") {
 		t.Errorf("unexpected project template content: %s", string(data))
 	}
 }

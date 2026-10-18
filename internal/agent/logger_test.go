@@ -98,7 +98,7 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	}
 
 	// 2. 验证 latest.json 是合法、完整的 JSON 数组
-	latestJSONPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.json")
+	latestJSONPath := filepath.Join(tmpDir, ".tide", "logs", "latest.json")
 	jsonBytes, err := os.ReadFile(latestJSONPath)
 	if err != nil {
 		t.Fatalf("failed to read latest.json: %v", err)
@@ -113,7 +113,7 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	}
 
 	// 3. 验证 agent.jsonl 逐行有效
-	jsonlPath := filepath.Join(tmpDir, ".coustea", "logs", "agent.jsonl")
+	jsonlPath := filepath.Join(tmpDir, ".tide", "logs", "agent.jsonl")
 	f, err := os.Open(jsonlPath)
 	if err != nil {
 		t.Fatalf("failed to read agent.jsonl: %v", err)
@@ -156,7 +156,7 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *test
 	for range stream1 {
 	}
 
-	latestPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.json")
+	latestPath := filepath.Join(tmpDir, ".tide", "logs", "latest.json")
 	data1, _ := os.ReadFile(latestPath)
 	if !strings.Contains(string(data1), "Question One") {
 		t.Errorf("expected latest.json to contain Turn 1 question")
@@ -184,7 +184,7 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *test
 	}
 
 	// 验证 agent.jsonl 同时保留两轮对话
-	jsonlPath := filepath.Join(tmpDir, ".coustea", "logs", "agent.jsonl")
+	jsonlPath := filepath.Join(tmpDir, ".tide", "logs", "agent.jsonl")
 	jsonlBytes, _ := os.ReadFile(jsonlPath)
 	jsonlStr := string(jsonlBytes)
 	if !strings.Contains(jsonlStr, "Question One") || !strings.Contains(jsonlStr, "Question Two") {
@@ -215,7 +215,7 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 	for range stream {
 	}
 
-	latestPath := filepath.Join(tmpDir, ".coustea", "logs", "latest.json")
+	latestPath := filepath.Join(tmpDir, ".tide", "logs", "latest.json")
 	data, err := os.ReadFile(latestPath)
 	if err != nil {
 		t.Fatalf("failed to read latest.json: %v", err)

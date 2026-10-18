@@ -14,16 +14,16 @@ const (
 	FileLearnings   = "learnings.md"   // 经验总结与知识沉淀（已解决问题、用户反馈、备忘笔记）
 )
 
-// GlobalDir 返回用户主目录下的全局记忆存储目录 (~/.coustea/memory)
+// GlobalDir 返回用户主目录下的全局记忆存储目录 (~/.tide/memory)
 func GlobalDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
-		return filepath.Join(".", ".coustea", "memory")
+		return filepath.Join(".", ".tide", "memory")
 	}
-	return filepath.Join(home, ".coustea", "memory")
+	return filepath.Join(home, ".tide", "memory")
 }
 
-// ProjectDir 返回指定项目工作区下的项目记忆目录 (<workDir>/.coustea/memory)
+// ProjectDir 返回指定项目工作区下的项目记忆目录 (<workDir>/.tide/memory)
 func ProjectDir(workDir string) string {
 	workDir = strings.TrimSpace(workDir)
 	if workDir == "" {
@@ -33,7 +33,7 @@ func ProjectDir(workDir string) string {
 			workDir = "."
 		}
 	}
-	return filepath.Join(workDir, ".coustea", "memory")
+	return filepath.Join(workDir, ".tide", "memory")
 }
 
 // File 表示单个已读取的记忆文件快照
@@ -79,7 +79,7 @@ func (b *Bundle) FormatForPrompt() string {
 
 	var sb strings.Builder
 	sb.WriteString("# Long-Term Memory (长期记忆库)\n")
-	sb.WriteString("coustea 具备本地持久化记忆系统，分为两个层级的 Markdown 文件：\n")
+	sb.WriteString("Tide 具备本地持久化记忆系统，分为两个层级的 Markdown 文件：\n")
 	sb.WriteString(fmt.Sprintf("- 全局通用记忆: %s\n", b.GlobalDir))
 	sb.WriteString(fmt.Sprintf("- 当前项目记忆: %s\n", b.ProjectDir))
 	sb.WriteString("你可以通过内置的 read_file、write_file、edit_file 工具随时读取或沉淀新的关键信息到上述对应目录中。\n")
@@ -200,7 +200,7 @@ func InitTemplates(workDir string, customGlobalDir ...string) error {
 `)
 
 	initFileIfNotExists(filepath.Join(projectDir, FileProject), `# 工作区与任务背景 (Workspace Context)
-- 目标定位: coustea 通用个人本地 AI 智能助手工作区
+- 目标定位: Tide 智能助手工作区
 - 核心要求: 协助用户高效执行任务，在需要时主动通过内置工具探索与操作文件
 `)
 

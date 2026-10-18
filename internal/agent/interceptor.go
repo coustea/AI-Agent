@@ -128,7 +128,7 @@ func (a *CoreAgent) largeResultPostHook(ctx context.Context, call protocol.ToolC
 		workDir = "."
 	}
 
-	resultsDir := filepath.Join(workDir, ".coustea", "tool-results")
+	resultsDir := filepath.Join(workDir, ".tide", "tool-results")
 	if err := os.MkdirAll(resultsDir, 0o755); err != nil {
 		// 落盘目录创建失败则降级原样返回
 		return

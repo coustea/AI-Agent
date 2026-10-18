@@ -60,8 +60,8 @@ func newMockAgent(replies ...string) *mockTestAgent {
 					Name:              "讯飞星辰 MaaS",
 					IsLocal:           false,
 					IsConfigured:      false,
-					CurrentModel:      "spark-x2.5",
-					RecommendedModels: []string{"spark-x2.5", "lite"},
+					CurrentModel:      "spark-2.5",
+					RecommendedModels: []string{"spark-2.5", "spark-2.5-4b", "spark-x2.5", "spark-x2.5-4b", "spark-lite"},
 				},
 			},
 		},
@@ -179,7 +179,7 @@ func TestTUIFlow(t *testing.T) {
 	}
 
 	// 2. 验证主线对话交互：发送普通消息实时在界面展示
-	m.chatInput.SetValue("Hello coustea, this is mainline chat!")
+	m.chatInput.SetValue("Hello Tide, this is mainline chat!")
 	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
@@ -187,7 +187,7 @@ func TestTUIFlow(t *testing.T) {
 		t.Fatalf("expected messages to have content")
 	}
 	lastUserMsg := m.messages[len(m.messages)-2]
-	if lastUserMsg.Sender != "You" || lastUserMsg.Content != "Hello coustea, this is mainline chat!" {
+	if lastUserMsg.Sender != "You" || lastUserMsg.Content != "Hello Tide, this is mainline chat!" {
 		t.Fatalf("expected user message to be recorded in chat history, got: %+v", lastUserMsg)
 	}
 
@@ -255,7 +255,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 	ag := newMockAgent()
 	m := NewModel(ag)
 	m.messages = append(m.messages, ChatMessage{
-		Sender:  "coustea",
+		Sender:  "Tide",
 		Content: "Thinking...",
 	})
 
@@ -330,7 +330,7 @@ func TestTUI_EndToEnd_MultiTurn_Chat(t *testing.T) {
 	}
 
 	lastMsg := m.messages[len(m.messages)-1]
-	if lastMsg.Sender != "coustea" || !strings.Contains(lastMsg.Content, "Hello Alice") {
+	if lastMsg.Sender != "Tide" || !strings.Contains(lastMsg.Content, "Hello Alice") {
 		t.Errorf("turn 1 unexpected assistant reply: %+v", lastMsg)
 	}
 
@@ -346,7 +346,7 @@ func TestTUI_EndToEnd_MultiTurn_Chat(t *testing.T) {
 	}
 
 	lastMsg = m.messages[len(m.messages)-1]
-	if lastMsg.Sender != "coustea" || !strings.Contains(lastMsg.Content, "Your name is Alice") {
+	if lastMsg.Sender != "Tide" || !strings.Contains(lastMsg.Content, "Your name is Alice") {
 		t.Errorf("turn 2 unexpected assistant reply: %+v", lastMsg)
 	}
 
@@ -514,7 +514,7 @@ func TestTUI_KeyOperations_ExitAndInterrupt(t *testing.T) {
 	m.isGenerating = true
 	var cancelled bool
 	m.cancel = func() { cancelled = true }
-	m.messages = []ChatMessage{{Sender: "coustea", Content: "Thinking"}}
+	m.messages = []ChatMessage{{Sender: "Tide", Content: "Thinking"}}
 
 	mIntf, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
 	m = mIntf.(Model)
@@ -537,7 +537,7 @@ func TestTUI_KeyOperations_ExitAndInterrupt(t *testing.T) {
 func TestTUI_PermissionApproval_InteractiveFlow(t *testing.T) {
 	ag := newMockAgent()
 	m := NewModel(ag)
-	m.messages = []ChatMessage{{Sender: "coustea", Content: ""}}
+	m.messages = []ChatMessage{{Sender: "Tide", Content: ""}}
 	m.isGenerating = true
 
 	req := &protocol.PermissionRequest{
@@ -627,18 +627,18 @@ func TestTUIFlow_Spark(t *testing.T) {
 		t.Fatalf("expected stateSelectModelPreset, got %v", m.state)
 	}
 
-	// 5. 下移一次选择 lite 规格 (预设项第二条)
+	// 5. 下移一次选择 spark-2.5-4b 规格 (预设项第二条)
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m = mIntf.(Model)
 
-	// 回车确认选择 lite
+	// 回车确认选择 spark-2.5-4b
 	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = mIntf.(Model)
 
 	if m.state != stateChat {
 		t.Fatalf("expected stateChat after model preset selection, got %v", m.state)
 	}
-	if ag.cfgView.Provider != "spark" || ag.cfgView.ModelName != "lite" {
+	if ag.cfgView.Provider != "spark" || ag.cfgView.ModelName != "spark-2.5-4b" {
 		t.Fatalf("agent config mismatch: %+v", ag.cfgView)
 	}
 }

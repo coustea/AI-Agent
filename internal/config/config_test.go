@@ -90,13 +90,13 @@ func TestConfig_AutoDiscovery_Env(t *testing.T) {
 	t.Setenv("SPARK_API_KEY", "")
 	t.Setenv("MAAS_API_KEY", "")
 
-	// 1. 无环境变量时默认 fallback 到 llamacpp
+	// 1. 无环境变量时默认激活官方免费模型 Spark (spark-2.5)
 	cfg, err := LoadConfig(missingPath)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Provider != ProviderLlamaCpp {
-		t.Errorf("expected fallback to llamacpp, got %s", cfg.Provider)
+	if cfg.Provider != ProviderSpark || cfg.ModelName != DefaultSparkModel {
+		t.Errorf("expected default to spark (%s), got provider: %s, model: %s", DefaultSparkModel, cfg.Provider, cfg.ModelName)
 	}
 
 	// 2. 设置 SPARK_API_KEY

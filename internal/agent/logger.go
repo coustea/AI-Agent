@@ -20,7 +20,7 @@ import (
 // 3. 大模型返回的原始思考链 (ReasoningContent) 与回复 (Content)
 // 4. 工具调用的精确参数与执行结果 (ToolCall & ToolResult)
 // 5. Token 消耗统计与总耗时 (Usage & Summary)
-// 实时结构化收集为 []protocol.TraceEvent，并以 100% 原始 JSON 写入 .coustea/logs/latest.json 与追加归档到 .coustea/logs/agent.jsonl。
+// 实时结构化收集为 []protocol.TraceEvent，并以 100% 原始 JSON 写入 .tide/logs/latest.json 与追加归档到 .tide/logs/agent.jsonl。
 type LoggingMiddleware struct {
 	mu         sync.RWMutex
 	logDir     string
@@ -34,7 +34,7 @@ func NewLoggingMiddleware(workDir string) *LoggingMiddleware {
 	if strings.TrimSpace(workDir) == "" {
 		workDir = "."
 	}
-	dir := filepath.Join(workDir, ".coustea", "logs")
+	dir := filepath.Join(workDir, ".tide", "logs")
 	return &LoggingMiddleware{
 		logDir:     dir,
 		latestJSON: filepath.Join(dir, "latest.json"),

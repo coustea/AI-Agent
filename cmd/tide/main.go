@@ -25,7 +25,7 @@ func main() {
 		ag, err = agent.NewFromConfig(config.DefaultConfig(), agent.WithLoggingMiddleware())
 	}
 	if err != nil {
-		fmt.Printf("coustea 内核装配失败: %v\n", err)
+		fmt.Printf("tide 内核装配失败: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -34,7 +34,7 @@ func main() {
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
-		fmt.Printf("coustea 运行异常: %v\n", err)
+		fmt.Printf("tide 运行异常: %v\n", err)
 		os.Exit(1)
 	}
 }

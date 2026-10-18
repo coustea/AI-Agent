@@ -310,7 +310,7 @@ func (m *Manager) checkRules(call protocol.ToolCall) (needsApproval bool, ruleRe
 	return false, ""
 }
 
-// isPathEscapingWorkspace 校验目标文件路径是否逃逸了当前项目工作区和用户 ~/.coustea 目录
+// isPathEscapingWorkspace 校验目标文件路径是否逃逸了当前项目工作区和用户 ~/.tide 目录
 func (m *Manager) isPathEscapingWorkspace(targetPath string) (escapes bool, resolvedAbs string) {
 	cleanPath := strings.TrimSpace(targetPath)
 	if cleanPath == "" {
@@ -330,11 +330,11 @@ func (m *Manager) isPathEscapingWorkspace(targetPath string) (escapes bool, reso
 		return false, targetAbs
 	}
 
-	// 2. 位于用户 ~/.coustea 目录下（全局记忆/配置），合法
+	// 2. 位于用户 ~/.tide 目录下（全局记忆/配置），合法
 	home, errHome := os.UserHomeDir()
 	if errHome == nil && home != "" {
-		globalCousteaAbs := filepath.Clean(filepath.Join(home, ".coustea"))
-		relGlobal, errRelGlobal := filepath.Rel(globalCousteaAbs, targetAbs)
+		globalTideAbs := filepath.Clean(filepath.Join(home, ".tide"))
+		relGlobal, errRelGlobal := filepath.Rel(globalTideAbs, targetAbs)
 		if errRelGlobal == nil && !strings.HasPrefix(relGlobal, "..") && relGlobal != ".." {
 			return false, targetAbs
 		}

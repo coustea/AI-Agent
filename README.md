@@ -1,6 +1,6 @@
 <div align="center">
 
-# coustea
+# Tide
 
 **一个运行在本地终端的通用 AI 个人助手**
 
@@ -19,7 +19,7 @@ ReAct 循环 · Harness 可插拔接缝 · 多模型网关 · 三道闸门权限
 
 ## 项目简介
 
-coustea 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进代码，而是遵循 Harness 设计哲学——
+tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进代码，而是遵循 Harness 设计哲学——
 **给模型提供工具、知识、上下文管理与权限边界，然后让开**。模型负责决策，代码只负责提供接缝。
 
 | 维度 | 说明 |
@@ -66,10 +66,10 @@ coustea 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码�
 | **ReAct 工具循环** | 单轮最多 10 步推理-行动迭代，工具结果以 Observation 形式回灌模型，支持错误自愈 |
 | **三道闸门权限** | 硬拒绝表 → 风险规则精准匹配（删除 / 提权 / 越界写入等）→ 交互式审批（支持会话级信任），常规命令自主放行，高危操作永不静默执行 |
 | **分层长期记忆** | 全局 + 项目两级 Markdown 记忆，每轮对话开始时重新读取，运行期沉淀即时生效 |
-| **可观测性链路** | 淘汰 Markdown 拼接，全链路 100% 原生结构体收集，双轨落盘（`.coustea/logs/latest.json` 和 `agent.jsonl`），支持终端交互式双栏 Master-Detail JSON 审计看板（`/log`、`/trace`、`Ctrl+L`） |
-| **大结果安全落盘** | 工具结果超过阈值（8000 runes）自动全量落盘至 `.coustea/tool-results/`，回灌「前缀预览 + 完整路径」，既保护上下文窗口又支持模型回读 |
+| **可观测性链路** | 淘汰 Markdown 拼接，全链路 100% 原生结构体收集，双轨落盘（`.tide/logs/latest.json` 和 `agent.jsonl`），支持终端交互式双栏 Master-Detail JSON 审计看板（`/log`、`/trace`、`Ctrl+L`） |
+| **大结果安全落盘** | 工具结果超过阈值（8000 runes）自动全量落盘至 `.tide/tool-results/`，回灌「前缀预览 + 完整路径」，既保护上下文窗口又支持模型回读 |
 | **Claude Code 美学 TUI** | 全景圆角卡片流式排版、深度思考链气泡、实时打字机光标 ` ▊`、Glamour 代码语法高亮与富文本排版 |
-| **工作区沙箱** | 文件工具通过 `SafePath` 严格限制在工作区与 `~/.coustea` 内，阻断 `../` 路径逃逸 |
+| **工作区沙箱** | 文件工具通过 `SafePath` 严格限制在工作区与 `~/.tide` 内，阻断 `../` 路径逃逸 |
 
 ---
 
@@ -77,9 +77,9 @@ coustea 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码�
 
 ```bash
 # 1. 克隆仓库（SSH）
-git clone git@github.com:coustea/AI-Agent.git
+git clone git@github.com:tide/AI-Agent.git
 # 或使用 HTTPS
-# git clone https://github.com/coustea/AI-Agent.git
+# git clone https://github.com/tide/AI-Agent.git
 
 cd AI-Agent
 
@@ -88,7 +88,7 @@ go mod download
 make build
 
 # 3. 启动
-./coustea
+./tide
 ```
 
 首次启动后，在输入框输入 `/model` 打开配置向导：**平台看板 → API Key → 模型规格点选**，已就绪平台按 Enter 一键直切。
@@ -114,9 +114,9 @@ make build
 ### 1. 克隆仓库
 
 ```bash
-git clone git@github.com:coustea/AI-Agent.git   # SSH
+git clone git@github.com:tide/AI-Agent.git   # SSH
 # 或
-git clone https://github.com/coustea/AI-Agent.git  # HTTPS
+git clone https://github.com/tide/AI-Agent.git  # HTTPS
 
 cd AI-Agent
 ```
@@ -130,39 +130,39 @@ go mod download
 ### 3. 编译
 
 ```bash
-make build          # 生成当前目录下的 coustea 可执行文件
+make build          # 生成当前目录下的 tide 可执行文件
 ```
 
 或直接使用 Go 工具链：
 
 ```bash
-go build -o coustea ./cmd/coustea
+go build -o tide ./cmd/tide
 ```
 
 ### 4. 验证安装
 
 ```bash
-./coustea
+./tide
 ```
 
-首次启动若未检测到可用密钥，界面会提示「欢迎使用 coustea！当前模型尚未配置 API Key」，输入 `/model` 即可调出配置向导。
+首次启动若未检测到可用密钥，界面会提示「欢迎使用 tide！当前模型尚未配置 API Key」，输入 `/model` 即可调出配置向导。
 
 ### 5. （可选）加入 PATH
 
 ```bash
-sudo mv coustea /usr/local/bin/
-coustea
+sudo mv tide /usr/local/bin/
+tide
 ```
 
 ---
 
 ## 配置说明
 
-coustea 按以下**优先级**解析配置文件：
+tide 按以下**优先级**解析配置文件：
 
 1. 代码中显式传入的路径（`LoadConfig(path)`）
 2. **当前工作目录**下的 `config.json`（项目级配置优先）
-3. 用户主目录的全局配置 `~/.coustea/config.json`
+3. 用户主目录的全局配置 `~/.tide/config.json`
 
 若配置文件不存在，程序会**从环境变量自动补全**密钥，并按 `DEEPSEEK_API_KEY` → `GEMINI_API_KEY`（兼容 `GOOGLE_API_KEY`）→ `SPARK_API_KEY`（兼容 `MAAS_API_KEY`）→ `llamacpp` 的顺序选择默认激活的 Provider。
 
@@ -249,9 +249,9 @@ curl http://127.0.0.1:8080/health
 ### 启动
 
 ```bash
-make run            # 等价于 go run ./cmd/coustea
+make run            # 等价于 go run ./cmd/tide
 # 或使用已编译的二进制
-./coustea
+./tide
 ```
 
 ### 一次典型会话与 Claude Code 美学界面
@@ -273,7 +273,7 @@ make run            # 等价于 go run ./cmd/coustea
 │   ↳ 结果: package agent ... (共 542 行，其余已折叠)                      │
 ╰──────────────────────────────────────────────────────────────────────────╯
 ╭──────────────────────────────────────────────────────────────────────────╮
-│ ● coustea                                                                │
+│ ● tide                                                                │
 │ 默认最大迭代次数是 10 步，由 NewAgent 中的 maxSteps 字段设定，可通过     │
 │ WithMaxSteps 选项覆盖。这种设计的核心目的是……                            │
 │ ──────────────────────────────────────────────────────────────────────── │
@@ -381,7 +381,7 @@ flowchart TD
 
 ```text
 AI-Agent/
-├── cmd/coustea/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
+├── cmd/tide/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
 ├── internal/
 │   ├── agent/                 # Harness 核心：ReAct 循环、Persona 合成与事件分发
 │   ├── config/                # 配置加载、持久化与环境变量补全
@@ -413,7 +413,7 @@ AI-Agent/
 | `glob` | `pattern` | 递归匹配文件路径（支持 `**`），用于探索仓库结构；默认忽略 `.git`，最多返回 200 条匹配 |
 | `grep` | `pattern`、`path`（可选）、`include`（可选）、`max_results`（可选） | 在工作区内按正则全文检索代码与文本，返回带行号的匹配内容，自动过滤二进制文件 |
 
-**安全边界**：文件与检索类工具统一经 `SafePath` 校验，仅允许访问当前工作区与 `~/.coustea`；`bash` 配置独立的进程组隔离（PGID），中断时整组杀死派生子进程杜绝孤儿残留；输出上限为 50,000 字节，超出部分自动截断。
+**安全边界**：文件与检索类工具统一经 `SafePath` 校验，仅允许访问当前工作区与 `~/.tide`；`bash` 配置独立的进程组隔离（PGID），中断时整组杀死派生子进程杜绝孤儿残留；输出上限为 50,000 字节，超出部分自动截断。
 
 ### 扩展自定义工具
 
@@ -434,17 +434,17 @@ type Tool interface {
 
 ## 长期记忆
 
-coustea 在**两级目录**中维护 Markdown 记忆，并在每轮对话开始时重新读取注入系统提示词：
+tide 在**两级目录**中维护 Markdown 记忆，并在每轮对话开始时重新读取注入系统提示词：
 
 | 层级 | 路径 | 文件 |
 |---|---|---|
-| 全局 | `~/.coustea/memory/` | `preferences.md`（个人偏好）、`learnings.md`（经验沉淀） |
-| 项目 | `<工作目录>/.coustea/memory/` | `project.md`（工作区背景）、`preferences.md`、`learnings.md` |
+| 全局 | `~/.tide/memory/` | `preferences.md`（个人偏好）、`learnings.md`（经验沉淀） |
+| 项目 | `<工作目录>/.tide/memory/` | `project.md`（工作区背景）、`preferences.md`、`learnings.md` |
 
 - 首次运行会在缺失时**播种模板**（全局 `preferences.md`、项目 `project.md`），已存在的文件不会被覆盖。
 - 模型可通过内置文件工具主动读写这些记忆文件；运行期写入的内容**下一轮立即生效**，无需重启。
 - 记忆是背景参考而非硬性指令——与用户当前明确要求冲突时，以当前要求为准。
-- `.coustea/` 已加入 `.gitignore`，不会被提交。
+- `.tide/` 已加入 `.gitignore`，不会被提交。
 
 TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记忆生效`）。
 
@@ -457,7 +457,7 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 | 闸门 | 机制 | 行为 |
 |---|---|---|
 | **Gate 1 — 硬拒绝表** | 字面量黑名单（`rm -rf /`、`sudo `、`shutdown`、`reboot`、`mkfs`、`dd if=`、fork 炸弹等） | 命中即**永久拒绝**，不触发人工审批 |
-| **Gate 2 — 风险规则** | 破坏性命令正则（`rm`/`del`/`rmdir`、`git reset --hard`/强制推送、`chmod`/`chown`/`chgrp`、`kill`、`curl \| sh`、系统目录写入、磁盘工具等）与文件工具越界路径（工作区与 `~/.coustea` 之外） | 命中才标记"需审批"并进入 Gate 3；**未命中的常规命令直接放行** |
+| **Gate 2 — 风险规则** | 破坏性命令正则（`rm`/`del`/`rmdir`、`git reset --hard`/强制推送、`chmod`/`chown`/`chgrp`、`kill`、`curl \| sh`、系统目录写入、磁盘工具等）与文件工具越界路径（工作区与 `~/.tide` 之外） | 命中才标记"需审批"并进入 Gate 3；**未命中的常规命令直接放行** |
 | **Gate 3 — 交互审批** | TUI 审批卡片："允许本次 / 本会话始终允许（按 `工具:签名` 记授信）/ 拒绝" | 无审批通道时**默认拒绝**（安全默认值） |
 
 **精准拦截**：只有命中风险规则的操作才需要人工确认——日常只读查询（`git status`、`go test`、`curl` 探测等）与工作区内文件读写自主放行，不再逐条打断。会话内可按 `a` 对相同签名持续授信；自动化场景可通过 `WithAutoApprove(true)` 全自动放行非硬拒绝操作——请确保仅在可信环境中使用。
@@ -491,7 +491,7 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <details>
 <summary><b>配置文件应该放在哪里？会被提交到仓库吗？</b></summary>
 
-项目级配置放在工作目录的 `config.json`（优先级更高），全局配置放在 `~/.coustea/config.json`。
+项目级配置放在工作目录的 `config.json`（优先级更高），全局配置放在 `~/.tide/config.json`。
 两者以及 `*.local.json` 均已在 `.gitignore` 中排除，不会被提交。
 </details>
 
@@ -531,7 +531,7 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 | 命令 | 说明 |
 |---|---|
-| `make build` | 编译 `./cmd/coustea` 为本地 `coustea` 可执行文件 |
+| `make build` | 编译 `./cmd/tide` 为本地 `tide` 可执行文件 |
 | `make run` | 以 `go run` 启动终端界面 |
 | `make test` | 运行 `./internal/...` 下的包测试（verbose） |
 | `go test ./...` | 运行全部包的测试，含命令包 |
@@ -543,7 +543,7 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 ```bash
 $ go test -count=1 ./...
-?   	my-agent/cmd/coustea	[no test files]
+?   	my-agent/cmd/tide	[no test files]
 ok  	my-agent/internal/agent	1.146s
 ok  	my-agent/internal/config	1.853s
 ok  	my-agent/internal/gateway	3.615s
@@ -561,7 +561,7 @@ ok  	my-agent/internal/tui	4.483s
 
 ## 贡献指南
 
-欢迎通过 [Issue](https://github.com/coustea/AI-Agent/issues) 与 Pull Request 参与共建。
+欢迎通过 [Issue](https://github.com/tide/AI-Agent/issues) 与 Pull Request 参与共建。
 
 ### 前置约定（重要）
 
@@ -612,11 +612,11 @@ ok  	my-agent/internal/tui	4.483s
 
 - **凭据**：`config.json`、`*.local.json`、`test_config.json` 均已加入 `.gitignore`，请勿提交填充了真实密钥的配置文件。
 - **密钥存储**：`SaveConfig` 以 `0600` 权限写入配置文件，并确保目录存在。
-- **工作区隔离**：文件工具只能读写当前工作区与 `~/.coustea`，任何越界路径都会被拒绝。
+- **工作区隔离**：文件工具只能读写当前工作区与 `~/.tide`，任何越界路径都会被拒绝。
 - **命令执行**：`bash` 命中 Gate 2 风险规则（破坏性删除、提权、系统目录写入等）时触发人工确认，无审批通道时默认拒绝；硬拒绝表中的危险指令永不执行。
 - **记忆文件**：长期记忆为明文 Markdown，请避免在其中写入敏感信息。
 
-如发现安全问题，请通过 [Issue](https://github.com/coustea/AI-Agent/issues) 私下联系维护者，勿直接公开披露。
+如发现安全问题，请通过 [Issue](https://github.com/tide/AI-Agent/issues) 私下联系维护者，勿直接公开披露。
 
 ---
 
@@ -637,10 +637,10 @@ ok  	my-agent/internal/tui	4.483s
 
 ## 许可证
 
-本项目基于 [MIT License](./LICENSE) 开源，Copyright (c) 2026 coustea。
+本项目基于 [MIT License](./LICENSE) 开源，Copyright (c) 2026 tide。
 
 <div align="center">
 
-**[⬆ 回到顶部](#coustea)**
+**[⬆ 回到顶部](#tide)**
 
 </div>

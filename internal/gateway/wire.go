@@ -190,15 +190,6 @@ func buildHTTPRequestFromPayload(ctx context.Context, url string, payload []byte
 	return httpReq, nil
 }
 
-// buildHTTPRequest 构建 OpenAI 协议的 HTTP 请求体
-func buildHTTPRequest(ctx context.Context, url string, model string, req *protocol.ChatRequest, stream bool) (*http.Request, error) {
-	payload, err := buildRequestPayload(model, req, stream)
-	if err != nil {
-		return nil, err
-	}
-	return buildHTTPRequestFromPayload(ctx, url, payload, stream)
-}
-
 type tcBuilder struct {
 	id   string
 	name strings.Builder

@@ -113,7 +113,7 @@ func NewModel(ag protocol.Agent) Model {
 	// 3. 聊天输入框 (Claude Code 风格)
 	chatInput := textinput.New()
 	chatInput.Prompt = promptPrefixStyle.Render("❯ ")
-	chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+	chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 	chatInput.CharLimit = 2000
 	chatInput.Width = 70
 
@@ -168,7 +168,7 @@ func NewModel(ag protocol.Agent) Model {
 	} else {
 		m.messages = append(m.messages, ChatMessage{
 			Sender:  "System",
-			Content: "欢迎使用 coustea！当前模型尚未配置 API Key，可随时输入 /model 调出配置向导。",
+			Content: "欢迎使用 Tide！当前模型尚未配置 API Key，可随时输入 /model 调出配置向导。",
 		})
 	}
 
@@ -209,7 +209,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.isGenerating = false
 				m.activeToolName = ""
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				m.chatInput.Focus()
 				if len(m.messages) > 0 {
 					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
@@ -247,7 +247,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.isGenerating = false
 				m.activeToolName = ""
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				m.chatInput.Focus()
 				if len(m.messages) > 0 {
 					m.messages[len(m.messages)-1].Content += "\n[用户已中断当前生成]"
@@ -293,7 +293,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.messages[lastIdx].Content += fmt.Sprintf("\n[出错: %s]", errMsg)
 			m.isGenerating = false
 			m.activeToolName = ""
-			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+			m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
 			if m.viewportReady {
 				m.viewport.SetContent(m.renderChatMessages())
@@ -304,7 +304,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case protocol.EventDone:
 			m.isGenerating = false
 			m.activeToolName = ""
-			m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+			m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 			m.chatInput.Focus()
 			if msg.event.Usage != nil && msg.event.Usage.TotalTokens > 0 {
 				m.messages[lastIdx].Usage = msg.event.Usage

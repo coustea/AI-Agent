@@ -121,7 +121,7 @@ func (m Model) viewTraceInspector() string {
 	var sb strings.Builder
 
 	// 1. 顶部 Header 状态信息
-	badge := bentoTitleBadgeStyle.Render(" coustea ")
+	badge := bentoTitleBadgeStyle.Render(" Tide ")
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(" 全系统执行链路与详细 JSON 追踪看板")
 	sub := dimStyle.Render(fmt.Sprintf("当前轮次捕获事件: %d 个 (按 Tab 切换左右栏焦点，可在右侧视口翻页完整 JSON)", len(m.traceEvents)))
 	sb.WriteString(fmt.Sprintf("%s %s\n%s\n\n", badge, title, sub))

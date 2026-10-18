@@ -24,7 +24,7 @@ func (m Model) isLocalProvider(provider string) bool {
 			return p.IsLocal
 		}
 	}
-	return config.IsLocalProvider(config.Provider(provider))
+	return false
 }
 
 // syncActiveProvider 同步当前激活厂商并重置光标与选中索引
@@ -375,7 +375,7 @@ func (m Model) viewSelectModel() string {
 	var s strings.Builder
 
 	// 标题区域
-	titleBadge := bentoTitleBadgeStyle.Render(" coustea ")
+	titleBadge := bentoTitleBadgeStyle.Render(" Tide ")
 	titleText := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(" 大模型平台与服务看板")
 	subText := dimStyle.Render("请选择大模型平台 (已就绪平台按 Enter 一键直切，按 m 可选择具体规格)：")
 
@@ -457,7 +457,7 @@ func (m Model) viewSelectModelPreset() string {
 		}
 	}
 
-	badge := bentoTitleBadgeStyle.Render(" coustea ")
+	badge := bentoTitleBadgeStyle.Render(" Tide ")
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(fmt.Sprintf(" 选择 %s 模型规格", pName))
 	sub := dimStyle.Render("请按上下键点选要激活的模型规格 (Enter 确认生效)：")
 
@@ -520,7 +520,7 @@ func (m Model) viewInputAPIKey() string {
 		}
 	}
 
-	badge := bentoTitleBadgeStyle.Render(" coustea ")
+	badge := bentoTitleBadgeStyle.Render(" Tide ")
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(fmt.Sprintf(" 配置 %s API Key", provider))
 	s.WriteString(fmt.Sprintf("%s %s\n\n", badge, title))
 
@@ -566,7 +566,7 @@ func (m Model) viewInputModel() string {
 		}
 	}
 
-	badge := bentoTitleBadgeStyle.Render(" coustea ")
+	badge := bentoTitleBadgeStyle.Render(" Tide ")
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(fmt.Sprintf(" 配置 %s 自定义模型", provider))
 	s.WriteString(fmt.Sprintf("%s %s\n\n", badge, title))
 

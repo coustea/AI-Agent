@@ -553,13 +553,15 @@ func TestNewGatewayFromConfig(t *testing.T) {
 		t.Fatalf("expected *Client for spark, got %T", sparkSubGW)
 	}
 
-	// 测试根据 spark-* 模型前缀动态路由
-	prefixGW, err := sparkRouter.Route(&protocol.ChatRequest{Model: "spark-x2.5"})
-	if err != nil {
-		t.Fatalf("failed to route spark-x2.5: %v", err)
-	}
-	if client, ok := prefixGW.(*Client); !ok || client.Provider() != config.ProviderSpark {
-		t.Fatalf("expected *Client for spark-x2.5 model prefix, got %T", prefixGW)
+	// 测试根据 spark-* 模型前缀动态路由 (支持 spark-2.5, spark-2.5-4b, spark-x2.5 等)
+	for _, mName := range []string{"spark-2.5", "spark-2.5-4b", "spark-x2.5", "spark-x2.5-4b"} {
+		prefixGW, err := sparkRouter.Route(&protocol.ChatRequest{Model: mName})
+		if err != nil {
+			t.Fatalf("failed to route %s: %v", mName, err)
+		}
+		if client, ok := prefixGW.(*Client); !ok || client.Provider() != config.ProviderSpark {
+			t.Fatalf("expected *Client for %s model prefix, got %T", mName, prefixGW)
+		}
 	}
 
 	// 测试 Spark 缺少 APIKey 返回 ErrEmptyAPIKey

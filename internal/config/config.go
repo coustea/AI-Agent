@@ -36,11 +36,19 @@ const (
 	GeminiProModel     = "gemini-2.5-pro"
 	GeminiBaseURL      = "https://generativelanguage.googleapis.com/v1beta/openai"
 
-	// 讯飞星辰 MaaS 官方最新模型规范
-	DefaultSparkModel   = "spark-x2.5"
-	SparkLiteModel      = "lite"
+	// 讯飞星辰 MaaS 官方最新模型规范 (https://maas.xfyun.cn/modelSquare)
+	DefaultSparkModel   = "spark-2.5"     // 官方主力免费体验模型 (亦兼容 spark-x2.5)
+	Spark254BModel      = "spark-2.5-4b"  // 端侧 4B 免费开源模型 (原生 1M 超长上下文，0元/tokens)
+	SparkX25Model       = "spark-x2.5"    // MaaS 平台官方代号
+	SparkX254BModel     = "spark-x2.5-4b" // MaaS 平台官方代号
+	SparkLiteModel      = "spark-lite"    // 轻量免费基础模型
 	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
+
+// DefaultSparkAPIKey 系统内置免费星火 API Key。
+// 推荐在编译期通过 -ldflags "-X my-agent/internal/config.DefaultSparkAPIKey=..." 动态注入，
+// 避免明文泄露到 Git 仓库中。
+var DefaultSparkAPIKey = ""
 
 // providerMeta 描述一个模型厂商的静态元数据，是全部厂商相关映射的单一来源。
 type providerMeta struct {
@@ -91,15 +99,21 @@ var providerRegistry = []providerMeta{
 		ModelPrefixes:     []string{"gemini"},
 	},
 	{
-		ID:                "spark",
-		Aliases:           []string{"maas", "xfyun"},
-		DefaultBaseURL:    DefaultSparkBaseURL,
-		DefaultModel:      DefaultSparkModel,
-		RecommendedModels: []string{DefaultSparkModel, SparkLiteModel},
-		DisplayName:       "讯飞星辰 MaaS",
-		Description:       "星火通用大模型 / 认知大模型",
-		ModelPrefixes:     []string{"spark"},
-		ExactModels:       []string{"lite"},
+		ID:             "spark",
+		Aliases:        []string{"maas", "xfyun"},
+		DefaultBaseURL: DefaultSparkBaseURL,
+		DefaultModel:   DefaultSparkModel,
+		RecommendedModels: []string{
+			DefaultSparkModel, // spark-2.5
+			Spark254BModel,    // spark-2.5-4b
+			SparkX25Model,     // spark-x2.5
+			SparkX254BModel,   // spark-x2.5-4b
+			SparkLiteModel,    // spark-lite
+		},
+		DisplayName:   "讯飞星辰 MaaS",
+		Description:   "官方免费模型 - 默认 spark-2.5 (主力) / spark-2.5-4b (1M上下文)",
+		ModelPrefixes: []string{"spark"},
+		ExactModels:   []string{"lite"},
 	},
 }
 
@@ -160,16 +174,16 @@ type Config struct {
 	Providers map[string]ProviderConfig `json:"providers,omitempty"` // 各厂商独立保存的配置历史
 }
 
-// GlobalConfigDir 返回用户级全局配置目录 (~/.coustea)
+// GlobalConfigDir 返回用户级全局配置目录 (~/.tide)
 func GlobalConfigDir() string {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
 		return "."
 	}
-	return filepath.Join(home, ".coustea")
+	return filepath.Join(home, ".tide")
 }
 
-// GlobalConfigPath 返回用户级全局配置文件路径 (~/.coustea/config.json)
+// GlobalConfigPath 返回用户级全局配置文件路径 (~/.tide/config.json)
 func GlobalConfigPath() string {
 	return filepath.Join(GlobalConfigDir(), "config.json")
 }
@@ -177,7 +191,7 @@ func GlobalConfigPath() string {
 // ResolveConfigPath 解析生效的配置文件路径：
 // 1. 若指定了非空 path，优先使用指定的 path；
 // 2. 若当前工作目录下存在 config.json，优先使用当前项目目录的本地配置；
-// 3. 否则默认使用用户主目录下的全局配置 (~/.coustea/config.json)。
+// 3. 否则默认使用用户主目录下的全局配置 (~/.tide/config.json)。
 func ResolveConfigPath(path string) string {
 	if strings.TrimSpace(path) != "" {
 		return strings.TrimSpace(path)
@@ -295,15 +309,28 @@ func DefaultConfig() *Config {
 		ModelName: DefaultLlamaCppModel,
 	})
 
-	// 默认激活提供商选择
+	// 预置 spark 默认端点与默认免费模型 (优先使用用户环境变量/配置；若无则回退到编译期注入的 DefaultSparkAPIKey)
+	pcfgSpark := cfg.ProviderFor(ProviderSpark)
+	if pcfgSpark.BaseURL == "" {
+		pcfgSpark.BaseURL = DefaultSparkBaseURL
+	}
+	if pcfgSpark.ModelName == "" {
+		pcfgSpark.ModelName = DefaultSparkModel
+	}
+	if pcfgSpark.APIKey == "" && strings.TrimSpace(DefaultSparkAPIKey) != "" {
+		pcfgSpark.APIKey = strings.TrimSpace(DefaultSparkAPIKey)
+	}
+	cfg.SetProviderConfig(ProviderSpark, pcfgSpark)
+
+	// 默认激活提供商选择：
+	// 1. 若外部环境变量显式配置了 DeepSeek 或 Gemini，优先激活对应厂商；
+	// 2. 否则系统默认激活官方免费模型 (Spark spark-2.5)
 	if cfg.ProviderFor(ProviderDeepSeek).APIKey != "" {
 		cfg.SwitchProvider(ProviderDeepSeek)
 	} else if cfg.ProviderFor(ProviderGemini).APIKey != "" {
 		cfg.SwitchProvider(ProviderGemini)
-	} else if cfg.ProviderFor(ProviderSpark).APIKey != "" {
-		cfg.SwitchProvider(ProviderSpark)
 	} else {
-		cfg.SwitchProvider(ProviderLlamaCpp)
+		cfg.SwitchProvider(ProviderSpark)
 	}
 
 	return cfg

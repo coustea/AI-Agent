@@ -606,7 +606,7 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 	}
 }
 
-// 测试 coustea 个人智能体名称与工作目录自动注入系统提示词
+// 测试 Tide 个人智能体名称与工作目录自动注入系统提示词
 func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 	gw := &mockGateway{}
 
@@ -617,11 +617,11 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 	}
 
 	prompt := agDefault.SystemPrompt()
-	if !strings.Contains(prompt, "coustea") {
-		t.Errorf("expected system prompt to contain 'coustea', got: %s", prompt)
+	if !strings.Contains(prompt, "Tide") {
+		t.Errorf("expected system prompt to contain 'Tide', got: %s", prompt)
 	}
-	if !strings.Contains(prompt, "general-purpose local AI personal assistant") {
-		t.Errorf("expected system prompt to state general-purpose assistant, got: %s", prompt)
+	if !strings.Contains(prompt, "autonomous, intelligent local AI personal agent") {
+		t.Errorf("expected system prompt to state autonomous agent, got: %s", prompt)
 	}
 	if !strings.Contains(prompt, "Long-Term Memory") {
 		t.Errorf("expected system prompt to contain Long-Term Memory section, got: %s", prompt)
@@ -684,7 +684,7 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	}
 
 	// 模拟模型在会话期间通过 write_file 沉淀长期记忆
-	memFile := filepath.Join(workDir, ".coustea", "memory", memory.FileLearnings)
+	memFile := filepath.Join(workDir, ".tide", "memory", memory.FileLearnings)
 	if err := os.WriteFile(memFile, []byte("MAGIC_LONG_TERM_MEMORY_TOKEN"), 0o644); err != nil {
 		t.Fatalf("failed to write memory file: %v", err)
 	}
@@ -1093,7 +1093,7 @@ func (s *simpleTestTool) Execute(ctx context.Context, args json.RawMessage) (str
 
 // TestCoreAgent_LargeToolResult_Persisted 验证大输出经 PostToolUse 钩子被落盘且截断为预览
 func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "coustea-posthook-test-*")
+	tmpDir, err := os.MkdirTemp("", "tide-posthook-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
@@ -1124,7 +1124,7 @@ func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
 	}
 
 	// 验证磁盘文件确实写入且内容为全量
-	savedPath := filepath.Join(tmpDir, ".coustea", "tool-results", "large_call_1.txt")
+	savedPath := filepath.Join(tmpDir, ".tide", "tool-results", "large_call_1.txt")
 	data, err := os.ReadFile(savedPath)
 	if err != nil {
 		t.Fatalf("expected tool result file to exist at %s, got: %v", savedPath, err)

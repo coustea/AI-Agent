@@ -19,7 +19,7 @@ type ToolCallRecord struct {
 
 // ChatMessage 用于在界面上展示发送和接收的消息
 type ChatMessage struct {
-	Sender           string           // "You", "coustea", "System"
+	Sender           string           // "You", "Tide", "System"
 	Content          string           // 最终回复文本
 	ReasoningContent string           // 深度思考链 (DeepSeek 等)
 	ToolCalls        []ToolCallRecord // 结构化工具调用列表
@@ -37,7 +37,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "y", "Y":
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowOnce)
 				m.pendingPerm = nil
-				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -46,7 +46,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "a", "A":
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowSession)
 				m.pendingPerm = nil
-				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -55,7 +55,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "n", "N":
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
 				m.pendingPerm = nil
-				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -66,7 +66,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.Type == tea.KeyEsc {
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
 				m.pendingPerm = nil
-				m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -112,11 +112,11 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			// 预备一条 Assistant 消息占位，等待流式增量填入
 			m.messages = append(m.messages, ChatMessage{
-				Sender:  "coustea",
+				Sender:  "Tide",
 				Content: "",
 			})
 			m.isGenerating = true
-			m.chatInput.Placeholder = "coustea 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+			m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
 
 			if m.viewportReady {
 				m.viewport.SetContent(m.renderChatMessages())
@@ -127,7 +127,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.agent.Config().HasAPIKey {
 				m.messages[len(m.messages)-1].Content = "[未配置可用模型] 请先输入 /model 配置 API Key 或设置环境变量 (DEEPSEEK_API_KEY / GEMINI_API_KEY)。"
 				m.isGenerating = false
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -142,7 +142,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cancel = nil
 				m.messages[len(m.messages)-1].Content = fmt.Sprintf("[请求失败: %v]", err)
 				m.isGenerating = false
-				m.chatInput.Placeholder = "输入消息与 coustea 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
+				m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -168,7 +168,7 @@ func (m Model) renderHeaderBar() string {
 		modelInfo = fmt.Sprintf("%s • %s", cfg.Provider, cfg.ModelName)
 	}
 
-	brandBadge := headerBadgeStyle.Render(" coustea ")
+	brandBadge := headerBadgeStyle.Render(" Tide ")
 	modelTag := headerTagStyle.Render("● " + modelInfo)
 
 	// 计算长效记忆激活篇数
@@ -319,7 +319,7 @@ func (m Model) renderInputBox() string {
 func (m Model) renderChatMessages() string {
 	cardWidth := max(60, m.width-6)
 	if len(m.messages) == 0 {
-		title := lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render("👋 欢迎使用 coustea 智能助手")
+		title := lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render("👋 欢迎使用 Tide 智能助手")
 		text := "  在下方输入框键入问题并按 Enter 即可开始多轮深度对话。\n" +
 			"  随时输入 /model 调出模型配置向导，输入 /clear 可清空上下文记忆。"
 		return fmt.Sprintf("\n%s\n%s\n\n", title, dimStyle.Render(text))
@@ -352,7 +352,7 @@ func (m Model) renderChatMessages() string {
 			}
 			sb.WriteString(fmt.Sprintf("%s\n%s\n\n", badge, indented.String()))
 
-		case "coustea":
+		case "Tide":
 			// 1. 若有深度思考链，独立优雅呈现
 			if msg.ReasoningContent != "" {
 				thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):")
@@ -392,7 +392,7 @@ func (m Model) renderChatMessages() string {
 
 			// 3. 回复正文：完全释放 Markdown 富文本能力，通透自然排版
 			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1 && len(msg.ToolCalls) == 0 && msg.ReasoningContent == "") {
-				header := assistantBadgeStyle.Render(" 🤖 coustea ")
+				header := assistantBadgeStyle.Render(" 🌊 Tide ")
 				var bodyText string
 				if msg.Content != "" {
 					if m.isGenerating && i == len(m.messages)-1 {

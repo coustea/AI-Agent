@@ -1,4 +1,5 @@
 # 编译二进制文件
+/tide
 /coustea
 *.exe
 *.exe~
@@ -16,7 +17,8 @@ test_*_config.json
 config.json
 *.local.json
 
-# coustea 本地长期记忆与工作区数据
+# Tide 本地长期记忆与工作区数据
+.tide/
 .coustea/
 
 # 系统与 IDE 缓存

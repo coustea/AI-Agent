@@ -154,7 +154,7 @@ func (t *GrepTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			// 跳过版本控制与缓存目录
 			if d.IsDir() {
 				name := d.Name()
-				if name == ".git" || name == ".coustea" || name == "node_modules" || name == "vendor" {
+				if name == ".git" || name == ".tide" || name == "node_modules" || name == "vendor" {
 					return filepath.SkipDir
 				}
 				return nil

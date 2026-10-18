@@ -44,12 +44,12 @@ func SafePath(workDir, targetPath string) (string, error) {
 		return targetAbs, nil
 	}
 
-	// 2. 检查是否在用户全局 ~/.coustea 目录内部（允许读取与沉淀全局记忆及配置）
+	// 2. 检查是否在用户全局 ~/.tide 目录内部（允许读取与沉淀全局记忆及配置）
 	home, errHome := os.UserHomeDir()
 	if errHome == nil && home != "" {
-		globalCousteaAbs, errGlobal := filepath.Abs(filepath.Join(home, ".coustea"))
+		globalTideAbs, errGlobal := filepath.Abs(filepath.Join(home, ".tide"))
 		if errGlobal == nil {
-			relGlobal, errRelGlobal := filepath.Rel(globalCousteaAbs, targetAbs)
+			relGlobal, errRelGlobal := filepath.Rel(globalTideAbs, targetAbs)
 			if errRelGlobal == nil && !strings.HasPrefix(relGlobal, "..") && relGlobal != ".." {
 				return targetAbs, nil
 			}
