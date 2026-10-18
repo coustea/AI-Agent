@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
@@ -65,25 +66,37 @@ func (t *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 	}
 	defer file.Close()
 
-	scanner := bufio.NewScanner(file)
-	var lines []string
-
-	for scanner.Scan() {
+	// 逐行流式读取：ReadString 无单行长度上限（Scanner 有 64KB 限制），
+	// limit 达到后立即停止，不再全量读入后截断。
+	reader := bufio.NewReader(file)
+	lines := make([]string, 0, 64)
+	for {
 		select {
 		case <-ctx.Done():
 			return "", ctx.Err()
 		default:
 		}
-		lines = append(lines, scanner.Text())
-	}
 
-	if err := scanner.Err(); err != nil {
-		return "", fmt.Errorf("error reading file %s: %w", input.Path, err)
-	}
+		line, readErr := reader.ReadString('\n')
+		if line != "" {
+			lines = append(lines, strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r"))
+		}
 
-	if input.Limit > 0 && input.Limit < len(lines) {
-		remaining := len(lines) - input.Limit
-		lines = append(lines[:input.Limit], fmt.Sprintf("... (%d more lines)", remaining))
+		if input.Limit > 0 && len(lines) >= input.Limit {
+			// 探测是否还有后续内容（只多读一行，不累积），有则给出截断提示
+			rest, peekErr := reader.ReadString('\n')
+			if rest != "" || peekErr != io.EOF {
+				lines = append(lines, fmt.Sprintf("... (truncated at %d lines)", input.Limit))
+			}
+			break
+		}
+
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			return "", fmt.Errorf("error reading file %s: %w", input.Path, readErr)
+		}
 	}
 
 	return strings.Join(lines, "\n"), nil

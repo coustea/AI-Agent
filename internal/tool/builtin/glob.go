@@ -11,6 +11,16 @@ import (
 	"strings"
 )
 
+// skippedDirs 是检索类工具（glob/grep）统一跳过的目录集合：
+// 版本控制、本地状态、缓存与依赖目录，避免无意义遍历与噪声命中。
+var skippedDirs = map[string]bool{
+	".git":         true,
+	".tide":        true,
+	".agents":      true,
+	"node_modules": true,
+	"vendor":       true,
+}
+
 // GlobTool 基于模式匹配查找工作区内的文件，学习自 learn-claude-code 中的 run_glob
 type GlobTool struct {
 	workDir *WorkDirRef
@@ -86,8 +96,8 @@ func (t *GlobTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		}
 		relSlash := filepath.ToSlash(rel)
 
-		// 默认忽略 .git 目录以提升检索性能
-		if d.IsDir() && (d.Name() == ".git" || d.Name() == ".agents") {
+		// 统一跳过版本控制、缓存与依赖目录
+		if d.IsDir() && skippedDirs[d.Name()] {
 			return filepath.SkipDir
 		}
 

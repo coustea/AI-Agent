@@ -56,7 +56,9 @@ type Model struct {
 	selected        int
 	currentProvider string
 	currentModel    string
-	currentAPIKey   string
+	// wizardAPIKey 仅在配置向导的 API Key 输入页内暂存：进入输入页即重置，
+	// 提交或取消后不再跨厂商残留（不变量由单一入口保证，不依赖各处手工清空）
+	wizardAPIKey string
 
 	// 状态 2: 模型规格预设选择菜单
 	presetChoices []string

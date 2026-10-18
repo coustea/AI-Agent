@@ -140,10 +140,9 @@ func (t *GrepTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 				return nil
 			}
 
-			// 跳过版本控制与缓存目录
+			// 统一跳过版本控制、缓存与依赖目录
 			if d.IsDir() {
-				name := d.Name()
-				if name == ".git" || name == ".tide" || name == "node_modules" || name == "vendor" {
+				if skippedDirs[d.Name()] {
 					return filepath.SkipDir
 				}
 				return nil

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"my-agent/internal/protocol"
+	"my-agent/internal/textutil"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -572,7 +573,7 @@ func renderToolCard(tc ToolCallRecord, cardWidth int) string {
 			if len(lines) > 5 {
 				snippet = strings.Join(lines[:5], "\n") + fmt.Sprintf("\n  ... (共 %d 行，其余已折叠)", len(lines))
 			} else if len(snippet) > 300 {
-				snippet = snippet[:300] + "... (已截断)"
+				snippet = textutil.TruncateUTF8(snippet, 300) + "... (已截断)"
 			}
 			sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelGreen.Render("📄 结果:"), snippet))
 		}

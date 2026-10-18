@@ -69,7 +69,24 @@ func (t *WriteFileTool) Execute(ctx context.Context, args json.RawMessage) (stri
 		return "", fmt.Errorf("failed to create parent directories for %s: %w", input.Path, err)
 	}
 
-	if err := os.WriteFile(targetPath, []byte(input.Content), 0o644); err != nil {
+	// 原子落盘：先写同目录临时文件再 Rename，避免中断留下半截文件
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file for %s: %w", input.Path, err)
+	}
+	tmpName := tmp.Name()
+
+	if _, err := tmp.WriteString(input.Content); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return "", fmt.Errorf("failed to write file %s: %w", input.Path, err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return "", fmt.Errorf("failed to write file %s: %w", input.Path, err)
+	}
+	if err := os.Rename(tmpName, targetPath); err != nil {
+		_ = os.Remove(tmpName)
 		return "", fmt.Errorf("failed to write file %s: %w", input.Path, err)
 	}
 

@@ -75,8 +75,12 @@ func (t *EditFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 	}
 
 	content := string(data)
-	if !strings.Contains(content, input.OldText) {
+	occurrences := strings.Count(content, input.OldText)
+	if occurrences == 0 {
 		return "", fmt.Errorf("text not found in %s", input.Path)
+	}
+	if occurrences > 1 {
+		return "", fmt.Errorf("old_text matches %d locations in %s, provide more context to make it unique", occurrences, input.Path)
 	}
 
 	// 仅替换一次，确保修改的精确受控

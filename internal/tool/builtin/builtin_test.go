@@ -96,8 +96,8 @@ func TestReadFileTool(t *testing.T) {
 	if strings.Contains(outLimit, "Line 3") {
 		t.Errorf("output should not contain line 3: %s", outLimit)
 	}
-	if !strings.Contains(outLimit, "(3 more lines)") {
-		t.Errorf("expected remaining lines count summary, got: %s", outLimit)
+	if !strings.Contains(outLimit, "(truncated at 2 lines)") {
+		t.Errorf("expected truncation notice, got: %s", outLimit)
 	}
 
 	// 3. 文件不存在报错
@@ -156,13 +156,24 @@ func TestEditFileTool(t *testing.T) {
 
 	tool := NewEditFileTool(NewWorkDirRef(tmpDir))
 
-	// 1. 精确单次替换
+	// 1. 多处命中：必须报错并要求提供更多上下文
 	args, _ := json.Marshal(EditFileInput{
 		Path:    testFile,
 		OldText: "Old Message",
 		NewText: "New Message",
 	})
-	out, err := tool.Execute(context.Background(), args)
+	_, err := tool.Execute(context.Background(), args)
+	if err == nil || !strings.Contains(err.Error(), "matches 2 locations") {
+		t.Fatalf("expected multi-match error, got: %v", err)
+	}
+
+	// 2. 提供唯一上下文后可精确替换
+	argsUnique, _ := json.Marshal(EditFileInput{
+		Path:    testFile,
+		OldText: "func main() {\n\tfmt.Println(\"Old Message\")",
+		NewText: "func main() {\n\tfmt.Println(\"New Message\")",
+	})
+	out, err := tool.Execute(context.Background(), argsUnique)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,7 +181,7 @@ func TestEditFileTool(t *testing.T) {
 		t.Errorf("unexpected output: %s", out)
 	}
 
-	// 验证只替换了第一次出现的 OldText
+	// 验证只替换了目标位置，另一处保留
 	updatedBytes, _ := os.ReadFile(filepath.Join(tmpDir, testFile))
 	updated := string(updatedBytes)
 	if !strings.Contains(updated, "New Message") {
@@ -180,7 +191,7 @@ func TestEditFileTool(t *testing.T) {
 		t.Errorf("Second occurrence should have remained Old Message: %s", updated)
 	}
 
-	// 2. 查找文本不存在时报错
+	// 3. 查找文本不存在时报错
 	argsNotFound, _ := json.Marshal(EditFileInput{
 		Path:    testFile,
 		OldText: "Nonexistent text",
@@ -388,5 +399,90 @@ func TestBashTool_ToolTimeoutMs(t *testing.T) {
 	out, err := tool.Execute(context.Background(), argsOk)
 	if err != nil || out != "fast" {
 		t.Errorf("expected normal execution, got out=%q err=%v", out, err)
+	}
+}
+
+// 验收 D13：超长单行文件（>64KB）可完整读取，不受 Scanner 行长限制
+func TestReadFileTool_LongSingleLine(t *testing.T) {
+	tmpDir := t.TempDir()
+	longLine := strings.Repeat("x", 200*1024) // 200KB 单行
+	if err := os.WriteFile(filepath.Join(tmpDir, "long.txt"), []byte(longLine+"\nsecond\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := NewReadFileTool(NewWorkDirRef(tmpDir))
+	args, _ := json.Marshal(ReadFileInput{Path: "long.txt"})
+	out, err := tool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("unexpected error reading long line: %v", err)
+	}
+	if !strings.Contains(out, "second") {
+		t.Errorf("expected full content including trailing line")
+	}
+	if len(out) < len(longLine) {
+		t.Errorf("long line truncated: got %d bytes", len(out))
+	}
+}
+
+// 验收 D13：write_file 原子落盘，不残留临时文件
+func TestWriteFileTool_AtomicNoTempLeftover(t *testing.T) {
+	tmpDir := t.TempDir()
+	tool := NewWriteFileTool(NewWorkDirRef(tmpDir))
+
+	args, _ := json.Marshal(WriteFileInput{Path: "sub/atomic.txt", Content: "atomic content"})
+	if _, err := tool.Execute(context.Background(), args); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	entries, err := os.ReadDir(filepath.Join(tmpDir, "sub"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".tmp-") {
+			t.Errorf("temp file left behind: %s", e.Name())
+		}
+	}
+
+	data, _ := os.ReadFile(filepath.Join(tmpDir, "sub", "atomic.txt"))
+	if string(data) != "atomic content" {
+		t.Errorf("content mismatch: %q", string(data))
+	}
+}
+
+// 验收 D13：glob/grep 统一跳过依赖与缓存目录
+func TestSearchTools_SkipDirsUnified(t *testing.T) {
+	tmpDir := t.TempDir()
+	for _, dir := range []string{"vendor", "node_modules", "src"} {
+		if err := os.MkdirAll(filepath.Join(tmpDir, dir), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		_ = os.WriteFile(filepath.Join(tmpDir, dir, "target.go"), []byte("package x"), 0o644)
+	}
+
+	globTool := NewGlobTool(NewWorkDirRef(tmpDir))
+	args, _ := json.Marshal(GlobInput{Pattern: "**/*.go"})
+	out, err := globTool.Execute(context.Background(), args)
+	if err != nil {
+		t.Fatalf("glob failed: %v", err)
+	}
+	if strings.Contains(out, "vendor/") || strings.Contains(out, "node_modules/") {
+		t.Errorf("glob must skip vendor/node_modules, got: %s", out)
+	}
+	if !strings.Contains(out, "src/target.go") {
+		t.Errorf("glob must include normal dirs, got: %s", out)
+	}
+
+	grepTool := NewGrepTool(NewWorkDirRef(tmpDir))
+	gargs, _ := json.Marshal(GrepInput{Pattern: "package"})
+	gout, err := grepTool.Execute(context.Background(), gargs)
+	if err != nil {
+		t.Fatalf("grep failed: %v", err)
+	}
+	if strings.Contains(gout, "vendor/") || strings.Contains(gout, "node_modules/") {
+		t.Errorf("grep must skip vendor/node_modules, got: %s", gout)
+	}
+	if !strings.Contains(gout, "src/target.go") {
+		t.Errorf("grep must include normal dirs, got: %s", gout)
 	}
 }

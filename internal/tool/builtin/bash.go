@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"my-agent/internal/textutil"
 )
 
 // bash 超时边界：默认 120s，模型可按需覆盖，夹取到 [100ms, 10min]
@@ -96,15 +98,15 @@ func (t *BashTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 	err := cmd.Run()
 	output := strings.TrimSpace(combinedBuf.String())
 
-	// 截断超大输出
+	// 截断超大输出（按 UTF-8 字符边界，避免切断多字节字符）
 	if len(output) > maxBashOutputBytes {
-		output = output[:maxBashOutputBytes] + "\n... (output truncated)"
+		output = textutil.TruncateUTF8(output, maxBashOutputBytes) + "\n... (output truncated)"
 	}
 
 	if err != nil {
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			if len(output) > maxBashOutputBytes {
-				output = output[:maxBashOutputBytes]
+				output = textutil.TruncateUTF8(output, maxBashOutputBytes)
 			}
 			if output != "" {
 				return "", fmt.Errorf("bash: command timed out after %dms with output:\n%s", timeoutMs, output)

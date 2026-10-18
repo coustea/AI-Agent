@@ -516,7 +516,6 @@ func TestTUIFlow_SwitchWithoutReenteringAPIKey(t *testing.T) {
 	ag.cfgView.Providers[1].CurrentModel = "deepseek-flash"
 
 	m := NewModel(ag, ag)
-	m.currentAPIKey = "sk-deepseek-preserved-key"
 
 	// 1. 切换到 Gemini 并配置
 	m.chatInput.SetValue("/model")
@@ -1264,5 +1263,57 @@ func TestRenderMarkdownCache_HitAndWidthIsolation(t *testing.T) {
 	_ = renderMarkdownCached("**bold** and `code`", 60)
 	if len(mdCache) != 2 {
 		t.Errorf("different width must produce a separate cache entry, got %d", len(mdCache))
+	}
+}
+
+// 验收 D12：A 厂商输入的 API Key 不得泄漏到 B 厂商的向导流程
+func TestTUI_WizardAPIKeyNotLeakedAcrossProviders(t *testing.T) {
+	ag := newMockAgent()
+	ag.cfgView.Provider = "deepseek"
+	ag.cfgView.ModelName = "deepseek-flash"
+	ag.cfgView.HasAPIKey = true
+	for i := range ag.cfgView.Providers {
+		ag.cfgView.Providers[i].IsConfigured = false
+	}
+
+	m := NewModel(ag, ag)
+
+	// 1. 打开 /model，选中当前 deepseek，输入 A 厂商的 key
+	m.chatInput.SetValue("/model")
+	mIntf, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+	if m.state != stateInputAPIKey {
+		t.Fatalf("expected stateInputAPIKey for unconfigured provider, got %v", m.state)
+	}
+	m.apiKeyInput.SetValue("sk-deepseek-secret")
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+	if m.wizardAPIKey != "sk-deepseek-secret" {
+		t.Fatalf("expected wizardAPIKey captured, got %q", m.wizardAPIKey)
+	}
+
+	// 2. 在模型规格菜单按 Esc 取消，回到平台看板
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = mIntf.(Model)
+
+	// 3. 下移到 gemini 并进入输入页：暂存 key 必须已被重置
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m = mIntf.(Model)
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+	if m.state != stateInputAPIKey {
+		t.Fatalf("expected stateInputAPIKey for gemini, got %v", m.state)
+	}
+	if m.wizardAPIKey != "" {
+		t.Fatalf("API key from previous provider leaked: %q", m.wizardAPIKey)
+	}
+
+	// 4. 直接 Enter（未输入任何 key）不得借助残留 key 误判通过
+	mIntf, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+	if m.state != stateInputAPIKey {
+		t.Fatalf("empty key must not pass validation via stale state, state=%v", m.state)
 	}
 }

@@ -116,7 +116,6 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case tea.KeyEnter:
 			p := providers[m.cursor]
-			m.currentAPIKey = ""
 			m.currentProvider = p.ID
 			m.currentModel = p.CurrentModel
 
@@ -143,7 +142,8 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			// 未配置密钥，跳转进入 API Key 输入
+			// 未配置密钥，跳转进入 API Key 输入（进入即重置暂存值）
+			m.wizardAPIKey = ""
 			m.state = stateInputAPIKey
 			m.apiKeyInput.Focus()
 			m.apiKeyInput.Reset()
@@ -171,7 +171,6 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e":
 			// 按 'e' 键修改/重置当前平台的 API Key
 			p := providers[m.cursor]
-			m.currentAPIKey = ""
 			m.currentProvider = p.ID
 			m.currentModel = p.CurrentModel
 			m.state = stateInputAPIKey
@@ -190,9 +189,6 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // openModelPresetMenu 打开指定厂商的预设模型规格菜单
 func (m Model) openModelPresetMenu(p protocol.ProviderInfo) (tea.Model, tea.Cmd) {
-	if m.currentProvider != p.ID {
-		m.currentAPIKey = ""
-	}
 	m.currentProvider = p.ID
 	m.currentModel = p.CurrentModel
 	m.presetChoices = nil
@@ -252,7 +248,7 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentModel = chosen
 
 				// 检查当前平台是否已就绪 (新输入 Key、已存 Key 或本地)
-				isConfigured := m.currentAPIKey != "" || m.isLocalProvider(m.currentProvider)
+				isConfigured := m.wizardAPIKey != "" || m.isLocalProvider(m.currentProvider)
 				if !isConfigured {
 					for _, p := range m.getProviders() {
 						if p.ID == m.currentProvider && p.IsConfigured {
@@ -272,8 +268,8 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 
 				// 平台已就绪，立即热切换模型并返回对话
-				apiKeyToSend := m.currentAPIKey
-				m.currentAPIKey = ""
+				apiKeyToSend := m.wizardAPIKey
+				m.wizardAPIKey = ""
 				if err := m.agent.UpdateConfig(m.currentProvider, apiKeyToSend, m.currentModel); err != nil {
 					m.messages = append(m.messages, ChatMessage{
 						Sender:  "System",
@@ -325,10 +321,10 @@ func (m Model) updateInputAPIKey(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case tea.KeyEnter:
 			keyVal := strings.TrimSpace(m.apiKeyInput.Value())
-			m.currentAPIKey = keyVal
+			m.wizardAPIKey = keyVal
 
 			// 验证当前是否有可用密钥 (用户刚输入的、之前保存过的、或本地服务)
-			hasKey := m.currentAPIKey != "" || m.isLocalProvider(m.currentProvider)
+			hasKey := m.wizardAPIKey != "" || m.isLocalProvider(m.currentProvider)
 			if !hasKey {
 				for _, p := range m.getProviders() {
 					if p.ID == m.currentProvider && p.IsConfigured {
@@ -382,8 +378,8 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if nameVal != "" {
 				m.currentModel = nameVal
 
-				apiKeyToSend := m.currentAPIKey
-				m.currentAPIKey = ""
+				apiKeyToSend := m.wizardAPIKey
+				m.wizardAPIKey = ""
 				if err := m.agent.UpdateConfig(m.currentProvider, apiKeyToSend, m.currentModel); err != nil {
 					m.messages = append(m.messages, ChatMessage{
 						Sender:  "System",
@@ -570,7 +566,7 @@ func (m Model) viewInputAPIKey() string {
 	title := lipgloss.NewStyle().Bold(true).Foreground(colorTextNormal).Render(fmt.Sprintf(" 配置 %s API Key", provider))
 	s.WriteString(fmt.Sprintf("%s %s\n\n", badge, title))
 
-	if m.currentAPIKey != "" {
+	if m.wizardAPIKey != "" {
 		s.WriteString(fmt.Sprintf("检测到已输入 %s 的 API Key。直接按 Enter 保留，或输入新 Key 覆盖：\n\n", provider))
 	} else if m.isLocalProvider(m.currentProvider) {
 		s.WriteString(fmt.Sprintf("本地服务 %s 无需鉴权密钥，直接按 Enter 继续即可：\n\n", provider))
@@ -697,7 +693,8 @@ func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// 平台未就绪：引导进入 API Key 输入
+		// 平台未就绪：引导进入 API Key 输入（进入即重置暂存值）
+		m.wizardAPIKey = ""
 		m.currentProvider = targetProvider.ID
 		m.state = stateInputAPIKey
 		m.apiKeyInput.Focus()
