@@ -5,10 +5,24 @@ import (
 	"strings"
 
 	"my-agent/internal/config"
-	"my-agent/internal/gateway"
+	"my-agent/pkg/llm"
 )
 
-// UpdateConfig 运行时更新模型提供商、密钥与模型名称（具备事务原子性：先在候选副本上校验、初始化网关并落盘，全部成功后原子生效）
+// newLLMFromConfig 根据配置初始化 pkg/llm.Client (由 llm.New 自主完成默认值补齐与前置校验)
+func newLLMFromConfig(cfg *config.Config) (*llm.Client, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("agent: configuration cannot be nil")
+	}
+
+	return llm.New(
+		cfg.Provider,
+		llm.WithBaseURL(cfg.BaseURL),
+		llm.WithAPIKey(cfg.APIKey),
+		llm.WithModel(config.NormalizeModelName(cfg.Provider, cfg.ModelName)),
+	)
+}
+
+// UpdateConfig 运行时更新模型提供商、密钥与模型名称（具备事务原子性：先在候选副本上校验、初始化客户端并落盘，全部成功后原子生效）
 func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -31,7 +45,7 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 		pStr = string(candidate.Provider)
 	}
 
-	newProvider := config.Provider(pStr)
+	newProvider := llm.Provider(pStr)
 	// 切换厂商（自动载入该厂商已保存的配置历史）
 	candidate.SwitchProvider(newProvider)
 
@@ -44,20 +58,20 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 	if mStr != "" {
 		candidate.ModelName = config.NormalizeModelName(newProvider, mStr)
 	} else if candidate.ModelName == "" {
-		candidate.ModelName = config.DefaultModel(newProvider)
+		candidate.ModelName = llm.DefaultModel(newProvider)
 	} else {
 		candidate.ModelName = config.NormalizeModelName(newProvider, candidate.ModelName)
 	}
 
 	// 4. 远程厂商必须具备有效 APIKey
-	if !config.IsLocalProvider(newProvider) && strings.TrimSpace(candidate.APIKey) == "" {
+	if !llm.IsLocalProvider(newProvider) && strings.TrimSpace(candidate.APIKey) == "" {
 		return fmt.Errorf("agent: provider %q requires an API key", newProvider)
 	}
 
-	// 5. 初始化新网关
-	gw, err := gateway.NewGatewayFromConfig(candidate)
+	// 5. 初始化大模型客户端
+	llmClient, err := newLLMFromConfig(candidate)
 	if err != nil {
-		return fmt.Errorf("agent: initialize gateway failed: %w", err)
+		return fmt.Errorf("agent: initialize llm client failed: %w", err)
 	}
 
 	// 6. 持久化落盘配置文件
@@ -72,6 +86,6 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 	// 全部校验与构建成功后原子提交
 	a.cfg = candidate
 	a.cfgPath = cfgPath
-	a.gw = gw
+	a.llm = llmClient
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 )
 
 // LoggingMiddleware 是基于 Hook 思想实现的透明可观测性日志中间件。
@@ -174,7 +175,7 @@ func (l *LoggingMiddleware) OnLLMResponse(ctx context.Context, resp *protocol.LL
 }
 
 // OnToolStart 工具调用开始前
-func (l *LoggingMiddleware) OnToolStart(ctx context.Context, step int, call protocol.ToolCall) {
+func (l *LoggingMiddleware) OnToolStart(ctx context.Context, step int, call llm.ToolCall) {
 	var parsedArgs any
 	if err := json.Unmarshal([]byte(call.Arguments), &parsedArgs); err != nil {
 		parsedArgs = call.Arguments

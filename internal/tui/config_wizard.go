@@ -3,19 +3,16 @@ package tui
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
-
-// llamaCppProbeURL 本地推理服务默认探测端点
-const llamaCppProbeURL = "http://127.0.0.1:8080/v1/models"
 
 // probeLlamaCpp 探测本地 llama-server 是否就绪（2s 超时）。
 // 返回非空提示文案表示未就绪；探测不阻断配置——服务可能稍后启动。
@@ -23,17 +20,8 @@ func probeLlamaCpp() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, llamaCppProbeURL, http.NoBody)
-	if err != nil {
-		return fmt.Sprintf("[提示] 本地服务探测失败: %v（配置已保留，可稍后启动 llama-server）", err)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "[提示] 本地服务未就绪（连接失败），配置已保留。启动 llama-server 后即可直接对话。"
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Sprintf("[提示] 本地服务未就绪（HTTP %d），配置已保留。启动 llama-server 后即可直接对话。", resp.StatusCode)
+	if err := llm.ProbeLocalService(ctx, ""); err != nil {
+		return "[提示] 本地服务未就绪，配置已保留。启动 llama-server 后即可直接对话。"
 	}
 	return ""
 }

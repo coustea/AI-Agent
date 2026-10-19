@@ -70,7 +70,7 @@ func main() {
 			return
 		}
 	}
-	// 组装调用链：LLM -> Gateway -> Agent (驱动 ReAct 循环与内置工具) -> TUI
+	// 组装调用链：LLM (pkg/llm) -> Agent (驱动 ReAct 循环与内置工具) -> Protocol -> TUI
 	// 配置文件损坏时回退全新默认装配；未就绪状态由 ConfigView 表达，交由 /model 向导修复
 	cfg, err := config.LoadConfig("")
 	if err != nil {

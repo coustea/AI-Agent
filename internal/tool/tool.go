@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sync"
 
-	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 )
 
 // Tool 定义单个工具插件的标准接口
@@ -75,13 +75,13 @@ func (r *Registry) Get(name string) (Tool, bool) {
 }
 
 // Definitions 导出供大模型 Function Calling 使用的工具定义列表
-func (r *Registry) Definitions() []protocol.ToolDefinition {
+func (r *Registry) Definitions() []llm.ToolDefinition {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	defs := make([]protocol.ToolDefinition, 0, len(r.tools))
+	defs := make([]llm.ToolDefinition, 0, len(r.tools))
 	for _, t := range r.tools {
-		defs = append(defs, protocol.ToolDefinition{
+		defs = append(defs, llm.ToolDefinition{
 			Name:        t.Name(),
 			Description: t.Description(),
 			Parameters:  t.Schema(),
@@ -95,7 +95,7 @@ func (r *Registry) Definitions() []protocol.ToolDefinition {
 // 执行流水线为：查找工具 → 执行前钩子链 (PreToolUse) → 参数校验 → 工具执行 → 执行后钩子链 (PostToolUse)。
 // 钩子先于参数校验，看到的是未经校验的原始调用；钩子若无法解析参数应放行，
 // 交由参数校验拒绝，避免重复报错。所有失败均以 IsError + Content 表达，不再返回 error。
-func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) protocol.ToolResult {
+func (r *Registry) Execute(ctx context.Context, call llm.ToolCall) llm.ToolResult {
 	r.mu.RLock()
 	t, ok := r.tools[call.Name]
 	preHooks := r.preHooks
@@ -103,7 +103,7 @@ func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) protocol
 	r.mu.RUnlock()
 
 	if !ok {
-		return protocol.ToolResult{
+		return llm.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 			Content:    fmt.Sprintf("tool %q not found", call.Name),
@@ -114,7 +114,7 @@ func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) protocol
 	// 1. 执行前钩子链：权限等策略在此挂载，任一错误即短路拦截
 	for _, h := range preHooks {
 		if err := h(ctx, call); err != nil {
-			return protocol.ToolResult{
+			return llm.ToolResult{
 				ToolCallID: call.ID,
 				Name:       call.Name,
 				Content:    err.Error(),
@@ -129,7 +129,7 @@ func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) protocol
 		args = []byte("{}")
 	}
 	if err := ValidateArguments(t.Schema(), args); err != nil {
-		return protocol.ToolResult{
+		return llm.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 			Content:    fmt.Sprintf("invalid arguments for tool %q: %v", call.Name, err),
@@ -139,16 +139,16 @@ func (r *Registry) Execute(ctx context.Context, call protocol.ToolCall) protocol
 
 	// 3. 工具本体执行（panic 转为 IsError 结果，单工具崩溃不击穿整轮）
 	output, err := executeTool(t, ctx, args)
-	var res protocol.ToolResult
+	var res llm.ToolResult
 	if err != nil {
-		res = protocol.ToolResult{
+		res = llm.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 			Content:    err.Error(),
 			IsError:    true,
 		}
 	} else {
-		res = protocol.ToolResult{
+		res = llm.ToolResult{
 			ToolCallID: call.ID,
 			Name:       call.Name,
 			Content:    output,

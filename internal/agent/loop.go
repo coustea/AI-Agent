@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 )
 
 // Run 严格实现 protocol.Agent 契约，负责轮次生命周期、并发互斥与事件通道管理
@@ -22,10 +23,10 @@ func (a *CoreAgent) Run(ctx context.Context, prompt string) (<-chan protocol.Eve
 	}
 
 	a.mu.RLock()
-	gw := a.gw
+	llmClient := a.llm
 	a.mu.RUnlock()
-	if gw == nil {
-		return nil, errors.New("agent: no model gateway configured, please configure via /model")
+	if llmClient == nil {
+		return nil, errors.New("agent: no LLM client configured, please configure via /model")
 	}
 
 	a.mu.Lock()
@@ -69,7 +70,7 @@ func (a *CoreAgent) agentLoop(ctx context.Context, prompt string, eventCh chan<-
 	a.dispatchTurnStart(ctx, turnID, prompt)
 
 	var (
-		totalTurnUsage protocol.Usage
+		totalTurnUsage llm.Usage
 		turnErr        error
 		stepCount      int
 	)
@@ -87,7 +88,7 @@ func (a *CoreAgent) agentLoop(ctx context.Context, prompt string, eventCh chan<-
 	}()
 
 	// 2. 将用户问题存入 Memory
-	userMsg := protocol.Message{Role: protocol.RoleUser, Content: prompt}
+	userMsg := llm.Message{Role: llm.RoleUser, Content: prompt}
 	_ = a.memory.Append(ctx, userMsg)
 
 	// 3. 每用户轮次开始时动态合成系统提示词
@@ -131,18 +132,18 @@ func (a *CoreAgent) agentLoop(ctx context.Context, prompt string, eventCh chan<-
 
 // executeStep 执行单步 ReAct：调用一次流式大模型，解析思考过程与文本内容，并在有工具调用时驱动工具流水线。
 // 返回本步 token 用量；finished 为 true 表示模型已给出最终答复，无需继续迭代。
-func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Event, sysPrompt string, step int) (stepUsage protocol.Usage, finished bool, err error) {
+func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Event, sysPrompt string, step int) (stepUsage llm.Usage, finished bool, err error) {
 	a.mu.RLock()
 	var providerName, modelName string
 	if a.cfg != nil {
 		providerName = string(a.cfg.Provider)
 		modelName = a.cfg.ModelName
 	}
-	gw := a.gw
+	llmClient := a.llm
 	toolDefs := a.tools.Definitions()
 	a.mu.RUnlock()
-	if gw == nil {
-		return stepUsage, false, errors.New("agent: no model gateway configured, please configure via /model")
+	if llmClient == nil {
+		return stepUsage, false, errors.New("agent: no LLM client configured, please configure via /model")
 	}
 
 	// 基于记忆状态机安全构建当前上下文
@@ -163,8 +164,8 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 		Timestamp:    stepStart,
 	})
 
-	// 发起网关流式调用
-	stream, err := gw.ChatStream(ctx, &protocol.ChatRequest{
+	// 发起大模型流式调用
+	stream, err := llmClient.ChatStream(ctx, &llm.ChatRequest{
 		Messages: reqMsgs,
 		Tools:    toolDefs,
 	})
@@ -178,7 +179,7 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 	}
 
 	var replyBuilder, reasoningBuilder strings.Builder
-	var toolCalls []protocol.ToolCall
+	var toolCalls []llm.ToolCall
 	for chunk := range stream {
 		if chunk.Err != nil {
 			// 流式异常回滚：本步 assistant 消息不入记忆
@@ -222,8 +223,8 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 	})
 
 	// 将模型本轮完整回复存入记忆
-	_ = a.memory.Append(ctx, protocol.Message{
-		Role:             protocol.RoleAssistant,
+	_ = a.memory.Append(ctx, llm.Message{
+		Role:             llm.RoleAssistant,
 		Content:          replyBuilder.String(),
 		ReasoningContent: reasoningBuilder.String(),
 		ToolCalls:        toolCalls,
@@ -243,14 +244,14 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 			// 中途被取消时，为剩余全部未完成的 toolCalls 补齐取消状态，杜绝历史消息残缺导致后续 API 400
 			for j := i; j < len(toolCalls); j++ {
 				remTc := toolCalls[j]
-				cancelRes := protocol.ToolResult{
+				cancelRes := llm.ToolResult{
 					ToolCallID: remTc.ID,
 					Name:       remTc.Name,
 					Content:    "[Execution cancelled by user]",
 					IsError:    true,
 				}
-				_ = a.memory.Append(context.Background(), protocol.Message{
-					Role:       protocol.RoleTool,
+				_ = a.memory.Append(context.Background(), llm.Message{
+					Role:       llm.RoleTool,
 					ToolResult: &cancelRes,
 				})
 			}
@@ -265,14 +266,14 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 		}) {
 			for j := i; j < len(toolCalls); j++ {
 				remTc := toolCalls[j]
-				cancelRes := protocol.ToolResult{
+				cancelRes := llm.ToolResult{
 					ToolCallID: remTc.ID,
 					Name:       remTc.Name,
 					Content:    "[Execution cancelled by user]",
 					IsError:    true,
 				}
-				_ = a.memory.Append(context.Background(), protocol.Message{
-					Role:       protocol.RoleTool,
+				_ = a.memory.Append(context.Background(), llm.Message{
+					Role:       llm.RoleTool,
 					ToolResult: &cancelRes,
 				})
 			}
@@ -291,8 +292,8 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 			Timestamp: toolStart,
 		})
 
-		_ = a.memory.Append(context.Background(), protocol.Message{
-			Role:       protocol.RoleTool,
+		_ = a.memory.Append(context.Background(), llm.Message{
+			Role:       llm.RoleTool,
 			ToolResult: &res,
 		})
 
@@ -302,14 +303,14 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 		}) {
 			for j := i + 1; j < len(toolCalls); j++ {
 				remTc := toolCalls[j]
-				cancelRes := protocol.ToolResult{
+				cancelRes := llm.ToolResult{
 					ToolCallID: remTc.ID,
 					Name:       remTc.Name,
 					Content:    "[Execution cancelled by user]",
 					IsError:    true,
 				}
-				_ = a.memory.Append(context.Background(), protocol.Message{
-					Role:       protocol.RoleTool,
+				_ = a.memory.Append(context.Background(), llm.Message{
+					Role:       llm.RoleTool,
 					ToolResult: &cancelRes,
 				})
 			}

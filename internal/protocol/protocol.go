@@ -2,82 +2,15 @@ package protocol
 
 import (
 	"context"
-	"encoding/json"
 	"time"
+
+	"my-agent/pkg/llm"
 )
 
-// Role 统一消息角色类型
-type Role string
-
-const (
-	RoleSystem    Role = "system"
-	RoleUser      Role = "user"
-	RoleAssistant Role = "assistant"
-	RoleTool      Role = "tool"
-)
-
-// ToolDefinition 暴露给大模型的工具 JSON Schema 描述元信息
-type ToolDefinition struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	Parameters  json.RawMessage `json:"parameters"`
-}
-
-// ToolCall 统一大模型发出的工具调用指令 (Gateway、Agent、Tool、TUI 通用)
-type ToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"` // 统一为规范 JSON 字符串，跨语言与跨端最友好
-}
-
-// ToolResult 统一工具执行后的观察回灌结果 (Tool、Agent、Memory、TUI 通用)
-type ToolResult struct {
-	ToolCallID string `json:"tool_call_id"`
-	Name       string `json:"name"`
-	Content    string `json:"content"`
-	IsError    bool   `json:"is_error,omitempty"`
-}
-
-// Message 统一多轮对话消息结构体
-type Message struct {
-	Role             Role        `json:"role"`
-	Content          string      `json:"content,omitempty"`
-	ReasoningContent string      `json:"reasoning_content,omitempty"`
-	ToolCalls        []ToolCall  `json:"tool_calls,omitempty"`
-	ToolResult       *ToolResult `json:"tool_result,omitempty"`
-}
-
-// ChatRequest 统一大模型交互请求
-type ChatRequest struct {
-	Model       string           `json:"model,omitempty"`
-	Messages    []Message        `json:"messages"`
-	Tools       []ToolDefinition `json:"tools,omitempty"`
-	Temperature *float32         `json:"temperature,omitempty"`
-	MaxTokens   *int             `json:"max_tokens,omitempty"`
-}
-
-// ChatResponse 统一大模型响应块 (兼容流式增量与最终汇总)
-type ChatResponse struct {
-	Delta            string     `json:"delta,omitempty"`
-	ReasoningContent string     `json:"reasoning_content,omitempty"`
-	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
-	Usage            *Usage     `json:"usage,omitempty"`
-	Done             bool       `json:"done"`
-	Err              error      `json:"err,omitempty"`
-}
-
-// Usage 统一 Token 消耗用量统计
-type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
-}
-
-// Add 累加用量
-func (u *Usage) Add(other Usage) {
-	u.PromptTokens += other.PromptTokens
-	u.CompletionTokens += other.CompletionTokens
-	u.TotalTokens += other.TotalTokens
+// LLM 定义大模型统一流式调用接口 (由 pkg/llm.Client 原生实现)
+type LLM interface {
+	ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error)
+	TotalUsage() llm.Usage
 }
 
 // Decision 统一权限决策枚举
@@ -117,10 +50,10 @@ type Event struct {
 	Type       EventType          `json:"type"`
 	Delta      string             `json:"delta,omitempty"`
 	Reasoning  string             `json:"reasoning,omitempty"`
-	ToolCall   *ToolCall          `json:"tool_call,omitempty"`   // 直接使用统一的 ToolCall
-	ToolResult *ToolResult        `json:"tool_result,omitempty"` // 直接使用统一的 ToolResult
+	ToolCall   *llm.ToolCall      `json:"tool_call,omitempty"`   // 直接使用 llm.ToolCall
+	ToolResult *llm.ToolResult    `json:"tool_result,omitempty"` // 直接使用 llm.ToolResult
 	Permission *PermissionRequest `json:"permission,omitempty"`  // 直接使用统一的 PermissionRequest
-	Usage      *Usage             `json:"usage,omitempty"`       // 直接使用统一的 Usage
+	Usage      *llm.Usage         `json:"usage,omitempty"`       // 直接使用 llm.Usage
 	Error      string             `json:"error,omitempty"`       // 纯字符串错误说明
 }
 
@@ -161,33 +94,33 @@ type TraceEvent struct {
 
 // LLMRequestTrace 记录向大模型发送的完整请求快照
 type LLMRequestTrace struct {
-	Step         int              `json:"step"`
-	Provider     string           `json:"provider"`
-	ModelName    string           `json:"model_name"`
-	SystemPrompt string           `json:"system_prompt"`
-	Messages     []Message        `json:"messages"`
-	Tools        []ToolDefinition `json:"tools"`
-	Timestamp    time.Time        `json:"timestamp"`
+	Step         int                  `json:"step"`
+	Provider     string               `json:"provider"`
+	ModelName    string               `json:"model_name"`
+	SystemPrompt string               `json:"system_prompt"`
+	Messages     []llm.Message        `json:"messages"`
+	Tools        []llm.ToolDefinition `json:"tools"`
+	Timestamp    time.Time            `json:"timestamp"`
 }
 
 // LLMResponseTrace 记录大模型返回的完整决策快照
 type LLMResponseTrace struct {
-	Step             int           `json:"step"`
-	Duration         time.Duration `json:"duration"`
-	Reply            string        `json:"reply"`
-	ReasoningContent string        `json:"reasoning_content,omitempty"`
-	ToolCalls        []ToolCall    `json:"tool_calls,omitempty"`
-	Usage            *Usage        `json:"usage,omitempty"`
-	Error            error         `json:"error,omitempty"`
+	Step             int            `json:"step"`
+	Duration         time.Duration  `json:"duration"`
+	Reply            string         `json:"reply"`
+	ReasoningContent string         `json:"reasoning_content,omitempty"`
+	ToolCalls        []llm.ToolCall `json:"tool_calls,omitempty"`
+	Usage            *llm.Usage     `json:"usage,omitempty"`
+	Error            error          `json:"error,omitempty"`
 }
 
 // ToolTrace 记录工具执行前后的完整快照
 type ToolTrace struct {
-	Step      int           `json:"step"`
-	Call      ToolCall      `json:"call"`
-	Result    ToolResult    `json:"result"`
-	Duration  time.Duration `json:"duration"`
-	Timestamp time.Time     `json:"timestamp"`
+	Step      int            `json:"step"`
+	Call      llm.ToolCall   `json:"call"`
+	Result    llm.ToolResult `json:"result"`
+	Duration  time.Duration  `json:"duration"`
+	Timestamp time.Time      `json:"timestamp"`
 }
 
 // TurnSummaryTrace 记录一轮完整问答的汇总快照
@@ -195,7 +128,7 @@ type TurnSummaryTrace struct {
 	TurnID     string        `json:"turn_id"`
 	Prompt     string        `json:"prompt"`
 	TotalSteps int           `json:"total_steps"`
-	TotalUsage Usage         `json:"total_usage"`
+	TotalUsage llm.Usage     `json:"total_usage"`
 	Duration   time.Duration `json:"duration"`
 	Success    bool          `json:"success"`
 	Error      error         `json:"error,omitempty"`

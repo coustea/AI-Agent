@@ -8,8 +8,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
+	"my-agent/pkg/llm"
 )
 
 const (
@@ -28,7 +28,7 @@ func LargeResultSpill(workDir string) tool.PostToolUse {
 		dir = "."
 	}
 
-	return func(ctx context.Context, call protocol.ToolCall, res *protocol.ToolResult) {
+	return func(ctx context.Context, call llm.ToolCall, res *llm.ToolResult) {
 		if res == nil || res.Content == "" {
 			return
 		}

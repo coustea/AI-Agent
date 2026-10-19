@@ -15,28 +15,28 @@ import (
 	"time"
 
 	"my-agent/internal/config"
-	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
 	"my-agent/internal/middleware"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
+	"my-agent/pkg/llm"
 )
 
-// mockGateway 用于测试 Agent 多轮对话与流式输出的测试桩
-type mockGateway struct {
+// mockLLM 用于测试 Agent 多轮对话与流式输出的测试桩
+type mockLLM struct {
 	mu       sync.Mutex
-	requests []*protocol.ChatRequest
+	requests []*llm.ChatRequest
 	replies  []string
 	callIdx  int
 }
 
-func newMockGateway(replies ...string) *mockGateway {
-	return &mockGateway{
+func newMockLLM(replies ...string) *mockLLM {
+	return &mockLLM{
 		replies: replies,
 	}
 }
 
-func (m *mockGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
+func (m *mockLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
 	m.mu.Lock()
 	m.requests = append(m.requests, req)
 	idx := m.callIdx
@@ -48,7 +48,7 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest)
 		reply = m.replies[idx]
 	}
 
-	ch := make(chan protocol.ChatResponse, 8)
+	ch := make(chan llm.ChatResponse, 8)
 	go func() {
 		defer close(ch)
 
@@ -59,12 +59,12 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest)
 			if i < len(parts)-1 {
 				delta += " "
 			}
-			ch <- protocol.ChatResponse{Delta: delta}
+			ch <- llm.ChatResponse{Delta: delta}
 		}
 
-		ch <- protocol.ChatResponse{
+		ch <- llm.ChatResponse{
 			Done: true,
-			Usage: &protocol.Usage{
+			Usage: &llm.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 5,
 				TotalTokens:      15,
@@ -75,18 +75,18 @@ func (m *mockGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest)
 	return ch, nil
 }
 
-func (m *mockGateway) TotalUsage() protocol.Usage {
-	return protocol.Usage{TotalTokens: 15}
+func (m *mockLLM) TotalUsage() llm.Usage {
+	return llm.Usage{TotalTokens: 15}
 }
 
 // 测试多轮对话上下文累加与记忆保留
 func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
-	mockGW := newMockGateway(
+	mockLLMClient := newMockLLM(
 		"Hello! Nice to meet you, Coustea.",
 		"Your name is Coustea, as you mentioned earlier.",
 	)
 
-	ag, err := NewAgent(mockGW, WithSystemPrompt("Test System Prompt"))
+	ag, err := NewAgent(mockLLMClient, WithSystemPrompt("Test System Prompt"))
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 
 	var text1 strings.Builder
 	var done1 bool
-	var usage1 *protocol.Usage
+	var usage1 *llm.Usage
 
 	for ev := range stream1 {
 		if ev.Type == protocol.EventError {
@@ -132,10 +132,10 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 	if len(history1) != 2 {
 		t.Fatalf("expected 2 history messages after turn 1, got %d", len(history1))
 	}
-	if history1[0].Role != protocol.RoleUser || history1[0].Content != "Hello, my name is Coustea." {
+	if history1[0].Role != llm.RoleUser || history1[0].Content != "Hello, my name is Coustea." {
 		t.Errorf("unexpected history[0]: %+v", history1[0])
 	}
-	if history1[1].Role != protocol.RoleAssistant || history1[1].Content != "Hello! Nice to meet you, Coustea." {
+	if history1[1].Role != llm.RoleAssistant || history1[1].Content != "Hello! Nice to meet you, Coustea." {
 		t.Errorf("unexpected history[1]: %+v", history1[1])
 	}
 
@@ -156,19 +156,19 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 		t.Errorf("turn 2 unexpected reply: %q", text2.String())
 	}
 
-	// 关键验证：检查发给网关的请求中，是否携带了完整的历史上下文！
-	mockGW.mu.Lock()
-	if len(mockGW.requests) != 2 {
-		t.Fatalf("expected 2 gateway requests, got %d", len(mockGW.requests))
+	// 关键验证：检查发给大模型的请求中，是否携带了完整的历史上下文！
+	mockLLMClient.mu.Lock()
+	if len(mockLLMClient.requests) != 2 {
+		t.Fatalf("expected 2 LLM requests, got %d", len(mockLLMClient.requests))
 	}
-	req2 := mockGW.requests[1]
-	mockGW.mu.Unlock()
+	req2 := mockLLMClient.requests[1]
+	mockLLMClient.mu.Unlock()
 
 	// req2 应该包含：System, User1, Assistant1, User2 (共 4 条)
 	if len(req2.Messages) != 4 {
 		t.Fatalf("turn 2 request expected 4 messages, got %d", len(req2.Messages))
 	}
-	if req2.Messages[0].Role != protocol.RoleSystem {
+	if req2.Messages[0].Role != llm.RoleSystem {
 		t.Errorf("expected System prompt first, got: %+v", req2.Messages[0])
 	}
 	if req2.Messages[1].Content != "Hello, my name is Coustea." {
@@ -190,8 +190,8 @@ func TestCoreAgent_MultiTurn_Memory(t *testing.T) {
 
 // 测试 Reset 清空会话
 func TestCoreAgent_Reset(t *testing.T) {
-	mockGW := newMockGateway("Hi")
-	ag, _ := NewAgent(mockGW)
+	mockLLMClient := newMockLLM("Hi")
+	ag, _ := NewAgent(mockLLMClient)
 
 	stream, _ := ag.Run(context.Background(), "Msg")
 	for range stream {
@@ -208,10 +208,10 @@ func TestCoreAgent_Reset(t *testing.T) {
 
 func TestCoreAgent_ConcurrentRun_Lock(t *testing.T) {
 	blockCh := make(chan struct{})
-	mockGW := &mockGateway{}
+	mockLLMClient := &mockLLM{}
 	// 自定义一个阻塞式的 ChatStream
-	ag, _ := NewAgent(mockGW)
-	ag.gw = &blockingGateway{blockCh: blockCh}
+	ag, _ := NewAgent(mockLLMClient)
+	ag.llm = &blockingLLM{blockCh: blockCh}
 
 	ctx := context.Background()
 
@@ -241,48 +241,48 @@ func TestCoreAgent_ConcurrentRun_Lock(t *testing.T) {
 	}
 }
 
-type blockingGateway struct {
+type blockingLLM struct {
 	blockCh <-chan struct{}
 }
 
-func (b *blockingGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
-	ch := make(chan protocol.ChatResponse, 2)
+func (b *blockingLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
+	ch := make(chan llm.ChatResponse, 2)
 	go func() {
 		defer close(ch)
 		<-b.blockCh
-		ch <- protocol.ChatResponse{Delta: "Done", Done: true}
+		ch <- llm.ChatResponse{Delta: "Done", Done: true}
 	}()
 	return ch, nil
 }
 
-func (b *blockingGateway) TotalUsage() protocol.Usage {
-	return protocol.Usage{}
+func (b *blockingLLM) TotalUsage() llm.Usage {
+	return llm.Usage{}
 }
 
 // 测试边界校验与空参数
 func TestCoreAgent_Validation(t *testing.T) {
-	// nil 网关表示未就绪内核：允许装配，但发起对话须给出配置引导
+	// nil 客户端表示未就绪内核：允许装配，但发起对话须给出配置引导
 	unready, err := NewAgent(nil)
 	if err != nil {
-		t.Fatalf("expected nil gateway to assemble an unready agent, got: %v", err)
+		t.Fatalf("expected nil client to assemble an unready agent, got: %v", err)
 	}
-	if _, err := unready.Run(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "no model gateway") {
+	if _, err := unready.Run(context.Background(), "hello"); err == nil || !strings.Contains(err.Error(), "no LLM client") {
 		t.Errorf("expected unready agent Run to fail with configuration guidance, got: %v", err)
 	}
 
-	ag, _ := NewAgent(&mockGateway{}, WithMemory(memory.NewSlidingWindowMemory(10, 0)), WithMaxSteps(5))
+	ag, _ := NewAgent(&mockLLM{}, WithMemory(memory.NewSlidingWindowMemory(10, 0)), WithMaxSteps(5))
 	_, err = ag.Run(context.Background(), "   ")
 	if !errors.Is(err, ErrEmptyPrompt) {
 		t.Errorf("expected ErrEmptyPrompt, got: %v", err)
 	}
 }
 
-// 测试远程厂商缺密钥时仍装配出未就绪内核，供 /model 向导补齐密钥后热装网关
+// 测试远程厂商缺密钥时仍装配出未就绪内核，供 /model 向导补齐密钥后热装客户端
 func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 	cfg := &config.Config{
-		Provider:  config.ProviderDeepSeek,
-		BaseURL:   config.DeepSeekBaseURL,
-		ModelName: config.DefaultDeepSeekModel,
+		Provider:  llm.ProviderDeepSeek,
+		BaseURL:   llm.DefaultDeepSeekBaseURL,
+		ModelName: llm.DefaultDeepSeekModel,
 	}
 	cfgPath := filepath.Join(t.TempDir(), "unready_config.json")
 
@@ -294,31 +294,31 @@ func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 		t.Errorf("expected remote provider without key to be unready")
 	}
 	if _, err := ag.Run(context.Background(), "hello"); err == nil {
-		t.Errorf("expected Run to fail before gateway is attached")
+		t.Errorf("expected Run to fail before client is attached")
 	}
 
-	// 模拟 /model 向导补齐密钥：热装网关后恢复就绪
-	if err := ag.UpdateConfig(string(config.ProviderDeepSeek), "sk-test-key", config.DefaultDeepSeekModel); err != nil {
-		t.Fatalf("expected UpdateConfig to attach gateway, got: %v", err)
+	// 模拟 /model 向导补齐密钥：热装客户端后恢复就绪
+	if err := ag.UpdateConfig(string(llm.ProviderDeepSeek), "sk-test-key", llm.DefaultDeepSeekModel); err != nil {
+		t.Fatalf("expected UpdateConfig to attach client, got: %v", err)
 	}
 	if !ag.Config().HasAPIKey {
 		t.Errorf("expected agent to become ready after key configured")
 	}
 }
 
-type toolCallStepGateway struct {
+type toolCallStepLLM struct {
 	mu    sync.Mutex
-	steps []func(req *protocol.ChatRequest) []protocol.ChatResponse
+	steps []func(req *llm.ChatRequest) []llm.ChatResponse
 	calls int
 }
 
-func (m *toolCallStepGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
+func (m *toolCallStepLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
 	m.mu.Lock()
 	idx := m.calls
 	m.calls++
 	m.mu.Unlock()
 
-	ch := make(chan protocol.ChatResponse, 4)
+	ch := make(chan llm.ChatResponse, 4)
 	go func() {
 		defer close(ch)
 		if idx < len(m.steps) {
@@ -331,8 +331,8 @@ func (m *toolCallStepGateway) ChatStream(ctx context.Context, req *protocol.Chat
 	return ch, nil
 }
 
-func (m *toolCallStepGateway) TotalUsage() protocol.Usage {
-	return protocol.Usage{}
+func (m *toolCallStepLLM) TotalUsage() llm.Usage {
+	return llm.Usage{}
 }
 
 type mockAdderTool struct{}
@@ -367,16 +367,16 @@ func (m *mockAdderTool) Execute(ctx context.Context, args json.RawMessage) (stri
 func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 	reg := tool.NewRegistry(&mockAdderTool{})
 
-	gw := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+	stepLLM := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
 			// Step 1: 模型返回工具调用
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+			func(req *llm.ChatRequest) []llm.ChatResponse {
 				if len(req.Tools) != 1 || req.Tools[0].Name != "adder" {
 					t.Errorf("expected 1 tool 'adder' in request, got %v", req.Tools)
 				}
-				return []protocol.ChatResponse{
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{
 								ID:        "call_123",
 								Name:      "adder",
@@ -388,13 +388,13 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 				}
 			},
 			// Step 2: 模型收到工具结果后生成最终文本答复
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+			func(req *llm.ChatRequest) []llm.ChatResponse {
 				// 验证上下文历史中已经包含了 RoleTool
 				lastMsg := req.Messages[len(req.Messages)-1]
-				if lastMsg.Role != protocol.RoleTool || lastMsg.ToolResult == nil || lastMsg.ToolResult.IsError {
+				if lastMsg.Role != llm.RoleTool || lastMsg.ToolResult == nil || lastMsg.ToolResult.IsError {
 					t.Errorf("expected successful RoleTool message, got: %+v", lastMsg)
 				}
-				return []protocol.ChatResponse{
+				return []llm.ChatResponse{
 					{Delta: "The sum is 5."},
 					{Done: true},
 				}
@@ -402,7 +402,7 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 		},
 	}
 
-	ag, err := NewAgent(gw, WithTools(reg))
+	ag, err := NewAgent(stepLLM, WithTools(reg))
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -452,13 +452,13 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 	reg := tool.NewRegistry(&mockAdderTool{})
 
-	gw := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+	stepLLM := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
 			// Step 1: 模型传入非法负数参数触发工具报错
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{
 								ID:        "call_neg",
 								Name:      "adder",
@@ -470,12 +470,12 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 				}
 			},
 			// Step 2: 模型收到错误 Observation，进行自愈回答
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+			func(req *llm.ChatRequest) []llm.ChatResponse {
 				lastMsg := req.Messages[len(req.Messages)-1]
-				if lastMsg.Role != protocol.RoleTool || lastMsg.ToolResult == nil || !lastMsg.ToolResult.IsError {
+				if lastMsg.Role != llm.RoleTool || lastMsg.ToolResult == nil || !lastMsg.ToolResult.IsError {
 					t.Errorf("expected RoleTool with IsError=true, got: %+v", lastMsg)
 				}
-				return []protocol.ChatResponse{
+				return []llm.ChatResponse{
 					{Delta: "I cannot compute this because negative numbers are not supported."},
 					{Done: true},
 				}
@@ -483,7 +483,7 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 		},
 	}
 
-	ag, _ := NewAgent(gw, WithTools(reg))
+	ag, _ := NewAgent(stepLLM, WithTools(reg))
 	stream, err := ag.Run(context.Background(), "Calculate -5 + 3")
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
@@ -513,32 +513,32 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 	reg := tool.NewRegistry(&mockAdderTool{})
 
 	// 模拟无限调用工具的模型
-	gw := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+	stepLLM := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "c1", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
 						Done: true,
 					},
 				}
 			},
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "c2", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
 						Done: true,
 					},
 				}
 			},
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "c3", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
 						Done: true,
@@ -549,7 +549,7 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 	}
 
 	// 限制最多 2 步
-	ag, _ := NewAgent(gw, WithTools(reg), WithMaxSteps(2))
+	ag, _ := NewAgent(stepLLM, WithTools(reg), WithMaxSteps(2))
 	stream, err := ag.Run(context.Background(), "Loop forever")
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
@@ -569,10 +569,10 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 
 // 测试 Tide 个人智能体名称与工作目录自动注入系统提示词
 func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
-	gw := &mockGateway{}
+	mockLLMClient := &mockLLM{}
 
 	// 1. 默认构建：系统提示词自动注入当前工作目录并表明身份
-	agDefault, err := NewAgent(gw)
+	agDefault, err := NewAgent(mockLLMClient)
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -595,7 +595,7 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 
 	// 2. 指定 WithWorkDir：工作目录与系统提示词同步更新
 	customDir := "/Users/test/my-workspace"
-	agCustomDir, err := NewAgent(gw, WithWorkDir(customDir))
+	agCustomDir, err := NewAgent(mockLLMClient, WithWorkDir(customDir))
 	if err != nil {
 		t.Fatalf("failed to create agent with custom workdir: %v", err)
 	}
@@ -608,7 +608,7 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 	}
 
 	// 3. 显式覆盖 WithSystemPrompt：自定义 persona 生效，长期记忆块仍动态追加
-	agCustomPrompt, err := NewAgent(gw, WithSystemPrompt("Explicit custom prompt"))
+	agCustomPrompt, err := NewAgent(mockLLMClient, WithSystemPrompt("Explicit custom prompt"))
 	if err != nil {
 		t.Fatalf("failed to create agent with custom prompt: %v", err)
 	}
@@ -627,9 +627,9 @@ func TestCoreAgent_WorkDir_And_SystemPrompt(t *testing.T) {
 // 测试 P1：运行期沉淀的长期记忆在下一轮对话开始时即时注入系统提示词（每轮刷新）
 func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	workDir := t.TempDir()
-	gw := newMockGateway("reply one", "reply two")
+	mockLLMClient := newMockLLM("reply one", "reply two")
 
-	ag, err := NewAgent(gw, WithWorkDir(workDir))
+	ag, err := NewAgent(mockLLMClient, WithWorkDir(workDir))
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -658,16 +658,16 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	for range stream2 {
 	}
 
-	gw.mu.Lock()
-	reqs := append([]*protocol.ChatRequest(nil), gw.requests...)
-	gw.mu.Unlock()
+	mockLLMClient.mu.Lock()
+	reqs := append([]*llm.ChatRequest(nil), mockLLMClient.requests...)
+	mockLLMClient.mu.Unlock()
 
 	if len(reqs) != 2 {
-		t.Fatalf("expected 2 gateway requests, got %d", len(reqs))
+		t.Fatalf("expected 2 LLM requests, got %d", len(reqs))
 	}
 
 	turn1System := reqs[0].Messages[0]
-	if turn1System.Role != protocol.RoleSystem {
+	if turn1System.Role != llm.RoleSystem {
 		t.Fatalf("expected first message to be system, got %s", turn1System.Role)
 	}
 	if strings.Contains(turn1System.Content, "MAGIC_LONG_TERM_MEMORY_TOKEN") {
@@ -675,7 +675,7 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	}
 
 	turn2System := reqs[1].Messages[0]
-	if turn2System.Role != protocol.RoleSystem {
+	if turn2System.Role != llm.RoleSystem {
 		t.Fatalf("expected first message to be system, got %s", turn2System.Role)
 	}
 	if !strings.Contains(turn2System.Content, "MAGIC_LONG_TERM_MEMORY_TOKEN") {
@@ -686,13 +686,13 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 // 测试权限策略确实作为执行前钩子在装配期挂载到了工具执行流水线上：
 // 破坏性 bash 命令被拦截、不会真正执行，且拒绝文案原样回灌给模型。
 func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
-	gw := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+	stepLLM := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
 			// Step 1: 模型请求执行破坏性命令
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "call_1", Name: "bash", Arguments: `{"command": "rm -rf /"}`},
 						},
 						Done: true,
@@ -700,15 +700,15 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 				}
 			},
 			// Step 2: 断言模型收到的是策略拒绝的精确文案，而非被泛化的「执行错误」
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+			func(req *llm.ChatRequest) []llm.ChatResponse {
 				if len(req.Messages) == 0 {
 					t.Errorf("expected a non-empty message history")
-					return []protocol.ChatResponse{{Delta: "blocked"}, {Done: true}}
+					return []llm.ChatResponse{{Delta: "blocked"}, {Done: true}}
 				}
 				last := req.Messages[len(req.Messages)-1]
-				if last.Role != protocol.RoleTool || last.ToolResult == nil {
+				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Errorf("expected a RoleTool message, got %+v", last)
-					return []protocol.ChatResponse{{Delta: "blocked"}, {Done: true}}
+					return []llm.ChatResponse{{Delta: "blocked"}, {Done: true}}
 				}
 				if !last.ToolResult.IsError {
 					t.Errorf("expected the blocked command to be reported as an error")
@@ -719,12 +719,12 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 				if strings.Contains(last.ToolResult.Content, "Tool execution error") {
 					t.Errorf("policy message was overwritten by the generic error text: %q", last.ToolResult.Content)
 				}
-				return []protocol.ChatResponse{{Delta: "Blocked."}, {Done: true}}
+				return []llm.ChatResponse{{Delta: "Blocked."}, {Done: true}}
 			},
 		},
 	}
 
-	ag, err := NewAgent(gw, WithDefaultTools())
+	ag, err := NewAgent(stepLLM, WithDefaultTools())
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -737,7 +737,7 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 	}
 }
 
-// 测试整个系统通过 Agent 经过 Gateway 网关分配并正常调用具体模型的完整端到端链路
+// 测试整个系统通过 Agent 直接驱动 LLM 客户端并正常调用具体模型的完整端到端链路
 func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 	// 1. 模拟 Google Gemini 官方端点
 	geminiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -772,16 +772,28 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 	defer dsServer.Close()
 
 	// 3. 构建各厂商客户端并注入 Agent 内核
-	geminiGW, err := gateway.NewGemini(geminiServer.URL, "gemini-secret", "gemini-2.5-flash", geminiServer.Client())
+	geminiClient, err := llm.New(
+		llm.ProviderGemini,
+		llm.WithBaseURL(geminiServer.URL),
+		llm.WithAPIKey("gemini-secret"),
+		llm.WithModel("gemini-2.5-flash"),
+		llm.WithHTTPClient(geminiServer.Client()),
+	)
 	if err != nil {
-		t.Fatalf("failed to create gemini gateway: %v", err)
+		t.Fatalf("failed to create gemini client: %v", err)
 	}
-	dsGW, err := gateway.NewDeepSeek(dsServer.URL, "ds-secret", "deepseek-flash", dsServer.Client())
+	dsClient, err := llm.New(
+		llm.ProviderDeepSeek,
+		llm.WithBaseURL(dsServer.URL),
+		llm.WithAPIKey("ds-secret"),
+		llm.WithModel("deepseek-flash"),
+		llm.WithHTTPClient(dsServer.Client()),
+	)
 	if err != nil {
-		t.Fatalf("failed to create deepseek gateway: %v", err)
+		t.Fatalf("failed to create deepseek client: %v", err)
 	}
 
-	ag, err := NewAgent(geminiGW, WithDefaultTools())
+	ag, err := NewAgent(geminiClient, WithDefaultTools())
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -801,10 +813,10 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 		t.Errorf("expected 'Hello from Gemini', got %q", replyA.String())
 	}
 
-	// 场景 B: 运行时切换到 DeepSeek 网关，验证深度思考与回答
-	// （生产路径为 UpdateConfig 热装网关；测试直接替换内核网关字段）
+	// 场景 B: 运行时切换到 DeepSeek 客户端，验证深度思考与回答
+	// （生产路径为 UpdateConfig 热装模型客户端；测试直接替换内核字段）
 	ag.mu.Lock()
-	ag.gw = dsGW
+	ag.llm = dsClient
 	ag.mu.Unlock()
 	streamB, err := ag.Run(context.Background(), "Think carefully")
 	if err != nil {
@@ -826,13 +838,13 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// 1. 测试允许流程 (AllowOnce)
-	gwAllow := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+	llmAllow := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
 			// Step 1: 模型发起命令调用
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "call_bash_1", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'harness_approval_test'"}`},
 						},
 						Done: true,
@@ -840,9 +852,9 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				}
 			},
 			// Step 2: 模型接收到工具执行输出并生成最终回复
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+			func(req *llm.ChatRequest) []llm.ChatResponse {
 				last := req.Messages[len(req.Messages)-1]
-				if last.Role != protocol.RoleTool || last.ToolResult == nil {
+				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
 				}
 				if last.ToolResult.IsError {
@@ -851,12 +863,12 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "harness_approval_test") {
 					t.Errorf("expected tool output to contain 'harness_approval_test', got: %s", last.ToolResult.Content)
 				}
-				return []protocol.ChatResponse{{Delta: "Done executed."}, {Done: true}}
+				return []llm.ChatResponse{{Delta: "Done executed."}, {Done: true}}
 			},
 		},
 	}
 
-	agAllow, err := NewAgent(gwAllow, WithWorkDir(tmpDir), WithDefaultTools())
+	agAllow, err := NewAgent(llmAllow, WithWorkDir(tmpDir), WithDefaultTools())
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -883,13 +895,13 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 	}
 
 	// 2. 测试拒绝流程 (User Deny -> Error as Observation)
-	gwDeny := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+	llmDeny := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
 			// Step 1: 模型发起命令调用
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "call_bash_2", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'will_be_denied'"}`},
 						},
 						Done: true,
@@ -897,9 +909,9 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				}
 			},
 			// Step 2: 模型接收到人类拒绝的观察结果，完成自愈回复
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+			func(req *llm.ChatRequest) []llm.ChatResponse {
 				last := req.Messages[len(req.Messages)-1]
-				if last.Role != protocol.RoleTool || last.ToolResult == nil {
+				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
 				}
 				if !last.ToolResult.IsError {
@@ -908,12 +920,12 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "permission denied by user") {
 					t.Errorf("expected content to mention permission denied by user, got: %s", last.ToolResult.Content)
 				}
-				return []protocol.ChatResponse{{Delta: "Understood, command was cancelled by user."}, {Done: true}}
+				return []llm.ChatResponse{{Delta: "Understood, command was cancelled by user."}, {Done: true}}
 			},
 		},
 	}
 
-	agDeny, err := NewAgent(gwDeny, WithWorkDir(tmpDir), WithDefaultTools())
+	agDeny, err := NewAgent(llmDeny, WithWorkDir(tmpDir), WithDefaultTools())
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -940,21 +952,21 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 func TestAgent_WithAutoApprove(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	gw := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+	stepLLM := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "call_bash_auto", Name: "bash", Arguments: `{"command": "touch 'harness_approval_test.tmp' && rm -f 'harness_approval_test.tmp' && echo 'auto_approved_ok'"}`},
 						},
 						Done: true,
 					},
 				}
 			},
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+			func(req *llm.ChatRequest) []llm.ChatResponse {
 				last := req.Messages[len(req.Messages)-1]
-				if last.Role != protocol.RoleTool || last.ToolResult == nil {
+				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
 				}
 				if last.ToolResult.IsError {
@@ -963,12 +975,12 @@ func TestAgent_WithAutoApprove(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "auto_approved_ok") {
 					t.Errorf("expected tool output to contain 'auto_approved_ok', got: %s", last.ToolResult.Content)
 				}
-				return []protocol.ChatResponse{{Delta: "Auto approval confirmed."}, {Done: true}}
+				return []llm.ChatResponse{{Delta: "Auto approval confirmed."}, {Done: true}}
 			},
 		},
 	}
 
-	ag, err := NewAgent(gw, WithWorkDir(tmpDir), WithDefaultTools(), WithAutoApprove(true))
+	ag, err := NewAgent(stepLLM, WithWorkDir(tmpDir), WithDefaultTools(), WithAutoApprove(true))
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -995,9 +1007,9 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 	cfgPath := filepath.Join(tmpDir, "test_config.json")
 
 	cfg := &config.Config{
-		Provider:  config.ProviderLlamaCpp,
-		ModelName: config.DefaultLlamaCppModel,
-		BaseURL:   config.DefaultLlamaCppBaseURL,
+		Provider:  llm.ProviderLlamaCpp,
+		ModelName: llm.DefaultLlamaCppModel,
+		BaseURL:   llm.DefaultLlamaCppBaseURL,
 		Providers: make(map[string]config.ProviderConfig),
 	}
 
@@ -1080,13 +1092,13 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 
 // TestCoreAgent_DirectToolExecute_PermissionHook 验证装配期钩子在脱离循环本体时依然生效
 func TestCoreAgent_DirectToolExecute_PermissionHook(t *testing.T) {
-	mockGW := newMockGateway("hi")
-	ag, err := NewAgent(mockGW, WithDefaultTools())
+	mockLLMClient := newMockLLM("hi")
+	ag, err := NewAgent(mockLLMClient, WithDefaultTools())
 	if err != nil {
 		t.Fatalf("NewAgent failed: %v", err)
 	}
 
-	res := ag.tools.Execute(context.Background(), protocol.ToolCall{
+	res := ag.tools.Execute(context.Background(), llm.ToolCall{
 		ID:        "direct_call_1",
 		Name:      "bash",
 		Arguments: `{"command": "rm -rf /"}`,
@@ -1116,8 +1128,8 @@ func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	mockGW := newMockGateway("hi")
-	ag, err := NewAgent(mockGW,
+	mockLLMClient := newMockLLM("hi")
+	ag, err := NewAgent(mockLLMClient,
 		WithWorkDir(tmpDir),
 		WithPostToolUse(middleware.LargeResultSpill(tmpDir)),
 	)
@@ -1133,7 +1145,7 @@ func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
 		},
 	})
 
-	res := ag.tools.Execute(context.Background(), protocol.ToolCall{
+	res := ag.tools.Execute(context.Background(), llm.ToolCall{
 		ID:        "large_call_1",
 		Name:      "large_tool",
 		Arguments: `{}`,
@@ -1155,8 +1167,8 @@ func TestCoreAgent_LargeToolResult_Persisted(t *testing.T) {
 }
 
 func TestCoreAgent_EnvironmentContext(t *testing.T) {
-	mockGW := newMockGateway("hi")
-	ag, err := NewAgent(mockGW)
+	mockLLMClient := newMockLLM("hi")
+	ag, err := NewAgent(mockLLMClient)
 	if err != nil {
 		t.Fatalf("NewAgent failed: %v", err)
 	}
@@ -1173,18 +1185,18 @@ func TestCoreAgent_EnvironmentContext(t *testing.T) {
 	}
 }
 
-// panicGateway 在流式调用时直接 panic，用于验证 Run 的 goroutine recover 兜底
-type panicGateway struct{}
+// panicLLM 在流式调用时直接 panic，用于验证 Run 的 goroutine recover 兜底
+type panicLLM struct{}
 
-func (p *panicGateway) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-chan protocol.ChatResponse, error) {
-	panic("gateway exploded")
+func (p *panicLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
+	panic("llm exploded")
 }
 
-func (p *panicGateway) TotalUsage() protocol.Usage { return protocol.Usage{} }
+func (p *panicLLM) TotalUsage() llm.Usage { return llm.Usage{} }
 
 // 验收 D2：agentLoop 崩溃时通道正常关闭、以 EventError 收敛、running 复位可再次 Run
 func TestAgentRun_PanicInLoop(t *testing.T) {
-	ag, err := NewAgent(&panicGateway{}, WithSystemPrompt("test"))
+	ag, err := NewAgent(&panicLLM{}, WithSystemPrompt("test"))
 	if err != nil {
 		t.Fatalf("failed to create agent: %v", err)
 	}
@@ -1228,13 +1240,13 @@ func TestCoreAgent_WorkDirRef_ToolsFollowWithWorkDir(t *testing.T) {
 	}
 
 	// 故意先装配工具、后设置工作目录（装配顺序无关性验证）
-	ag, err := NewAgent(newMockGateway("ok"), WithDefaultTools(), WithWorkDir(sub))
+	ag, err := NewAgent(newMockLLM("ok"), WithDefaultTools(), WithWorkDir(sub))
 	if err != nil {
 		t.Fatalf("NewAgent failed: %v", err)
 	}
 
 	ctx := context.Background()
-	inside := ag.tools.Execute(ctx, protocol.ToolCall{ID: "c1", Name: "read_file", Arguments: `{"path":"inner.txt"}`})
+	inside := ag.tools.Execute(ctx, llm.ToolCall{ID: "c1", Name: "read_file", Arguments: `{"path":"inner.txt"}`})
 	if inside.IsError {
 		t.Fatalf("expected read inside workdir to succeed, got: %s", inside.Content)
 	}
@@ -1242,7 +1254,7 @@ func TestCoreAgent_WorkDirRef_ToolsFollowWithWorkDir(t *testing.T) {
 		t.Errorf("unexpected content: %q", inside.Content)
 	}
 
-	outside := ag.tools.Execute(ctx, protocol.ToolCall{ID: "c2", Name: "read_file", Arguments: `{"path":"../root.txt"}`})
+	outside := ag.tools.Execute(ctx, llm.ToolCall{ID: "c2", Name: "read_file", Arguments: `{"path":"../root.txt"}`})
 	if !outside.IsError {
 		t.Fatalf("expected read outside workdir to be blocked, got content: %q", outside.Content)
 	}

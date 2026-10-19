@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 )
 
 type eventSinkKey struct{}
@@ -76,7 +77,7 @@ func (a *CoreAgent) RespondPermission(requestID string, decision protocol.Decisi
 
 // permissionPreHook 作为 PreToolUse 钩子挂载在 tool.Registry 流水线上。
 // 在工具实际调用前拦截高危行为与越界路径，直接阻断并返回错误作为 Observation 回灌。
-func (a *CoreAgent) permissionPreHook(ctx context.Context, call protocol.ToolCall) error {
+func (a *CoreAgent) permissionPreHook(ctx context.Context, call llm.ToolCall) error {
 	a.mu.RLock()
 	perm := a.permission
 	a.mu.RUnlock()

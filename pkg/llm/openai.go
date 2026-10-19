@@ -1,17 +1,22 @@
-package gateway
+package llm
 
 import (
 	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"sort"
 	"strings"
+	"time"
+)
 
-	"my-agent/internal/protocol"
+var (
+	ErrEmptyAPIKey   = errors.New("llm: api key cannot be empty")
+	ErrEmptyMessages = errors.New("llm: messages cannot be empty")
 )
 
 // --- OpenAI 协议内部 wire 结构体 ---
@@ -29,8 +34,8 @@ type wireToolCall struct {
 }
 
 type wireTool struct {
-	Type     string                  `json:"type"`
-	Function protocol.ToolDefinition `json:"function"`
+	Type     string         `json:"type"`
+	Function ToolDefinition `json:"function"`
 }
 
 type wireMsg struct {
@@ -70,32 +75,30 @@ type wireChunk struct {
 	Usage *wireUsage `json:"usage"`
 }
 
-// --- 共享转换与协议处理函数 ---
-
-// toWireMessages 将统一 Message 转为 OpenAI wire 格式
-func toWireMessages(messages []protocol.Message) []wireMsg {
+// toWireMessages 将统一 Message 转为 OpenAI 协议规范格式
+func toWireMessages(messages []Message) []wireMsg {
 	out := make([]wireMsg, 0, len(messages))
 	for _, m := range messages {
 		msg := wireMsg{
 			Role: string(m.Role),
 		}
 
-		if m.Content != "" || (m.Role != protocol.RoleAssistant && m.Role != protocol.RoleTool) {
+		if m.Content != "" || (m.Role != RoleAssistant && m.Role != RoleTool) {
 			s := m.Content
 			msg.Content = &s
 		}
 
-		// reasoning_content 只进不出：入站解析、本地展示与存档保留，
-		// 但严禁回传请求体（DeepSeek 等厂商输入含该字段直接 400）。
+		// reasoning_content 只进不出：入站提取供上层展示与存储，
+		// 但回传请求体中严禁包含该字段（多数厂商 API 会直接返回 400）。
 
-		if m.Role == protocol.RoleTool && m.ToolResult != nil {
+		if m.Role == RoleTool && m.ToolResult != nil {
 			msg.ToolCallID = m.ToolResult.ToolCallID
 			msg.Name = m.ToolResult.Name
 			s := m.ToolResult.Content
 			msg.Content = &s
 		}
 
-		if m.Role == protocol.RoleAssistant && len(m.ToolCalls) > 0 {
+		if m.Role == RoleAssistant && len(m.ToolCalls) > 0 {
 			tcs := make([]wireToolCall, 0, len(m.ToolCalls))
 			for _, tc := range m.ToolCalls {
 				tcs = append(tcs, wireToolCall{
@@ -115,8 +118,8 @@ func toWireMessages(messages []protocol.Message) []wireMsg {
 	return out
 }
 
-// toWireTools 将统一工具定义转为 OpenAI wire 格式
-func toWireTools(tools []protocol.ToolDefinition) []wireTool {
+// toWireTools 将统一工具定义转为 OpenAI 协议规范格式
+func toWireTools(tools []ToolDefinition) []wireTool {
 	if len(tools) == 0 {
 		return nil
 	}
@@ -127,8 +130,8 @@ func toWireTools(tools []protocol.ToolDefinition) []wireTool {
 	return out
 }
 
-// chatURL 根据 baseURL 智能拼接 chat completions 端点路径
-func chatURL(base string) string {
+// ResolveChatURL 根据 baseURL 智能拼接 chat completions 端点路径
+func ResolveChatURL(base string) string {
 	base = strings.TrimRight(strings.TrimSpace(base), "/")
 	if strings.HasSuffix(base, "/chat/completions") {
 		return base
@@ -139,8 +142,8 @@ func chatURL(base string) string {
 	return base + "/v1/chat/completions"
 }
 
-// buildRequestPayload 序列化 OpenAI 协议请求体
-func buildRequestPayload(model string, req *protocol.ChatRequest, stream bool) ([]byte, error) {
+// BuildRequestPayload 序列化 OpenAI 协议请求体
+func BuildRequestPayload(model string, req *ChatRequest, stream bool) ([]byte, error) {
 	if req == nil || len(req.Messages) == 0 {
 		return nil, ErrEmptyMessages
 	}
@@ -163,16 +166,16 @@ func buildRequestPayload(model string, req *protocol.ChatRequest, stream bool) (
 
 	payload, err := json.Marshal(body)
 	if err != nil {
-		return nil, fmt.Errorf("gateway: marshal request: %w", err)
+		return nil, fmt.Errorf("llm: marshal request: %w", err)
 	}
 	return payload, nil
 }
 
-// buildHTTPRequestFromPayload 从已序列化的 payload 构建 HTTP 请求
-func buildHTTPRequestFromPayload(ctx context.Context, url string, payload []byte, stream bool) (*http.Request, error) {
+// buildHTTPRequest 从 payload 构建 HTTP 请求对象
+func buildHTTPRequest(ctx context.Context, url string, payload []byte, stream bool) (*http.Request, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
 	if err != nil {
-		return nil, fmt.Errorf("gateway: create request: %w", err)
+		return nil, fmt.Errorf("llm: create request: %w", err)
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
@@ -189,10 +192,10 @@ type tcBuilder struct {
 	args strings.Builder
 }
 
-// readSSE 读取 SSE 流并向 channel 逐块发送，返回累计 Usage
-func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResponse) protocol.Usage {
+// readSSE 读取 SSE 数据流并向 channel 逐块发送增量，返回整轮累计 Usage
+func readSSE(ctx context.Context, reader io.Reader, out chan<- ChatResponse) Usage {
 	scanner := bufio.NewReader(reader)
-	var turnUsage protocol.Usage
+	var turnUsage Usage
 	tcMap := make(map[int]*tcBuilder)
 
 	for {
@@ -201,7 +204,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 			if err == io.EOF {
 				break
 			}
-			sendChunk(ctx, out, protocol.ChatResponse{Err: fmt.Errorf("gateway: stream read: %w", err)})
+			sendChunk(ctx, out, ChatResponse{Err: fmt.Errorf("llm: stream read: %w", err)})
 			return turnUsage
 		}
 
@@ -224,7 +227,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 		}
 
 		if chunk.Usage != nil {
-			turnUsage = protocol.Usage{
+			turnUsage = Usage{
 				PromptTokens:     chunk.Usage.PromptTokens,
 				CompletionTokens: chunk.Usage.CompletionTokens,
 				TotalTokens:      chunk.Usage.TotalTokens,
@@ -237,12 +240,12 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 
 		choice := chunk.Choices[0]
 		if choice.Delta.ReasoningContent != "" {
-			if !sendChunk(ctx, out, protocol.ChatResponse{ReasoningContent: choice.Delta.ReasoningContent}) {
+			if !sendChunk(ctx, out, ChatResponse{ReasoningContent: choice.Delta.ReasoningContent}) {
 				return turnUsage
 			}
 		}
 		if choice.Delta.Content != "" {
-			if !sendChunk(ctx, out, protocol.ChatResponse{Delta: choice.Delta.Content}) {
+			if !sendChunk(ctx, out, ChatResponse{Delta: choice.Delta.Content}) {
 				return turnUsage
 			}
 		}
@@ -269,7 +272,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 		}
 	}
 
-	var finalTCs []protocol.ToolCall
+	var finalTCs []ToolCall
 	if len(tcMap) > 0 {
 		indices := make([]int, 0, len(tcMap))
 		for idx := range tcMap {
@@ -278,7 +281,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 		sort.Ints(indices)
 		for _, idx := range indices {
 			b := tcMap[idx]
-			finalTCs = append(finalTCs, protocol.ToolCall{
+			finalTCs = append(finalTCs, ToolCall{
 				ID:        b.id,
 				Name:      b.name.String(),
 				Arguments: b.args.String(),
@@ -286,7 +289,7 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 		}
 	}
 
-	sendChunk(ctx, out, protocol.ChatResponse{
+	sendChunk(ctx, out, ChatResponse{
 		Done:      true,
 		ToolCalls: finalTCs,
 		Usage:     &turnUsage,
@@ -295,12 +298,33 @@ func readSSE(ctx context.Context, reader io.Reader, out chan<- protocol.ChatResp
 	return turnUsage
 }
 
-// sendChunk 安全地向 channel 发送一个 protocol.ChatResponse
-func sendChunk(ctx context.Context, ch chan<- protocol.ChatResponse, chunk protocol.ChatResponse) bool {
+// sendChunk 安全向 channel 发送 ChatResponse，感知 context 取消
+func sendChunk(ctx context.Context, ch chan<- ChatResponse, chunk ChatResponse) bool {
 	select {
 	case ch <- chunk:
 		return true
 	case <-ctx.Done():
 		return false
+	}
+}
+
+func isRetryableNetworkError(err error) bool {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	return true
+}
+
+func sleepBackoff(ctx context.Context, attempt int) error {
+	baseDelay := 150 * time.Millisecond
+	delay := time.Duration(1<<(attempt-1)) * baseDelay
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
 	}
 }

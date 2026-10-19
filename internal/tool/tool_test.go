@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 )
 
 type mockTool struct {
@@ -83,31 +83,31 @@ func TestRegistry_Execute(t *testing.T) {
 	ctx := context.Background()
 
 	// 1. Tool not found
-	res := reg.Execute(ctx, protocol.ToolCall{ID: "1", Name: "nonexistent"})
+	res := reg.Execute(ctx, llm.ToolCall{ID: "1", Name: "nonexistent"})
 	if !res.IsError {
 		t.Errorf("expected error for nonexistent tool, got res=%+v", res)
 	}
 
 	// 2. Missing required parameter
-	res = reg.Execute(ctx, protocol.ToolCall{ID: "2", Name: "search", Arguments: `{}`})
+	res = reg.Execute(ctx, llm.ToolCall{ID: "2", Name: "search", Arguments: `{}`})
 	if !res.IsError {
 		t.Errorf("expected validation error for missing query, got res=%+v", res)
 	}
 
 	// 3. Invalid argument type
-	res = reg.Execute(ctx, protocol.ToolCall{ID: "3", Name: "search", Arguments: `{"query": 123}`})
+	res = reg.Execute(ctx, llm.ToolCall{ID: "3", Name: "search", Arguments: `{"query": 123}`})
 	if !res.IsError {
 		t.Errorf("expected type validation error, got res=%+v", res)
 	}
 
 	// 4. Execution error
-	res = reg.Execute(ctx, protocol.ToolCall{ID: "4", Name: "search", Arguments: `{"query": "fail"}`})
+	res = reg.Execute(ctx, llm.ToolCall{ID: "4", Name: "search", Arguments: `{"query": "fail"}`})
 	if !res.IsError || res.Content != "search failed" {
 		t.Errorf("expected execution error, got res=%+v", res)
 	}
 
 	// 5. Success
-	res = reg.Execute(ctx, protocol.ToolCall{ID: "5", Name: "search", Arguments: `{"query": "hello"}`})
+	res = reg.Execute(ctx, llm.ToolCall{ID: "5", Name: "search", Arguments: `{"query": "hello"}`})
 	if res.IsError || res.Content != "found: hello" {
 		t.Errorf("expected success, got res=%+v", res)
 	}
@@ -136,20 +136,20 @@ func TestRegistry_PreToolUse_OrderAndShortCircuit(t *testing.T) {
 	reg := NewRegistry(inner)
 	reg.UsePreToolUse(nil) // 空钩子应被忽略，且不得 panic
 
-	reg.UsePreToolUse(func(ctx context.Context, call protocol.ToolCall) error {
+	reg.UsePreToolUse(func(ctx context.Context, call llm.ToolCall) error {
 		calls = append(calls, "hook1")
 		return nil
 	})
-	reg.UsePreToolUse(func(ctx context.Context, call protocol.ToolCall) error {
+	reg.UsePreToolUse(func(ctx context.Context, call llm.ToolCall) error {
 		calls = append(calls, "hook2")
 		return errors.New("blocked by hook2")
 	})
-	reg.UsePreToolUse(func(ctx context.Context, call protocol.ToolCall) error {
+	reg.UsePreToolUse(func(ctx context.Context, call llm.ToolCall) error {
 		calls = append(calls, "hook3")
 		return nil
 	})
 
-	res := reg.Execute(context.Background(), protocol.ToolCall{
+	res := reg.Execute(context.Background(), llm.ToolCall{
 		ID: "1", Name: "search", Arguments: `{"query": "hi"}`,
 	})
 	if !res.IsError || res.Content != "blocked by hook2" {
@@ -173,9 +173,9 @@ func TestRegistry_PreToolUse_AllowThenExecute(t *testing.T) {
 	}
 
 	reg := NewRegistry(inner)
-	reg.UsePreToolUse(func(ctx context.Context, call protocol.ToolCall) error { return nil })
+	reg.UsePreToolUse(func(ctx context.Context, call llm.ToolCall) error { return nil })
 
-	res := reg.Execute(context.Background(), protocol.ToolCall{
+	res := reg.Execute(context.Background(), llm.ToolCall{
 		ID: "1", Name: "search", Arguments: `{"query": "hi"}`,
 	})
 	if res.IsError || res.Content != "ok" {
@@ -189,16 +189,16 @@ func TestRegistry_PreToolUse_AllowThenExecute(t *testing.T) {
 // TestRegistry_PreToolUse_SeesRawCallBeforeValidation 验证钩子先于参数校验，
 // 看到的是未经校验的原始调用。
 func TestRegistry_PreToolUse_SeesRawCallBeforeValidation(t *testing.T) {
-	var seen protocol.ToolCall
+	var seen llm.ToolCall
 	inner := &mockTool{name: "search", schema: json.RawMessage(querySchema)}
 
 	reg := NewRegistry(inner)
-	reg.UsePreToolUse(func(ctx context.Context, call protocol.ToolCall) error {
+	reg.UsePreToolUse(func(ctx context.Context, call llm.ToolCall) error {
 		seen = call
 		return nil
 	})
 
-	call := protocol.ToolCall{ID: "1", Name: "search", Arguments: `{"query": 123}`}
+	call := llm.ToolCall{ID: "1", Name: "search", Arguments: `{"query": 123}`}
 	if res := reg.Execute(context.Background(), call); !res.IsError {
 		t.Fatal("expected a validation error for the wrong argument type")
 	}
@@ -220,7 +220,7 @@ func TestRegistry_PreToolUse_NoHooks_Regression(t *testing.T) {
 	}
 
 	reg := NewRegistry(inner)
-	res := reg.Execute(context.Background(), protocol.ToolCall{
+	res := reg.Execute(context.Background(), llm.ToolCall{
 		ID: "1", Name: "search", Arguments: `{"query": "hi"}`,
 	})
 	if res.IsError || res.Content != "ok" || !ran {
@@ -239,13 +239,13 @@ func TestRegistry_PostToolUse_ModifiesResult(t *testing.T) {
 	}
 
 	reg := NewRegistry(inner)
-	reg.UsePostToolUse(func(ctx context.Context, call protocol.ToolCall, result *protocol.ToolResult) {
+	reg.UsePostToolUse(func(ctx context.Context, call llm.ToolCall, result *llm.ToolResult) {
 		if result.Content == "raw output" {
 			result.Content = "rewritten output"
 		}
 	})
 
-	res := reg.Execute(context.Background(), protocol.ToolCall{
+	res := reg.Execute(context.Background(), llm.ToolCall{
 		ID: "call_1", Name: "search", Arguments: `{"query":"hi"}`,
 	})
 	if res.Content != "rewritten output" {
@@ -263,13 +263,13 @@ func TestRegistry_PostToolUse_ExecutionError(t *testing.T) {
 		},
 	}
 
-	var seenResult *protocol.ToolResult
+	var seenResult *llm.ToolResult
 	reg := NewRegistry(inner)
-	reg.UsePostToolUse(func(ctx context.Context, call protocol.ToolCall, result *protocol.ToolResult) {
+	reg.UsePostToolUse(func(ctx context.Context, call llm.ToolCall, result *llm.ToolResult) {
 		seenResult = result
 	})
 
-	res := reg.Execute(context.Background(), protocol.ToolCall{
+	res := reg.Execute(context.Background(), llm.ToolCall{
 		ID: "call_2", Name: "search", Arguments: `{"query":"hi"}`,
 	})
 	if seenResult == nil || !seenResult.IsError || seenResult.Content != "boom" {
@@ -292,7 +292,7 @@ func TestRegistryExecute_PanicRecovery(t *testing.T) {
 	}
 	r := NewRegistry(boom)
 
-	res := r.Execute(context.Background(), protocol.ToolCall{ID: "c1", Name: "boom", Arguments: "{}"})
+	res := r.Execute(context.Background(), llm.ToolCall{ID: "c1", Name: "boom", Arguments: "{}"})
 	if !res.IsError {
 		t.Fatalf("expected IsError result from panicked tool, got: %+v", res)
 	}

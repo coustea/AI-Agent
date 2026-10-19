@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 )
 
 // AgentHook 定义智能体生命周期横切切面。
@@ -19,7 +20,7 @@ type AgentHook interface {
 	OnLLMResponse(ctx context.Context, resp *protocol.LLMResponseTrace)
 
 	// OnToolStart 工具调用开始前
-	OnToolStart(ctx context.Context, step int, call protocol.ToolCall)
+	OnToolStart(ctx context.Context, step int, call llm.ToolCall)
 
 	// OnToolEnd 工具调用执行完毕后
 	OnToolEnd(ctx context.Context, trace *protocol.ToolTrace)
@@ -55,7 +56,7 @@ func (a *CoreAgent) dispatchLLMResponse(ctx context.Context, resp *protocol.LLMR
 	}
 }
 
-func (a *CoreAgent) dispatchToolStart(ctx context.Context, step int, call protocol.ToolCall) {
+func (a *CoreAgent) dispatchToolStart(ctx context.Context, step int, call llm.ToolCall) {
 	a.mu.RLock()
 	hooks := a.hooks
 	a.mu.RUnlock()

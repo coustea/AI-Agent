@@ -23,7 +23,7 @@ verify: fmt-check vet test-race build
 
 # 格式检查：gofmt 有输出即视为失败
 fmt-check:
-	@out=$$(gofmt -l cmd internal); if [ -n "$$out" ]; then echo "以下文件未格式化（执行 gofmt -w）："; echo "$$out"; exit 1; fi
+	@out=$$(gofmt -l cmd internal pkg); if [ -n "$$out" ]; then echo "以下文件未格式化（执行 gofmt -w）："; echo "$$out"; exit 1; fi
 
 # 静态检查：可疑构造、无效赋值、错误处理缺陷
 vet:

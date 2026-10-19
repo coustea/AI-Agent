@@ -7,12 +7,12 @@ import (
 	"strings"
 
 	"my-agent/internal/config"
-	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
 	"my-agent/internal/permission"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 	"my-agent/internal/tool/builtin"
+	"my-agent/pkg/llm"
 )
 
 // Option 定义 Agent 的函数式拼装算子
@@ -125,14 +125,14 @@ func WithPostToolUse(h tool.PostToolUse) Option {
 	}
 }
 
-// NewAgent 使用函数式选项构建 CoreAgent 实例；gw 为 nil 表示未就绪内核，
-// 待 /model 向导补齐密钥后由 UpdateConfig 热装网关。
-func NewAgent(gw gateway.Gateway, opts ...Option) (*CoreAgent, error) {
+// NewAgent 使用函数式选项构建 CoreAgent 实例；llmClient 为 nil 表示未就绪内核，
+// 待 /model 向导补齐密钥后由 UpdateConfig 热装大模型客户端。
+func NewAgent(llmClient protocol.LLM, opts ...Option) (*CoreAgent, error) {
 	wd, _ := os.Getwd()
 	_ = memory.InitTemplates(wd)
 
 	a := &CoreAgent{
-		gw:           gw,
+		llm:          llmClient,
 		workDir:      wd,
 		workDirRef:   builtin.NewWorkDirRef(wd),
 		memory:       memory.NewSlidingWindowMemory(40, 160_000),
@@ -160,15 +160,19 @@ func NewFromConfig(cfg *config.Config, opts ...Option) (*CoreAgent, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("agent: config cannot be nil")
 	}
-	gw, err := gateway.NewGatewayFromConfig(cfg)
-	if err != nil && !errors.Is(err, gateway.ErrEmptyAPIKey) {
+	client, err := newLLMFromConfig(cfg)
+	if err != nil && !errors.Is(err, llm.ErrEmptyAPIKey) {
 		return nil, err
 	}
-	// 远程厂商缺密钥：保留未就绪内核（gw 为 nil），待 /model 向导补齐后热装网关
+	// 远程厂商缺密钥：保留未就绪内核（llmClient 为 nil 接口），待 /model 向导补齐后热装客户端
+	var llmClient protocol.LLM
+	if client != nil {
+		llmClient = client
+	}
 	defaultOpts := []Option{
 		WithDefaultTools(),
 		WithConfig(cfg, config.DefaultConfigPath()),
 	}
 	defaultOpts = append(defaultOpts, opts...)
-	return NewAgent(gw, defaultOpts...)
+	return NewAgent(llmClient, defaultOpts...)
 }

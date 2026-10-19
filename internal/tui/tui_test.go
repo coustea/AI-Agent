@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -81,7 +82,7 @@ func (m *mockTestAgent) Run(ctx context.Context, prompt string) (<-chan protocol
 	go func() {
 		defer close(ch)
 		ch <- protocol.Event{Type: protocol.EventDelta, Delta: reply}
-		ch <- protocol.Event{Type: protocol.EventDone, Usage: &protocol.Usage{TotalTokens: 20}}
+		ch <- protocol.Event{Type: protocol.EventDone, Usage: &llm.Usage{TotalTokens: 20}}
 	}()
 	return ch, nil
 }
@@ -163,8 +164,8 @@ func (m *mockTestAgent) Traces() []protocol.TraceEvent {
 			Timestamp: time.Now(),
 			Payload: map[string]any{
 				"model": "deepseek-reasoner",
-				"messages": []protocol.Message{
-					{Role: protocol.RoleUser, Content: "查看项目文件"},
+				"messages": []llm.Message{
+					{Role: llm.RoleUser, Content: "查看项目文件"},
 				},
 			},
 		},
@@ -265,7 +266,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 	mIntf, _ := m.Update(agentStreamEventMsg{
 		event: protocol.Event{
 			Type: protocol.EventToolCallStart,
-			ToolCall: &protocol.ToolCall{
+			ToolCall: &llm.ToolCall{
 				ID:        "call_1",
 				Name:      "read_file",
 				Arguments: `{"path": "sample.go"}`,
@@ -290,7 +291,7 @@ func TestTUIToolEventRendering(t *testing.T) {
 	mIntf, _ = m.Update(agentStreamEventMsg{
 		event: protocol.Event{
 			Type: protocol.EventToolCallResult,
-			ToolResult: &protocol.ToolResult{
+			ToolResult: &llm.ToolResult{
 				ToolCallID: "call_1",
 				Name:       "read_file",
 				Content:    "package main\nfunc main() {}",
@@ -353,7 +354,7 @@ func TestTUI_SequentialBlocksRendering(t *testing.T) {
 	mIntf, _ = m.Update(agentStreamEventMsg{
 		event: protocol.Event{
 			Type: protocol.EventToolCallStart,
-			ToolCall: &protocol.ToolCall{
+			ToolCall: &llm.ToolCall{
 				ID:        "c_1",
 				Name:      "GammaToolBash",
 				Arguments: `{"command": "ls"}`,
@@ -366,7 +367,7 @@ func TestTUI_SequentialBlocksRendering(t *testing.T) {
 	mIntf, _ = m.Update(agentStreamEventMsg{
 		event: protocol.Event{
 			Type: protocol.EventToolCallResult,
-			ToolResult: &protocol.ToolResult{
+			ToolResult: &llm.ToolResult{
 				ToolCallID: "c_1",
 				Name:       "GammaToolBash",
 				Content:    "DeltaToolResultFiles",
@@ -1028,7 +1029,7 @@ func TestLipglossBoxModelWidth(t *testing.T) {
 func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 	// 1. 测试工具执行中卡片
 	runningCard := renderToolCard(ToolCallRecord{
-		Call: protocol.ToolCall{
+		Call: llm.ToolCall{
 			ID:        "c_run",
 			Name:      "bash",
 			Arguments: `{"command": "sleep 1"}`,
@@ -1041,12 +1042,12 @@ func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 
 	// 2. 测试工具成功卡片
 	successCard := renderToolCard(ToolCallRecord{
-		Call: protocol.ToolCall{
+		Call: llm.ToolCall{
 			ID:        "c_succ",
 			Name:      "read_file",
 			Arguments: `{"path": "main.go"}`,
 		},
-		Result: &protocol.ToolResult{
+		Result: &llm.ToolResult{
 			ToolCallID: "c_succ",
 			Name:       "read_file",
 			Content:    "package main\n\nfunc main() {}",
@@ -1059,12 +1060,12 @@ func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 
 	// 3. 测试工具报错卡片
 	errorCard := renderToolCard(ToolCallRecord{
-		Call: protocol.ToolCall{
+		Call: llm.ToolCall{
 			ID:        "c_err",
 			Name:      "bash",
 			Arguments: `{"command": "exit 1"}`,
 		},
-		Result: &protocol.ToolResult{
+		Result: &llm.ToolResult{
 			ToolCallID: "c_err",
 			Name:       "bash",
 			Content:    "exit status 1: command not found",

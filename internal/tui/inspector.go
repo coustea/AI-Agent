@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,7 +35,7 @@ func cleanTracePayload(ev protocol.TraceEvent) any {
 
 	// 2. 将静态工具参数 Schema 压缩为精炼的工具名称列表
 	switch tools := m["tools"].(type) {
-	case []protocol.ToolDefinition:
+	case []llm.ToolDefinition:
 		names := make([]string, 0, len(tools))
 		for _, t := range tools {
 			names = append(names, t.Name)
@@ -55,7 +56,7 @@ func cleanTracePayload(ev protocol.TraceEvent) any {
 	}
 
 	// 3. 针对 messages 消息历史：若历史过多，突出保留本步输入
-	if msgs, ok := m["messages"].([]protocol.Message); ok && len(msgs) > 2 {
+	if msgs, ok := m["messages"].([]llm.Message); ok && len(msgs) > 2 {
 		clean["_history_summary"] = fmt.Sprintf("历史消息共 %d 条，以下展示最近输入", len(msgs))
 		clean["messages"] = msgs[len(msgs)-2:]
 	}

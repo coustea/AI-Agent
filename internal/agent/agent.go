@@ -5,12 +5,12 @@ import (
 	"sync"
 
 	"my-agent/internal/config"
-	"my-agent/internal/gateway"
 	"my-agent/internal/memory"
 	"my-agent/internal/permission"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 	"my-agent/internal/tool/builtin"
+	"my-agent/pkg/llm"
 )
 
 var (
@@ -19,13 +19,10 @@ var (
 	ErrMaxSteps      = errors.New("agent: exceeded maximum ReAct steps")
 )
 
-// Agent 直接指向统一数据契约层定义的 protocol.Agent 纯虚接口
-type Agent = protocol.Agent
-
 // CoreAgent 是基于 Harness 思想驱动 ReAct 循环与状态机管理的运行核心
 type CoreAgent struct {
 	mu           sync.RWMutex
-	gw           gateway.Gateway
+	llm          protocol.LLM
 	cfg          *config.Config
 	cfgPath      string
 	workDir      string
@@ -76,7 +73,7 @@ func (a *CoreAgent) Reset() {
 }
 
 // History 获取历史消息快照（内部测试与监控使用）
-func (a *CoreAgent) History() []protocol.Message {
+func (a *CoreAgent) History() []llm.Message {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.memory.History()

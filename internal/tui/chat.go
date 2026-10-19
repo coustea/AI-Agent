@@ -7,6 +7,7 @@ import (
 
 	"my-agent/internal/protocol"
 	"my-agent/internal/textutil"
+	"my-agent/pkg/llm"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -14,8 +15,8 @@ import (
 
 // ToolCallRecord 结构化记录单次工具调用过程与结果，组合统一的 ToolCall 与 ToolResult
 type ToolCallRecord struct {
-	Call   protocol.ToolCall
-	Result *protocol.ToolResult
+	Call   llm.ToolCall
+	Result *llm.ToolResult
 }
 
 // BlockKind 定义消息片段类型
@@ -44,10 +45,10 @@ type MessageBlock struct {
 
 // ChatMessage 用于在界面上展示发送和接收的消息
 type ChatMessage struct {
-	Sender  string          // "You", "Tide", "System"
-	Content string          // 文本内容 (用户输入、系统提示或回退兜底)
-	Blocks  []MessageBlock  // 严格按时间线性排列的结构化块 (思考、文本、工具、权限)
-	Usage   *protocol.Usage // 携带的 Token 用量统计（可选）
+	Sender  string         // "You", "Tide", "System"
+	Content string         // 文本内容 (用户输入、系统提示或回退兜底)
+	Blocks  []MessageBlock // 严格按时间线性排列的结构化块 (思考、文本、工具、权限)
+	Usage   *llm.Usage     // 携带的 Token 用量统计（可选）
 }
 
 // updateChat 处理聊天页面的键盘输入和发送逻辑

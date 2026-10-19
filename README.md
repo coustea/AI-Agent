@@ -4,7 +4,7 @@
 
 **一个运行在本地终端的通用 AI 个人助手**
 
-ReAct 循环 · Harness 可插拔接缝 · 多模型网关 · 三道闸门权限 · 沉浸思考看板
+ReAct 循环 · Harness 可插拔接缝 · 独立 LLM 驱动 · 三道闸门权限 · 沉浸思考看板
 
 [![Release](https://img.shields.io/github/v/release/coustea/AI-Agent?color=00ADD8&logo=github)](https://github.com/coustea/AI-Agent/releases)
 [![Go Version](https://img.shields.io/badge/Go-1.24+-00ADD8?logo=go&logoColor=white)](https://go.dev/dl/)
@@ -60,10 +60,10 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 
 | 能力 | 说明 |
 |---|---|
-| **Harness 架构** | 一个 ReAct 循环 + 一圈可插拔接缝（工具、权限、记忆、网关），代码中不含"替模型做决策"的编排逻辑 |
+| **Harness 架构** | 一个 ReAct 循环 + 一圈可插拔接缝（工具、权限、记忆、大模型驱动），代码中不含"替模型做决策"的编排逻辑 |
 | **纯数据契约** | `internal/protocol` 零依赖事件流、权限请求与配置视图，TUI 与内核零 UI 耦合，可平滑扩展桌面端与无头宿主 |
 | **自主解题心智** | 打破大模型"我无法获取实时信息"的消极惯性，遇到实时数据（如天气、网络诊断、Git 状态）主动调用工具探查 |
-| **多模型网关** | 内置 `llamacpp`（本地）、`deepseek`、`gemini`、`spark`（讯飞星辰 MaaS）四家 Provider，统一 OpenAI 协议，按模型名前缀动态路由，运行时热切换且不丢上下文 |
+| **轻量大模型驱动** | `pkg/llm` 独立零依赖驱动包，预置 `llamacpp`（本地）、`deepseek`、`gemini`、`spark`（讯飞星辰 MaaS）等 Provider，统一 OpenAI wire 协议，支持运行时动态热装配且不丢上下文 |
 | **深度思考独立看板** | 专属全屏沉浸式推理链看板（快捷键 `Ctrl+T` 或 `/think`），支持多轮导航、Markdown/Raw 双模式切换与流式增量刷新 |
 | **ReAct 工具循环** | 单轮最多 10 步推理-行动迭代，工具结果以 Observation 形式回灌模型，支持错误自愈 |
 | **三道闸门权限** | 硬拒绝表 → 风险规则精准匹配（删除 / 提权 / 越界写入等）→ 交互式审批（支持会话级信任），常规命令自主放行，高危操作永不静默执行 |
@@ -216,7 +216,7 @@ export SPARK_API_KEY="xxxxxxxxxxxxxxxx"          # 讯飞星辰 MaaS，兼容 MA
 | 本地 llama.cpp | `llamacpp` | `http://127.0.0.1:8080` | `local-model` | `qwen2.5-coder-7b` | 否 |
 | DeepSeek | `deepseek` | `https://api.deepseek.com` | `deepseek-flash` | `deepseek-v4-pro`、`deepseek-reasoner` | 是 |
 | Google Gemini | `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` | `gemini-2.5-pro` | 是 |
-| 讯飞星辰 MaaS | `spark` | `https://maas-api.cn-huabei-1.xf-yun.com/v2` | `spark-x2.5` | `lite` | 是 |
+| 讯飞星辰 MaaS | `spark` | `https://maas-api.cn-huabei-1.xf-yun.com/v2` | `spark-x2.5-4b` | `spark-x2.5` | 预置官方免费 Key (开箱即用) |
 
 别名兼容：`llama` / `local` → `llamacpp`，`ds` → `deepseek`，`google` → `gemini`，`maas` / `xfyun` → `spark`。
 
@@ -331,7 +331,7 @@ make run            # 等价于 go run ./cmd/tide
 
 ## 架构总览
 
-调用链：**LLM → Gateway → Agent → Protocol → TUI**。协议层为纯数据契约（事件流与配置视图），内核零 UI 依赖，同一内核可直接复用于桌面端与无头宿主。
+调用链：**LLM (pkg/llm) → Agent → Protocol → TUI**。协议层为纯数据契约（事件流与配置视图），内核零 UI 依赖，同一内核可直接复用于桌面端与无头宿主。
 
 ```mermaid
 flowchart TD
@@ -340,11 +340,11 @@ flowchart TD
     AG -->|protocol.Event 纯数据事件流| PR[Protocol 契约<br/>internal/protocol]
     PR --> TUI
     AG -->|每轮重算| MEM[Memory<br/>滑动窗口 + 长期记忆]
-    AG -->|ChatStream| RT[Router<br/>internal/gateway]
-    RT --> DS[DeepSeek]
-    RT --> GM[Gemini]
-    RT --> SP[讯飞星辰 MaaS]
-    RT --> LC[LlamaCpp 本地]
+    AG -->|ChatStream| LLM[LLM Client<br/>pkg/llm]
+    LLM --> DS[DeepSeek]
+    LLM --> GM[Gemini]
+    LLM --> SP[讯飞星辰 MaaS]
+    LLM --> LC[LlamaCpp 本地]
     AG -->|工具调用| PERM[Permission<br/>三道闸门]
     PERM --> REG[Tool Registry<br/>internal/tool]
     REG --> B1[bash]
@@ -360,7 +360,7 @@ flowchart TD
 | 包 | 职责 |
 |---|---|
 | `internal/config` | 配置加载与持久化，全局/本地配置发现，环境变量自动补全，多厂商配置历史 |
-| `internal/gateway` | 统一网关接口与 OpenAI 协议 wire 层，Router 按模型名前缀动态路由，四家 Provider 实现 |
+| `pkg/llm` | 纯净独立、零外部依赖的大模型传输层与 OpenAI wire 协议实现，预置 DeepSeek、Gemini、Spark、LlamaCpp 与自定义端点支持 |
 | `internal/agent` | Harness 核心：ReAct 循环、Persona 与长期记忆合成、纯数据事件分发、工具流水线与权限审查 |
 | `internal/protocol` | 零依赖纯数据契约：流式事件、权限请求（RequestID 异步关联）、配置视图与 Token 统计，原生支持跨端序列化 |
 | `internal/tool` | 工具接口、线程安全注册表、执行前钩子（`PreToolUse`）、参数校验 |
@@ -373,12 +373,13 @@ flowchart TD
 
 ```text
 AI-Agent/
-├── cmd/tide/main.go        # 可执行入口：组装 LLM→Gateway→Agent→TUI 调用链
+├── cmd/tide/main.go        # 可执行入口：组装 LLM→Agent→Protocol→TUI 调用链
+├── pkg/
+│   └── llm/                   # 独立大模型传输层与 OpenAI wire 协议实现（零外部依赖）
 ├── internal/
 │   ├── agent/                 # Harness 核心：ReAct 循环、装配、审批桥、事件分发
 │   ├── config/                # 配置加载、持久化与环境变量补全
 │   ├── fsutil/                # 工作区边界判定的唯一实现（含符号链接解析）
-│   ├── gateway/               # 统一网关、OpenAI wire 层与四家 Provider
 │   ├── memory/                # 滑动窗口记忆与两级长期记忆
 │   ├── middleware/            # 横切关注点：链路日志、大结果落盘
 │   ├── permission/            # 三道闸门权限管线与命令规范化
@@ -479,7 +480,7 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <details>
 <summary><b>切换模型平台后，之前的对话上下文会丢失吗？</b></summary>
 
-不会。配置保存后内核会热装新网关（`UpdateConfig`），**完整保留当前记忆与已注册工具**。
+不会。配置保存后内核会热装新大模型驱动客户端（`UpdateConfig`），**完整保留当前记忆与已注册工具**。
 若需清空上下文，请显式执行 `/clear`。
 </details>
 
@@ -501,7 +502,7 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <summary><b>支持哪些模型？能接入其他 OpenAI 兼容服务吗？</b></summary>
 
 原生支持 `llamacpp` / `deepseek` / `gemini` / `spark`。由于所有 Provider 统一走 OpenAI Chat Completions 协议，
-接入其他兼容服务只需在 `internal/gateway` 中新增一个 Provider 实现并在 `initProviderGateway` 中注册。
+接入其他兼容服务只需通过 `pkg/llm.New(llm.ProviderCustom, ...)` 传入 BaseURL 或在 `pkg/llm` 中添加预设即可。
 </details>
 
 <details>
@@ -538,20 +539,23 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 
 ### 当前测试规模
 
-14 个测试文件、101 个测试用例，覆盖 `agent`、`config`、`fsutil`、`gateway`、`memory`、`middleware`、`permission`、`textutil`、`tool`、`tool/builtin`、`tui` 十一个包（`cmd` 为纯装配入口、`protocol` 为纯数据契约，无独立测试）。
+14 个测试文件、101 个测试用例，覆盖 `agent`、`config`、`fsutil`、`memory`、`middleware`、`permission`、`textutil`、`tool`、`tool/builtin`、`tui`、`llm` 十一个测试包（`cmd` 为纯装配入口、`protocol` 为纯数据契约，无独立测试）。
 
 ```bash
 $ go test -race -count=1 ./...
 ?   	my-agent/cmd/tide	[no test files]
-ok  	my-agent/internal/agent	1.146s
-ok  	my-agent/internal/config	1.853s
-ok  	my-agent/internal/gateway	3.615s
-ok  	my-agent/internal/memory	4.044s
-ok  	my-agent/internal/permission	2.298s
+ok  	my-agent/internal/agent	3.826s
+ok  	my-agent/internal/config	4.318s
+ok  	my-agent/internal/fsutil	4.822s
+ok  	my-agent/internal/memory	5.874s
+ok  	my-agent/internal/middleware	5.342s
+ok  	my-agent/internal/permission	6.413s
 ?   	my-agent/internal/protocol	[no test files]
-ok  	my-agent/internal/tool	3.152s
-ok  	my-agent/internal/tool/builtin	2.777s
-ok  	my-agent/internal/tui	4.483s
+ok  	my-agent/internal/textutil	6.767s
+ok  	my-agent/internal/tool	7.195s
+ok  	my-agent/internal/tool/builtin	4.539s
+ok  	my-agent/internal/tui	4.451s
+ok  	my-agent/pkg/llm	4.741s
 ```
 
 测试原则：优先使用 `httptest` 服务器或轻量 fake 模拟 Provider 与 Agent 行为，**不依赖真实凭据**。
@@ -587,7 +591,7 @@ ok  	my-agent/internal/tui	4.483s
 
 - 遵循标准 Go 格式化：提交前执行 `gofmt`（或 `go fmt ./...`）。
 - 命名遵循 Go 惯例：导出标识符用 `MixedCaps`，非导出用 `mixedCaps`，包名短小写。
-- 应用逻辑放在对应的 `internal/` 包内，新增 Provider 时**保持 gateway 边界不被穿透**。
+- 应用逻辑放在对应的 `internal/` 包内，新增 Provider 时**保持 pkg/llm 独立与零外部依赖边界不被穿透**。
 - 注释使用中文，聚焦"为什么这样做"而非复述代码。
 
 ### 测试要求

@@ -13,6 +13,7 @@ import (
 	"my-agent/internal/middleware"
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
+	"my-agent/pkg/llm"
 )
 
 // TestLoggingMiddleware_FullLifecycle 验证完整 ReAct 循环被透明记录为 100% 原始 JSON 并落盘
@@ -27,29 +28,29 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 		},
 	})
 
-	// 模拟两步 ReAct 网关：
+	// 模拟两步 ReAct 大模型调用：
 	// Step 0: 思考并请求调用 read_file 工具
 	// Step 1: 思考并给出最终文本回复
-	gw := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+	llmStub := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{ReasoningContent: "I need to read the config file first.\nThen I can answer the user."},
 					{
-						ToolCalls: []protocol.ToolCall{
+						ToolCalls: []llm.ToolCall{
 							{ID: "call_test_1", Name: "read_file", Arguments: `{"path": "config.yaml"}`},
 						},
-						Usage: &protocol.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120},
+						Usage: &llm.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120},
 						Done:  true,
 					},
 				}
 			},
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{ReasoningContent: "I have received the config content.\nNow answering."},
 					{Delta: "The host is 127.0.0.1 and port is 8080."},
 					{
-						Usage: &protocol.Usage{PromptTokens: 150, CompletionTokens: 30, TotalTokens: 180},
+						Usage: &llm.Usage{PromptTokens: 150, CompletionTokens: 30, TotalTokens: 180},
 						Done:  true,
 					},
 				}
@@ -58,7 +59,7 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	}
 
 	lm := middleware.NewLoggingMiddleware(tmpDir)
-	ag, err := NewAgent(gw,
+	ag, err := NewAgent(llmStub,
 		WithWorkDir(tmpDir),
 		WithTools(reg),
 		WithHook(lm),
@@ -143,9 +144,9 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	mockGW := newMockGateway("Reply 1", "Reply 2")
+	mockLLMClient := newMockLLM("Reply 1", "Reply 2")
 	lm := middleware.NewLoggingMiddleware(tmpDir)
-	ag, err := NewAgent(mockGW,
+	ag, err := NewAgent(mockLLMClient,
 		WithWorkDir(tmpDir),
 		WithHook(lm),
 	)
@@ -198,10 +199,10 @@ func TestLoggingMiddleware_MultipleTurns_LatestOverwritten_JSONLAppended(t *test
 func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	gwErr := &toolCallStepGateway{
-		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
-			func(req *protocol.ChatRequest) []protocol.ChatResponse {
-				return []protocol.ChatResponse{
+	llmErr := &toolCallStepLLM{
+		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+			func(req *llm.ChatRequest) []llm.ChatResponse {
+				return []llm.ChatResponse{
 					{Err: errors.New("upstream service unavailable 503")},
 				}
 			},
@@ -209,7 +210,7 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 	}
 
 	lm := middleware.NewLoggingMiddleware(tmpDir)
-	ag, _ := NewAgent(gwErr,
+	ag, _ := NewAgent(llmErr,
 		WithWorkDir(tmpDir),
 		WithHook(lm),
 	)

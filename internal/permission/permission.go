@@ -12,6 +12,7 @@ import (
 
 	"my-agent/internal/fsutil"
 	"my-agent/internal/protocol"
+	"my-agent/pkg/llm"
 )
 
 // Approver 定义人机交互或外部策略决策接口
@@ -186,7 +187,7 @@ func (m *Manager) SetWorkDir(workDir string) {
 // Gate 1: 硬拒绝表 (Hard Deny List) -> 命中直接返回 false，无需人工介入
 // Gate 2: 规则匹配器 (Rule Evaluator) -> 判断是否存在破坏性操作或越界行为
 // Gate 3: 交互式审批 (Interactive Approval) -> 触发人类介入确认并支持会话级信任
-func (m *Manager) Evaluate(ctx context.Context, call protocol.ToolCall) (allowed bool, reason string, err error) {
+func (m *Manager) Evaluate(ctx context.Context, call llm.ToolCall) (allowed bool, reason string, err error) {
 	// --- Gate 1: 硬拒绝表检查 ---
 	if blocked, denyReason := m.checkHardDeny(call); blocked {
 		return false, denyReason, nil
@@ -249,7 +250,7 @@ func (m *Manager) Evaluate(ctx context.Context, call protocol.ToolCall) (allowed
 }
 
 // checkHardDeny 检查 Gate 1: 绝对不可执行的硬拒绝指令
-func (m *Manager) checkHardDeny(call protocol.ToolCall) (blocked bool, denyReason string) {
+func (m *Manager) checkHardDeny(call llm.ToolCall) (blocked bool, denyReason string) {
 	if call.Name != "bash" {
 		return false, ""
 	}
@@ -273,7 +274,7 @@ func (m *Manager) checkHardDeny(call protocol.ToolCall) (blocked bool, denyReaso
 }
 
 // checkRules 检查 Gate 2: 规则匹配与风险识别
-func (m *Manager) checkRules(call protocol.ToolCall) (needsApproval bool, ruleReason string) {
+func (m *Manager) checkRules(call llm.ToolCall) (needsApproval bool, ruleReason string) {
 	switch call.Name {
 	case "bash":
 		cmd := extractStringArg(call.Arguments, "command")
@@ -348,7 +349,7 @@ func (m *Manager) overwritesExistingFile(target string) bool {
 	return err == nil && info.Mode().IsRegular()
 }
 
-func (m *Manager) callSignature(call protocol.ToolCall) string {
+func (m *Manager) callSignature(call llm.ToolCall) string {
 	switch call.Name {
 	case "bash":
 		cmd := strings.TrimSpace(extractStringArg(call.Arguments, "command"))
