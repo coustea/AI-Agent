@@ -87,11 +87,16 @@ func (t *GlobTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 		}
 
 		if err != nil {
-			return nil
+			// 条目不可访问（权限、悬空链接等）：跳过该子树而非中断整次遍历，
+			// 也不能静默 return nil——SkipDir 让语义显式化。
+			return filepath.SkipDir
 		}
 
-		rel, err := filepath.Rel(workDirAbs, path)
-		if err != nil || rel == "." {
+		rel, relErr := filepath.Rel(workDirAbs, path)
+		if relErr != nil {
+			return filepath.SkipDir
+		}
+		if rel == "." {
 			return nil
 		}
 		relSlash := filepath.ToSlash(rel)

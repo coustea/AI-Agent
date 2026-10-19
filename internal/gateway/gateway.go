@@ -177,12 +177,20 @@ func (c *Client) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-c
 		return nil, err
 	}
 
+	return c.pump(streamCtx, cancel, resp), nil
+}
+
+// pump 独占响应体生命周期：返回的 channel 关闭时，Body 必已关闭、超时 context 必已释放。
+// 把响应体所有权收敛在本函数内，调用方只消费 channel，不必关心资源释放。
+func (c *Client) pump(ctx context.Context, cancel context.CancelFunc, resp *http.Response) <-chan protocol.ChatResponse {
 	out := make(chan protocol.ChatResponse, 32)
+
 	go func() {
-		defer cancel()
-		defer resp.Body.Close()
 		defer close(out)
-		usage := readSSE(streamCtx, resp.Body, out)
+		defer cancel()
+		defer func() { _ = resp.Body.Close() }()
+
+		usage := readSSE(ctx, resp.Body, out)
 		if usage.TotalTokens > 0 {
 			c.mu.Lock()
 			c.totalUsage.Add(usage)
@@ -190,7 +198,7 @@ func (c *Client) ChatStream(ctx context.Context, req *protocol.ChatRequest) (<-c
 		}
 	}()
 
-	return out, nil
+	return out
 }
 
 // executeWithRetry 执行 HTTP 请求并在遇到 429、5xx 或临时网络错误时自动指数退避重试（最多 3 次）

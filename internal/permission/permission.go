@@ -261,9 +261,8 @@ func (m *Manager) Evaluate(ctx context.Context, call protocol.ToolCall) (allowed
 	case protocol.DecisionAllowOnce:
 		return true, "", nil
 
-	case protocol.DecisionDeny:
-		fallthrough
 	default:
+		// DecisionDeny 与任何未知决策一律拒绝：审批层必须 fail-closed
 		return false, fmt.Sprintf("permission denied by user: %s", ruleReason), nil
 	}
 }
@@ -381,7 +380,7 @@ func (m *Manager) callSignature(call protocol.ToolCall) string {
 	}
 }
 
-func extractStringArg(raw string, key string) string {
+func extractStringArg(raw, key string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""

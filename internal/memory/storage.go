@@ -127,7 +127,7 @@ func LoadBundle(workDir string, customGlobalDir ...string) *Bundle {
 		ProjectDir: projectDir,
 	}
 
-	// 读取全局记忆 (preferences.md, learnings.md)
+	// 读取全局记忆：preferences.md 与 learnings.md
 	globalNames := []string{FilePreferences, FileLearnings}
 	for _, name := range globalNames {
 		p := filepath.Join(globalDir, name)
@@ -144,7 +144,7 @@ func LoadBundle(workDir string, customGlobalDir ...string) *Bundle {
 		}
 	}
 
-	// 读取项目记忆 (project.md, preferences.md, learnings.md)
+	// 读取项目记忆：project.md、preferences.md 与 learnings.md
 	projectNames := []string{FileProject, FilePreferences, FileLearnings}
 	for _, name := range projectNames {
 		p := filepath.Join(projectDir, name)

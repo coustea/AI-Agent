@@ -137,7 +137,8 @@ func (t *GrepTool) Execute(ctx context.Context, args json.RawMessage) (string, e
 			}
 
 			if walkErr != nil {
-				return nil
+				// 条目不可访问：跳过该子树，遍历继续
+				return filepath.SkipDir
 			}
 
 			// 统一跳过版本控制、缓存与依赖目录
@@ -198,7 +199,8 @@ func grepFile(ctx context.Context, fullPath, workDirAbs string, re *regexp.Regex
 	if err != nil {
 		return nil, false
 	}
-	defer file.Close()
+	// 只读句柄：关闭失败无法补救，显式丢弃
+	defer func() { _ = file.Close() }()
 
 	// 嗅探前 512 字节以快速阻断二进制文件
 	header := make([]byte, 512)

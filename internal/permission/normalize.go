@@ -22,7 +22,7 @@ var wrapperVerbs = map[string]bool{
 }
 
 var envAssignPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=`)
-var durationArgPattern = regexp.MustCompile(`^[0-9]+(?:\.\d+)?(?:s|m|h|ms|ns|us|µs)?$`)
+var durationArgPattern = regexp.MustCompile(`^\d+(?:\.\d+)?(?:s|m|h|ms|ns|us|µs)?$`)
 
 // commandAnalysis 是一次命令规范化分析的产出
 type commandAnalysis struct {

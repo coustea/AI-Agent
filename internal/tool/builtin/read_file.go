@@ -64,7 +64,8 @@ func (t *ReadFileTool) Execute(ctx context.Context, args json.RawMessage) (strin
 	if err != nil {
 		return "", fmt.Errorf("failed to open file %s: %w", input.Path, err)
 	}
-	defer file.Close()
+	// 只读句柄：关闭失败无法补救，显式丢弃
+	defer func() { _ = file.Close() }()
 
 	// 逐行流式读取：ReadString 无单行长度上限（Scanner 有 64KB 限制），
 	// limit 达到后立即停止，不再全量读入后截断。

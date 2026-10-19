@@ -25,7 +25,7 @@ func defaultPersona(workDir string) string {
 	sb.WriteString("You are Tide, an autonomous, intelligent local AI personal agent running directly in the user's terminal.\n")
 	sb.WriteString("You possess native environment execution capabilities, helping the user solve complex tasks end-to-end including coding, architecture design, system diagnostics, codebase exploration, file editing, and problem reasoning.\n")
 	if workDir != "" {
-		sb.WriteString(fmt.Sprintf("Working Directory: %s\n", workDir))
+		fmt.Fprintf(&sb, "Working Directory: %s\n", workDir)
 	}
 
 	sb.WriteString("\nAutonomous Problem-Solving Mindset:\n")
@@ -59,10 +59,10 @@ func composeEnvironmentContext(workDir string) string {
 
 	var sb strings.Builder
 	sb.WriteString("## Environment Context (环境与时空状态)\n")
-	sb.WriteString(fmt.Sprintf("- Current Time: %s\n", time.Now().Format("2006-01-02 15:04:05 -0700 MST (Monday)")))
-	sb.WriteString(fmt.Sprintf("- Host Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH))
+	fmt.Fprintf(&sb, "- Current Time: %s\n", time.Now().Format("2006-01-02 15:04:05 -0700 MST (Monday)"))
+	fmt.Fprintf(&sb, "- Host Platform: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	if cleanDir != "" {
-		sb.WriteString(fmt.Sprintf("- Working Directory: %s\n", cleanDir))
+		fmt.Fprintf(&sb, "- Working Directory: %s\n", cleanDir)
 	}
 
 	if gitInfo := detectGitBranch(cleanDir); gitInfo != "" {

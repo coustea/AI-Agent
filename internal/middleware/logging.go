@@ -66,7 +66,7 @@ func (l *LoggingMiddleware) appendJSONLLocked(ev protocol.TraceEvent) {
 	l.ensureDirLocked()
 	f, err := os.OpenFile(l.jsonlFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err == nil {
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		line, err := json.Marshal(ev)
 		if err == nil {
 			_, _ = f.WriteString(string(line) + "\n")
@@ -85,7 +85,7 @@ func (l *LoggingMiddleware) recordEvent(ev protocol.TraceEvent) {
 }
 
 // OnTurnStart 单轮交互开始
-func (l *LoggingMiddleware) OnTurnStart(ctx context.Context, turnID string, prompt string) {
+func (l *LoggingMiddleware) OnTurnStart(ctx context.Context, turnID, prompt string) {
 	l.mu.Lock()
 	l.events = make([]protocol.TraceEvent, 0)
 	l.mu.Unlock()

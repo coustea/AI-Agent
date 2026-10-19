@@ -18,7 +18,7 @@ type PropertyDefinition struct {
 }
 
 // ValidateArguments 根据 Schema 校验传入的工具调用参数
-func ValidateArguments(schemaRaw json.RawMessage, argsRaw json.RawMessage) error {
+func ValidateArguments(schemaRaw, argsRaw json.RawMessage) error {
 	if len(argsRaw) == 0 {
 		argsRaw = json.RawMessage("{}")
 	}
@@ -32,10 +32,11 @@ func ValidateArguments(schemaRaw json.RawMessage, argsRaw json.RawMessage) error
 		return nil
 	}
 
+	// Schema 由代码内静态定义，解析失败属程序缺陷。校验层必须 fail-closed：
+	// 宁可拒绝执行，也不能让未经校验的参数进入工具本体。
 	var schema SchemaDefinition
 	if err := json.Unmarshal(schemaRaw, &schema); err != nil {
-		// Schema 解析失败不阻断执行，返回 nil
-		return nil
+		return fmt.Errorf("invalid tool schema: %w", err)
 	}
 
 	// 校验必填字段

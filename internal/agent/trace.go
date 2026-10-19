@@ -28,7 +28,7 @@ type AgentHook interface {
 	OnTurnEnd(ctx context.Context, summary *protocol.TurnSummaryTrace)
 }
 
-func (a *CoreAgent) dispatchTurnStart(ctx context.Context, turnID string, prompt string) {
+func (a *CoreAgent) dispatchTurnStart(ctx context.Context, turnID, prompt string) {
 	a.mu.RLock()
 	hooks := a.hooks
 	a.mu.RUnlock()
