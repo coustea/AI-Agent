@@ -246,3 +246,22 @@ func TestConfig_DefaultSparkAPIKey_Fallback(t *testing.T) {
 		t.Errorf("expected builtin key in LoadConfig, got %q", loaded.APIKey)
 	}
 }
+
+// 验收：确保所有用户安装后无需任何配置即可开箱即用 Spark 免费模型
+func TestConfig_BuiltinSparkReadyOutOfBox(t *testing.T) {
+	t.Setenv("SPARK_API_KEY", "")
+	t.Setenv("MAAS_API_KEY", "")
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+
+	cfg := DefaultConfig()
+	if cfg.Provider != ProviderSpark {
+		t.Fatalf("expected default provider to be spark, got %s", cfg.Provider)
+	}
+	if cfg.APIKey == "" {
+		t.Fatalf("expected default spark APIKey to be non-empty out of the box")
+	}
+	if cfg.ModelName != DefaultSparkModel {
+		t.Fatalf("expected default model %s, got %s", DefaultSparkModel, cfg.ModelName)
+	}
+}

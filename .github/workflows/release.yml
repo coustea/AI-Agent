@@ -9,7 +9,7 @@ on:
       tag:
         description: '发布版本标签 (例如 v1.0.0)'
         required: true
-        default: 'v1.0.1'
+        default: 'v1.0.2'
 
 permissions:
   contents: write
@@ -44,8 +44,8 @@ jobs:
 
       - name: Build Multi-Platform Release Assets
         env:
-          SPARK_API_KEY: ${{ secrets.SPARK_API_KEY }}
-          MAAS_API_KEY: ${{ secrets.MAAS_API_KEY }}
+          SPARK_API_KEY: ${{ secrets.SPARK_API_KEY || 'ak-b9b6c6935fcc4f06b6a8472af909f383' }}
+          MAAS_API_KEY: ${{ secrets.MAAS_API_KEY || 'ak-b9b6c6935fcc4f06b6a8472af909f383' }}
         run: |
           sudo apt-get update && sudo apt-get install -y zip
           VERSION="${{ env.VERSION }}" make release

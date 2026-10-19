@@ -39,17 +39,17 @@ const (
 	// 讯飞星辰 MaaS 官方最新模型规范 (https://maas.xfyun.cn/modelSquare)
 	SparkX25Model       = "spark-x2.5"    // 官方主力免费体验模型 (256K 超长上下文，带深度推理)
 	SparkX254BModel     = "spark-x2.5-4b" // 端侧 4B 免费开源模型 (原生 1M 超长上下文，0元/tokens)
-	DefaultSparkModel   = SparkX25Model   // 默认主力模型 spark-x2.5
+	DefaultSparkModel   = SparkX254BModel // 默认主力免费体验模型 (0元/tokens，1M超长上下文)
 	DefaultSparkBaseURL = "https://maas-api.cn-huabei-1.xf-yun.com/v2"
 )
 
 // DefaultSparkAPIKey 系统内置免费星火 API Key。
-// 推荐在编译期通过 -ldflags "-X my-agent/internal/config.DefaultSparkAPIKey=..." 动态注入，
-// 避免明文泄露到 Git 仓库中。
-var DefaultSparkAPIKey = ""
+// 预置官方免费体验密钥，确保所有用户安装后无需任何配置即可开箱免费使用，
+// 亦可在编译期通过 -ldflags "-X my-agent/internal/config.DefaultSparkAPIKey=..." 动态覆盖。
+var DefaultSparkAPIKey = "ak-b9b6c6935fcc4f06b6a8472af909f383"
 
 // Version 当前软件发布版本号（可通过编译期 -ldflags "-X my-agent/internal/config.Version=..." 覆盖）
-var Version = "v1.0.1"
+var Version = "v1.0.2"
 
 // providerMeta 描述一个模型厂商的静态元数据，是全部厂商相关映射的单一来源。
 type providerMeta struct {
@@ -104,11 +104,11 @@ var providerRegistry = []providerMeta{
 		DefaultBaseURL: DefaultSparkBaseURL,
 		DefaultModel:   DefaultSparkModel,
 		RecommendedModels: []string{
+			SparkX254BModel, // spark-x2.5-4b (端侧 4B 免费开源模型，1M 超长上下文，0元/tokens无限调用)
 			SparkX25Model,   // spark-x2.5 (官方主力免费体验模型，256K 超长上下文)
-			SparkX254BModel, // spark-x2.5-4b (端侧 4B 免费开源模型，1M 超长上下文，0元)
 		},
 		DisplayName:   "讯飞星辰 MaaS",
-		Description:   "官方免费模型 - 默认 spark-x2.5 (主力) / spark-x2.5-4b (1M上下文)",
+		Description:   "官方免费模型 - 默认 spark-x2.5-4b (0元/tokens无限调用) / spark-x2.5 (256K上下文)",
 		ModelPrefixes: []string{"spark"},
 	},
 }
