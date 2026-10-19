@@ -43,6 +43,9 @@ jobs:
         run: go test -v ./...
 
       - name: Build Multi-Platform Release Assets
+        env:
+          SPARK_API_KEY: ${{ secrets.SPARK_API_KEY }}
+          MAAS_API_KEY: ${{ secrets.MAAS_API_KEY }}
         run: |
           sudo apt-get update && sudo apt-get install -y zip
           VERSION="${{ env.VERSION }}" make release

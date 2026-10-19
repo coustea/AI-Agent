@@ -280,7 +280,7 @@ var envFallbacks = []envFallback{
 	{ProviderSpark, []string{"SPARK_API_KEY", "MAAS_API_KEY"}, DefaultSparkBaseURL, DefaultSparkModel},
 }
 
-// applyEnvFallbacks 使用环境变量补齐缺失的厂商密钥与默认端点/模型。
+// applyEnvFallbacks 使用环境变量与内置凭证补齐缺失的厂商密钥与默认端点/模型。
 func applyEnvFallbacks(cfg *Config) {
 	for _, fb := range envFallbacks {
 		pcfg := cfg.ProviderFor(fb.provider)
@@ -288,6 +288,9 @@ func applyEnvFallbacks(cfg *Config) {
 			continue
 		}
 		key := firstEnv(fb.envKeys...)
+		if key == "" && fb.provider == ProviderSpark && strings.TrimSpace(DefaultSparkAPIKey) != "" {
+			key = strings.TrimSpace(DefaultSparkAPIKey)
+		}
 		if key == "" {
 			continue
 		}

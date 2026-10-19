@@ -213,3 +213,36 @@ func TestConfig_Load_RemoteWithoutKey_Unready(t *testing.T) {
 		t.Fatalf("unexpected cfg: provider=%s apiKey=%q", cfg.Provider, cfg.APIKey)
 	}
 }
+
+// 验证 DefaultSparkAPIKey 在环境变量缺失时作为保底密钥自动生效于 DefaultConfig 和 LoadConfig
+func TestConfig_DefaultSparkAPIKey_Fallback(t *testing.T) {
+	orig := DefaultSparkAPIKey
+	DefaultSparkAPIKey = "builtin-spark-test-key"
+	defer func() { DefaultSparkAPIKey = orig }()
+
+	t.Setenv("SPARK_API_KEY", "")
+	t.Setenv("MAAS_API_KEY", "")
+	t.Setenv("DEEPSEEK_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+
+	// 1. DefaultConfig 应自动注入
+	cfg := DefaultConfig()
+	if cfg.ProviderFor(ProviderSpark).APIKey != "builtin-spark-test-key" {
+		t.Errorf("expected builtin key in DefaultConfig, got %q", cfg.ProviderFor(ProviderSpark).APIKey)
+	}
+
+	// 2. LoadConfig 在已有配置文件但缺 API Key 时同样回退注入
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "spark_empty.json")
+	if err := os.WriteFile(cfgPath, []byte(`{"provider":"spark","model_name":"spark-x2.5"}`), 0o600); err != nil {
+		t.Fatalf("failed to write fixture: %v", err)
+	}
+	loaded, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig failed: %v", err)
+	}
+	if loaded.APIKey != "builtin-spark-test-key" {
+		t.Errorf("expected builtin key in LoadConfig, got %q", loaded.APIKey)
+	}
+}
