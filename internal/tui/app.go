@@ -142,6 +142,9 @@ func NewModel(ag protocol.Agent, traces TraceSource) Model {
 
 	// 5. 消息滚动视口 (Viewport)
 	vp := viewport.New(80, 20)
+	vp.MouseWheelEnabled = true
+	vp.MouseWheelDelta = 3
+	vp.KeyMap = viewport.KeyMap{} // 禁用键盘滚动，历史记录专由鼠标滚轮滚动
 
 	cfgView := ag.Config()
 	choices := []string{"llamacpp", "deepseek", "gemini", "spark"}
@@ -294,17 +297,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
-		m.chatInput.Width = max(40, msg.Width-10)
-
-		headerHeight := 4
-		footerHeight := 8
-		if m.pendingPerm != nil {
-			footerHeight += 8
-		}
-		vpHeight := max(6, msg.Height-headerHeight-footerHeight)
-		m.viewport.Width = max(40, msg.Width-2)
-		m.viewport.Height = vpHeight
-		m.viewportReady = true
+		m.updateViewportDimensions()
 		m.viewport.SetContent(m.renderChatMessages())
 		m.viewport.GotoBottom()
 		return m, nil
@@ -448,6 +441,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.event.Permission != nil {
 				m.pendingPerm = msg.event.Permission
 				m.chatInput.Placeholder = "[等待权限决策] 请直接按 y (允许) / a (信任) / n (拒绝)"
+				m.updateViewportDimensions()
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()

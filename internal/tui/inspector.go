@@ -33,16 +33,17 @@ func cleanTracePayload(ev protocol.TraceEvent) any {
 	}
 
 	// 2. 将静态工具参数 Schema 压缩为精炼的工具名称列表
-	if tools, ok := m["tools"].([]protocol.ToolDefinition); ok {
+	switch tools := m["tools"].(type) {
+	case []protocol.ToolDefinition:
 		names := make([]string, 0, len(tools))
 		for _, t := range tools {
 			names = append(names, t.Name)
 		}
 		clean["tools_available"] = names
 		delete(clean, "tools")
-	} else if toolsAny, ok := m["tools"].([]any); ok {
-		names := make([]string, 0, len(toolsAny))
-		for _, t := range toolsAny {
+	case []any:
+		names := make([]string, 0, len(tools))
+		for _, t := range tools {
 			if tm, ok := t.(map[string]any); ok {
 				if n, ok := tm["name"].(string); ok {
 					names = append(names, n)

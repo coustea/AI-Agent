@@ -23,7 +23,7 @@ func probeLlamaCpp() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, llamaCppProbeURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, llamaCppProbeURL, http.NoBody)
 	if err != nil {
 		return fmt.Sprintf("[提示] 本地服务探测失败: %v（配置已保留，可稍后启动 llama-server）", err)
 	}
@@ -31,7 +31,7 @@ func probeLlamaCpp() string {
 	if err != nil {
 		return "[提示] 本地服务未就绪（连接失败），配置已保留。启动 llama-server 后即可直接对话。"
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Sprintf("[提示] 本地服务未就绪（HTTP %d），配置已保留。启动 llama-server 后即可直接对话。", resp.StatusCode)
 	}
@@ -90,9 +90,8 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cursor = len(providers) - 1
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.Type {
 		case tea.KeyEsc:
 			m.state = stateChat
 			m.chatInput.Focus()
@@ -152,7 +151,7 @@ func (m Model) updateSelectModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// 字符快捷键处理
-		switch msg.String() {
+		switch keyMsg.String() {
 		case "q":
 			m.state = stateChat
 			m.chatInput.Focus()
@@ -214,9 +213,8 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.Type {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.Type {
 		case tea.KeyEsc, tea.KeyLeft:
 			// 返回平台选择看板
 			m.state = stateSelectModel
@@ -294,7 +292,7 @@ func (m Model) updateSelectModelPreset(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		// 字符快捷键处理
-		switch msg.String() {
+		switch keyMsg.String() {
 		case "q":
 			m.state = stateSelectModel
 			return m, nil
@@ -454,11 +452,9 @@ func (m Model) viewSelectModel() string {
 			modelHint = bentoModelChipStyle.Render(fmt.Sprintf(" [模型: %s]", p.CurrentModel))
 		}
 
-		nameStyled := p.Name
+		nameStyled := bentoNormalItemStyle.Render(p.Name)
 		if m.cursor == i {
 			nameStyled = bentoActiveItemStyle.Render(p.Name)
-		} else {
-			nameStyled = bentoNormalItemStyle.Render(p.Name)
 		}
 
 		s.WriteString(fmt.Sprintf("%s%s %-16s %s%s%s\n", cursor, checked, nameStyled, statusBadge, modelHint, desc))
@@ -516,15 +512,14 @@ func (m Model) viewSelectModelPreset() string {
 			checked = selectedStyle.Render("[*]")
 		}
 
-		itemStyled := choice
-		if choice == "[+] 自定义输入模型名称..." {
+		itemStyled := bentoNormalItemStyle.Render(choice)
+		switch {
+		case choice == "[+] 自定义输入模型名称...":
 			itemStyled = lipgloss.NewStyle().Foreground(colorYellow).Render(choice)
-		} else if choice == m.currentModel {
+		case choice == m.currentModel:
 			itemStyled = lipgloss.NewStyle().Bold(true).Foreground(colorCyan).Render(choice) + dimStyle.Render(" (当前激活)")
-		} else if m.presetCursor == i {
+		case m.presetCursor == i:
 			itemStyled = bentoActiveItemStyle.Render(choice)
-		} else {
-			itemStyled = bentoNormalItemStyle.Render(choice)
 		}
 
 		s.WriteString(fmt.Sprintf("%s%s %s\n", cursor, checked, itemStyled))

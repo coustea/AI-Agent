@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -1341,5 +1342,41 @@ func TestTUI_ShutdownClearsPendingPermission(t *testing.T) {
 	}
 	if m.isGenerating {
 		t.Errorf("isGenerating must be reset on shutdown")
+	}
+}
+
+func TestTUI_ViewLayoutHeight(t *testing.T) {
+	ag := newMockAgent()
+	m := NewModel(ag, ag)
+	for i := 0; i < 20; i++ {
+		m.messages = append(m.messages, ChatMessage{
+			Sender:  "You",
+			Content: fmt.Sprintf("Question %d with some longer text to fill up lines in viewport", i),
+		})
+		m.messages = append(m.messages, ChatMessage{
+			Sender:  "Tide",
+			Content: fmt.Sprintf("Answer %d with multiple lines of helpful responses from assistant\nLine 2 of answer\nLine 3 of answer", i),
+		})
+	}
+	mIntf, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = mIntf.(Model)
+	out := m.View()
+	h := lipgloss.Height(out)
+	t.Logf("Height of View with many messages in 24-line terminal: %d", h)
+	if h > 24 {
+		t.Errorf("View height %d exceeds window height 24", h)
+	}
+
+	// 验证按键不会破坏视口或使输入框异常
+	for _, key := range []tea.KeyType{tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown} {
+		mIntf, _ = m.Update(tea.KeyMsg{Type: key})
+		m = mIntf.(Model)
+		newH := lipgloss.Height(m.View())
+		if newH > 24 {
+			t.Errorf("View height %d exceeds window height 24 after key %v", newH, key)
+		}
+		if !strings.Contains(m.View(), "PROMPT · 对话模式") {
+			t.Errorf("Input box disappeared after key %v", key)
+		}
 	}
 }

@@ -52,12 +52,11 @@ type ChatMessage struct {
 
 // updateChat 处理聊天页面的键盘输入和发送逻辑
 func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
 		// 1. 若当前存在挂起的权限审批请求，优先处理审批交互
 		if m.pendingPerm != nil {
 			reqID := m.pendingPerm.RequestID
-			switch msg.String() {
+			switch keyMsg.String() {
 			case "y", "Y":
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionAllowOnce)
 				if len(m.messages) > 0 {
@@ -71,6 +70,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.updateViewportDimensions()
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -89,6 +89,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.updateViewportDimensions()
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -107,6 +108,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.updateViewportDimensions()
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -114,7 +116,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			if msg.Type == tea.KeyEsc {
+			if keyMsg.Type == tea.KeyEsc {
 				_ = m.agent.RespondPermission(reqID, protocol.DecisionDeny)
 				if len(m.messages) > 0 {
 					m.messages[len(m.messages)-1].Blocks = append(m.messages[len(m.messages)-1].Blocks, MessageBlock{
@@ -127,6 +129,7 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.pendingPerm = nil
 				m.chatInput.Placeholder = "Tide 正在思考生成中... (按 Ctrl+C 或 Esc 可中断)"
+				m.updateViewportDimensions()
 				if m.viewportReady {
 					m.viewport.SetContent(m.renderChatMessages())
 					m.viewport.GotoBottom()
@@ -138,26 +141,11 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		// 2. 翻页与视口滚动快捷键支持 (PgUp, PgDown, Ctrl+U, Ctrl+B, Ctrl+F，以及输入框为空时的上下键)
-		switch msg.Type {
-		case tea.KeyPgUp, tea.KeyPgDown, tea.KeyCtrlU, tea.KeyCtrlB, tea.KeyCtrlF:
-			if m.viewportReady {
-				var cmd tea.Cmd
-				m.viewport, cmd = m.viewport.Update(msg)
-				return m, cmd
-			}
-
-		case tea.KeyUp:
-			if m.viewportReady && m.chatInput.Value() == "" {
-				m.viewport.LineUp(2)
-				return m, nil
-			}
-
-		case tea.KeyDown:
-			if m.viewportReady && m.chatInput.Value() == "" {
-				m.viewport.LineDown(2)
-				return m, nil
-			}
+		// 2. 历史记录专由鼠标滚轮上下滑动查看；
+		// 屏蔽上下方向键/翻页键对视口滚动的拦截与篡改，保障输入框永远常驻底部不抖动、不消失。
+		switch keyMsg.Type {
+		case tea.KeyUp, tea.KeyDown, tea.KeyPgUp, tea.KeyPgDown:
+			return m, nil
 
 		case tea.KeyEnter:
 			// 如果正在流式生成中，避免重复触发
@@ -230,10 +218,33 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// updateViewportDimensions 动态精确计算聊天页面视口尺寸，确保总行数严丝合缝匹配终端高度
+func (m *Model) updateViewportDimensions() {
+	if m.width <= 0 || m.height <= 0 {
+		return
+	}
+	cardWidth := max(60, m.width-6)
+	m.chatInput.Width = max(40, cardWidth-6)
+
+	headerHeight := lipgloss.Height(m.renderHeaderBar()) + 1 // 含与视口的分隔换行
+	statusHeight := lipgloss.Height(m.renderStatusBar())     // 已内含换行
+	inputHeight := lipgloss.Height(m.renderInputBox())
+	permHeight := 0
+	if m.pendingPerm != nil {
+		permHeight = lipgloss.Height(m.renderPermissionCard()) + 1
+	}
+
+	// 视口高度 = 终端总高度 - 固定组件高度 - 视口后换行(1)
+	nonViewportHeight := headerHeight + statusHeight + permHeight + inputHeight + 1
+	vpHeight := max(4, m.height-nonViewportHeight)
+
+	m.viewport.Width = max(40, m.width-2)
+	m.viewport.Height = vpHeight
+	m.viewportReady = true
+}
+
 // renderHeaderBar 渲染固定在顶部的 Claude 风格品牌与状态栏
 func (m Model) renderHeaderBar() string {
-	var sb strings.Builder
-
 	cfg := m.agent.Config()
 	modelInfo := "未配置模型 (输入 /model 配置)"
 	if cfg.ModelName != "" {
@@ -250,11 +261,8 @@ func (m Model) renderHeaderBar() string {
 	dirTag := headerDirStyle.Render(" 📂 目录: " + m.agent.WorkDir())
 
 	headerRow := fmt.Sprintf("%s %s %s%s", brandBadge, modelTag, memTag, dirTag)
-	sb.WriteString("\n" + headerRow + "\n")
-
-	divider := headerDividerStyle.Render(strings.Repeat("─", max(50, m.width-2)))
-	sb.WriteString(divider)
-	return sb.String()
+	divider := headerDividerStyle.Render(strings.Repeat("─", max(40, m.width-2)))
+	return fmt.Sprintf("%s\n%s", headerRow, divider)
 }
 
 // renderStatusBar 渲染运行状态指示器 (Spinner + 就绪/思考/工具中 + 视口滚动百分比)
@@ -273,7 +281,7 @@ func (m Model) renderStatusBar() string {
 	scrollHint := ""
 	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
 		percent := int(m.viewport.ScrollPercent() * 100)
-		scrollHint = scrollIndicatorStyle.Render(fmt.Sprintf(" [已滚至 %d%% | PgUp/PgDn 翻页]", percent))
+		scrollHint = scrollIndicatorStyle.Render(fmt.Sprintf(" [已滚至 %d%% | 鼠标滚轮翻看]", percent))
 	}
 
 	return fmt.Sprintf(" %s%s\n", statusText, scrollHint)
@@ -289,7 +297,7 @@ func (m Model) renderPermissionCard() string {
 
 	var sb strings.Builder
 	title := cardLabelYellow.Render("🛡️  [权限审批 Gate 3] · 拦截潜在高危行为")
-	sb.WriteString(title + "\n\n")
+	sb.WriteString(title + "\n")
 
 	sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelOrange.Render("⚡ 工具目标:"), req.ToolName))
 	argPreview := codeArgStyle.Render(req.Arguments)
@@ -297,7 +305,7 @@ func (m Model) renderPermissionCard() string {
 	sb.WriteString(fmt.Sprintf("  %s %s\n", cardLabelRed.Render("⚠️  拦截原因:"), req.Reason))
 
 	divider := dockDividerStyle.Render(strings.Repeat("─", max(20, cardWidth-6)))
-	sb.WriteString("\n" + divider + "\n")
+	sb.WriteString(divider + "\n")
 
 	actions := fmt.Sprintf("  %s %s   %s %s   %s %s",
 		keycapAllowStyle.Render("[y] 允许本次"),
@@ -316,7 +324,7 @@ func (m Model) renderPermissionCard() string {
 func (m Model) renderInputBox() string {
 	cardWidth := max(60, m.width-6)
 
-	var borderCol lipgloss.Color = colorBrand
+	borderCol := colorBrand
 	var statusBadge string
 
 	if m.pendingPerm != nil {
@@ -338,7 +346,7 @@ func (m Model) renderInputBox() string {
 	topRow := fmt.Sprintf("%s  %s", statusBadge, modelBadge)
 	inputRow := m.chatInput.View()
 
-	// 底部操作快捷键栏
+	// 底部操作快捷键栏（精简且自适应宽度，杜绝折行撑高卡片）
 	var footerRow string
 	if m.pendingPerm != nil {
 		footerRow = fmt.Sprintf(" %s %s   %s %s   %s %s",
@@ -357,13 +365,13 @@ func (m Model) renderInputBox() string {
 		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s%s%s%s%s",
 			item("Enter", "发送"),
 			sep,
-			item("滚轮/↑↓/PgUp", "翻看记录"),
+			item("鼠标滚轮", "翻看历史"),
 			sep,
-			item("/think", "思考看板"),
+			item("/think", "思考"),
 			sep,
-			item("/log", "JSON追踪"),
+			item("/log", "追踪"),
 			sep,
-			item("/model", "切换模型"),
+			item("/model", "模型"),
 			sep,
 			item("/clear", "清屏"),
 			sep,
@@ -372,7 +380,7 @@ func (m Model) renderInputBox() string {
 	}
 
 	divider := dockDividerStyle.Render(strings.Repeat("─", max(20, cardWidth-4)))
-	dockContent := fmt.Sprintf("%s\n\n  %s\n\n%s\n%s", topRow, inputRow, divider, footerRow)
+	dockContent := fmt.Sprintf("%s\n  %s\n%s\n%s", topRow, inputRow, divider, footerRow)
 
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -507,13 +515,13 @@ func (m Model) viewChat() string {
 	var s strings.Builder
 
 	// 1. 顶部固定 Header 状态栏
-	s.WriteString(m.renderHeaderBar() + "\n\n")
+	s.WriteString(m.renderHeaderBar() + "\n")
 
 	// 2. 中部 Viewport 聊天记录滚动展示
 	if m.viewportReady {
-		s.WriteString(m.viewport.View() + "\n\n")
+		s.WriteString(m.viewport.View() + "\n")
 	} else {
-		s.WriteString(m.renderChatMessages() + "\n\n")
+		s.WriteString(m.renderChatMessages() + "\n")
 	}
 
 	// 3. 运行状态栏 (Spinner / 就绪 / 视口滚动百分比)
@@ -521,11 +529,11 @@ func (m Model) viewChat() string {
 
 	// 4. 若有挂起的权限审批，高亮呈现权限提示卡片
 	if m.pendingPerm != nil {
-		s.WriteString(m.renderPermissionCard() + "\n\n")
+		s.WriteString(m.renderPermissionCard() + "\n")
 	}
 
 	// 5. 底部高亮交互驾驶舱 (Command Dock: 整合输入框、模式状态、当前模型与按键操作)
-	s.WriteString(m.renderInputBox() + "\n")
+	s.WriteString(m.renderInputBox())
 
 	return s.String()
 }
