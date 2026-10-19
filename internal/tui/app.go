@@ -177,11 +177,14 @@ func NewModel(ag protocol.Agent, traces TraceSource) Model {
 		traces:          traces,
 		spinner:         sp,
 		viewport:        vp,
+		width:           80,
+		height:          24,
 	}
 
 	// 主线永远是聊天对话页面（输入框交互）
 	m.state = stateChat
 	m.chatInput.Focus()
+	m.updateViewportDimensions()
 
 	if cfgView.HasAPIKey {
 		m.messages = append(m.messages, ChatMessage{

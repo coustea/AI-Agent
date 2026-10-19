@@ -6,57 +6,61 @@ import (
 
 var (
 	// ==========================================
-	// 1. 现代化调色系统 (Tokyo Night / Claude Dark)
+	// 1. 现代潮汐深空调色系统 (Tide Modern / Deep Abyssal)
 	// ==========================================
-	colorBrand       = lipgloss.Color("#FF7A59") // Claude 暖珊瑚活力橙
-	colorBrandLight  = lipgloss.Color("#FFA07A") // 亮珊瑚高光色
-	colorBrandSubtle = lipgloss.Color("#2D1F1D") // 品牌微透暗底
+	colorBrand       = lipgloss.Color("#38BDF8") // 潮汐天蓝 (Sky Blue 主品牌色)
+	colorBrandLight  = lipgloss.Color("#7DD3FC") // 潮汐浪花浅蓝 (高亮文字)
+	colorBrandSubtle = lipgloss.Color("#0F2231") // 品牌微透暗底
 
 	colorUser       = lipgloss.Color("#38BDF8") // 用户输入与高亮 (Sky Blue)
-	colorUserSubtle = lipgloss.Color("#162938") // 用户卡片微暗底
+	colorUserSubtle = lipgloss.Color("#112233") // 用户卡片微暗底
 
-	colorReasoning     = lipgloss.Color("#A78BFA") // 思考链薰衣草紫 (Violet)
-	colorReasoningText = lipgloss.Color("#DDD6FE") // 思考链柔和高对比文本
+	colorReasoning       = lipgloss.Color("#A78BFA") // 思考链晶体紫 (Violet)
+	colorReasoningText   = lipgloss.Color("#DDD6FE") // 思考链柔和高对比文本
+	colorReasoningSubtle = lipgloss.Color("#1E1B2E") // 思考微紫暗底
 
-	colorGreen       = lipgloss.Color("#34D399") // 成功、激活与就绪 (Emerald)
-	colorGreenSubtle = lipgloss.Color("#132F23") // 成功微绿暗底
+	colorGreen       = lipgloss.Color("#10B981") // 成功、激活与就绪 (Emerald)
+	colorGreenLight  = lipgloss.Color("#6EE7B7") // 浅海绿高光
+	colorGreenSubtle = lipgloss.Color("#062E20") // 成功微绿暗底
 
-	colorYellow       = lipgloss.Color("#FBBF24") // 待审批与运行中提醒 (Amber)
-	colorYellowSubtle = lipgloss.Color("#332814") // 警告微黄暗底
+	colorYellow       = lipgloss.Color("#F59E0B") // 待审批与进行中 (Amber)
+	colorYellowLight  = lipgloss.Color("#FDE68A") // 琥珀亮金
+	colorYellowSubtle = lipgloss.Color("#2A1D08") // 警告微黄暗底
 
 	colorRed       = lipgloss.Color("#F43F5E") // 阻断、报错与危险 (Rose Red)
-	colorRedSubtle = lipgloss.Color("#38171E") // 报错微红暗底
+	colorRedLight  = lipgloss.Color("#FDA4AF") // 浅玫瑰红
+	colorRedSubtle = lipgloss.Color("#2E0D14") // 报错微红暗底
 
-	colorOrange = lipgloss.Color("#FB923C") // 工具名称与提示 (Orange)
-	colorCyan   = lipgloss.Color("#22D3EE") // 细节高亮青色
+	colorOrange = lipgloss.Color("#FB923C") // 工具名称与高亮 (Warm Orange)
+	colorCyan   = lipgloss.Color("#2DD4BF") // 浪花青色 (Teal Cyan)
 
-	colorSurface      = lipgloss.Color("#1E222D") // 悬浮卡片背景深灰
-	colorBorder       = lipgloss.Color("#333A4C") // 柔和卡片边框灰
-	colorBorderActive = lipgloss.Color("#4F5B75") // 激活态高亮边框灰
+	colorSurface      = lipgloss.Color("#161B22") // 悬浮卡片背景深灰 (GitHub Dark / Raycast)
+	colorSurfaceAlt   = lipgloss.Color("#21262D") // 次级容器轻质衬底
+	colorBorder       = lipgloss.Color("#30363D") // 柔和微暗边框灰 (低侵入性)
+	colorBorderActive = lipgloss.Color("#38BDF8") // 激活态高亮天蓝边框
+	colorBorderViolet = lipgloss.Color("#8B5CF6") // 思考链微光边框
 
-	colorTextNormal = lipgloss.Color("#E2E8F0") // 正文高对比度白灰
-	colorTextMuted  = lipgloss.Color("#94A3B8") // 辅助文本浅灰
-	colorDim        = lipgloss.Color("#64748B") // 弱化文本暗灰
+	colorTextNormal = lipgloss.Color("#F0F6FC") // 正文高对比度白灰
+	colorTextMuted  = lipgloss.Color("#8B949E") // 辅助文本浅灰
+	colorDim        = lipgloss.Color("#484F58") // 弱化文本暗灰 (微图标/折叠)
 
 	// ==========================================
-	// 2. 顶部 Header 状态栏样式
+	// 2. 顶部 Header 状态栏样式 (极简单行 Flex 布局)
 	// ==========================================
 	headerBadgeStyle = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorBrand).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Foreground(lipgloss.Color("#0B0F14")).
 				Padding(0, 1)
 
 	headerTagStyle = lipgloss.NewStyle().
-			Bold(true).
 			Background(colorSurface).
-			Foreground(colorUser).
+			Foreground(colorBrandLight).
 			Padding(0, 1)
 
 	headerMemoryStyle = lipgloss.NewStyle().
-				Bold(true).
 				Background(colorGreenSubtle).
-				Foreground(colorGreen).
+				Foreground(colorGreenLight).
 				Padding(0, 1)
 
 	headerDirStyle = lipgloss.NewStyle().
@@ -78,6 +82,12 @@ var (
 				Bold(true).
 				Foreground(colorTextNormal)
 
+	userBlockContainer = lipgloss.NewStyle().
+				BorderLeft(true).
+				BorderStyle(lipgloss.ThickBorder()).
+				BorderForeground(colorBrand).
+				PaddingLeft(1)
+
 	assistantBadgeStyle = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorBrandSubtle).
@@ -91,9 +101,8 @@ var (
 				Padding(0, 1)
 
 	tokenBadgeStyle = lipgloss.NewStyle().
-			Background(colorSurface).
 			Foreground(colorTextMuted).
-			Padding(0, 1)
+			Italic(true)
 
 	dimStyle = lipgloss.NewStyle().
 			Foreground(colorTextMuted)
@@ -106,23 +115,28 @@ var (
 	// 4. 深度思考链与思考看板专用样式
 	// ==========================================
 	reasoningTextStyle = lipgloss.NewStyle().
-				Foreground(colorReasoningText).
-				Italic(true)
+				Foreground(colorReasoningText)
 
 	reasoningTitleStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(colorReasoning)
 
+	thinkingCapsuleStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorBorderViolet).
+				Background(colorReasoningSubtle).
+				Padding(0, 1)
+
 	thinkingBadgeStyle = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorReasoning).
-				Foreground(lipgloss.Color("#1A1D24")).
+				Foreground(lipgloss.Color("#0B0F14")).
 				Padding(0, 1)
 
 	thinkingTabActiveStyle = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorReasoning).
-				Foreground(lipgloss.Color("#1A1D24")).
+				Foreground(lipgloss.Color("#0B0F14")).
 				Padding(0, 1)
 
 	thinkingTabInactiveStyle = lipgloss.NewStyle().
@@ -137,7 +151,7 @@ var (
 				Padding(0, 1)
 
 	// ==========================================
-	// 5. 工具卡片与状态芯片样式
+	// 5. 工具卡片与状态芯片样式 (DevTools Bento 风格)
 	// ==========================================
 	toolHeaderStyle = lipgloss.NewStyle().
 			Bold(true).
@@ -156,8 +170,8 @@ var (
 
 	toolCardSuccessStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorGreen).
-				Background(colorGreenSubtle).
+				BorderForeground(colorBorder).
+				Background(colorSurface).
 				Padding(0, 1)
 
 	toolCardErrorStyle = lipgloss.NewStyle().
@@ -169,13 +183,13 @@ var (
 	toolBadgeRunning = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorYellow).
-				Foreground(lipgloss.Color("#1A1D24")).
+				Foreground(lipgloss.Color("#0B0F14")).
 				Padding(0, 1)
 
 	toolBadgeSuccess = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorGreen).
-				Foreground(lipgloss.Color("#1A1D24")).
+				Foreground(lipgloss.Color("#0B0F14")).
 				Padding(0, 1)
 
 	toolBadgeError = lipgloss.NewStyle().
@@ -206,7 +220,7 @@ var (
 	permissionAuditBadgeAllowed = lipgloss.NewStyle().
 					Bold(true).
 					Background(colorGreen).
-					Foreground(lipgloss.Color("#1A1D24")).
+					Foreground(lipgloss.Color("#0B0F14")).
 					Padding(0, 1)
 
 	permissionAuditBadgeDenied = lipgloss.NewStyle().
@@ -245,7 +259,7 @@ var (
 			Foreground(colorYellow)
 
 	codeArgStyle = lipgloss.NewStyle().
-			Background(colorSurface).
+			Background(colorSurfaceAlt).
 			Foreground(colorCyan).
 			Padding(0, 1)
 
@@ -268,7 +282,7 @@ var (
 			Padding(0, 1)
 
 	// ==========================================
-	// 7. 运行状态、滚动条与按键胶囊
+	// 7. 运行状态、滚动条与按键胶囊 (Kbd Badges)
 	// ==========================================
 	statusReadyStyle = lipgloss.NewStyle().
 				Foreground(colorGreen).
@@ -289,8 +303,9 @@ var (
 	footerStyle = lipgloss.NewStyle().
 			Foreground(colorTextMuted)
 
+	// 键盘按键拟物质感标签 (Kbd Pill)
 	keycapPillStyle = lipgloss.NewStyle().
-			Background(colorSurface).
+			Background(colorSurfaceAlt).
 			Foreground(colorBrandLight).
 			Bold(true).
 			Padding(0, 1)
@@ -305,7 +320,7 @@ var (
 	bentoTitleBadgeStyle = lipgloss.NewStyle().
 				Bold(true).
 				Background(colorBrand).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Foreground(lipgloss.Color("#0B0F14")).
 				Padding(0, 1)
 
 	bentoReadyBadgeStyle = lipgloss.NewStyle().
@@ -332,12 +347,12 @@ var (
 				Foreground(colorTextNormal)
 
 	// ==========================================
-	// 9. Command Dock (控制台悬浮驾驶舱) 样式
+	// 9. Command Dock (悬浮命令岛驾驶舱) 样式
 	// ==========================================
 	dockPromptBadgeStyle = lipgloss.NewStyle().
 				Bold(true).
-				Background(colorBrand).
-				Foreground(lipgloss.Color("#FFFFFF")).
+				Background(colorBrandSubtle).
+				Foreground(colorBrand).
 				Padding(0, 1)
 
 	dockGeneratingBadgeStyle = lipgloss.NewStyle().
@@ -353,7 +368,7 @@ var (
 					Padding(0, 1)
 
 	dockModelTagStyle = lipgloss.NewStyle().
-				Background(colorSurface).
+				Background(colorSurfaceAlt).
 				Foreground(colorCyan).
 				Padding(0, 1)
 

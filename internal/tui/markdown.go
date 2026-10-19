@@ -35,7 +35,7 @@ func getRenderer(width int) (*glamour.TermRenderer, error) {
 	}
 
 	newR, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
+		glamour.WithStandardStyle("dark"),
 		glamour.WithWordWrap(width),
 	)
 	if err != nil {

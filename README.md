@@ -27,7 +27,7 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 |---|---|
 | 运行形态 | 单机终端 TUI（[Bubble Tea](https://github.com/charmbracelet/bubbletea)），面向本地单用户 |
 | 模型协议 | 所有厂商统一走 **OpenAI Chat Completions** 协议，无需为每家 SDK 单独适配 |
-| 交互美学 | Claude Code 风格圆角卡片、流式打字机光标、深度思考看板（`/think` / `Ctrl+T`）、Glamour 富文本 Markdown、Token 用量统计 |
+| 交互美学 | Tide Modern 沉浸视觉体系：呼吸卡片对话流、紫晶思考胶囊（`/think` / `Ctrl+T`）、DevTools Bento 工具卡、悬浮命令岛（Command Dock）、Glamour 语法高亮与 Token 统计 |
 | 自主心智 | 拒绝被动拒答，遵循 ReAct 思考循环，面对实时信息与环境问题主动调用工具破局 |
 | 安全模型 | 工作区沙箱 + 三道闸门权限管线：常规操作自主放行，高风险操作精准触发人工审批，永不静默执行 |
 | 跨端契约 | `internal/protocol` 纯数据事件流与配置视图，TUI 与内核零 UI 耦合，可复用于桌面端与无头宿主 |
@@ -70,7 +70,7 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 | **分层长期记忆** | 全局 + 项目两级 Markdown 记忆，每轮对话开始时重新读取，运行期沉淀即时生效 |
 | **可观测性链路** | 淘汰 Markdown 拼接，全链路 100% 原生结构体收集，双轨落盘（`.tide/logs/latest.json` 和 `agent.jsonl`），支持终端交互式双栏 Master-Detail JSON 审计看板（`/log`、`/trace`、`Ctrl+L`） |
 | **大结果安全落盘** | 工具结果超过阈值（8000 runes）自动全量落盘至 `.tide/tool-results/`，回灌「前缀预览 + 完整路径」，既保护上下文窗口又支持模型回读 |
-| **Claude Code 美学 TUI** | 全景圆角卡片流式排版、深度思考链气泡、实时打字机光标 ` ▊`、Glamour 代码语法高亮与富文本排版 |
+| **Tide Modern 美学 TUI** | 现代深邃玄黑+潮汐蓝交互视觉、用户微边框容器、折叠沉浸式紫晶思考气泡、DevTools Bento 工具卡片、悬浮命令岛（Command Dock）与 Glamour 语法高亮 |
 | **工作区沙箱** | 文件工具通过 `SafePath` 严格限制在工作区与 `~/.tide` 内，阻断 `../` 路径逃逸 |
 
 ---

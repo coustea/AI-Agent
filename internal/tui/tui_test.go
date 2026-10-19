@@ -448,10 +448,10 @@ func TestTUI_EndToEnd_MultiTurn_Chat(t *testing.T) {
 		t.Errorf("turn 2 unexpected assistant reply: %+v", lastMsg)
 	}
 
-	// 验证 View 渲染出两轮对话 (去除 ANSI 控制码后验证语义内容)
-	strippedView := ansi.Strip(m.View())
-	if !strings.Contains(strippedView, "My name is Alice") || !strings.Contains(strippedView, "Your name is Alice") {
-		t.Errorf("view missing expected conversation content:\n%s", strippedView)
+	// 验证两轮对话消息渲染内容 (去除 ANSI 控制码后验证语义内容)
+	strippedChat := ansi.Strip(m.renderChatMessages())
+	if !strings.Contains(strippedChat, "My name is Alice") || !strings.Contains(strippedChat, "Your name is Alice") {
+		t.Errorf("messages missing expected conversation content:\n%s", strippedChat)
 	}
 }
 
@@ -884,7 +884,7 @@ func TestTUI_PresetModelSpecsMenu(t *testing.T) {
 func TestTUI_HeaderUsesAgentWorkDir(t *testing.T) {
 	m := NewModel(newMockAgent(), nil)
 	view := ansi.Strip(m.View())
-	if !strings.Contains(view, "目录: /mock/workdir") {
+	if !strings.Contains(view, "/mock/workdir") {
 		t.Fatalf("expected header to show agent workdir, got:\n%s", view)
 	}
 }
@@ -1036,7 +1036,7 @@ func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 		},
 		Result: nil,
 	}, 80)
-	if !strings.Contains(runningCard, "TOOL RUNNING") || !strings.Contains(runningCard, "sleep 1") {
+	if !strings.Contains(runningCard, "RUNNING") || !strings.Contains(runningCard, "bash") || !strings.Contains(runningCard, "sleep 1") {
 		t.Errorf("unexpected running tool card: %s", runningCard)
 	}
 
@@ -1054,7 +1054,7 @@ func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 			IsError:    false,
 		},
 	}, 80)
-	if !strings.Contains(successCard, "TOOL SUCCESS") || !strings.Contains(successCard, "package main") {
+	if !strings.Contains(successCard, "SUCCESS") || !strings.Contains(successCard, "read_file") || !strings.Contains(successCard, "package main") {
 		t.Errorf("unexpected success tool card: %s", successCard)
 	}
 
@@ -1072,7 +1072,7 @@ func TestTUI_ToolAndPermissionCardRendering(t *testing.T) {
 			IsError:    true,
 		},
 	}, 80)
-	if !strings.Contains(errorCard, "TOOL ERROR") || !strings.Contains(errorCard, "exit status 1") {
+	if !strings.Contains(errorCard, "ERROR") || !strings.Contains(errorCard, "bash") || !strings.Contains(errorCard, "exit status 1") {
 		t.Errorf("unexpected error tool card: %s", errorCard)
 	}
 

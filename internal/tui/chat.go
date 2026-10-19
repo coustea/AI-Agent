@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os"
 	"strings"
 
 	"my-agent/internal/protocol"
@@ -219,24 +220,40 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// shortenPath 友好缩写工作区路径（例如用 ~ 代替用户主目录，超长时截短）
+func shortenPath(path string, maxLen int) string {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return "."
+	}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		if strings.HasPrefix(p, home) {
+			p = "~" + strings.TrimPrefix(p, home)
+		}
+	}
+	if len(p) > maxLen && maxLen > 10 {
+		return "..." + p[len(p)-(maxLen-3):]
+	}
+	return p
+}
+
 // updateViewportDimensions 动态精确计算聊天页面视口尺寸，确保总行数严丝合缝匹配终端高度
 func (m *Model) updateViewportDimensions() {
 	if m.width <= 0 || m.height <= 0 {
 		return
 	}
-	cardWidth := max(60, m.width-6)
-	m.chatInput.Width = max(40, cardWidth-6)
+	cardWidth := max(50, m.width-4)
+	m.chatInput.Width = max(36, cardWidth-8)
 
-	headerHeight := lipgloss.Height(m.renderHeaderBar()) + 1 // 含与视口的分隔换行
-	statusHeight := lipgloss.Height(m.renderStatusBar())     // 已内含换行
+	headerHeight := lipgloss.Height(m.renderHeaderBar())
 	inputHeight := lipgloss.Height(m.renderInputBox())
 	permHeight := 0
 	if m.pendingPerm != nil {
 		permHeight = lipgloss.Height(m.renderPermissionCard()) + 1
 	}
 
-	// 视口高度 = 终端总高度 - 固定组件高度 - 视口后换行(1)
-	nonViewportHeight := headerHeight + statusHeight + permHeight + inputHeight + 1
+	// 视口高度 = 终端总高度 - 固定组件高度 (Header + InputBox + 审批卡片)
+	nonViewportHeight := headerHeight + permHeight + inputHeight
 	vpHeight := max(4, m.height-nonViewportHeight)
 
 	m.viewport.Width = max(40, m.width-2)
@@ -244,48 +261,38 @@ func (m *Model) updateViewportDimensions() {
 	m.viewportReady = true
 }
 
-// renderHeaderBar 渲染固定在顶部的 Claude 风格品牌与状态栏
+// renderHeaderBar 渲染固定在顶部的 Tide 现代极简品牌与状态栏 (严格单行 + 水平细线)
 func (m Model) renderHeaderBar() string {
 	cfg := m.agent.Config()
-	modelInfo := "未配置模型 (输入 /model 配置)"
+	modelInfo := "未配置模型 (/model)"
 	if cfg.ModelName != "" {
-		modelInfo = fmt.Sprintf("%s • %s", cfg.Provider, cfg.ModelName)
+		modelInfo = fmt.Sprintf("%s · %s", cfg.Provider, cfg.ModelName)
 	}
 
 	brandBadge := headerBadgeStyle.Render(" Tide ")
 	modelTag := headerTagStyle.Render("● " + modelInfo)
 
-	// 使用缓存的长效记忆篇数（避免每帧重复读取 5 个 Markdown 文件）
-	memCount := m.cachedMemCount
-	memTag := headerMemoryStyle.Render(fmt.Sprintf("🧠 %d 篇记忆生效", memCount))
+	// 工作区目录优先展示：自适应截断
+	availForDir := max(12, m.width-lipgloss.Width(brandBadge)-lipgloss.Width(modelTag)-16)
+	shortDir := shortenPath(m.agent.WorkDir(), availForDir)
+	dirTag := headerDirStyle.Render("📂 " + shortDir)
 
-	dirTag := headerDirStyle.Render(" 📂 目录: " + m.agent.WorkDir())
+	// 生效记忆
+	memTag := headerMemoryStyle.Render(fmt.Sprintf("🧠 %d 篇记忆", m.cachedMemCount))
 
-	headerRow := fmt.Sprintf("%s %s %s%s", brandBadge, modelTag, memTag, dirTag)
-	divider := headerDividerStyle.Render(strings.Repeat("─", max(40, m.width-2)))
-	return fmt.Sprintf("%s\n%s", headerRow, divider)
-}
-
-// renderStatusBar 渲染运行状态指示器 (Spinner + 就绪/思考/工具中 + 视口滚动百分比)
-func (m Model) renderStatusBar() string {
-	var statusText string
-	if m.pendingPerm != nil {
-		statusText = permissionWarnStyle.Render("🛡️ 等待授权决策 (Gate 3)")
-	} else if m.activeToolName != "" {
-		statusText = toolRunningStyle.Render(fmt.Sprintf("%s 正在调用 [%s]...", m.spinner.View(), m.activeToolName))
-	} else if m.isGenerating {
-		statusText = statusThinkingStyle.Render(fmt.Sprintf("%s 正在深度思考生成中...", m.spinner.View()))
+	var headerRow string
+	if m.width >= 80 {
+		headerRow = fmt.Sprintf("%s %s %s %s", brandBadge, modelTag, memTag, dirTag)
+	} else if m.width >= 55 {
+		headerRow = fmt.Sprintf("%s %s %s", brandBadge, modelTag, dirTag)
 	} else {
-		statusText = statusReadyStyle.Render("● 就绪")
+		headerRow = fmt.Sprintf("%s %s", brandBadge, modelTag)
 	}
 
-	scrollHint := ""
-	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
-		percent := int(m.viewport.ScrollPercent() * 100)
-		scrollHint = scrollIndicatorStyle.Render(fmt.Sprintf(" [已滚至 %d%% | 鼠标滚轮翻看]", percent))
-	}
-
-	return fmt.Sprintf(" %s%s\n", statusText, scrollHint)
+	// 严格截断保证单行
+	headerRow = textutil.TruncateUTF8(headerRow, max(30, m.width-2))
+	divider := headerDividerStyle.Render(strings.Repeat("─", max(30, m.width-2)))
+	return fmt.Sprintf("%s\n%s", headerRow, divider)
 }
 
 // renderPermissionCard 渲染 Claude Code 风格高安全性 Gate 3 权限审批交互卡片
@@ -293,7 +300,7 @@ func (m Model) renderPermissionCard() string {
 	if m.pendingPerm == nil {
 		return ""
 	}
-	cardWidth := max(60, m.width-6)
+	cardWidth := max(50, m.width-4)
 	req := m.pendingPerm
 
 	var sb strings.Builder
@@ -321,33 +328,58 @@ func (m Model) renderPermissionCard() string {
 	return toolCardRunningStyle.Width(cardWidth).Render(sb.String())
 }
 
-// renderInputBox 渲染高视觉重心的 Command Dock 交互控制台驾驶舱
+// renderInputBox 渲染悬浮命令岛交互控制台驾驶舱 (Floating Command Dock)
 func (m Model) renderInputBox() string {
-	cardWidth := max(60, m.width-6)
+	cardWidth := max(50, m.width-4)
+	innerW := max(30, cardWidth-4)
 
-	borderCol := colorBrand
+	borderCol := colorBorderActive
 	var statusBadge string
 
 	if m.pendingPerm != nil {
 		borderCol = colorYellow
 		statusBadge = dockPermissionBadgeStyle.Render(" 🛡️ 权限审批决策中 ")
+	} else if m.activeToolName != "" {
+		borderCol = colorBrand
+		statusBadge = dockGeneratingBadgeStyle.Render(fmt.Sprintf(" ⚙️ 正在调用 [%s]... ", m.activeToolName))
 	} else if m.isGenerating {
 		borderCol = colorYellow
 		statusBadge = dockGeneratingBadgeStyle.Render(" ⏳ 思考生成中 ")
 	} else {
+		borderCol = colorBorderActive
 		statusBadge = dockPromptBadgeStyle.Render(" 💬 PROMPT · 对话模式 ")
 	}
 
 	cfg := m.agent.Config()
 	modelBadge := ""
 	if cfg.ModelName != "" {
-		modelBadge = dockModelTagStyle.Render(fmt.Sprintf("● %s • %s", cfg.Provider, cfg.ModelName))
+		readyDot := statusReadyStyle.Render("● 就绪")
+		if m.isGenerating {
+			readyDot = statusThinkingStyle.Render("⏳ 思考中")
+		}
+		modelBadge = dockModelTagStyle.Render(fmt.Sprintf("%s · %s", readyDot, cfg.ModelName))
 	}
 
-	topRow := fmt.Sprintf("%s  %s", statusBadge, modelBadge)
-	inputRow := m.chatInput.View()
+	// 视口滚动比例指示徽标
+	scrollBadge := ""
+	if m.viewportReady && m.viewport.TotalLineCount() > m.viewport.Height {
+		percent := int(m.viewport.ScrollPercent() * 100)
+		scrollBadge = scrollIndicatorStyle.Render(fmt.Sprintf("📜 %d%%", percent))
+	}
 
-	// 底部操作快捷键栏（精简且自适应宽度，杜绝折行撑高卡片）
+	var topRow string
+	if scrollBadge != "" && cardWidth >= 70 {
+		topRow = fmt.Sprintf("%s  %s  %s", statusBadge, modelBadge, scrollBadge)
+	} else if modelBadge != "" && cardWidth >= 55 {
+		topRow = fmt.Sprintf("%s  %s", statusBadge, modelBadge)
+	} else {
+		topRow = statusBadge
+	}
+	topRow = textutil.TruncateUTF8(topRow, innerW)
+
+	inputRow := textutil.TruncateUTF8(m.chatInput.View(), innerW)
+
+	// 底部按键提示 (Kbd Badges，自适应宽度排版，杜绝换行撑破卡片)
 	var footerRow string
 	if m.pendingPerm != nil {
 		footerRow = fmt.Sprintf(" %s %s   %s %s   %s %s",
@@ -359,28 +391,46 @@ func (m Model) renderInputBox() string {
 			dimStyle.Render("(安全拦截)"),
 		)
 	} else {
-		sep := dimStyle.Render("  •  ")
 		item := func(key, desc string) string {
 			return fmt.Sprintf("%s %s", keycapPillStyle.Render(key), dimStyle.Render(desc))
 		}
-		footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s%s%s%s%s",
-			item("Enter", "发送"),
-			sep,
-			item("鼠标滚轮", "翻看历史"),
-			sep,
-			item("/think", "思考"),
-			sep,
-			item("/log", "追踪"),
-			sep,
-			item("/model", "模型"),
-			sep,
-			item("/clear", "清屏"),
-			sep,
-			item("Ctrl+C", "退出"),
-		)
-	}
+		sep := dimStyle.Render("  •  ")
 
-	divider := dockDividerStyle.Render(strings.Repeat("─", max(20, cardWidth-4)))
+		if cardWidth >= 95 {
+			footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s%s%s%s%s",
+				item("Enter", "发送"),
+				sep,
+				item("滚轮", "历史"),
+				sep,
+				item("/think", "思考"),
+				sep,
+				item("/model", "模型"),
+				sep,
+				item("/log", "追踪"),
+				sep,
+				item("Ctrl+C", "退出"),
+			)
+		} else if cardWidth >= 75 {
+			footerRow = fmt.Sprintf(" %s%s%s%s%s%s%s",
+				item("Enter", "发送"),
+				sep,
+				item("/think", "思考"),
+				sep,
+				item("/model", "模型"),
+				sep,
+				item("Ctrl+C", "退出"),
+			)
+		} else {
+			footerRow = fmt.Sprintf(" %s%s%s",
+				item("Enter", "发送"),
+				sep,
+				item("Ctrl+C", "退出"),
+			)
+		}
+	}
+	footerRow = textutil.TruncateUTF8(footerRow, innerW)
+
+	divider := dockDividerStyle.Render(strings.Repeat("─", innerW))
 	dockContent := fmt.Sprintf("%s\n  %s\n%s\n%s", topRow, inputRow, divider, footerRow)
 
 	return lipgloss.NewStyle().
@@ -392,13 +442,33 @@ func (m Model) renderInputBox() string {
 		Render(dockContent)
 }
 
-// renderChatMessages 将所有历史消息格式化为适用于 Viewport 渲染的高质量通透呼吸文本 (无生硬封闭边框)
+// toolSemanticIcon 返回各内置工具专属的语义图标
+func toolSemanticIcon(name string) string {
+	switch name {
+	case "bash":
+		return "⚡ bash"
+	case "read_file":
+		return "📖 read_file"
+	case "write_file":
+		return "✏️ write_file"
+	case "edit_file":
+		return "📝 edit_file"
+	case "glob":
+		return "🌐 glob"
+	case "grep":
+		return "🔍 grep"
+	default:
+		return "⚙️ " + name
+	}
+}
+
+// renderChatMessages 将所有历史消息格式化为适用于 Viewport 渲染的高质量通透呼吸卡片流
 func (m Model) renderChatMessages() string {
-	cardWidth := max(60, m.width-6)
+	cardWidth := max(50, m.width-4)
 	if len(m.messages) == 0 {
-		title := lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render("👋 欢迎使用 Tide 智能助手")
-		text := "  在下方输入框键入问题并按 Enter 即可开始多轮深度对话。\n" +
-			"  随时输入 /model 调出模型配置向导，输入 /clear 可清空上下文记忆。"
+		title := lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render("🌊 欢迎使用 Tide 智能助手")
+		text := "  在下方命令岛键入需求并按 Enter，Tide 将自主调用工具为您解决问题。\n" +
+			"  常用指令: /model (切换模型平台), /think (打开思考看板), /log (全量追踪), /clear (清屏)"
 		return fmt.Sprintf("\n%s\n%s\n\n", title, dimStyle.Render(text))
 	}
 
@@ -406,16 +476,9 @@ func (m Model) renderChatMessages() string {
 	for i, msg := range m.messages {
 		switch msg.Sender {
 		case "You":
-			badge := userBadgeStyle.Render(" 👤 You ")
-			lines := strings.Split(msg.Content, "\n")
-			var indented strings.Builder
-			for j, line := range lines {
-				if j > 0 {
-					indented.WriteString("\n")
-				}
-				indented.WriteString("  " + userPromptTextStyle.Render(line))
-			}
-			sb.WriteString(fmt.Sprintf("%s\n%s\n\n", badge, indented.String()))
+			badge := userBadgeStyle.Render(" ❯ You ")
+			userContent := userBlockContainer.Render(userPromptTextStyle.Render(msg.Content))
+			sb.WriteString(fmt.Sprintf("%s\n%s\n\n", badge, userContent))
 
 		case "System":
 			badge := systemBadgeStyle.Render(" ℹ System ")
@@ -430,7 +493,6 @@ func (m Model) renderChatMessages() string {
 			sb.WriteString(fmt.Sprintf("%s\n%s\n\n", badge, indented.String()))
 
 		case "Tide":
-			// 严格按时间发生的真实先后顺序线性渲染，杜绝任何乱序插入
 			if len(msg.Blocks) > 0 {
 				var sbTide strings.Builder
 				headerShown := false
@@ -439,9 +501,17 @@ func (m Model) renderChatMessages() string {
 					switch block.Kind {
 					case BlockReasoning:
 						if strings.TrimSpace(block.Text) != "" {
-							thoughtHeader := reasoningTitleStyle.Render("💭 思考过程 (Thinking Process):") + " " + dimStyle.Render("[按 Ctrl+T 打开独立看板]")
-							thoughtText := reasoningTextStyle.Render(block.Text)
-							sbTide.WriteString(fmt.Sprintf("  %s\n  %s\n\n", thoughtHeader, thoughtText))
+							raw := strings.TrimSpace(block.Text)
+							lines := strings.Split(raw, "\n")
+							thoughtHeader := reasoningTitleStyle.Render("💭 深度思考") + " " + dimStyle.Render("[按 Ctrl+T 打开独立看板]")
+							var preview string
+							if len(lines) > 4 {
+								preview = strings.Join(lines[:3], "\n") + "\n" + dimStyle.Render(fmt.Sprintf("... (已折叠 %d 行思考，按 Ctrl+T 展开沉浸看板)", len(lines)-3))
+							} else {
+								preview = raw
+							}
+							capsule := thinkingCapsuleStyle.Width(max(40, cardWidth-4)).Render(fmt.Sprintf("%s\n%s", thoughtHeader, reasoningTextStyle.Render(preview)))
+							sbTide.WriteString(capsule + "\n\n")
 						}
 
 					case BlockTool:
@@ -456,13 +526,13 @@ func (m Model) renderChatMessages() string {
 
 					case BlockText:
 						if !headerShown {
-							sbTide.WriteString(assistantBadgeStyle.Render(" 🌊 Tide ") + "\n")
+							sbTide.WriteString(assistantBadgeStyle.Render(" 🌊 Tide ") + "\n\n")
 							headerShown = true
 						}
 						var text string
 						isLastBlock := bIdx == len(msg.Blocks)-1
 						if m.isGenerating && i == len(m.messages)-1 && isLastBlock {
-							text = block.Text + cursorStyle.Render(" ▊")
+							text = renderMarkdown(block.Text, cardWidth) + cursorStyle.Render(" ▊")
 						} else {
 							text = renderMarkdownCached(block.Text, cardWidth)
 						}
@@ -471,7 +541,7 @@ func (m Model) renderChatMessages() string {
 				}
 
 				if msg.Usage != nil && msg.Usage.TotalTokens > 0 {
-					usageText := tokenBadgeStyle.Render(fmt.Sprintf("📊 Token 用量: %d (输入 %d / 输出 %d)",
+					usageText := tokenBadgeStyle.Render(fmt.Sprintf("⚡ %d tokens (输入 %d / 输出 %d)",
 						msg.Usage.TotalTokens, msg.Usage.PromptTokens, msg.Usage.CompletionTokens))
 					sbTide.WriteString("  " + usageText + "\n\n")
 				}
@@ -480,7 +550,7 @@ func (m Model) renderChatMessages() string {
 				continue
 			}
 
-			// 若暂无结构化块（例如刚发起连接或直接包含文本）
+			// 若暂无结构化块
 			if msg.Content != "" || (m.isGenerating && i == len(m.messages)-1) {
 				header := assistantBadgeStyle.Render(" 🌊 Tide ")
 				var bodyText string
@@ -496,11 +566,11 @@ func (m Model) renderChatMessages() string {
 
 				usageText := ""
 				if msg.Usage != nil && msg.Usage.TotalTokens > 0 {
-					usageText = "\n  " + tokenBadgeStyle.Render(fmt.Sprintf("📊 Token 用量: %d (输入 %d / 输出 %d)",
+					usageText = "\n  " + tokenBadgeStyle.Render(fmt.Sprintf("⚡ %d tokens (输入 %d / 输出 %d)",
 						msg.Usage.TotalTokens, msg.Usage.PromptTokens, msg.Usage.CompletionTokens))
 				}
 
-				sb.WriteString(fmt.Sprintf("%s\n%s%s\n\n", header, bodyText, usageText))
+				sb.WriteString(fmt.Sprintf("%s\n\n%s%s\n\n", header, bodyText, usageText))
 			}
 
 		default:
@@ -525,15 +595,12 @@ func (m Model) viewChat() string {
 		s.WriteString(m.renderChatMessages() + "\n")
 	}
 
-	// 3. 运行状态栏 (Spinner / 就绪 / 视口滚动百分比)
-	s.WriteString(m.renderStatusBar())
-
-	// 4. 若有挂起的权限审批，高亮呈现权限提示卡片
+	// 3. 若有挂起的权限审批，高亮呈现权限提示卡片
 	if m.pendingPerm != nil {
 		s.WriteString(m.renderPermissionCard() + "\n")
 	}
 
-	// 5. 底部高亮交互驾驶舱 (Command Dock: 整合输入框、模式状态、当前模型与按键操作)
+	// 4. 底部高亮交互驾驶舱 (Command Dock: 整合输入框、模式状态、当前模型、滚动指示与按键操作)
 	s.WriteString(m.renderInputBox())
 
 	return s.String()
@@ -541,7 +608,7 @@ func (m Model) viewChat() string {
 
 // renderToolCard 将工具调用的执行状态、输入参数及输出结果渲染为精致的 Bento 圆角卡片
 func renderToolCard(tc ToolCallRecord, cardWidth int) string {
-	innerW := max(40, cardWidth-2)
+	innerW := max(36, cardWidth-4)
 
 	var (
 		cardStyle lipgloss.Style
@@ -550,18 +617,19 @@ func renderToolCard(tc ToolCallRecord, cardWidth int) string {
 
 	if tc.Result == nil {
 		cardStyle = toolCardRunningStyle
-		badge = toolBadgeRunning.Render(" ⚙️ TOOL RUNNING ")
+		badge = toolBadgeRunning.Render(" ⚙️ RUNNING ")
 	} else if tc.Result.IsError {
 		cardStyle = toolCardErrorStyle
-		badge = toolBadgeError.Render(" ✖ TOOL ERROR ")
+		badge = toolBadgeError.Render(" ✖ ERROR ")
 	} else {
 		cardStyle = toolCardSuccessStyle
-		badge = toolBadgeSuccess.Render(" ✔ TOOL SUCCESS ")
+		badge = toolBadgeSuccess.Render(" ✔ SUCCESS ")
 	}
 
 	var sb strings.Builder
-	// 顶部状态栏：徽章 + 工具名称
-	sb.WriteString(fmt.Sprintf("%s %s\n", badge, toolHeaderStyle.Render(tc.Call.Name)))
+	// 顶部状态栏：徽章 + 工具名称与语义图标
+	iconTitle := toolSemanticIcon(tc.Call.Name)
+	sb.WriteString(fmt.Sprintf("%s %s\n", badge, toolHeaderStyle.Render(iconTitle)))
 
 	// 参数区
 	if tc.Call.Arguments != "" && tc.Call.Arguments != "{}" {
