@@ -937,6 +937,59 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 	}
 }
 
+func TestAgent_WithAutoApprove(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	gw := &toolCallStepGateway{
+		steps: []func(req *protocol.ChatRequest) []protocol.ChatResponse{
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				return []protocol.ChatResponse{
+					{
+						ToolCalls: []protocol.ToolCall{
+							{ID: "call_bash_auto", Name: "bash", Arguments: `{"command": "touch 'harness_approval_test.tmp' && rm -f 'harness_approval_test.tmp' && echo 'auto_approved_ok'"}`},
+						},
+						Done: true,
+					},
+				}
+			},
+			func(req *protocol.ChatRequest) []protocol.ChatResponse {
+				last := req.Messages[len(req.Messages)-1]
+				if last.Role != protocol.RoleTool || last.ToolResult == nil {
+					t.Fatalf("expected RoleTool message, got: %+v", last)
+				}
+				if last.ToolResult.IsError {
+					t.Fatalf("expected tool call to succeed under auto approve, got error: %s", last.ToolResult.Content)
+				}
+				if !strings.Contains(last.ToolResult.Content, "auto_approved_ok") {
+					t.Errorf("expected tool output to contain 'auto_approved_ok', got: %s", last.ToolResult.Content)
+				}
+				return []protocol.ChatResponse{{Delta: "Auto approval confirmed."}, {Done: true}}
+			},
+		},
+	}
+
+	ag, err := NewAgent(gw, WithWorkDir(tmpDir), WithDefaultTools(), WithAutoApprove(true))
+	if err != nil {
+		t.Fatalf("failed to create agent: %v", err)
+	}
+
+	stream, err := ag.Run(context.Background(), "Run command with auto approve")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	permissionPromptReceived := false
+	for ev := range stream {
+		if ev.Type == protocol.EventPermissionReq {
+			permissionPromptReceived = true
+		}
+	}
+
+	if permissionPromptReceived {
+		t.Errorf("expected NO EventPermissionReq when WithAutoApprove(true) is configured")
+	}
+}
+
 func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgPath := filepath.Join(tmpDir, "test_config.json")

@@ -122,18 +122,6 @@ func WithApprover(approver Approver) Option {
 	}
 }
 
-// WithHardDenyList 向硬拒绝表追加自定义正则（默认表内置，不可清空）
-func WithHardDenyList(denyPatterns []string) Option {
-	return func(m *Manager) {
-		for _, p := range denyPatterns {
-			if p == "" {
-				continue
-			}
-			m.hardDenyPatterns = append(m.hardDenyPatterns, regexp.MustCompile(p))
-		}
-	}
-}
-
 // WithAutoApprove 设置是否全自动放行非硬拒绝操作 (常用于非交互测试或可信自动化模式)
 func WithAutoApprove(auto bool) Option {
 	return func(m *Manager) {
@@ -167,13 +155,6 @@ func NewManager(workDir string, opts ...Option) *Manager {
 	}
 
 	return m
-}
-
-// SetApprover 动态设置用户审批器
-func (m *Manager) SetApprover(approver Approver) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.approver = approver
 }
 
 // SetAutoApprove 动态设置是否全自动放行非硬拒绝操作

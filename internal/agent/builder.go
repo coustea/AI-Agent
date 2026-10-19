@@ -36,24 +36,6 @@ func WithTools(reg *tool.Registry) Option {
 	}
 }
 
-// WithPermission 配置三道闸门权限管理器
-func WithPermission(perm *permission.Manager) Option {
-	return func(a *CoreAgent) {
-		if perm != nil {
-			a.permission = perm
-		}
-	}
-}
-
-// WithApprover 配置用户审批回调
-func WithApprover(approver permission.Approver) Option {
-	return func(a *CoreAgent) {
-		if a.permission != nil {
-			a.permission.SetApprover(approver)
-		}
-	}
-}
-
 // WithAutoApprove 配置是否自动放行非硬拒绝操作 (自动化测试或非交互模式使用)
 func WithAutoApprove(auto bool) Option {
 	return func(a *CoreAgent) {

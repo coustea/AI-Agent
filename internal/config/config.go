@@ -149,11 +149,6 @@ func ProviderIDs() []string {
 	return ids
 }
 
-// ProviderID 返回厂商的规范 ID（别名归一化）。
-func ProviderID(p Provider) string {
-	return canonicalProvider(p)
-}
-
 // ProviderAliases 返回厂商的快捷别名列表
 func ProviderAliases(p Provider) []string {
 	if pm := lookupProvider(p); pm != nil {
