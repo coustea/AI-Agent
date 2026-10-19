@@ -54,12 +54,21 @@ if (-not (Test-Path $InstallDir)) {
 }
 
 $ExePath = Join-Path $InstallDir "tide.exe"
+$IsUpgrade = Test-Path $ExePath
+if ($IsUpgrade) {
+    Write-Host "=> 检测到已安装版本，正在平滑升级至 $Version..." -ForegroundColor Cyan
+}
+
 Copy-Item -Path (Join-Path $TempDir "tide.exe") -Destination $ExePath -Force
 
 # 清理临时文件
 Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 
-Write-Host "`n✔ Tide 安装成功！" -ForegroundColor Green
+if ($IsUpgrade) {
+    Write-Host "`n✔ Tide 平滑更新成功！" -ForegroundColor Green
+} else {
+    Write-Host "`n✔ Tide 安装成功！" -ForegroundColor Green
+}
 Write-Host "=> 安装位置: $ExePath" -ForegroundColor Green
 
 # 4. 检查与添加 PATH

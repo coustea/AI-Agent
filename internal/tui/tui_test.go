@@ -1380,3 +1380,22 @@ func TestTUI_ViewLayoutHeight(t *testing.T) {
 		}
 	}
 }
+
+func TestTUI_SlashCommand_Update(t *testing.T) {
+	ag := newMockAgent()
+	m := NewModel(ag, ag)
+	m.chatInput.SetValue("/update")
+	mIntf, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = mIntf.(Model)
+
+	if cmd != nil {
+		t.Errorf("expected nil cmd for /update, got %v", cmd)
+	}
+	if len(m.messages) == 0 {
+		t.Fatalf("expected message appended for /update command")
+	}
+	lastMsg := m.messages[len(m.messages)-1]
+	if !strings.Contains(lastMsg.Content, "tide update") {
+		t.Errorf("expected /update response to mention 'tide update', got: %s", lastMsg.Content)
+	}
+}

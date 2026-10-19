@@ -101,27 +101,40 @@ fi
 
 chmod +x "${TMP_DIR}/tide"
 
-# 5. 选择安装路径
+# 5. 选择安装路径与写入
 INSTALL_DIR="/usr/local/bin"
-USE_SUDO=0
+IS_UPGRADE=0
+
+if [ -f "${INSTALL_DIR}/tide" ] || [ -f "$HOME/.local/bin/tide" ]; then
+    IS_UPGRADE=1
+    echo "=> 检测到已安装版本，正在平滑升级至 ${VERSION}..."
+fi
 
 if [ -w "$INSTALL_DIR" ]; then
-    cp "${TMP_DIR}/tide" "${INSTALL_DIR}/tide"
+    rm -f "${INSTALL_DIR}/tide" 2>/dev/null || true
+    cp -f "${TMP_DIR}/tide" "${INSTALL_DIR}/tide"
+    chmod 755 "${INSTALL_DIR}/tide"
 else
     if command -v sudo >/dev/null 2>&1 && [ -t 0 ]; then
         echo "=> 需要管理员权限将 tide 安装到 ${INSTALL_DIR}，请输入密码:"
-        sudo cp "${TMP_DIR}/tide" "${INSTALL_DIR}/tide"
+        sudo rm -f "${INSTALL_DIR}/tide" 2>/dev/null || true
+        sudo cp -f "${TMP_DIR}/tide" "${INSTALL_DIR}/tide"
         sudo chmod 755 "${INSTALL_DIR}/tide"
     else
         INSTALL_DIR="$HOME/.local/bin"
         mkdir -p "$INSTALL_DIR"
-        cp "${TMP_DIR}/tide" "${INSTALL_DIR}/tide"
+        rm -f "${INSTALL_DIR}/tide" 2>/dev/null || true
+        cp -f "${TMP_DIR}/tide" "${INSTALL_DIR}/tide"
         chmod 755 "${INSTALL_DIR}/tide"
     fi
 fi
 
 echo ""
-echo "${BOLD}${GREEN}✔ Tide 安装成功！${NC}"
+if [ "$IS_UPGRADE" = "1" ]; then
+    echo "${BOLD}${GREEN}✔ Tide 平滑更新成功！${NC}"
+else
+    echo "${BOLD}${GREEN}✔ Tide 安装成功！${NC}"
+fi
 echo "=> 安装位置: ${BOLD}${INSTALL_DIR}/tide${NC}"
 
 # 6. PATH 检测与提示

@@ -61,5 +61,19 @@ func (m Model) handleSlashCommand(text string) (Model, tea.Cmd, bool) {
 		return newM, nil, true
 	}
 
+	// 5. 版本更新提示指令
+	if trimmed == "/update" || trimmed == "/upgrade" {
+		m.chatInput.Reset()
+		m.messages = append(m.messages, ChatMessage{
+			Sender:  "Tide",
+			Content: "💡 **如何更新 Tide 至最新版本：**\n\n- **终端一键更新**：退出当前会话后在终端执行：\n  ```bash\n  tide update\n  ```\n- **重新执行一键安装**：\n  ```bash\n  curl -fsSL https://raw.githubusercontent.com/coustea/AI-Agent/my-agent/install.sh | bash\n  ```\n\n*提示：升级将平滑覆盖二进制，您的长期记忆、聊天追踪与个人配置（`~/.tide/`）均会被完好保留。*",
+		})
+		if m.viewportReady {
+			m.viewport.SetContent(m.renderChatMessages())
+			m.viewport.GotoBottom()
+		}
+		return m, nil, true
+	}
+
 	return m, nil, false
 }
