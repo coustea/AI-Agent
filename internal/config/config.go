@@ -49,7 +49,7 @@ const (
 var DefaultSparkAPIKey = ""
 
 // Version 当前软件发布版本号（可通过编译期 -ldflags "-X my-agent/internal/config.Version=..." 覆盖）
-var Version = "v1.0.0"
+var Version = "v1.0.1"
 
 // providerMeta 描述一个模型厂商的静态元数据，是全部厂商相关映射的单一来源。
 type providerMeta struct {

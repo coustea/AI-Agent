@@ -5,7 +5,7 @@
 set -e
 
 REPO="coustea/AI-Agent"
-DEFAULT_VERSION="v1.0.0"
+DEFAULT_VERSION="v1.0.1"
 VERSION="${TIDE_VERSION:-$DEFAULT_VERSION}"
 
 # 颜色控制

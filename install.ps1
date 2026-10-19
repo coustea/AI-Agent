@@ -4,7 +4,7 @@
 $ErrorActionPreference = "Stop"
 
 $Repo = "coustea/AI-Agent"
-$DefaultVersion = "v1.0.0"
+$DefaultVersion = "v1.0.1"
 $Version = if ($env:TIDE_VERSION) { $env:TIDE_VERSION } else { $DefaultVersion }
 
 Write-Host "====================================================" -ForegroundColor Cyan
