@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"my-agent/internal/protocol"
 
@@ -18,13 +17,12 @@ import (
 type sessionState int
 
 const (
-	stateSelectModel       sessionState = iota // 状态 1: 模型平台看板 (Enter 一键直切, m 选规格, e 改密钥)
-	stateSelectModelPreset                     // 状态 2: 预设模型规格列表点选 (Flash/Pro/Reasoner/[+]自定义)
-	stateInputAPIKey                           // 状态 3: 输入/修改 API Key
-	stateInputModel                            // 状态 4: 输入自定义模型名称并保存
-	stateChat                                  // 状态 5: 主聊天页面（在 chat.go 中处理）
-	stateTraceInspector                        // 状态 6: 终端全量 JSON 追踪看板（在 inspector.go 中处理）
-	stateThinkingViewer                        // 状态 7: 深度思考过程沉浸看板（在 thinking.go 中处理）
+	stateInputBaseURL   sessionState = iota // 状态 1: 输入/修改 BaseURL (按 Enter 确认)
+	stateInputAPIKey                        // 状态 2: 输入/修改 API Key (按 Enter 确认)
+	stateInputModel                         // 状态 3: 输入/修改自定义模型名称并保存
+	stateChat                               // 状态 4: 主聊天页面（在 chat.go 中处理）
+	stateTraceInspector                     // 状态 5: 终端全量 JSON 追踪看板（在 inspector.go 中处理）
+	stateThinkingViewer                     // 状态 6: 深度思考过程沉浸看板（在 thinking.go 中处理）
 )
 
 // agentStreamEventMsg 封装来自 Agent 的单次纯数据流式事件
@@ -50,25 +48,17 @@ func waitForAgentEvent(ch <-chan protocol.Event) tea.Cmd {
 type Model struct {
 	state sessionState
 
-	// 状态 1: 模型选择（官网示例风格，在 config_wizard.go 中处理）
-	cursor          int
-	choices         []string
-	selected        int
-	currentProvider string
-	currentModel    string
-	// wizardAPIKey 仅在配置向导的 API Key 输入页内暂存：进入输入页即重置，
-	// 提交或取消后不再跨厂商残留（不变量由单一入口保证，不依赖各处手工清空）
-	wizardAPIKey string
+	// 配置向导暂存字段（仅在向导流程内有效，取消或保存后清空）
+	wizardBaseURL string
+	wizardAPIKey  string
+	wizardModel   string
 
-	// 状态 2: 模型规格预设选择菜单
-	presetChoices []string
-	presetCursor  int
+	// 状态 1~3: 配置输入框（在 config_wizard.go 中处理）
+	baseURLInput textinput.Model
+	apiKeyInput  textinput.Model
+	modelInput   textinput.Model
 
-	// 状态 3 & 4: 配置输入框（在 config_wizard.go 中处理）
-	apiKeyInput textinput.Model
-	modelInput  textinput.Model
-
-	// 状态 5: 聊天输入框与消息列表（在 chat.go 中处理）
+	// 状态 4: 聊天输入框与消息列表（在 chat.go 中处理）
 	chatInput    textinput.Model
 	messages     []ChatMessage
 	isGenerating bool               // 是否正在流式生成中
@@ -83,14 +73,14 @@ type Model struct {
 	spinner        spinner.Model
 	activeToolName string
 
-	// 状态 6: 终端全量 JSON 追踪审计看板 (在 inspector.go 中处理)
+	// 状态 5: 终端全量 JSON 追踪审计看板 (在 inspector.go 中处理)
 	traceEvents    []protocol.TraceEvent
 	traceCursor    int
 	traceViewport  viewport.Model
 	traceFocusJSON bool // false: 焦点在上方步骤列表; true: 焦点在下方全宽 JSON 视口
 	traceRawMode   bool // false: 纯净底层 JSON 模式; true: 全量原始 Wire 报文模式
 
-	// 状态 7: 深度思考过程看板 (在 thinking.go 中处理)
+	// 状态 6: 深度思考过程看板 (在 thinking.go 中处理)
 	thinkingEntries   []ReasoningEntry
 	thinkingCursor    int
 	thinkingFocusText bool
@@ -114,7 +104,13 @@ type Model struct {
 // NewModel 初始化并返回主 Model；ag 由装配入口保证非 nil，未就绪状态经 ConfigView 表达。
 // traces 为 /log 面板的数据源，未装配日志中间件时传 nil。
 func NewModel(ag protocol.Agent, traces TraceSource) Model {
-	// 1. API Key 输入框
+	// 1. Base URL 输入框
+	baseURLInput := textinput.New()
+	baseURLInput.Placeholder = "输入端点地址 (如 https://api.openai.com/v1 或 http://127.0.0.1:11434/v1)"
+	baseURLInput.CharLimit = 300
+	baseURLInput.Width = 60
+
+	// 2. API Key 输入框
 	apiKeyInput := textinput.New()
 	apiKeyInput.Placeholder = "在此粘贴或输入你的 API Key (按 Enter 确认)"
 	apiKeyInput.EchoMode = textinput.EchoPassword
@@ -122,63 +118,45 @@ func NewModel(ag protocol.Agent, traces TraceSource) Model {
 	apiKeyInput.CharLimit = 200
 	apiKeyInput.Width = 60
 
-	// 2. 模型名称输入框
+	// 3. 模型名称输入框
 	modelInput := textinput.New()
-	modelInput.Placeholder = "输入模型名称 (如 gemini-2.5-flash / deepseek-flash)"
+	modelInput.Placeholder = "输入模型名称 (如 gpt-4o / deepseek-chat / qwen2.5-coder)"
 	modelInput.CharLimit = 100
 	modelInput.Width = 60
 
-	// 3. 聊天输入框 (Claude Code 风格)
+	// 4. 聊天输入框 (Claude Code 风格)
 	chatInput := textinput.New()
 	chatInput.Prompt = promptPrefixStyle.Render("❯ ")
 	chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 	chatInput.CharLimit = 2000
 	chatInput.Width = 70
 
-	// 4. 微动态加载指示器 (Spinner)
+	// 5. 微动态加载指示器 (Spinner)
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(colorYellow)
 
-	// 5. 消息滚动视口 (Viewport)
+	// 6. 消息滚动视口 (Viewport)
 	vp := viewport.New(80, 20)
 	vp.MouseWheelEnabled = true
 	vp.MouseWheelDelta = 3
 	vp.KeyMap = viewport.KeyMap{} // 禁用键盘滚动，历史记录专由鼠标滚轮滚动
 
 	cfgView := ag.Config()
-	choices := []string{"llamacpp", "deepseek", "gemini", "spark"}
-	if len(cfgView.AvailableProviders) > 0 {
-		choices = cfgView.AvailableProviders
-	}
-	curProvider := cfgView.Provider
-	curModel := cfgView.ModelName
-
-	selectedIdx := 0
-	for i, c := range choices {
-		if strings.EqualFold(c, curProvider) {
-			selectedIdx = i
-			break
-		}
-	}
 
 	m := Model{
-		choices:         choices,
-		selected:        selectedIdx,
-		cursor:          selectedIdx,
-		currentProvider: curProvider,
-		currentModel:    curModel,
-		apiKeyInput:     apiKeyInput,
-		modelInput:      modelInput,
-		chatInput:       chatInput,
-		messages:        []ChatMessage{},
-		cachedMemCount:  ag.MemoryCount(),
-		agent:           ag,
-		traces:          traces,
-		spinner:         sp,
-		viewport:        vp,
-		width:           80,
-		height:          24,
+		baseURLInput:   baseURLInput,
+		apiKeyInput:    apiKeyInput,
+		modelInput:     modelInput,
+		chatInput:      chatInput,
+		messages:       []ChatMessage{},
+		cachedMemCount: ag.MemoryCount(),
+		agent:          ag,
+		traces:         traces,
+		spinner:        sp,
+		viewport:       vp,
+		width:          80,
+		height:         24,
 	}
 
 	// 主线永远是聊天对话页面（输入框交互）
@@ -189,12 +167,12 @@ func NewModel(ag protocol.Agent, traces TraceSource) Model {
 	if cfgView.HasAPIKey {
 		m.messages = append(m.messages, ChatMessage{
 			Sender:  "System",
-			Content: fmt.Sprintf("已连接大模型服务，平台: %s, 模型: %s。直接输入问题即可开始多轮对话 (输入 /model 可切换模型平台)。", cfgView.Provider, cfgView.ModelName),
+			Content: fmt.Sprintf("已连接大模型服务，端点: %s, 模型: %s。直接输入问题即可开始多轮对话 (输入 /model 可切换模型)。", cfgView.BaseURL, cfgView.ModelName),
 		})
 	} else {
 		m.messages = append(m.messages, ChatMessage{
 			Sender:  "System",
-			Content: "欢迎使用 Tide！当前模型尚未配置 API Key，可随时输入 /model 调出配置向导。",
+			Content: "欢迎使用 Tide！当前尚未配置 API Key 或端点，可随时输入 /model 调出配置向导。",
 		})
 	}
 
@@ -458,10 +436,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// 根据当前状态分发至对应的模块
 	switch m.state {
-	case stateSelectModel:
-		return m.updateSelectModel(msg)
-	case stateSelectModelPreset:
-		return m.updateSelectModelPreset(msg)
+	case stateInputBaseURL:
+		return m.updateInputBaseURL(msg)
 	case stateInputAPIKey:
 		return m.updateInputAPIKey(msg)
 	case stateInputModel:
@@ -480,10 +456,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View 总渲染入口
 func (m Model) View() string {
 	switch m.state {
-	case stateSelectModel:
-		return m.viewSelectModel()
-	case stateSelectModelPreset:
-		return m.viewSelectModelPreset()
+	case stateInputBaseURL:
+		return m.viewInputBaseURL()
 	case stateInputAPIKey:
 		return m.viewInputAPIKey()
 	case stateInputModel:

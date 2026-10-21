@@ -272,9 +272,8 @@ func TestCoreAgent_Validation(t *testing.T) {
 // 测试远程厂商缺密钥时仍装配出未就绪内核，供 /model 向导补齐密钥后热装客户端
 func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 	cfg := &config.Config{
-		Provider:  config.ProviderDeepSeek,
-		BaseURL:   config.ProviderSpec(config.ProviderDeepSeek).BaseURL,
-		ModelName: config.ProviderSpec(config.ProviderDeepSeek).DefaultModel,
+		BaseURL:   "https://api.openai.com/v1",
+		ModelName: "gpt-4o",
 	}
 	cfgPath := filepath.Join(t.TempDir(), "unready_config.json")
 
@@ -289,8 +288,8 @@ func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 		t.Errorf("expected Run to fail before client is attached")
 	}
 
-	// 模拟 /model 向导补齐密钥：热装客户端后恢复就绪
-	if err := ag.UpdateConfig(string(config.ProviderDeepSeek), "sk-test-key", config.ProviderSpec(config.ProviderDeepSeek).DefaultModel); err != nil {
+	// 补齐密钥：热装客户端后恢复就绪
+	if err := ag.UpdateConfig("", "sk-test-key", ""); err != nil {
 		t.Fatalf("expected UpdateConfig to attach client, got: %v", err)
 	}
 	if !ag.Config().HasAPIKey {
@@ -993,10 +992,8 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 	cfgPath := filepath.Join(tmpDir, "test_config.json")
 
 	cfg := &config.Config{
-		Provider:  config.ProviderLlamaCpp,
-		ModelName: config.ProviderSpec(config.ProviderLlamaCpp).DefaultModel,
-		BaseURL:   config.ProviderSpec(config.ProviderLlamaCpp).BaseURL,
-		Providers: make(map[string]config.ProviderConfig),
+		BaseURL:   "http://127.0.0.1:11434",
+		ModelName: "local-model",
 	}
 
 	ag, err := NewFromConfig(cfg, WithConfig(cfg, cfgPath), WithWorkDir(tmpDir))
@@ -1004,75 +1001,37 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 		t.Fatalf("failed to create agent from config: %v", err)
 	}
 
-	// 1. 验证 Config() 包含结构化 Providers 与推荐模型
+	// 1. 验证初始状态
 	cv := ag.Config()
-	if len(cv.Providers) < 4 {
-		t.Fatalf("expected at least 4 providers in ConfigView, got %d", len(cv.Providers))
-	}
-	var llamaP, geminiP, dsP *protocol.ProviderInfo
-	for i := range cv.Providers {
-		p := &cv.Providers[i]
-		if p.ID == "llamacpp" {
-			llamaP = p
-		} else if p.ID == "gemini" {
-			geminiP = p
-		} else if p.ID == "deepseek" {
-			dsP = p
-		}
-	}
-	if llamaP == nil || !llamaP.IsLocal || !llamaP.IsConfigured {
-		t.Errorf("unexpected llamaP info: %+v", llamaP)
-	}
-	if geminiP == nil || geminiP.IsConfigured {
-		t.Errorf("expected geminiP initially not configured, got: %+v", geminiP)
-	}
-	if len(geminiP.RecommendedModels) < 2 {
-		t.Errorf("expected recommended models for gemini, got: %+v", geminiP.RecommendedModels)
-	}
-	if dsP == nil || dsP.IsConfigured || len(dsP.RecommendedModels) < 3 {
-		t.Errorf("unexpected dsP info: %+v", dsP)
+	if cv.BaseURL != "http://127.0.0.1:11434" || cv.ModelName != "local-model" || !cv.HasAPIKey {
+		t.Fatalf("unexpected initial config: %+v", cv)
 	}
 
-	// 2. 配置 Gemini 平台与密钥
-	if err := ag.UpdateConfig("gemini", "sk-gemini-test-secret", "gemini-2.5-flash"); err != nil {
-		t.Fatalf("failed to update gemini config: %v", err)
+	// 2. 切换到远程端点，但缺少 APIKey：预期失败且状态保持
+	if err := ag.UpdateConfig("https://api.openai.com/v1", "", "gpt-4o"); err == nil {
+		t.Fatalf("expected error when updating to remote endpoint without key")
+	}
+	cvFail := ag.Config()
+	if cvFail.BaseURL != "http://127.0.0.1:11434" || cvFail.ModelName != "local-model" {
+		t.Fatalf("expected state untouched after failed update: %+v", cvFail)
+	}
+
+	// 3. 正常更新远程端点与密钥
+	if err := ag.UpdateConfig("https://api.openai.com/v1", "sk-test-secret", "gpt-4o"); err != nil {
+		t.Fatalf("failed to update remote config: %v", err)
 	}
 	cv = ag.Config()
-	if cv.Provider != "gemini" || cv.ModelName != "gemini-2.5-flash" || !cv.HasAPIKey {
-		t.Fatalf("unexpected cv after gemini update: %+v", cv)
+	if cv.BaseURL != "https://api.openai.com/v1" || cv.ModelName != "gpt-4o" || !cv.HasAPIKey {
+		t.Fatalf("unexpected config after update: %+v", cv)
 	}
 
-	// 3. 尝试直接通过模型名 "deepseek-reasoner" 切换：因 deepseek 尚未配置密钥，预期返回失败
-	if err := ag.UpdateConfig("", "", "deepseek-reasoner"); err == nil {
-		t.Fatalf("expected error when switching to unconfigured deepseek model, got nil")
-	}
-	// 验证事务原子性：失败后配置与网关状态未被污染，仍保持 Gemini
-	cvAfterFail := ag.Config()
-	if cvAfterFail.Provider != "gemini" || cvAfterFail.ModelName != "gemini-2.5-flash" {
-		t.Fatalf("expected provider to remain untouched after failed update, got: %+v", cvAfterFail)
-	}
-
-	// 4. 配置 DeepSeek 密钥
-	if err := ag.UpdateConfig("deepseek", "sk-deepseek-test-secret", "deepseek-flash"); err != nil {
-		t.Fatalf("failed to update deepseek config: %v", err)
-	}
-
-	// 5. 再次通过模型名 "deepseek-reasoner" 智能推断切模：已保存密钥，预期成功！
-	if err := ag.UpdateConfig("", "", "deepseek-reasoner"); err != nil {
-		t.Fatalf("expected success with model inference for deepseek-reasoner, got: %v", err)
+	// 4. 单独更新模型名，复用原有 BaseURL 与 Key
+	if err := ag.UpdateConfig("", "", "gpt-4o-mini"); err != nil {
+		t.Fatalf("failed to update model: %v", err)
 	}
 	cv = ag.Config()
-	if cv.Provider != "deepseek" || cv.ModelName != "deepseek-reasoner" {
-		t.Fatalf("expected deepseek and deepseek-reasoner, got: %+v", cv)
-	}
-
-	// 6. 切换回 Gemini 并更改模型为 "gemini-2.5-pro"，无需重新提供 API Key (自动复用)
-	if err := ag.UpdateConfig("gemini", "", "gemini-2.5-pro"); err != nil {
-		t.Fatalf("expected success reusing saved gemini key, got: %v", err)
-	}
-	cv = ag.Config()
-	if cv.Provider != "gemini" || cv.ModelName != "gemini-2.5-pro" {
-		t.Fatalf("expected gemini and gemini-2.5-pro, got: %+v", cv)
+	if cv.ModelName != "gpt-4o-mini" || cv.BaseURL != "https://api.openai.com/v1" || !cv.HasAPIKey {
+		t.Fatalf("unexpected config after model update: %+v", cv)
 	}
 }
 

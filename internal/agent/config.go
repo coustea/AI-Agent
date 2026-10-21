@@ -8,27 +8,26 @@ import (
 	"my-agent/pkg/llm"
 )
 
-// newLLMFromConfig 根据配置初始化 pkg/llm.Client
+// newLLMFromConfig 根据配置初始化 pkg/llm.Client (基于标准统一的 OpenAI 协议)
 func newLLMFromConfig(cfg *config.Config) (*llm.Client, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("agent: configuration cannot be nil")
 	}
 
-	spec := config.ProviderSpec(cfg.Provider)
-	// 远程厂商缺少密钥时保留未就绪状态（返回 nil, nil），待向导补齐
-	if !spec.Local && strings.TrimSpace(cfg.APIKey) == "" {
+	// 远程端点缺少密钥时保留未就绪状态（返回 nil, nil），待向导或配置补齐
+	if !config.IsLocalURL(cfg.BaseURL) && strings.TrimSpace(cfg.APIKey) == "" {
 		return nil, nil
 	}
 
 	return llm.New(llm.Config{
 		BaseURL: cfg.BaseURL,
 		APIKey:  cfg.APIKey,
-		Model:   config.NormalizeModelName(cfg.Provider, cfg.ModelName),
+		Model:   cfg.ModelName,
 	})
 }
 
-// UpdateConfig 运行时更新模型提供商、密钥与模型名称（具备事务原子性：先在候选副本上校验、初始化客户端并落盘，全部成功后原子生效）
-func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
+// UpdateConfig 运行时更新端点地址、API 密钥与模型名称（事务原子性：候选副本校验 -> 构建客户端 -> 持久化落盘 -> 提交生效）
+func (a *CoreAgent) UpdateConfig(baseURL, apiKey, model string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -38,50 +37,30 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 
 	candidate := a.cfg.Clone()
 
-	// 1. 若未显式传入 provider，尝试从 model 名称智能识别所属厂商或保持当前激活厂商
-	pStr := strings.TrimSpace(provider)
-	mStr := strings.TrimSpace(model)
-	if pStr == "" && mStr != "" {
-		if inferred := config.InferProviderFromModel(mStr); inferred != "" {
-			pStr = string(inferred)
-		}
-	}
-	if pStr == "" {
-		pStr = string(candidate.Provider)
+	// 1. 检查并更新 BaseURL
+	if bStr := strings.TrimSpace(baseURL); bStr != "" {
+		candidate.BaseURL = bStr
 	}
 
-	newProvider, ok := config.ParseProvider(pStr)
-	if !ok {
-		return fmt.Errorf("agent: 未知厂商 %q", pStr)
-	}
-	spec := config.ProviderSpec(newProvider)
-
-	// 切换厂商（自动载入该厂商已保存的配置历史）
-	candidate.SwitchProvider(newProvider)
-
-	// 2. 检查并更新 APIKey（若传入非空，则更新并覆盖；若传入空，则沿用该厂商已保存的密钥）
-	if strings.TrimSpace(apiKey) != "" {
-		candidate.APIKey = strings.TrimSpace(apiKey)
+	// 2. 检查并更新 APIKey
+	if kStr := strings.TrimSpace(apiKey); kStr != "" {
+		candidate.APIKey = kStr
 	}
 
 	// 3. 检查并更新 ModelName
-	if mStr != "" {
-		candidate.ModelName = config.NormalizeModelName(newProvider, mStr)
-	} else if candidate.ModelName == "" {
-		candidate.ModelName = spec.DefaultModel
-	} else {
-		candidate.ModelName = config.NormalizeModelName(newProvider, candidate.ModelName)
+	if mStr := strings.TrimSpace(model); mStr != "" {
+		candidate.ModelName = mStr
 	}
 
-	// 4. 远程厂商必须具备有效 APIKey
-	if !spec.Local && strings.TrimSpace(candidate.APIKey) == "" {
-		return fmt.Errorf("agent: provider %q requires an API key", newProvider)
+	// 4. 远程端点校验
+	if !config.IsLocalURL(candidate.BaseURL) && strings.TrimSpace(candidate.APIKey) == "" {
+		return fmt.Errorf("agent: 远程端点需要提供 API Key")
 	}
 
 	// 5. 初始化大模型客户端
 	llmClient, err := newLLMFromConfig(candidate)
 	if err != nil {
-		return fmt.Errorf("agent: initialize llm client failed: %w", err)
+		return fmt.Errorf("agent: 初始化大模型客户端失败: %w", err)
 	}
 
 	// 6. 持久化落盘配置文件
@@ -90,7 +69,7 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 		cfgPath = config.DefaultConfigPath()
 	}
 	if err := config.SaveConfig(cfgPath, candidate); err != nil {
-		return fmt.Errorf("agent: save config failed: %w", err)
+		return fmt.Errorf("agent: 保存配置失败: %w", err)
 	}
 
 	// 全部校验与构建成功后原子提交

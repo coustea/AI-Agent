@@ -215,7 +215,7 @@ func (m Model) viewThinkingViewer() string {
 	cfg := m.agent.Config()
 	modelTag := ""
 	if cfg.ModelName != "" {
-		modelTag = dockModelTagStyle.Render(fmt.Sprintf("● %s • %s", cfg.Provider, cfg.ModelName))
+		modelTag = dockModelTagStyle.Render("● " + cfg.ModelName)
 	}
 
 	topRow := fmt.Sprintf("%s%s  %s", badge, title, modelTag)

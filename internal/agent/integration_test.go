@@ -42,9 +42,8 @@ func newGatewayAgent(t *testing.T, baseURL string) *CoreAgent {
 	t.Helper()
 
 	cfg := &config.Config{
-		Provider:  config.ProviderDeepSeek,
 		BaseURL:   baseURL,
-		ModelName: config.ProviderSpec(config.ProviderDeepSeek).DefaultModel,
+		ModelName: "test-model",
 		APIKey:    "test-key",
 	}
 	ag, err := NewFromConfig(cfg,

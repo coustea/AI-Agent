@@ -185,9 +185,9 @@ func (m Model) updateChat(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.GotoBottom()
 			}
 
-			// 未就绪校验：远程厂商缺密钥时先引导配置（本地服务恒就绪）
+			// 未就绪校验：远程端点缺密钥时先引导配置（本地服务恒就绪）
 			if !m.agent.Config().HasAPIKey {
-				m.messages[len(m.messages)-1].Content = "[未配置可用模型] 请先输入 /model 配置 API Key 或设置环境变量 (DEEPSEEK_API_KEY / GEMINI_API_KEY)。"
+				m.messages[len(m.messages)-1].Content = "[未配置可用模型] 请先输入 /model 调出配置向导配置 API Key 或设置环境变量 (OPENAI_API_KEY)。"
 				m.isGenerating = false
 				m.chatInput.Placeholder = "输入消息与 Tide 对话... (输入 /log 查看全量JSON, /model 切换模型, /clear 清屏)"
 				if m.viewportReady {
@@ -266,7 +266,7 @@ func (m Model) renderHeaderBar() string {
 	cfg := m.agent.Config()
 	modelInfo := "未配置模型 (/model)"
 	if cfg.ModelName != "" {
-		modelInfo = fmt.Sprintf("%s · %s", cfg.Provider, cfg.ModelName)
+		modelInfo = cfg.ModelName
 	}
 
 	brandBadge := headerBadgeStyle.Render(" Tide ")
@@ -468,7 +468,7 @@ func (m Model) renderChatMessages() string {
 	if len(m.messages) == 0 {
 		title := lipgloss.NewStyle().Bold(true).Foreground(colorBrand).Render("🌊 欢迎使用 Tide 智能助手")
 		text := "  在下方命令岛键入需求并按 Enter，Tide 将自主调用工具为您解决问题。\n" +
-			"  常用指令: /model (切换模型平台), /think (打开思考看板), /log (全量追踪), /clear (清屏)"
+			"  常用指令: /model (切换与配置模型), /think (打开思考看板), /log (全量追踪), /clear (清屏)"
 		return fmt.Sprintf("\n%s\n%s\n\n", title, dimStyle.Render(text))
 	}
 

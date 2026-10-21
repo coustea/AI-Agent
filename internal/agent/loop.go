@@ -134,9 +134,9 @@ func (a *CoreAgent) agentLoop(ctx context.Context, prompt string, eventCh chan<-
 // 返回本步 token 用量；finished 为 true 表示模型已给出最终答复，无需继续迭代。
 func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Event, sysPrompt string, step int) (stepUsage llm.Usage, finished bool, err error) {
 	a.mu.RLock()
-	var providerName, modelName string
+	var baseURL, modelName string
 	if a.cfg != nil {
-		providerName = string(a.cfg.Provider)
+		baseURL = a.cfg.BaseURL
 		modelName = a.cfg.ModelName
 	}
 	llmClient := a.llm
@@ -156,7 +156,7 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 	stepStart := time.Now()
 	a.dispatchLLMRequest(ctx, &protocol.LLMRequestTrace{
 		Step:         step,
-		Provider:     providerName,
+		BaseURL:      baseURL,
 		ModelName:    modelName,
 		SystemPrompt: sysPrompt,
 		Messages:     reqMsgs,

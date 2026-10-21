@@ -1,9 +1,8 @@
 .PHONY: build run test clean install release verify fmt-check vet test-race lint
 
-# 版本与编译参数（SPARK_FREE_KEY 优先使用环境变量，若未 export 则自动回退从本地 ~/.tide/config.json 提取注入，最后兜底内置免配 Key）
+# 版本与编译参数
 VERSION ?= v1.2.0
-SPARK_FREE_KEY ?= $(shell if [ -n "$$SPARK_API_KEY" ]; then echo "$$SPARK_API_KEY"; elif [ -n "$$MAAS_API_KEY" ]; then echo "$$MAAS_API_KEY"; elif grep -q '"api_key"' ~/.tide/config.json 2>/dev/null; then grep -o '"api_key": "[^"]*"' ~/.tide/config.json 2>/dev/null | tail -n 1 | cut -d'"' -f4; else echo "ak-b9b6c6935fcc4f06b6a8472af909f383"; fi)
-LDFLAGS := -s -w -X my-agent/internal/config.DefaultSparkAPIKey=$(SPARK_FREE_KEY) -X my-agent/internal/config.Version=$(VERSION)
+LDFLAGS := -s -w -X my-agent/internal/config.Version=$(VERSION)
 
 # 编译生成名为 tide 的当前平台可执行程序
 build:

@@ -239,7 +239,7 @@ func TestLoggingMiddleware_LatestJSONTurnEndOnly(t *testing.T) {
 	ctx := context.Background()
 
 	lm.OnTurnStart(ctx, "turn_x", "hello")
-	lm.OnLLMRequest(ctx, &protocol.LLMRequestTrace{Step: 0, Provider: "p", ModelName: "m", SystemPrompt: "sys"})
+	lm.OnLLMRequest(ctx, &protocol.LLMRequestTrace{Step: 0, BaseURL: "p", ModelName: "m", SystemPrompt: "sys"})
 
 	if _, err := os.Stat(latest); !os.IsNotExist(err) {
 		t.Fatalf("latest.json must NOT be written mid-turn (err=%v)", err)

@@ -9,37 +9,14 @@ import (
 	"my-agent/internal/protocol"
 )
 
-// DefaultSparkAPIKey 系统内置免费星火 API Key。
-// 预置官方免费体验密钥，确保所有用户安装后无需任何配置即可开箱免费使用，
-// 亦可在编译期通过 -ldflags "-X my-agent/internal/config.DefaultSparkAPIKey=..." 动态覆盖。
-var DefaultSparkAPIKey = "ak-b9b6c6935fcc4f06b6a8472af909f383"
-
 // Version 当前软件发布版本号（可通过编译期 -ldflags "-X my-agent/internal/config.Version=..." 覆盖）
 var Version = "v1.2.0"
 
-// canonical 把任意厂商输入（ID 或别名）规范化为规范 ID；
-// 未知输入回退到本地厂商——这是配置层的容错策略，pkg/llm 本身不做任何猜测。
-func canonical(p Provider) Provider {
-	if parsed, ok := ParseProvider(string(p)); ok {
-		return parsed
-	}
-	return ProviderLlamaCpp
-}
-
-// ProviderConfig 保存各厂商的专属模型与密钥配置
-type ProviderConfig struct {
-	BaseURL   string `json:"base_url,omitempty"`   // 服务端点地址
-	ModelName string `json:"model_name,omitempty"` // 模型名称
-	APIKey    string `json:"api_key,omitempty"`    // API 密钥
-}
-
-// Config 保存应用的基础模型配置及多厂商独立持久化配置
+// Config 保存大模型标准统一配置（基于标准 OpenAI 兼容三要素驱动）
 type Config struct {
-	Provider  Provider                  `json:"provider"`            // 当前激活的模型厂商
-	BaseURL   string                    `json:"base_url,omitempty"`  // 当前激活的服务端点地址
-	ModelName string                    `json:"model_name"`          // 当前激活的具体模型名称
-	APIKey    string                    `json:"api_key,omitempty"`   // 当前激活的 API 密钥
-	Providers map[string]ProviderConfig `json:"providers,omitempty"` // 各厂商独立保存的配置历史
+	BaseURL   string `json:"base_url"`          // 服务端点地址 (如 https://api.openai.com/v1, http://127.0.0.1:11434)
+	APIKey    string `json:"api_key,omitempty"` // API 密钥 (本地服务可空)
+	ModelName string `json:"model_name"`        // 默认模型名称 (如 gpt-4o, deepseek-chat, qwen2.5:7b)
 }
 
 // GlobalConfigDir 返回用户级全局配置目录 (~/.tide)
@@ -78,92 +55,22 @@ func DefaultConfigPath() string {
 	return ResolveConfigPath("")
 }
 
-// ProviderFor 获取指定厂商已保存的配置
-func (c Config) ProviderFor(p Provider) ProviderConfig {
-	if c.Providers == nil {
-		return ProviderConfig{}
-	}
-	return c.Providers[string(canonical(p))]
-}
-
-// SetProviderConfig 记录并更新指定厂商的专属配置
-func (c *Config) SetProviderConfig(p Provider, pcfg ProviderConfig) {
-	if c.Providers == nil {
-		c.Providers = make(map[string]ProviderConfig)
-	}
-	c.Providers[string(canonical(p))] = pcfg
-}
-
-// SwitchProvider 切换当前激活的厂商，并自动载入该厂商已保存的配置历史
-func (c *Config) SwitchProvider(p Provider) {
-	active := canonical(p)
-	spec := ProviderSpec(active)
-	c.Provider = active
-	pcfg := c.ProviderFor(active)
-
-	if pcfg.BaseURL != "" {
-		c.BaseURL = pcfg.BaseURL
-	} else {
-		c.BaseURL = spec.BaseURL
-	}
-
-	if pcfg.ModelName != "" {
-		c.ModelName = NormalizeModelName(active, pcfg.ModelName)
-	} else {
-		c.ModelName = spec.DefaultModel
-	}
-
-	c.APIKey = pcfg.APIKey
-}
-
-// Clone 返回当前配置对象的深拷贝副本，确保更新时事务原子性
+// Clone 返回当前配置对象的深拷贝副本
 func (c *Config) Clone() *Config {
 	if c == nil {
 		return nil
 	}
 	cp := *c
-	if c.Providers != nil {
-		cp.Providers = make(map[string]ProviderConfig, len(c.Providers))
-		for k, v := range c.Providers {
-			cp.Providers[k] = v
-		}
-	}
 	return &cp
 }
 
-// applyEnvFallbacks 使用环境变量与内置凭证补齐缺失的厂商密钥与默认端点/模型。
-func applyEnvFallbacks(cfg *Config) {
-	for _, meta := range providerMetas {
-		if len(meta.EnvKeys) == 0 {
-			continue
-		}
-
-		pcfg := cfg.ProviderFor(meta.ID)
-		if pcfg.APIKey != "" {
-			continue
-		}
-
-		key := firstEnv(meta.EnvKeys...)
-		if key == "" && meta.ID == ProviderSpark && strings.TrimSpace(DefaultSparkAPIKey) != "" {
-			key = strings.TrimSpace(DefaultSparkAPIKey)
-		}
-		if key == "" {
-			continue
-		}
-
-		spec := ProviderSpec(meta.ID)
-		pcfg.APIKey = key
-		if pcfg.BaseURL == "" {
-			pcfg.BaseURL = spec.BaseURL
-		}
-		if pcfg.ModelName == "" {
-			pcfg.ModelName = spec.DefaultModel
-		}
-		cfg.SetProviderConfig(meta.ID, pcfg)
-	}
+// IsLocalURL 判定端点是否属于本地免密钥服务 (127.0.0.1 / localhost / ::1)
+func IsLocalURL(u string) bool {
+	u = strings.ToLower(strings.TrimSpace(u))
+	return strings.Contains(u, "127.0.0.1") || strings.Contains(u, "localhost") || strings.Contains(u, "::1")
 }
 
-// firstEnv 返回第一个非空的环境变量值。
+// firstEnv 返回第一个非空的环境变量值
 func firstEnv(keys ...string) string {
 	for _, k := range keys {
 		if v := strings.TrimSpace(os.Getenv(k)); v != "" {
@@ -173,52 +80,28 @@ func firstEnv(keys ...string) string {
 	return ""
 }
 
-// DefaultConfig 构建一份全新的默认配置（含环境变量密钥自动补全与 llamacpp 预置），
-// 作为配置文件缺失或损坏时的安全回退。
+// DefaultConfig 构建全新的默认配置，自动补全环境变量
 func DefaultConfig() *Config {
-	cfg := &Config{
-		Providers: make(map[string]ProviderConfig),
+	baseURL := firstEnv("OPENAI_BASE_URL")
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
 	}
 
-	// 收集环境变量中的密钥
-	applyEnvFallbacks(cfg)
+	apiKey := firstEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY")
 
-	// 预置 llamacpp
-	local := ProviderSpec(ProviderLlamaCpp)
-	cfg.SetProviderConfig(ProviderLlamaCpp, ProviderConfig{
-		BaseURL:   local.BaseURL,
-		ModelName: local.DefaultModel,
-	})
-
-	// 预置 spark 默认端点与默认免费模型 (优先使用用户环境变量/配置；若无则回退到编译期注入的 DefaultSparkAPIKey)
-	spark := ProviderSpec(ProviderSpark)
-	pcfgSpark := cfg.ProviderFor(ProviderSpark)
-	if pcfgSpark.BaseURL == "" {
-		pcfgSpark.BaseURL = spark.BaseURL
-	}
-	if pcfgSpark.ModelName == "" {
-		pcfgSpark.ModelName = spark.DefaultModel
-	}
-	if pcfgSpark.APIKey == "" && strings.TrimSpace(DefaultSparkAPIKey) != "" {
-		pcfgSpark.APIKey = strings.TrimSpace(DefaultSparkAPIKey)
-	}
-	cfg.SetProviderConfig(ProviderSpark, pcfgSpark)
-
-	// 默认激活提供商选择：
-	// 1. 若外部环境变量显式配置了 DeepSeek 或 Gemini，优先激活对应厂商；
-	// 2. 否则系统默认激活官方免费模型 (Spark spark-x2.5-4b)
-	if cfg.ProviderFor(ProviderDeepSeek).APIKey != "" {
-		cfg.SwitchProvider(ProviderDeepSeek)
-	} else if cfg.ProviderFor(ProviderGemini).APIKey != "" {
-		cfg.SwitchProvider(ProviderGemini)
-	} else {
-		cfg.SwitchProvider(ProviderSpark)
+	modelName := firstEnv("OPENAI_MODEL")
+	if modelName == "" {
+		modelName = "gpt-4o"
 	}
 
-	return cfg
+	return &Config{
+		BaseURL:   baseURL,
+		APIKey:    apiKey,
+		ModelName: modelName,
+	}
 }
 
-// LoadConfig 从指定 JSON 文件加载配置，支持全局/本地发现与环境变量自动补全
+// LoadConfig 从指定 JSON 文件加载配置，支持自动发现与环境变量兜底补齐
 func LoadConfig(path string) (*Config, error) {
 	resolvedPath := ResolveConfigPath(path)
 
@@ -235,62 +118,17 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	if cfg.Providers == nil {
-		cfg.Providers = make(map[string]ProviderConfig)
+	// 补全环境变量
+	if cfg.BaseURL == "" {
+		cfg.BaseURL = firstEnv("OPENAI_BASE_URL", "https://api.openai.com/v1")
 	}
-
-	// 保证顶层当前配置已落入 providers
-	if cfg.Provider != "" {
-		cfg.Provider = canonical(cfg.Provider)
-		pcfg := cfg.ProviderFor(cfg.Provider)
-		if pcfg.APIKey == "" && cfg.APIKey != "" {
-			pcfg.APIKey = cfg.APIKey
-		}
-		if pcfg.ModelName == "" && cfg.ModelName != "" {
-			pcfg.ModelName = cfg.ModelName
-		}
-		if pcfg.BaseURL == "" && cfg.BaseURL != "" {
-			pcfg.BaseURL = cfg.BaseURL
-		}
-		cfg.SetProviderConfig(cfg.Provider, pcfg)
-	}
-
-	// 环境变量补充
-	applyEnvFallbacks(&cfg)
-
-	// 确保当前激活项有效
-	if cfg.Provider == "" {
-		cfg.Provider = ProviderLlamaCpp
-	}
-	spec := ProviderSpec(cfg.Provider)
-
-	activePcfg := cfg.ProviderFor(cfg.Provider)
-	if cfg.APIKey == "" && activePcfg.APIKey != "" {
-		cfg.APIKey = activePcfg.APIKey
+	if cfg.APIKey == "" {
+		cfg.APIKey = firstEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY")
 	}
 	if cfg.ModelName == "" {
-		if activePcfg.ModelName != "" {
-			cfg.ModelName = activePcfg.ModelName
-		} else {
-			cfg.ModelName = spec.DefaultModel
-		}
-	}
-	cfg.ModelName = NormalizeModelName(cfg.Provider, cfg.ModelName)
-	for pName, pcfg := range cfg.Providers {
-		pcfg.ModelName = NormalizeModelName(Provider(pName), pcfg.ModelName)
-		cfg.Providers[pName] = pcfg
+		cfg.ModelName = firstEnv("OPENAI_MODEL", "gpt-4o")
 	}
 
-	if cfg.BaseURL == "" {
-		if activePcfg.BaseURL != "" {
-			cfg.BaseURL = activePcfg.BaseURL
-		} else {
-			cfg.BaseURL = spec.BaseURL
-		}
-	}
-
-	// 远程云端服务缺密钥不再视为加载失败：未就绪状态由上层视图（ConfigView.HasAPIKey）表达，
-	// 待 /model 配置向导补齐密钥后由内核热装网关。
 	return &cfg, nil
 }
 
@@ -305,15 +143,6 @@ func SaveConfig(path string, cfg *Config) error {
 		}
 	}
 
-	// 确保当前选中的配置也同步记录在 providers map 中
-	if cfg.Provider != "" {
-		cfg.SetProviderConfig(cfg.Provider, ProviderConfig{
-			BaseURL:   cfg.BaseURL,
-			ModelName: cfg.ModelName,
-			APIKey:    cfg.APIKey,
-		})
-	}
-
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
@@ -324,52 +153,12 @@ func SaveConfig(path string, cfg *Config) error {
 
 // ToView 将当前配置映射为面向前端只读呈现的纯数据 ConfigView 契约
 func (c *Config) ToView() protocol.ConfigView {
-	available := ProviderIDs()
-
-	cv := protocol.ConfigView{
-		AvailableProviders: available,
+	if c == nil {
+		return protocol.ConfigView{}
 	}
-	if c != nil {
-		cv.Provider = string(c.Provider)
-		cv.ModelName = c.ModelName
-		cv.HasAPIKey = c.APIKey != "" || ProviderSpec(c.Provider).Local
+	return protocol.ConfigView{
+		BaseURL:   c.BaseURL,
+		ModelName: c.ModelName,
+		HasAPIKey: c.APIKey != "" || IsLocalURL(c.BaseURL),
 	}
-
-	providers := make([]protocol.ProviderInfo, 0, len(available))
-	for _, pStr := range available {
-		p := Provider(pStr)
-		spec := ProviderSpec(p)
-		info := protocol.ProviderInfo{
-			ID:                pStr,
-			Name:              spec.DisplayName,
-			Description:       spec.Description,
-			Aliases:           append([]string(nil), spec.Aliases...),
-			IsLocal:           spec.Local,
-			RecommendedModels: append([]string(nil), spec.RecommendedModels...),
-		}
-
-		if c != nil {
-			pcfg := c.ProviderFor(p)
-			if pcfg.ModelName != "" {
-				info.CurrentModel = pcfg.ModelName
-			} else {
-				info.CurrentModel = spec.DefaultModel
-			}
-
-			if info.IsLocal {
-				info.IsConfigured = true
-			} else if pcfg.APIKey != "" {
-				info.IsConfigured = true
-			} else if c.Provider == p && c.APIKey != "" {
-				info.IsConfigured = true
-			}
-		} else {
-			info.CurrentModel = spec.DefaultModel
-			info.IsConfigured = info.IsLocal
-		}
-
-		providers = append(providers, info)
-	}
-	cv.Providers = providers
-	return cv
 }

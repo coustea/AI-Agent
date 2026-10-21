@@ -109,11 +109,11 @@ func (l *LoggingMiddleware) OnLLMRequest(ctx context.Context, req *protocol.LLMR
 	l.recordEvent(protocol.TraceEvent{
 		Step:      req.Step,
 		Type:      "llm_req",
-		Title:     fmt.Sprintf("Step %d · 📤 LLM 请求上下文 (%s • %s)", req.Step, req.Provider, req.ModelName),
+		Title:     fmt.Sprintf("Step %d · 📤 LLM 请求上下文 (%s)", req.Step, req.ModelName),
 		Timestamp: req.Timestamp,
 		Payload: map[string]any{
 			"step":          req.Step,
-			"provider":      req.Provider,
+			"base_url":      req.BaseURL,
 			"model":         req.ModelName,
 			"system_prompt": req.SystemPrompt,
 			"messages":      req.Messages,
