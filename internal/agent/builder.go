@@ -161,7 +161,7 @@ func NewFromConfig(cfg *config.Config, opts ...Option) (*CoreAgent, error) {
 		return nil, fmt.Errorf("agent: config cannot be nil")
 	}
 	client, err := newLLMFromConfig(cfg)
-	if err != nil && !errors.Is(err, llm.ErrEmptyAPIKey) {
+	if err != nil && !errors.Is(err, llm.ErrNoAPIKey) {
 		return nil, err
 	}
 	// 远程厂商缺密钥：保留未就绪内核（llmClient 为 nil 接口），待 /model 向导补齐后热装客户端

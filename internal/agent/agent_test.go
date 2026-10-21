@@ -25,7 +25,7 @@ import (
 // mockLLM 用于测试 Agent 多轮对话与流式输出的测试桩
 type mockLLM struct {
 	mu       sync.Mutex
-	requests []*llm.ChatRequest
+	requests []llm.Request
 	replies  []string
 	callIdx  int
 }
@@ -36,7 +36,7 @@ func newMockLLM(replies ...string) *mockLLM {
 	}
 }
 
-func (m *mockLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
+func (m *mockLLM) ChatStream(ctx context.Context, req llm.Request) (<-chan llm.Chunk, error) {
 	m.mu.Lock()
 	m.requests = append(m.requests, req)
 	idx := m.callIdx
@@ -48,7 +48,7 @@ func (m *mockLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan 
 		reply = m.replies[idx]
 	}
 
-	ch := make(chan llm.ChatResponse, 8)
+	ch := make(chan llm.Chunk, 8)
 	go func() {
 		defer close(ch)
 
@@ -59,12 +59,12 @@ func (m *mockLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan 
 			if i < len(parts)-1 {
 				delta += " "
 			}
-			ch <- llm.ChatResponse{Delta: delta}
+			ch <- llm.Chunk{Delta: delta}
 		}
 
-		ch <- llm.ChatResponse{
-			Done: true,
-			Usage: &llm.Usage{
+		ch <- llm.Chunk{
+			Finish: llm.StopEnd,
+			Usage: llm.Usage{
 				PromptTokens:     10,
 				CompletionTokens: 5,
 				TotalTokens:      15,
@@ -73,10 +73,6 @@ func (m *mockLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan 
 	}()
 
 	return ch, nil
-}
-
-func (m *mockLLM) TotalUsage() llm.Usage {
-	return llm.Usage{TotalTokens: 15}
 }
 
 // 测试多轮对话上下文累加与记忆保留
@@ -245,18 +241,14 @@ type blockingLLM struct {
 	blockCh <-chan struct{}
 }
 
-func (b *blockingLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
-	ch := make(chan llm.ChatResponse, 2)
+func (b *blockingLLM) ChatStream(ctx context.Context, req llm.Request) (<-chan llm.Chunk, error) {
+	ch := make(chan llm.Chunk, 2)
 	go func() {
 		defer close(ch)
 		<-b.blockCh
-		ch <- llm.ChatResponse{Delta: "Done", Done: true}
+		ch <- llm.Chunk{Delta: "Done", Finish: llm.StopEnd}
 	}()
 	return ch, nil
-}
-
-func (b *blockingLLM) TotalUsage() llm.Usage {
-	return llm.Usage{}
 }
 
 // 测试边界校验与空参数
@@ -281,8 +273,8 @@ func TestCoreAgent_Validation(t *testing.T) {
 func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 	cfg := &config.Config{
 		Provider:  llm.ProviderDeepSeek,
-		BaseURL:   llm.DefaultDeepSeekBaseURL,
-		ModelName: llm.DefaultDeepSeekModel,
+		BaseURL:   config.ProviderSpec(llm.ProviderDeepSeek).BaseURL,
+		ModelName: config.ProviderSpec(llm.ProviderDeepSeek).DefaultModel,
 	}
 	cfgPath := filepath.Join(t.TempDir(), "unready_config.json")
 
@@ -298,7 +290,7 @@ func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 	}
 
 	// 模拟 /model 向导补齐密钥：热装客户端后恢复就绪
-	if err := ag.UpdateConfig(string(llm.ProviderDeepSeek), "sk-test-key", llm.DefaultDeepSeekModel); err != nil {
+	if err := ag.UpdateConfig(string(llm.ProviderDeepSeek), "sk-test-key", config.ProviderSpec(llm.ProviderDeepSeek).DefaultModel); err != nil {
 		t.Fatalf("expected UpdateConfig to attach client, got: %v", err)
 	}
 	if !ag.Config().HasAPIKey {
@@ -308,17 +300,17 @@ func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 
 type toolCallStepLLM struct {
 	mu    sync.Mutex
-	steps []func(req *llm.ChatRequest) []llm.ChatResponse
+	steps []func(req llm.Request) []llm.Chunk
 	calls int
 }
 
-func (m *toolCallStepLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
+func (m *toolCallStepLLM) ChatStream(ctx context.Context, req llm.Request) (<-chan llm.Chunk, error) {
 	m.mu.Lock()
 	idx := m.calls
 	m.calls++
 	m.mu.Unlock()
 
-	ch := make(chan llm.ChatResponse, 4)
+	ch := make(chan llm.Chunk, 4)
 	go func() {
 		defer close(ch)
 		if idx < len(m.steps) {
@@ -329,10 +321,6 @@ func (m *toolCallStepLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) 
 		}
 	}()
 	return ch, nil
-}
-
-func (m *toolCallStepLLM) TotalUsage() llm.Usage {
-	return llm.Usage{}
 }
 
 type mockAdderTool struct{}
@@ -368,13 +356,13 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 	reg := tool.NewRegistry(&mockAdderTool{})
 
 	stepLLM := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
 			// Step 1: 模型返回工具调用
-			func(req *llm.ChatRequest) []llm.ChatResponse {
+			func(req llm.Request) []llm.Chunk {
 				if len(req.Tools) != 1 || req.Tools[0].Name != "adder" {
 					t.Errorf("expected 1 tool 'adder' in request, got %v", req.Tools)
 				}
-				return []llm.ChatResponse{
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{
@@ -383,20 +371,20 @@ func TestCoreAgent_ReAct_ToolExecution(t *testing.T) {
 								Arguments: `{"a": 2, "b": 3}`,
 							},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
 			// Step 2: 模型收到工具结果后生成最终文本答复
-			func(req *llm.ChatRequest) []llm.ChatResponse {
+			func(req llm.Request) []llm.Chunk {
 				// 验证上下文历史中已经包含了 RoleTool
 				lastMsg := req.Messages[len(req.Messages)-1]
 				if lastMsg.Role != llm.RoleTool || lastMsg.ToolResult == nil || lastMsg.ToolResult.IsError {
 					t.Errorf("expected successful RoleTool message, got: %+v", lastMsg)
 				}
-				return []llm.ChatResponse{
+				return []llm.Chunk{
 					{Delta: "The sum is 5."},
-					{Done: true},
+					{Finish: llm.StopEnd},
 				}
 			},
 		},
@@ -453,10 +441,10 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 	reg := tool.NewRegistry(&mockAdderTool{})
 
 	stepLLM := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
 			// Step 1: 模型传入非法负数参数触发工具报错
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{
@@ -465,19 +453,19 @@ func TestCoreAgent_ReAct_ErrorAsObservation(t *testing.T) {
 								Arguments: `{"a": -5, "b": 3}`,
 							},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
 			// Step 2: 模型收到错误 Observation，进行自愈回答
-			func(req *llm.ChatRequest) []llm.ChatResponse {
+			func(req llm.Request) []llm.Chunk {
 				lastMsg := req.Messages[len(req.Messages)-1]
 				if lastMsg.Role != llm.RoleTool || lastMsg.ToolResult == nil || !lastMsg.ToolResult.IsError {
 					t.Errorf("expected RoleTool with IsError=true, got: %+v", lastMsg)
 				}
-				return []llm.ChatResponse{
+				return []llm.Chunk{
 					{Delta: "I cannot compute this because negative numbers are not supported."},
-					{Done: true},
+					{Finish: llm.StopEnd},
 				}
 			},
 		},
@@ -514,34 +502,34 @@ func TestCoreAgent_MaxStepsExceeded(t *testing.T) {
 
 	// 模拟无限调用工具的模型
 	stepLLM := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "c1", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "c2", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "c3", Name: "adder", Arguments: `{"a":1,"b":1}`},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
@@ -659,7 +647,7 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 	}
 
 	mockLLMClient.mu.Lock()
-	reqs := append([]*llm.ChatRequest(nil), mockLLMClient.requests...)
+	reqs := append([]llm.Request(nil), mockLLMClient.requests...)
 	mockLLMClient.mu.Unlock()
 
 	if len(reqs) != 2 {
@@ -687,28 +675,28 @@ func TestCoreAgent_LongTermMemory_RefreshedPerTurn(t *testing.T) {
 // 破坏性 bash 命令被拦截、不会真正执行，且拒绝文案原样回灌给模型。
 func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 	stepLLM := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
 			// Step 1: 模型请求执行破坏性命令
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "call_1", Name: "bash", Arguments: `{"command": "rm -rf /"}`},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
 			// Step 2: 断言模型收到的是策略拒绝的精确文案，而非被泛化的「执行错误」
-			func(req *llm.ChatRequest) []llm.ChatResponse {
+			func(req llm.Request) []llm.Chunk {
 				if len(req.Messages) == 0 {
 					t.Errorf("expected a non-empty message history")
-					return []llm.ChatResponse{{Delta: "blocked"}, {Done: true}}
+					return []llm.Chunk{{Delta: "blocked"}, {Finish: llm.StopEnd}}
 				}
 				last := req.Messages[len(req.Messages)-1]
 				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Errorf("expected a RoleTool message, got %+v", last)
-					return []llm.ChatResponse{{Delta: "blocked"}, {Done: true}}
+					return []llm.Chunk{{Delta: "blocked"}, {Finish: llm.StopEnd}}
 				}
 				if !last.ToolResult.IsError {
 					t.Errorf("expected the blocked command to be reported as an error")
@@ -719,7 +707,7 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 				if strings.Contains(last.ToolResult.Content, "Tool execution error") {
 					t.Errorf("policy message was overwritten by the generic error text: %q", last.ToolResult.Content)
 				}
-				return []llm.ChatResponse{{Delta: "Blocked."}, {Done: true}}
+				return []llm.Chunk{{Delta: "Blocked."}, {Finish: llm.StopEnd}}
 			},
 		},
 	}
@@ -772,23 +760,23 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 	defer dsServer.Close()
 
 	// 3. 构建各厂商客户端并注入 Agent 内核
-	geminiClient, err := llm.New(
-		llm.ProviderGemini,
-		llm.WithBaseURL(geminiServer.URL),
-		llm.WithAPIKey("gemini-secret"),
-		llm.WithModel("gemini-2.5-flash"),
-		llm.WithHTTPClient(geminiServer.Client()),
-	)
+	geminiClient, err := llm.New(llm.Config{
+		Provider:   llm.ProviderGemini,
+		BaseURL:    geminiServer.URL,
+		APIKey:     "gemini-secret",
+		Model:      "gemini-2.5-flash",
+		HTTPClient: geminiServer.Client(),
+	})
 	if err != nil {
 		t.Fatalf("failed to create gemini client: %v", err)
 	}
-	dsClient, err := llm.New(
-		llm.ProviderDeepSeek,
-		llm.WithBaseURL(dsServer.URL),
-		llm.WithAPIKey("ds-secret"),
-		llm.WithModel("deepseek-flash"),
-		llm.WithHTTPClient(dsServer.Client()),
-	)
+	dsClient, err := llm.New(llm.Config{
+		Provider:   llm.ProviderDeepSeek,
+		BaseURL:    dsServer.URL,
+		APIKey:     "ds-secret",
+		Model:      "deepseek-flash",
+		HTTPClient: dsServer.Client(),
+	})
 	if err != nil {
 		t.Fatalf("failed to create deepseek client: %v", err)
 	}
@@ -839,20 +827,20 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 
 	// 1. 测试允许流程 (AllowOnce)
 	llmAllow := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
 			// Step 1: 模型发起命令调用
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "call_bash_1", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'harness_approval_test'"}`},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
 			// Step 2: 模型接收到工具执行输出并生成最终回复
-			func(req *llm.ChatRequest) []llm.ChatResponse {
+			func(req llm.Request) []llm.Chunk {
 				last := req.Messages[len(req.Messages)-1]
 				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
@@ -863,7 +851,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "harness_approval_test") {
 					t.Errorf("expected tool output to contain 'harness_approval_test', got: %s", last.ToolResult.Content)
 				}
-				return []llm.ChatResponse{{Delta: "Done executed."}, {Done: true}}
+				return []llm.Chunk{{Delta: "Done executed."}, {Finish: llm.StopEnd}}
 			},
 		},
 	}
@@ -896,20 +884,20 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 
 	// 2. 测试拒绝流程 (User Deny -> Error as Observation)
 	llmDeny := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
 			// Step 1: 模型发起命令调用
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "call_bash_2", Name: "bash", Arguments: `{"command": "rm -f 'harness_approval_test.tmp' && echo 'will_be_denied'"}`},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
 			// Step 2: 模型接收到人类拒绝的观察结果，完成自愈回复
-			func(req *llm.ChatRequest) []llm.ChatResponse {
+			func(req llm.Request) []llm.Chunk {
 				last := req.Messages[len(req.Messages)-1]
 				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
@@ -920,7 +908,7 @@ func TestCoreAgent_PermissionPipeline_InteractiveApproval(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "permission denied by user") {
 					t.Errorf("expected content to mention permission denied by user, got: %s", last.ToolResult.Content)
 				}
-				return []llm.ChatResponse{{Delta: "Understood, command was cancelled by user."}, {Done: true}}
+				return []llm.Chunk{{Delta: "Understood, command was cancelled by user."}, {Finish: llm.StopEnd}}
 			},
 		},
 	}
@@ -953,18 +941,18 @@ func TestAgent_WithAutoApprove(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	stepLLM := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "call_bash_auto", Name: "bash", Arguments: `{"command": "touch 'harness_approval_test.tmp' && rm -f 'harness_approval_test.tmp' && echo 'auto_approved_ok'"}`},
 						},
-						Done: true,
+						Finish: llm.StopEnd,
 					},
 				}
 			},
-			func(req *llm.ChatRequest) []llm.ChatResponse {
+			func(req llm.Request) []llm.Chunk {
 				last := req.Messages[len(req.Messages)-1]
 				if last.Role != llm.RoleTool || last.ToolResult == nil {
 					t.Fatalf("expected RoleTool message, got: %+v", last)
@@ -975,7 +963,7 @@ func TestAgent_WithAutoApprove(t *testing.T) {
 				if !strings.Contains(last.ToolResult.Content, "auto_approved_ok") {
 					t.Errorf("expected tool output to contain 'auto_approved_ok', got: %s", last.ToolResult.Content)
 				}
-				return []llm.ChatResponse{{Delta: "Auto approval confirmed."}, {Done: true}}
+				return []llm.Chunk{{Delta: "Auto approval confirmed."}, {Finish: llm.StopEnd}}
 			},
 		},
 	}
@@ -1008,8 +996,8 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 
 	cfg := &config.Config{
 		Provider:  llm.ProviderLlamaCpp,
-		ModelName: llm.DefaultLlamaCppModel,
-		BaseURL:   llm.DefaultLlamaCppBaseURL,
+		ModelName: config.ProviderSpec(llm.ProviderLlamaCpp).DefaultModel,
+		BaseURL:   config.ProviderSpec(llm.ProviderLlamaCpp).BaseURL,
 		Providers: make(map[string]config.ProviderConfig),
 	}
 
@@ -1188,11 +1176,9 @@ func TestCoreAgent_EnvironmentContext(t *testing.T) {
 // panicLLM 在流式调用时直接 panic，用于验证 Run 的 goroutine recover 兜底
 type panicLLM struct{}
 
-func (p *panicLLM) ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error) {
+func (p *panicLLM) ChatStream(ctx context.Context, req llm.Request) (<-chan llm.Chunk, error) {
 	panic("llm exploded")
 }
-
-func (p *panicLLM) TotalUsage() llm.Usage { return llm.Usage{} }
 
 // 验收 D2：agentLoop 崩溃时通道正常关闭、以 EventError 收敛、running 复位可再次 Run
 func TestAgentRun_PanicInLoop(t *testing.T) {

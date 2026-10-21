@@ -165,7 +165,7 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 	})
 
 	// 发起大模型流式调用
-	stream, err := llmClient.ChatStream(ctx, &llm.ChatRequest{
+	stream, err := llmClient.ChatStream(ctx, llm.Request{
 		Messages: reqMsgs,
 		Tools:    toolDefs,
 	})
@@ -179,7 +179,7 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 	}
 
 	var replyBuilder, reasoningBuilder strings.Builder
-	var toolCalls []llm.ToolCall
+	var terminal llm.Chunk
 	for chunk := range stream {
 		if chunk.Err != nil {
 			// 流式异常回滚：本步 assistant 消息不入记忆
@@ -204,13 +204,22 @@ func (a *CoreAgent) executeStep(ctx context.Context, eventCh chan<- protocol.Eve
 				Delta: chunk.Delta,
 			})
 		}
-		if len(chunk.ToolCalls) > 0 {
-			toolCalls = append(toolCalls, chunk.ToolCalls...)
-		}
-		if chunk.Done && chunk.Usage != nil {
-			stepUsage.Add(*chunk.Usage)
+		if chunk.Terminal() {
+			terminal = chunk
 		}
 	}
+
+	// 终块是唯一可信的收尾凭据：缺失即说明流被异常截断，不能当作正常完成
+	if !terminal.Terminal() {
+		a.dispatchLLMResponse(ctx, &protocol.LLMResponseTrace{
+			Step:     step,
+			Duration: time.Since(stepStart),
+			Error:    llm.ErrStreamIncomplete,
+		})
+		return stepUsage, false, llm.ErrStreamIncomplete
+	}
+	stepUsage = terminal.Usage
+	toolCalls := terminal.ToolCalls
 
 	// 触发 OnLLMResponse 钩子
 	a.dispatchLLMResponse(ctx, &protocol.LLMResponseTrace{

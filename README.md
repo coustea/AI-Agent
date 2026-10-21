@@ -360,7 +360,7 @@ flowchart TD
 | 包 | 职责 |
 |---|---|
 | `internal/config` | 配置加载与持久化，全局/本地配置发现，环境变量自动补全，多厂商配置历史 |
-| `pkg/llm` | 纯净独立、零外部依赖的大模型传输层与 OpenAI wire 协议实现，预置 DeepSeek、Gemini、Spark、LlamaCpp 与自定义端点支持 |
+| `pkg/llm` | 纯净独立、零外部依赖的大模型传输层与 OpenAI wire 协议实现，预置 DeepSeek、Gemini、Spark、LlamaCpp，支持通过 `Config.BaseURL` 覆盖端点 |
 | `internal/agent` | Harness 核心：ReAct 循环、Persona 与长期记忆合成、纯数据事件分发、工具流水线与权限审查 |
 | `internal/protocol` | 零依赖纯数据契约：流式事件、权限请求（RequestID 异步关联）、配置视图与 Token 统计，原生支持跨端序列化 |
 | `internal/tool` | 工具接口、线程安全注册表、执行前钩子（`PreToolUse`）、参数校验 |
@@ -501,8 +501,8 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <details>
 <summary><b>支持哪些模型？能接入其他 OpenAI 兼容服务吗？</b></summary>
 
-原生支持 `llamacpp` / `deepseek` / `gemini` / `spark`。由于所有 Provider 统一走 OpenAI Chat Completions 协议，
-接入其他兼容服务只需通过 `pkg/llm.New(llm.ProviderCustom, ...)` 传入 BaseURL 或在 `pkg/llm` 中添加预设即可。
+原生预置 `llamacpp` / `deepseek` / `gemini` / `spark` 四大厂商。由于统一走 OpenAI Chat Completions 协议，
+接入其他兼容服务（如 OpenAI 官方、OneAPI、vLLM、Ollama、Kimi 等）只需通过 `llm.Config` 自主输入 `BaseURL`、`APIKey`、`Model` 即可直接调用。
 </details>
 
 <details>

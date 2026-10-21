@@ -14,12 +14,12 @@ func newLLMFromConfig(cfg *config.Config) (*llm.Client, error) {
 		return nil, fmt.Errorf("agent: configuration cannot be nil")
 	}
 
-	return llm.New(
-		cfg.Provider,
-		llm.WithBaseURL(cfg.BaseURL),
-		llm.WithAPIKey(cfg.APIKey),
-		llm.WithModel(config.NormalizeModelName(cfg.Provider, cfg.ModelName)),
-	)
+	return llm.New(llm.Config{
+		Provider: cfg.Provider,
+		BaseURL:  cfg.BaseURL,
+		APIKey:   cfg.APIKey,
+		Model:    config.NormalizeModelName(cfg.Provider, cfg.ModelName),
+	})
 }
 
 // UpdateConfig 运行时更新模型提供商、密钥与模型名称（具备事务原子性：先在候选副本上校验、初始化客户端并落盘，全部成功后原子生效）
@@ -45,7 +45,12 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 		pStr = string(candidate.Provider)
 	}
 
-	newProvider := llm.Provider(pStr)
+	newProvider, ok := config.ParseProvider(pStr)
+	if !ok {
+		return fmt.Errorf("agent: 未知厂商 %q", pStr)
+	}
+	spec := config.ProviderSpec(newProvider)
+
 	// 切换厂商（自动载入该厂商已保存的配置历史）
 	candidate.SwitchProvider(newProvider)
 
@@ -58,13 +63,13 @@ func (a *CoreAgent) UpdateConfig(provider, apiKey, model string) error {
 	if mStr != "" {
 		candidate.ModelName = config.NormalizeModelName(newProvider, mStr)
 	} else if candidate.ModelName == "" {
-		candidate.ModelName = llm.DefaultModel(newProvider)
+		candidate.ModelName = spec.DefaultModel
 	} else {
 		candidate.ModelName = config.NormalizeModelName(newProvider, candidate.ModelName)
 	}
 
 	// 4. 远程厂商必须具备有效 APIKey
-	if !llm.IsLocalProvider(newProvider) && strings.TrimSpace(candidate.APIKey) == "" {
+	if !spec.Local && strings.TrimSpace(candidate.APIKey) == "" {
 		return fmt.Errorf("agent: provider %q requires an API key", newProvider)
 	}
 

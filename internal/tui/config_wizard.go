@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"my-agent/internal/config"
 	"my-agent/internal/protocol"
 	"my-agent/pkg/llm"
 
@@ -20,7 +21,7 @@ func probeLlamaCpp() string {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	if err := llm.ProbeLocalService(ctx, ""); err != nil {
+	if err := config.ProbeLocal(ctx, ""); err != nil {
 		return "[提示] 本地服务未就绪，配置已保留。启动 llama-server 后即可直接对话。"
 	}
 	return ""
@@ -28,7 +29,7 @@ func probeLlamaCpp() string {
 
 // appendLocalProviderNotice 在切换到本地厂商后追加就绪探测提示
 func (m *Model) appendLocalProviderNotice(provider string) {
-	if !strings.EqualFold(strings.TrimSpace(provider), "llamacpp") {
+	if !strings.EqualFold(strings.TrimSpace(provider), string(llm.ProviderLlamaCpp)) {
 		return
 	}
 	if notice := probeLlamaCpp(); notice != "" {

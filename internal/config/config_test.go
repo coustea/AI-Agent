@@ -8,45 +8,69 @@ import (
 	"my-agent/pkg/llm"
 )
 
+// 厂商默认值是对外契约：这里用字面量钉住，任何默认端点/模型漂移都会被发现。
 func TestConfig_Defaults(t *testing.T) {
-	if llm.DefaultModel(llm.ProviderGemini) != llm.DefaultGeminiModel {
-		t.Errorf("expected %s, got %s", llm.DefaultGeminiModel, llm.DefaultModel(llm.ProviderGemini))
-	}
-	if llm.DefaultModel(llm.ProviderDeepSeek) != llm.DefaultDeepSeekModel {
-		t.Errorf("expected %s, got %s", llm.DefaultDeepSeekModel, llm.DefaultModel(llm.ProviderDeepSeek))
-	}
-	if llm.DefaultModel(llm.ProviderLlamaCpp) != llm.DefaultLlamaCppModel {
-		t.Errorf("expected %s, got %s", llm.DefaultLlamaCppModel, llm.DefaultModel(llm.ProviderLlamaCpp))
-	}
-
-	if llm.DefaultModel(llm.ProviderSpark) != llm.DefaultSparkModel {
-		t.Errorf("expected %s, got %s", llm.DefaultSparkModel, llm.DefaultModel(llm.ProviderSpark))
+	cases := []struct {
+		provider llm.Provider
+		baseURL  string
+		model    string
+		local    bool
+	}{
+		{llm.ProviderLlamaCpp, "http://127.0.0.1:8080", "local-model", true},
+		{llm.ProviderDeepSeek, "https://api.deepseek.com", "deepseek-flash", false},
+		{llm.ProviderGemini, "https://generativelanguage.googleapis.com/v1beta/openai", "gemini-2.5-flash", false},
+		{llm.ProviderSpark, "https://maas-api.cn-huabei-1.xf-yun.com/v2", "spark-x2.5-4b", false},
 	}
 
-	if llm.DefaultBaseURL(llm.ProviderGemini) != llm.DefaultGeminiBaseURL {
-		t.Errorf("expected %s, got %s", llm.DefaultGeminiBaseURL, llm.DefaultBaseURL(llm.ProviderGemini))
+	for _, tc := range cases {
+		spec := ProviderSpec(tc.provider)
+		if spec.BaseURL != tc.baseURL {
+			t.Errorf("%s: 默认端点期望 %s，实际 %s", tc.provider, tc.baseURL, spec.BaseURL)
+		}
+		if spec.DefaultModel != tc.model {
+			t.Errorf("%s: 默认模型期望 %s，实际 %s", tc.provider, tc.model, spec.DefaultModel)
+		}
+		if spec.Local != tc.local {
+			t.Errorf("%s: Local 期望 %v，实际 %v", tc.provider, tc.local, spec.Local)
+		}
+		if got := NormalizeModelName(tc.provider, ""); got != tc.model {
+			t.Errorf("%s: 空模型名应归一化为 %s，实际 %s", tc.provider, tc.model, got)
+		}
 	}
-	if llm.DefaultBaseURL(llm.ProviderDeepSeek) != llm.DefaultDeepSeekBaseURL {
-		t.Errorf("expected %s, got %s", llm.DefaultDeepSeekBaseURL, llm.DefaultBaseURL(llm.ProviderDeepSeek))
+}
+
+// 模型名 → 厂商推断与别名解析（元数据已下沉到 pkg/llm.Spec，此处只验证配置层视图）
+func TestConfig_ProviderMetadata(t *testing.T) {
+	if got := InferProviderFromModel("deepseek-chat"); got != llm.ProviderDeepSeek {
+		t.Errorf("期望 deepseek，实际 %s", got)
 	}
-	if llm.DefaultBaseURL(llm.ProviderSpark) != llm.DefaultSparkBaseURL {
-		t.Errorf("expected %s, got %s", llm.DefaultSparkBaseURL, llm.DefaultBaseURL(llm.ProviderSpark))
+	if got := InferProviderFromModel("gemini-2.5-pro"); got != llm.ProviderGemini {
+		t.Errorf("期望 gemini，实际 %s", got)
 	}
-	if llm.DefaultBaseURL(llm.ProviderLlamaCpp) != llm.DefaultLlamaCppBaseURL {
-		t.Errorf("expected %s, got %s", llm.DefaultLlamaCppBaseURL, llm.DefaultBaseURL(llm.ProviderLlamaCpp))
+	if got := InferProviderFromModel("spark-x2.5"); got != llm.ProviderSpark {
+		t.Errorf("期望 spark，实际 %s", got)
+	}
+	if got := InferProviderFromModel("qwen2.5-coder-7b"); got != llm.ProviderLlamaCpp {
+		t.Errorf("期望 llamacpp，实际 %s", got)
+	}
+	if got := InferProviderFromModel("unknown-model"); got != "" {
+		t.Errorf("未知模型应返回空串，实际 %s", got)
 	}
 
-	if !llm.IsLocalProvider(llm.ProviderLlamaCpp) {
-		t.Errorf("expected llamacpp to be local provider")
+	// 别名与未知厂商：一律规范化到规范 ID，未知回落 llamacpp
+	if got := ProviderSpec(llm.Provider("ds")).ID; got != llm.ProviderDeepSeek {
+		t.Errorf("别名 ds 应解析为 deepseek，实际 %s", got)
 	}
-	if llm.IsLocalProvider(llm.ProviderDeepSeek) {
-		t.Errorf("expected deepseek to not be local provider")
+	if got := ProviderSpec(llm.Provider("不存在的厂商")).ID; got != llm.ProviderLlamaCpp {
+		t.Errorf("未知厂商应回落 llamacpp，实际 %s", got)
 	}
-	if llm.IsLocalProvider(llm.ProviderGemini) {
-		t.Errorf("expected gemini to not be local provider")
+
+	// 星火模型名笔误自动修正
+	if got := NormalizeModelName(llm.ProviderSpark, "spark-2.5"); got != sparkX25Model {
+		t.Errorf("期望 %s，实际 %s", sparkX25Model, got)
 	}
-	if llm.IsLocalProvider(llm.ProviderSpark) {
-		t.Errorf("expected spark to not be local provider")
+	if got := NormalizeModelName(llm.ProviderSpark, "4b"); got != sparkX254BModel {
+		t.Errorf("期望 %s，实际 %s", sparkX254BModel, got)
 	}
 }
 
@@ -56,8 +80,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 
 	cfg := &Config{
 		Provider:  llm.ProviderGemini,
-		BaseURL:   llm.DefaultGeminiBaseURL,
-		ModelName: llm.DefaultGeminiModel,
+		BaseURL:   ProviderSpec(llm.ProviderGemini).BaseURL,
+		ModelName: ProviderSpec(llm.ProviderGemini).DefaultModel,
 		APIKey:    "test-gemini-key",
 	}
 
@@ -76,8 +100,8 @@ func TestConfig_SaveAndLoad(t *testing.T) {
 	if loaded.APIKey != "test-gemini-key" {
 		t.Errorf("expected api key test-gemini-key, got %s", loaded.APIKey)
 	}
-	if loaded.ModelName != llm.DefaultGeminiModel {
-		t.Errorf("expected model %s, got %s", llm.DefaultGeminiModel, loaded.ModelName)
+	if loaded.ModelName != ProviderSpec(llm.ProviderGemini).DefaultModel {
+		t.Errorf("expected model %s, got %s", ProviderSpec(llm.ProviderGemini).DefaultModel, loaded.ModelName)
 	}
 }
 
@@ -97,8 +121,8 @@ func TestConfig_AutoDiscovery_Env(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cfg.Provider != llm.ProviderSpark || cfg.ModelName != llm.DefaultSparkModel {
-		t.Errorf("expected default to spark (%s), got provider: %s, model: %s", llm.DefaultSparkModel, cfg.Provider, cfg.ModelName)
+	if cfg.Provider != llm.ProviderSpark || cfg.ModelName != ProviderSpec(llm.ProviderSpark).DefaultModel {
+		t.Errorf("expected default to spark (%s), got provider: %s, model: %s", ProviderSpec(llm.ProviderSpark).DefaultModel, cfg.Provider, cfg.ModelName)
 	}
 
 	// 2. 设置 SPARK_API_KEY
@@ -138,8 +162,8 @@ func TestConfig_ProviderSwitchingAndPersistence(t *testing.T) {
 
 	cfg := &Config{
 		Provider:  llm.ProviderDeepSeek,
-		BaseURL:   llm.DefaultDeepSeekBaseURL,
-		ModelName: llm.DefaultDeepSeekModel,
+		BaseURL:   ProviderSpec(llm.ProviderDeepSeek).BaseURL,
+		ModelName: ProviderSpec(llm.ProviderDeepSeek).DefaultModel,
 		APIKey:    "sk-deepseek-initial",
 	}
 
@@ -151,7 +175,7 @@ func TestConfig_ProviderSwitchingAndPersistence(t *testing.T) {
 	// 2. 切换到 Gemini 并配置保存
 	cfg.SwitchProvider(llm.ProviderGemini)
 	cfg.APIKey = "sk-gemini-initial"
-	cfg.ModelName = llm.DefaultGeminiModel
+	cfg.ModelName = ProviderSpec(llm.ProviderGemini).DefaultModel
 	if err := SaveConfig(cfgPath, cfg); err != nil {
 		t.Fatalf("failed to save gemini config: %v", err)
 	}
@@ -166,7 +190,7 @@ func TestConfig_ProviderSwitchingAndPersistence(t *testing.T) {
 	}
 
 	dsSaved := loaded.ProviderFor(llm.ProviderDeepSeek)
-	if dsSaved.APIKey != "sk-deepseek-initial" || dsSaved.ModelName != llm.DefaultDeepSeekModel {
+	if dsSaved.APIKey != "sk-deepseek-initial" || dsSaved.ModelName != ProviderSpec(llm.ProviderDeepSeek).DefaultModel {
 		t.Errorf("expected preserved deepseek config, got %+v", dsSaved)
 	}
 
@@ -175,8 +199,8 @@ func TestConfig_ProviderSwitchingAndPersistence(t *testing.T) {
 	if loaded.APIKey != "sk-deepseek-initial" {
 		t.Errorf("expected switched api key to be sk-deepseek-initial, got %s", loaded.APIKey)
 	}
-	if loaded.ModelName != llm.DefaultDeepSeekModel {
-		t.Errorf("expected switched model name to be %s, got %s", llm.DefaultDeepSeekModel, loaded.ModelName)
+	if loaded.ModelName != ProviderSpec(llm.ProviderDeepSeek).DefaultModel {
+		t.Errorf("expected switched model name to be %s, got %s", ProviderSpec(llm.ProviderDeepSeek).DefaultModel, loaded.ModelName)
 	}
 }
 
@@ -263,7 +287,7 @@ func TestConfig_BuiltinSparkReadyOutOfBox(t *testing.T) {
 	if cfg.APIKey == "" {
 		t.Fatalf("expected default spark APIKey to be non-empty out of the box")
 	}
-	if cfg.ModelName != llm.DefaultSparkModel {
-		t.Fatalf("expected default model %s, got %s", llm.DefaultSparkModel, cfg.ModelName)
+	if cfg.ModelName != ProviderSpec(llm.ProviderSpark).DefaultModel {
+		t.Fatalf("expected default model %s, got %s", ProviderSpec(llm.ProviderSpark).DefaultModel, cfg.ModelName)
 	}
 }

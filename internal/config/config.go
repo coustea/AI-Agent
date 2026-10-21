@@ -10,121 +10,21 @@ import (
 	"my-agent/pkg/llm"
 )
 
-// 扩展推荐模型规格
-const (
-	// DeepSeek 官方最新模型规范 (V4 系列与 R1 推理)
-	DeepSeekProModel      = "deepseek-v4-pro"
-	DeepSeekReasonerModel = "deepseek-reasoner"
-
-	// Google Gemini 官方最新模型规范 (兼容 OpenAI 协议端点)
-	GeminiProModel = "gemini-2.5-pro"
-
-	// 讯飞星辰 MaaS 官方最新模型规范 (https://maas.xfyun.cn/modelSquare)
-	SparkX25Model   = "spark-x2.5"    // 官方主力免费体验模型 (256K 超长上下文，带深度推理)
-	SparkX254BModel = "spark-x2.5-4b" // 端侧 4B 免费开源模型 (原生 1M 超长上下文，0元/tokens)
-)
-
 // DefaultSparkAPIKey 系统内置免费星火 API Key。
 // 预置官方免费体验密钥，确保所有用户安装后无需任何配置即可开箱免费使用，
 // 亦可在编译期通过 -ldflags "-X my-agent/internal/config.DefaultSparkAPIKey=..." 动态覆盖。
 var DefaultSparkAPIKey = "ak-b9b6c6935fcc4f06b6a8472af909f383"
 
 // Version 当前软件发布版本号（可通过编译期 -ldflags "-X my-agent/internal/config.Version=..." 覆盖）
-var Version = "v1.1.0"
+var Version = "v1.2.0"
 
-// providerMeta 描述一个模型厂商的静态元数据，是全部厂商相关映射的单一来源。
-type providerMeta struct {
-	ID                string
-	Aliases           []string
-	DefaultBaseURL    string
-	DefaultModel      string
-	RecommendedModels []string
-	DisplayName       string
-	Description       string
-	IsLocal           bool
-	ModelPrefixes     []string
-	ModelSubstrings   []string
-}
-
-// providerRegistry 是全部厂商元数据的唯一注册表，按展示顺序排列。
-var providerRegistry = []providerMeta{
-	{
-		ID:                "llamacpp",
-		Aliases:           []string{"llama", "local"},
-		DefaultBaseURL:    llm.DefaultLlamaCppBaseURL,
-		DefaultModel:      llm.DefaultLlamaCppModel,
-		RecommendedModels: []string{llm.DefaultLlamaCppModel, "qwen2.5-coder-7b"},
-		DisplayName:       "llama.cpp",
-		Description:       "本地 HTTP 服务 (127.0.0.1:8080)",
-		IsLocal:           true,
-		ModelSubstrings:   []string{"llama", "local", "qwen"},
-	},
-	{
-		ID:                "deepseek",
-		Aliases:           []string{"ds"},
-		DefaultBaseURL:    llm.DefaultDeepSeekBaseURL,
-		DefaultModel:      llm.DefaultDeepSeekModel,
-		RecommendedModels: []string{llm.DefaultDeepSeekModel, DeepSeekProModel, DeepSeekReasonerModel},
-		DisplayName:       "DeepSeek",
-		Description:       "官方最新 - 支持 V4 系列与 R1 深度推理",
-		ModelPrefixes:     []string{"deepseek"},
-	},
-	{
-		ID:                "gemini",
-		Aliases:           []string{"google"},
-		DefaultBaseURL:    llm.DefaultGeminiBaseURL,
-		DefaultModel:      llm.DefaultGeminiModel,
-		RecommendedModels: []string{llm.DefaultGeminiModel, GeminiProModel},
-		DisplayName:       "Google Gemini",
-		Description:       "官方最新 - 推荐 Flash 极速响应 / Pro 深度代码",
-		ModelPrefixes:     []string{"gemini"},
-	},
-	{
-		ID:             "spark",
-		Aliases:        []string{"maas", "xfyun"},
-		DefaultBaseURL: llm.DefaultSparkBaseURL,
-		DefaultModel:   llm.DefaultSparkModel,
-		RecommendedModels: []string{
-			SparkX254BModel, // spark-x2.5-4b (端侧 4B 免费开源模型，1M 超长上下文，0元/tokens无限调用)
-			SparkX25Model,   // spark-x2.5 (官方主力免费体验模型，256K 超长上下文)
-		},
-		DisplayName:   "讯飞星辰 MaaS",
-		Description:   "官方免费模型 - 默认 spark-x2.5-4b (0元/tokens无限调用) / spark-x2.5 (256K上下文)",
-		ModelPrefixes: []string{"spark"},
-	},
-}
-
-// canonicalProvider 返回厂商的规范 ID；未知输入返回其小写形式。
-func canonicalProvider(p llm.Provider) string {
-	return string(llm.NormalizeProvider(p))
-}
-
-// lookupProvider 返回厂商元数据；未知厂商返回 nil。
-func lookupProvider(p llm.Provider) *providerMeta {
-	key := canonicalProvider(p)
-	for i := range providerRegistry {
-		if providerRegistry[i].ID == key {
-			return &providerRegistry[i]
-		}
+// canonical 把任意厂商输入（ID 或别名）规范化为规范 ID；
+// 未知输入回退到本地厂商——这是配置层的容错策略，pkg/llm 本身不做任何猜测。
+func canonical(p llm.Provider) llm.Provider {
+	if parsed, ok := ParseProvider(string(p)); ok {
+		return parsed
 	}
-	return nil
-}
-
-// ProviderIDs 返回按展示顺序排列的全部厂商规范 ID。
-func ProviderIDs() []string {
-	ids := make([]string, 0, len(providerRegistry))
-	for _, pm := range providerRegistry {
-		ids = append(ids, pm.ID)
-	}
-	return ids
-}
-
-// ProviderAliases 返回厂商的快捷别名列表
-func ProviderAliases(p llm.Provider) []string {
-	if pm := lookupProvider(p); pm != nil {
-		return append([]string(nil), pm.Aliases...)
-	}
-	return nil
+	return llm.ProviderLlamaCpp
 }
 
 // ProviderConfig 保存各厂商的专属模型与密钥配置
@@ -184,7 +84,7 @@ func (c Config) ProviderFor(p llm.Provider) ProviderConfig {
 	if c.Providers == nil {
 		return ProviderConfig{}
 	}
-	return c.Providers[canonicalProvider(p)]
+	return c.Providers[string(canonical(p))]
 }
 
 // SetProviderConfig 记录并更新指定厂商的专属配置
@@ -192,24 +92,26 @@ func (c *Config) SetProviderConfig(p llm.Provider, pcfg ProviderConfig) {
 	if c.Providers == nil {
 		c.Providers = make(map[string]ProviderConfig)
 	}
-	c.Providers[canonicalProvider(p)] = pcfg
+	c.Providers[string(canonical(p))] = pcfg
 }
 
 // SwitchProvider 切换当前激活的厂商，并自动载入该厂商已保存的配置历史
 func (c *Config) SwitchProvider(p llm.Provider) {
-	c.Provider = p
-	pcfg := c.ProviderFor(p)
+	active := canonical(p)
+	spec := ProviderSpec(active)
+	c.Provider = active
+	pcfg := c.ProviderFor(active)
 
 	if pcfg.BaseURL != "" {
 		c.BaseURL = pcfg.BaseURL
 	} else {
-		c.BaseURL = llm.DefaultBaseURL(p)
+		c.BaseURL = spec.BaseURL
 	}
 
 	if pcfg.ModelName != "" {
-		c.ModelName = NormalizeModelName(p, pcfg.ModelName)
+		c.ModelName = NormalizeModelName(active, pcfg.ModelName)
 	} else {
-		c.ModelName = llm.DefaultModel(p)
+		c.ModelName = spec.DefaultModel
 	}
 
 	c.APIKey = pcfg.APIKey
@@ -230,43 +132,35 @@ func (c *Config) Clone() *Config {
 	return &cp
 }
 
-// envFallback 描述一个厂商的环境变量密钥来源与默认端点/模型。
-type envFallback struct {
-	provider llm.Provider
-	envKeys  []string
-	baseURL  string
-	model    string
-}
-
-// envFallbacks 是环境变量补全的唯一来源。
-var envFallbacks = []envFallback{
-	{llm.ProviderDeepSeek, []string{"DEEPSEEK_API_KEY"}, llm.DefaultDeepSeekBaseURL, llm.DefaultDeepSeekModel},
-	{llm.ProviderGemini, []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"}, llm.DefaultGeminiBaseURL, llm.DefaultGeminiModel},
-	{llm.ProviderSpark, []string{"SPARK_API_KEY", "MAAS_API_KEY"}, llm.DefaultSparkBaseURL, llm.DefaultSparkModel},
-}
-
 // applyEnvFallbacks 使用环境变量与内置凭证补齐缺失的厂商密钥与默认端点/模型。
 func applyEnvFallbacks(cfg *Config) {
-	for _, fb := range envFallbacks {
-		pcfg := cfg.ProviderFor(fb.provider)
+	for _, meta := range providerMetas {
+		if len(meta.EnvKeys) == 0 {
+			continue
+		}
+
+		pcfg := cfg.ProviderFor(meta.ID)
 		if pcfg.APIKey != "" {
 			continue
 		}
-		key := firstEnv(fb.envKeys...)
-		if key == "" && fb.provider == llm.ProviderSpark && strings.TrimSpace(DefaultSparkAPIKey) != "" {
+
+		key := firstEnv(meta.EnvKeys...)
+		if key == "" && meta.ID == llm.ProviderSpark && strings.TrimSpace(DefaultSparkAPIKey) != "" {
 			key = strings.TrimSpace(DefaultSparkAPIKey)
 		}
 		if key == "" {
 			continue
 		}
+
+		spec := ProviderSpec(meta.ID)
 		pcfg.APIKey = key
 		if pcfg.BaseURL == "" {
-			pcfg.BaseURL = fb.baseURL
+			pcfg.BaseURL = spec.BaseURL
 		}
 		if pcfg.ModelName == "" {
-			pcfg.ModelName = fb.model
+			pcfg.ModelName = spec.DefaultModel
 		}
-		cfg.SetProviderConfig(fb.provider, pcfg)
+		cfg.SetProviderConfig(meta.ID, pcfg)
 	}
 }
 
@@ -291,18 +185,20 @@ func DefaultConfig() *Config {
 	applyEnvFallbacks(cfg)
 
 	// 预置 llamacpp
+	local := ProviderSpec(llm.ProviderLlamaCpp)
 	cfg.SetProviderConfig(llm.ProviderLlamaCpp, ProviderConfig{
-		BaseURL:   llm.DefaultLlamaCppBaseURL,
-		ModelName: llm.DefaultLlamaCppModel,
+		BaseURL:   local.BaseURL,
+		ModelName: local.DefaultModel,
 	})
 
 	// 预置 spark 默认端点与默认免费模型 (优先使用用户环境变量/配置；若无则回退到编译期注入的 DefaultSparkAPIKey)
+	spark := ProviderSpec(llm.ProviderSpark)
 	pcfgSpark := cfg.ProviderFor(llm.ProviderSpark)
 	if pcfgSpark.BaseURL == "" {
-		pcfgSpark.BaseURL = llm.DefaultSparkBaseURL
+		pcfgSpark.BaseURL = spark.BaseURL
 	}
 	if pcfgSpark.ModelName == "" {
-		pcfgSpark.ModelName = llm.DefaultSparkModel
+		pcfgSpark.ModelName = spark.DefaultModel
 	}
 	if pcfgSpark.APIKey == "" && strings.TrimSpace(DefaultSparkAPIKey) != "" {
 		pcfgSpark.APIKey = strings.TrimSpace(DefaultSparkAPIKey)
@@ -311,7 +207,7 @@ func DefaultConfig() *Config {
 
 	// 默认激活提供商选择：
 	// 1. 若外部环境变量显式配置了 DeepSeek 或 Gemini，优先激活对应厂商；
-	// 2. 否则系统默认激活官方免费模型 (Spark spark-2.5)
+	// 2. 否则系统默认激活官方免费模型 (Spark spark-x2.5-4b)
 	if cfg.ProviderFor(llm.ProviderDeepSeek).APIKey != "" {
 		cfg.SwitchProvider(llm.ProviderDeepSeek)
 	} else if cfg.ProviderFor(llm.ProviderGemini).APIKey != "" {
@@ -346,6 +242,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// 保证顶层当前配置已落入 providers
 	if cfg.Provider != "" {
+		cfg.Provider = canonical(cfg.Provider)
 		pcfg := cfg.ProviderFor(cfg.Provider)
 		if pcfg.APIKey == "" && cfg.APIKey != "" {
 			pcfg.APIKey = cfg.APIKey
@@ -366,6 +263,8 @@ func LoadConfig(path string) (*Config, error) {
 	if cfg.Provider == "" {
 		cfg.Provider = llm.ProviderLlamaCpp
 	}
+	spec := ProviderSpec(cfg.Provider)
+
 	activePcfg := cfg.ProviderFor(cfg.Provider)
 	if cfg.APIKey == "" && activePcfg.APIKey != "" {
 		cfg.APIKey = activePcfg.APIKey
@@ -374,7 +273,7 @@ func LoadConfig(path string) (*Config, error) {
 		if activePcfg.ModelName != "" {
 			cfg.ModelName = activePcfg.ModelName
 		} else {
-			cfg.ModelName = llm.DefaultModel(cfg.Provider)
+			cfg.ModelName = spec.DefaultModel
 		}
 	}
 	cfg.ModelName = NormalizeModelName(cfg.Provider, cfg.ModelName)
@@ -387,7 +286,7 @@ func LoadConfig(path string) (*Config, error) {
 		if activePcfg.BaseURL != "" {
 			cfg.BaseURL = activePcfg.BaseURL
 		} else {
-			cfg.BaseURL = llm.DefaultBaseURL(cfg.Provider)
+			cfg.BaseURL = spec.BaseURL
 		}
 	}
 
@@ -424,66 +323,6 @@ func SaveConfig(path string, cfg *Config) error {
 	return os.WriteFile(resolvedPath, data, 0o600)
 }
 
-// metaOrDefault 返回厂商元数据；未知厂商回退到本地 llamacpp。
-func metaOrDefault(p llm.Provider) *providerMeta {
-	if pm := lookupProvider(p); pm != nil {
-		return pm
-	}
-	return lookupProvider(llm.ProviderLlamaCpp)
-}
-
-// RecommendedModels 返回指定厂商官方推荐的高频常用模型列表
-func RecommendedModels(p llm.Provider) []string {
-	return metaOrDefault(p).RecommendedModels
-}
-
-// ProviderDisplayName 返回厂商的友好展示名称
-func ProviderDisplayName(p llm.Provider) string {
-	return metaOrDefault(p).DisplayName
-}
-
-// ProviderDescription 返回厂商的能力特征说明
-func ProviderDescription(p llm.Provider) string {
-	return metaOrDefault(p).Description
-}
-
-// InferProviderFromModel 根据模型名称前缀或特征智能识别所属厂商
-func InferProviderFromModel(model string) llm.Provider {
-	m := strings.ToLower(strings.TrimSpace(model))
-	for _, pm := range providerRegistry {
-		for _, prefix := range pm.ModelPrefixes {
-			if strings.HasPrefix(m, prefix) {
-				return llm.Provider(pm.ID)
-			}
-		}
-		for _, sub := range pm.ModelSubstrings {
-			if strings.Contains(m, sub) {
-				return llm.Provider(pm.ID)
-			}
-		}
-	}
-	return ""
-}
-
-// NormalizeModelName 归一化各厂商的模型名称，自动修复星火平台缺少 x 前缀的笔误（如 spark-2.5 修正为 spark-x2.5）
-func NormalizeModelName(p llm.Provider, model string) string {
-	m := strings.TrimSpace(model)
-	if m == "" {
-		return llm.DefaultModel(p)
-	}
-	canon := canonicalProvider(p)
-	if canon == "spark" {
-		low := strings.ToLower(m)
-		switch low {
-		case "spark-2.5", "2.5":
-			return SparkX25Model
-		case "spark-2.5-4b", "2.5-4b", "spark-4b", "4b":
-			return SparkX254BModel
-		}
-	}
-	return m
-}
-
 // ToView 将当前配置映射为面向前端只读呈现的纯数据 ConfigView 契约
 func (c *Config) ToView() protocol.ConfigView {
 	available := ProviderIDs()
@@ -494,19 +333,20 @@ func (c *Config) ToView() protocol.ConfigView {
 	if c != nil {
 		cv.Provider = string(c.Provider)
 		cv.ModelName = c.ModelName
-		cv.HasAPIKey = c.APIKey != "" || llm.IsLocalProvider(c.Provider)
+		cv.HasAPIKey = c.APIKey != "" || ProviderSpec(c.Provider).Local
 	}
 
 	providers := make([]protocol.ProviderInfo, 0, len(available))
 	for _, pStr := range available {
 		p := llm.Provider(pStr)
+		spec := ProviderSpec(p)
 		info := protocol.ProviderInfo{
 			ID:                pStr,
-			Name:              ProviderDisplayName(p),
-			Description:       ProviderDescription(p),
-			Aliases:           ProviderAliases(p),
-			IsLocal:           llm.IsLocalProvider(p),
-			RecommendedModels: RecommendedModels(p),
+			Name:              spec.DisplayName,
+			Description:       spec.Description,
+			Aliases:           append([]string(nil), spec.Aliases...),
+			IsLocal:           spec.Local,
+			RecommendedModels: append([]string(nil), spec.RecommendedModels...),
 		}
 
 		if c != nil {
@@ -514,7 +354,7 @@ func (c *Config) ToView() protocol.ConfigView {
 			if pcfg.ModelName != "" {
 				info.CurrentModel = pcfg.ModelName
 			} else {
-				info.CurrentModel = llm.DefaultModel(p)
+				info.CurrentModel = spec.DefaultModel
 			}
 
 			if info.IsLocal {
@@ -525,7 +365,7 @@ func (c *Config) ToView() protocol.ConfigView {
 				info.IsConfigured = true
 			}
 		} else {
-			info.CurrentModel = llm.DefaultModel(p)
+			info.CurrentModel = spec.DefaultModel
 			info.IsConfigured = info.IsLocal
 		}
 

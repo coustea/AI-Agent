@@ -7,10 +7,10 @@ import (
 	"my-agent/pkg/llm"
 )
 
-// LLM 定义大模型统一流式调用接口 (由 pkg/llm.Client 原生实现)
+// LLM 定义大模型统一流式调用接口 (由 pkg/llm.Client 原生实现)。
+// 用量统计只由 Agent 侧记录一处，客户端保持无状态。
 type LLM interface {
-	ChatStream(ctx context.Context, req *llm.ChatRequest) (<-chan llm.ChatResponse, error)
-	TotalUsage() llm.Usage
+	ChatStream(ctx context.Context, req llm.Request) (<-chan llm.Chunk, error)
 }
 
 // Decision 统一权限决策枚举

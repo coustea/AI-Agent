@@ -7,8 +7,8 @@
 Call chain: **LLM (pkg/llm) → Agent → Protocol → TUI (or Desktop/Wails)**.
 
 - `cmd/tide/main.go` is the sole entrypoint (this is what the Makefile builds and runs).
-- `pkg/llm` — 纯净独立、零外部依赖的大模型传输层与 OpenAI wire 协议实现，预置 DeepSeek、Gemini、Spark、LlamaCpp 与自定义端点支持，天然支持跨项目整包复制。
-- `internal/protocol` — 纯数据契约层：零依赖定义流式事件 (Event)、无闭包异步权限请求 (RequestID)、配置视图与 Token 统计，原生支持跨端与序列化；核心大模型实体类型 (Message/ChatRequest/ChatResponse/Usage) 零成本直绑 `pkg/llm`。
+- `pkg/llm` — 纯净独立、零外部依赖的大模型调用库，支持通过 `Config` 显式传入 Provider/APIKey/BaseURL/Model 直连任意 OpenAI 兼容服务及四大预设厂商，天然支持跨项目整包复制。
+- `internal/protocol` — 纯数据契约层：零依赖定义流式事件 (Event)、无闭包异步权限请求 (RequestID)、配置视图与 Token 统计，原生支持跨端与序列化；核心大模型实体类型 (Message/Request/Chunk/Usage) 零成本直绑 `pkg/llm`。
 - `internal/agent` — Harness core: ReAct loop (default 10 steps, `WithMaxSteps`), system-prompt assembly, streaming events, tool pipeline. 核心直接面向 `pkg/llm`，由 `CoreAgent.UpdateConfig` 完成模型热装配。
 - `internal/tool` + `internal/tool/builtin` — tool registry/hooks and builtins (`bash`, `read_file`, `write_file`, `edit_file`, `glob`, `grep`). All builtins share one `builtin.WorkDirRef`, so assembly order never affects the sandbox root.
 - `internal/fsutil` — the single implementation of workspace-boundary checks (`ResolveInWorkspace`, symlink-resolving). `SafePath` and the permission gate both forward to it; do not re-implement path checks elsewhere.

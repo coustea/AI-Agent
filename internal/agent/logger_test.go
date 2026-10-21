@@ -32,26 +32,26 @@ func TestLoggingMiddleware_FullLifecycle(t *testing.T) {
 	// Step 0: 思考并请求调用 read_file 工具
 	// Step 1: 思考并给出最终文本回复
 	llmStub := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{ReasoningContent: "I need to read the config file first.\nThen I can answer the user."},
 					{
 						ToolCalls: []llm.ToolCall{
 							{ID: "call_test_1", Name: "read_file", Arguments: `{"path": "config.yaml"}`},
 						},
-						Usage: &llm.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120},
-						Done:  true,
+						Usage:  llm.Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120},
+						Finish: llm.StopEnd,
 					},
 				}
 			},
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{ReasoningContent: "I have received the config content.\nNow answering."},
 					{Delta: "The host is 127.0.0.1 and port is 8080."},
 					{
-						Usage: &llm.Usage{PromptTokens: 150, CompletionTokens: 30, TotalTokens: 180},
-						Done:  true,
+						Usage:  llm.Usage{PromptTokens: 150, CompletionTokens: 30, TotalTokens: 180},
+						Finish: llm.StopEnd,
 					},
 				}
 			},
@@ -200,9 +200,9 @@ func TestLoggingMiddleware_ErrorTurn(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	llmErr := &toolCallStepLLM{
-		steps: []func(req *llm.ChatRequest) []llm.ChatResponse{
-			func(req *llm.ChatRequest) []llm.ChatResponse {
-				return []llm.ChatResponse{
+		steps: []func(req llm.Request) []llm.Chunk{
+			func(req llm.Request) []llm.Chunk {
+				return []llm.Chunk{
 					{Err: errors.New("upstream service unavailable 503")},
 				}
 			},
