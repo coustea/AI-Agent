@@ -8,7 +8,6 @@ import (
 
 	"my-agent/internal/config"
 	"my-agent/internal/protocol"
-	"my-agent/pkg/llm"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,7 +28,7 @@ func probeLlamaCpp() string {
 
 // appendLocalProviderNotice 在切换到本地厂商后追加就绪探测提示
 func (m *Model) appendLocalProviderNotice(provider string) {
-	if !strings.EqualFold(strings.TrimSpace(provider), string(llm.ProviderLlamaCpp)) {
+	if !strings.EqualFold(strings.TrimSpace(provider), string(config.ProviderLlamaCpp)) {
 		return
 	}
 	if notice := probeLlamaCpp(); notice != "" {

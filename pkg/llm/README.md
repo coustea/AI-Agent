@@ -1,30 +1,24 @@
 # pkg/llm
 
-零第三方依赖的大模型调用库。统一走 OpenAI Chat Completions + SSE，预置常见厂商规格，同时支持传入任意自定义 `BaseURL`、`APIKey`、`Model` 直连兼容端点。
+零第三方依赖、面向标准 **OpenAI 兼容协议**（Chat Completions + SSE）的轻量级大模型通信库。
 
-| Provider | 默认端点 | 默认模型 | 鉴权 |
-|---|---|---|---|
-| `openai` / `custom` | 自定义 BaseURL | 自定义 Model | `Authorization: Bearer` (本地服务免密) |
-| `deepseek` | `https://api.deepseek.com` | `deepseek-flash` | `Authorization: Bearer` |
-| `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` | `x-goog-api-key` |
-| `spark` | `https://maas-api.cn-huabei-1.xf-yun.com/v2` | `spark-x2.5-4b` | `Authorization: Bearer` |
-| `llamacpp` | `http://127.0.0.1:8080` | `local-model` | 可空 |
+只需提供 `BaseURL`、`APIKey`、`Model` 三要素，即可直连任意兼容端点（包括 OpenAI、DeepSeek、Moonshot、通义千问、SiliconFlow、Ollama、vLLM、LocalAI、Gemini 等）。
 
 ## 快速开始
 
-### 1. 通用端点直连（自主输入三要素）
+### 1. 基础调用（三要素直连）
 
 ```go
 client, err := llm.New(llm.Config{
-    BaseURL: "https://api.openai.com/v1", // 或任何兼容代理/中转端点，自动智能规范化
-    APIKey:  os.Getenv("OPENAI_API_KEY"),
-    Model:   "gpt-4o",
+    BaseURL: "https://api.deepseek.com/v1", // 自动智能兼容纯域名、/v1 或 /chat/completions 后缀
+    APIKey:  os.Getenv("DEEPSEEK_API_KEY"),
+    Model:   "deepseek-chat",
 })
 if err != nil {
     return err
 }
 
-// 同步调用（直接拿完整结果，复用 Chunk 零多余类型）
+// 同步非流式调用（直接拿完整结果，复用 Chunk 零多余类型）
 resp, err := client.Chat(ctx, llm.Request{
     Messages: []llm.Message{{Role: llm.RoleUser, Content: "你好"}},
 })
@@ -38,7 +32,7 @@ fmt.Println(resp.Delta, resp.Usage.TotalTokens)
 
 ```go
 stream, err := client.ChatStream(ctx, llm.Request{
-    Model:    "gpt-4o-mini", // 可选：单次请求覆盖 Client 默认模型
+    Model:    "deepseek-reasoner", // 可选：单次请求覆盖 Client 默认模型
     Messages: []llm.Message{{Role: llm.RoleUser, Content: "讲个故事"}},
 })
 if err != nil {
@@ -49,21 +43,33 @@ for chunk := range stream {
     if chunk.Terminal() {
         return chunk.Err
     }
+    // 思考模型支持增量输出 ReasoningContent
+    if chunk.ReasoningContent != "" {
+        fmt.Print(chunk.ReasoningContent)
+    }
     fmt.Print(chunk.Delta)
 }
 ```
 
-## Config
+### 3. 本地模型直连（Ollama / vLLM 免密）
 
-| 字段 | 说明 |
-|---|---|
-| `Provider` | 可选；预设厂商之一，或留空/自定义（只要传入 `BaseURL` 即自动兼容） |
-| `APIKey` | 远程端点必填；本地服务（127.0.0.1/localhost）可空 |
-| `BaseURL` | 服务端点（智能兼容 `/v1`、`/chat/completions` 等后缀）；预设厂商可留空使用默认值 |
-| `Model` | 客户端默认模型名（单次 `Request.Model` 可覆盖） |
-| `HTTPClient` | 空 = 内置 Transport（系统代理、HTTP/2、阶段超时） |
-| `Timeout` | 整次调用硬超时；空 = 10 分钟 |
-| `Attempts` | 最大尝试次数（含首次）；0 = 3，1 = 不重试 |
+```go
+client, err := llm.New(llm.Config{
+    BaseURL: "http://127.0.0.1:11434", // APIKey 留空即可免密访问本地服务
+    Model:   "qwen2.5:7b",
+})
+```
+
+## Config 配置项
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `BaseURL` | string | **必填**。服务根地址（如 `https://api.openai.com/v1`、`http://localhost:11434`） |
+| `APIKey` | string | 可选。远程端点填 Bearer Token；本地端点可留空 |
+| `Model` | string | 可选。客户端默认模型名（单次 `Request.Model` 可覆盖） |
+| `HTTPClient` | *http.Client | 可选。空则使用内置优化 Transport（系统代理、HTTP/2、阶段超时） |
+| `Timeout` | time.Duration | 可选。整次调用硬超时；空 = 默认 10 分钟 |
+| `Attempts` | int | 可选。最大尝试次数（含首次）；0 = 默认 3 次，1 = 不重试 |
 
 ## 流式契约
 
@@ -89,9 +95,4 @@ if errors.As(err, &apiErr) {
 }
 ```
 
-`APIError.Retryable()` 决定是否值得重试；`RetryAfter` 来自上游 `Retry-After`。
-
-## 设计边界
-
-库只负责网络与协议。展示名、别名、推荐模型、环境变量策略、本地服务探测属于调用方应用层，
-不应写进本包；这样整包复制到其他项目时不会带走产品信息。
+`APIError.Retryable()` 自动识别可重试错误（5xx、429、超时、网络闪断，自动规避证书/DNS/取消等不可恢复错误）；`RetryAfter` 自动解析上游 `Retry-After` 头。

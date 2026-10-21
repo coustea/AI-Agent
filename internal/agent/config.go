@@ -8,17 +8,22 @@ import (
 	"my-agent/pkg/llm"
 )
 
-// newLLMFromConfig 根据配置初始化 pkg/llm.Client (由 llm.New 自主完成默认值补齐与前置校验)
+// newLLMFromConfig 根据配置初始化 pkg/llm.Client
 func newLLMFromConfig(cfg *config.Config) (*llm.Client, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("agent: configuration cannot be nil")
 	}
 
+	spec := config.ProviderSpec(cfg.Provider)
+	// 远程厂商缺少密钥时保留未就绪状态（返回 nil, nil），待向导补齐
+	if !spec.Local && strings.TrimSpace(cfg.APIKey) == "" {
+		return nil, nil
+	}
+
 	return llm.New(llm.Config{
-		Provider: cfg.Provider,
-		BaseURL:  cfg.BaseURL,
-		APIKey:   cfg.APIKey,
-		Model:    config.NormalizeModelName(cfg.Provider, cfg.ModelName),
+		BaseURL: cfg.BaseURL,
+		APIKey:  cfg.APIKey,
+		Model:   config.NormalizeModelName(cfg.Provider, cfg.ModelName),
 	})
 }
 

@@ -272,9 +272,9 @@ func TestCoreAgent_Validation(t *testing.T) {
 // 测试远程厂商缺密钥时仍装配出未就绪内核，供 /model 向导补齐密钥后热装客户端
 func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 	cfg := &config.Config{
-		Provider:  llm.ProviderDeepSeek,
-		BaseURL:   config.ProviderSpec(llm.ProviderDeepSeek).BaseURL,
-		ModelName: config.ProviderSpec(llm.ProviderDeepSeek).DefaultModel,
+		Provider:  config.ProviderDeepSeek,
+		BaseURL:   config.ProviderSpec(config.ProviderDeepSeek).BaseURL,
+		ModelName: config.ProviderSpec(config.ProviderDeepSeek).DefaultModel,
 	}
 	cfgPath := filepath.Join(t.TempDir(), "unready_config.json")
 
@@ -290,7 +290,7 @@ func TestNewFromConfig_RemoteWithoutKey_Unready(t *testing.T) {
 	}
 
 	// 模拟 /model 向导补齐密钥：热装客户端后恢复就绪
-	if err := ag.UpdateConfig(string(llm.ProviderDeepSeek), "sk-test-key", config.ProviderSpec(llm.ProviderDeepSeek).DefaultModel); err != nil {
+	if err := ag.UpdateConfig(string(config.ProviderDeepSeek), "sk-test-key", config.ProviderSpec(config.ProviderDeepSeek).DefaultModel); err != nil {
 		t.Fatalf("expected UpdateConfig to attach client, got: %v", err)
 	}
 	if !ag.Config().HasAPIKey {
@@ -727,9 +727,9 @@ func TestCoreAgent_PermissionHook_Mounted(t *testing.T) {
 
 // 测试整个系统通过 Agent 直接驱动 LLM 客户端并正常调用具体模型的完整端到端链路
 func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
-	// 1. 模拟 Google Gemini 官方端点
+	// 1. 模拟 Google Gemini 兼容端点
 	geminiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("x-goog-api-key") != "gemini-secret" {
+		if r.Header.Get("Authorization") != "Bearer gemini-secret" && r.Header.Get("x-goog-api-key") != "gemini-secret" {
 			http.Error(w, "invalid google key", http.StatusUnauthorized)
 			return
 		}
@@ -761,7 +761,6 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 
 	// 3. 构建各厂商客户端并注入 Agent 内核
 	geminiClient, err := llm.New(llm.Config{
-		Provider:   llm.ProviderGemini,
 		BaseURL:    geminiServer.URL,
 		APIKey:     "gemini-secret",
 		Model:      "gemini-2.5-flash",
@@ -771,7 +770,6 @@ func TestAgent_EndToEnd_ModelExecution(t *testing.T) {
 		t.Fatalf("failed to create gemini client: %v", err)
 	}
 	dsClient, err := llm.New(llm.Config{
-		Provider:   llm.ProviderDeepSeek,
 		BaseURL:    dsServer.URL,
 		APIKey:     "ds-secret",
 		Model:      "deepseek-flash",
@@ -995,9 +993,9 @@ func TestAgent_ConfigAndModelSwitching(t *testing.T) {
 	cfgPath := filepath.Join(tmpDir, "test_config.json")
 
 	cfg := &config.Config{
-		Provider:  llm.ProviderLlamaCpp,
-		ModelName: config.ProviderSpec(llm.ProviderLlamaCpp).DefaultModel,
-		BaseURL:   config.ProviderSpec(llm.ProviderLlamaCpp).BaseURL,
+		Provider:  config.ProviderLlamaCpp,
+		ModelName: config.ProviderSpec(config.ProviderLlamaCpp).DefaultModel,
+		BaseURL:   config.ProviderSpec(config.ProviderLlamaCpp).BaseURL,
 		Providers: make(map[string]config.ProviderConfig),
 	}
 

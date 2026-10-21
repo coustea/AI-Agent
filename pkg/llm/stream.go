@@ -2,7 +2,9 @@ package llm
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,13 +15,279 @@ import (
 )
 
 const (
-	streamBufSize = 64 << 10
-	// terminalGrace 是终块的投递宽限期：调用方已停止读取时放弃投递，避免 goroutine 永久阻塞。
-	terminalGrace = 200 * time.Millisecond
+	sseDonePayload = "[DONE]"
+	streamBufSize  = 64 << 10
+	terminalGrace  = 200 * time.Millisecond
 )
 
-// outcome 是一次流读取的事实汇总。它只描述"发生了什么"，
-// 如何对外表达（终块 / Err）由 pump 统一决定。
+// ============================================================================
+// 请求编码（领域模型 → OpenAI 兼容 Wire 协议）
+// ============================================================================
+
+type reqPayload struct {
+	Model         string         `json:"model"`
+	Messages      []reqMessage   `json:"messages"`
+	Tools         []reqTool      `json:"tools,omitempty"`
+	Temperature   *float32       `json:"temperature,omitempty"`
+	MaxTokens     *int           `json:"max_tokens,omitempty"`
+	Stream        bool           `json:"stream"`
+	StreamOptions *streamOptions `json:"stream_options,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
+}
+
+type reqMessage struct {
+	Role       string        `json:"role"`
+	Content    *string       `json:"content"` // nil → null; 部分厂商在 tool_calls 下要求 content 为 null
+	ToolCalls  []reqToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string        `json:"tool_call_id,omitempty"`
+	Name       string        `json:"name,omitempty"`
+}
+
+type reqToolCall struct {
+	ID       string      `json:"id"`
+	Type     string      `json:"type"`
+	Function reqFunction `json:"function"`
+}
+
+type reqFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type reqTool struct {
+	Type     string         `json:"type"`
+	Function ToolDefinition `json:"function"`
+}
+
+func encodeRequest(defaultModel string, req Request) ([]byte, error) {
+	if len(req.Messages) == 0 {
+		return nil, ErrEmptyMessages
+	}
+
+	model := strings.TrimSpace(req.Model)
+	if model == "" {
+		model = defaultModel
+	}
+	if model == "" {
+		return nil, ErrEmptyModel
+	}
+
+	payload := reqPayload{
+		Model:         model,
+		Messages:      encodeMessages(req.Messages),
+		Tools:         encodeTools(req.Tools),
+		Temperature:   req.Temperature,
+		MaxTokens:     req.MaxTokens,
+		Stream:        true,
+		StreamOptions: &streamOptions{IncludeUsage: true},
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("llm: 编码请求失败: %w", err)
+	}
+	return data, nil
+}
+
+func encodeMessages(msgs []Message) []reqMessage {
+	out := make([]reqMessage, 0, len(msgs))
+	for _, m := range msgs {
+		rm := reqMessage{Role: string(m.Role)}
+		switch m.Role {
+		case RoleTool:
+			if m.ToolResult != nil {
+				rm.ToolCallID = m.ToolResult.ToolCallID
+				rm.Name = m.ToolResult.Name
+				content := m.ToolResult.Content
+				rm.Content = &content
+			}
+		case RoleAssistant:
+			// assistant 携带 tool_calls 且无文本时发 null，发 "" 会被部分厂商判为非法
+			if m.Content != "" {
+				content := m.Content
+				rm.Content = &content
+			}
+			if len(m.ToolCalls) > 0 {
+				rm.ToolCalls = encodeToolCalls(m.ToolCalls)
+			}
+		default:
+			content := m.Content
+			rm.Content = &content
+		}
+		out = append(out, rm)
+	}
+	return out
+}
+
+func encodeToolCalls(calls []ToolCall) []reqToolCall {
+	out := make([]reqToolCall, 0, len(calls))
+	for _, c := range calls {
+		out = append(out, reqToolCall{
+			ID:       c.ID,
+			Type:     "function",
+			Function: reqFunction{Name: c.Name, Arguments: c.Arguments},
+		})
+	}
+	return out
+}
+
+func encodeTools(tools []ToolDefinition) []reqTool {
+	if len(tools) == 0 {
+		return nil
+	}
+	out := make([]reqTool, 0, len(tools))
+	for _, t := range tools {
+		out = append(out, reqTool{Type: "function", Function: t})
+	}
+	return out
+}
+
+// ============================================================================
+// 响应解码（Wire 协议 → 语义化结果）
+// ============================================================================
+
+type wireChunk struct {
+	Choices []wireChoice `json:"choices"`
+	Usage   *wireUsage   `json:"usage"`
+	Error   *wireError   `json:"error"`
+}
+
+type wireChoice struct {
+	Delta        wireDelta `json:"delta"`
+	FinishReason *string   `json:"finish_reason"`
+}
+
+type wireDelta struct {
+	Content          string         `json:"content"`
+	ReasoningContent string         `json:"reasoning_content"`
+	Reasoning        string         `json:"reasoning"`
+	ToolCalls        []wireToolCall `json:"tool_calls"`
+}
+
+type wireToolCall struct {
+	Index    int           `json:"index"`
+	ID       string        `json:"id"`
+	Function *wireFunction `json:"function"`
+}
+
+type wireFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+type wireUsage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
+type wireError struct {
+	Message string `json:"message"`
+	Type    string `json:"type"`
+	Code    any    `json:"code"`
+}
+
+type decoded struct {
+	delta     string
+	reasoning string
+	toolCalls []wireToolCall
+	usage     *Usage
+	finish    StopReason
+	hasFinish bool
+	apiErr    string
+}
+
+func decodeData(data []byte) (decoded, error) {
+	var w wireChunk
+	if err := json.Unmarshal(data, &w); err != nil {
+		return decoded{}, fmt.Errorf("%w: %s", ErrProtocolViolation, clip(string(data), 200))
+	}
+
+	var d decoded
+	if w.Error != nil {
+		d.apiErr = w.Error.Message
+		if d.apiErr == "" {
+			d.apiErr = clip(string(data), 200)
+		}
+		return d, nil
+	}
+
+	if w.Usage != nil {
+		d.usage = &Usage{
+			PromptTokens:     w.Usage.PromptTokens,
+			CompletionTokens: w.Usage.CompletionTokens,
+			TotalTokens:      w.Usage.TotalTokens,
+		}
+	}
+
+	if len(w.Choices) == 0 {
+		return d, nil
+	}
+
+	choice := w.Choices[0]
+	d.delta = choice.Delta.Content
+	d.reasoning = choice.Delta.ReasoningContent
+	if d.reasoning == "" {
+		d.reasoning = choice.Delta.Reasoning
+	}
+	d.toolCalls = choice.Delta.ToolCalls
+
+	if choice.FinishReason != nil {
+		d.finish = stopReason(*choice.FinishReason)
+		d.hasFinish = true
+	}
+
+	return d, nil
+}
+
+func stopReason(raw string) StopReason {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "tool_calls", "function_call":
+		return StopToolCalls
+	case "length", "max_tokens":
+		return StopLength
+	case "content_filter":
+		return StopContentFilter
+	default:
+		return StopEnd
+	}
+}
+
+// extractErrorMessage 单次 Unmarshal 提取错误描述。
+func extractErrorMessage(body string) string {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return ""
+	}
+	var env struct {
+		Error   *wireError `json:"error"`
+		Message string     `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(body), &env); err == nil {
+		if env.Error != nil && env.Error.Message != "" {
+			return env.Error.Message
+		}
+		return env.Message
+	}
+	return ""
+}
+
+func clip(s string, limit int) string {
+	s = strings.TrimSpace(s)
+	runes := []rune(s)
+	if len(runes) <= limit {
+		return s
+	}
+	return string(runes[:limit]) + "…"
+}
+
+// ============================================================================
+// 流式泵与事件还原
+// ============================================================================
+
 type outcome struct {
 	usage     Usage
 	toolCalls []ToolCall
@@ -27,7 +295,6 @@ type outcome struct {
 	err       error
 }
 
-// pump 独占响应体生命周期：通道关闭时 Body 必关闭、Context 必释放、终块恰好一次。
 func pump(ctx context.Context, cancel context.CancelFunc, resp *http.Response) <-chan Chunk {
 	out := make(chan Chunk, 32)
 
@@ -37,7 +304,6 @@ func pump(ctx context.Context, cancel context.CancelFunc, resp *http.Response) <
 		defer func() { _ = resp.Body.Close() }()
 
 		res := readSSE(ctx, resp.Body, out)
-		// 终块必须发：即便 ctx 已取消，调用方也要能区分"取消"与"正常完成"
 		deliverTerminal(out, Chunk{
 			ToolCalls: res.toolCalls,
 			Usage:     res.usage,
@@ -49,27 +315,24 @@ func pump(ctx context.Context, cancel context.CancelFunc, resp *http.Response) <
 	return out
 }
 
-// readSSE 逐行读取 SSE 流并投递增量，返回终止事实。
-// 它只负责"报告事实"，不发终块，因此不变量可以集中在一个地方核对。
 func readSSE(ctx context.Context, body io.Reader, out chan<- Chunk) outcome {
 	reader := bufio.NewReaderSize(body, streamBufSize)
 	acc := newToolCallAccumulator()
 	res := outcome{}
 
 	for {
-		line, readErr := reader.ReadString('\n')
+		line, readErr := reader.ReadBytes('\n')
 
-		// 先消费本行数据：末行没有换行符时 ReadString 会同时返回有效数据与 io.EOF，
-		// 若先判断错误会丢掉这一行（[DONE] 恰好落在末行时表现为"截断"）。
-		if payload, ok := ssePayload(line); ok {
-			if payload == sseDonePayload {
+		// 零拷贝直接处理字节切片
+		if payload, ok := ssePayloadBytes(line); ok {
+			if bytes.Equal(payload, []byte(sseDonePayload)) {
 				if res.finish == "" {
 					res.finish = StopEnd
 				}
 				return finishWith(res, acc, res.finish, nil)
 			}
 
-			d, err := decodeData([]byte(payload))
+			d, err := decodeData(payload)
 			switch {
 			case err != nil:
 				return finishWith(res, acc, StopFailed, err)
@@ -80,7 +343,7 @@ func readSSE(ctx context.Context, body io.Reader, out chan<- Chunk) outcome {
 			if d.usage != nil {
 				res.usage = *d.usage
 			}
-			acc.add(d.fragments)
+			acc.add(d.toolCalls)
 
 			if d.reasoning != "" && !sendChunk(ctx, out, Chunk{ReasoningContent: d.reasoning}) {
 				return finishWith(res, acc, StopCanceled, ctx.Err())
@@ -99,7 +362,6 @@ func readSSE(ctx context.Context, body io.Reader, out chan<- Chunk) outcome {
 
 		switch {
 		case errors.Is(readErr, io.EOF):
-			// 只有收到 [DONE] 或 finish_reason 才算完整收尾；否则上游是中途断开的
 			if res.finish != "" {
 				return finishWith(res, acc, res.finish, nil)
 			}
@@ -112,7 +374,6 @@ func readSSE(ctx context.Context, body io.Reader, out chan<- Chunk) outcome {
 	}
 }
 
-// finishWith 收敛终止事实，并还原已累积的工具调用。
 func finishWith(res outcome, acc *toolCallAccumulator, finish StopReason, err error) outcome {
 	res.finish = finish
 	res.err = err
@@ -120,23 +381,21 @@ func finishWith(res outcome, acc *toolCallAccumulator, finish StopReason, err er
 	return res
 }
 
-// ssePayload 提取一条 SSE 行的 data 内容；非 data 行（空行、注释、event/id 行）返回 false。
-func ssePayload(line string) (string, bool) {
-	line = strings.TrimRight(line, "\r\n")
-	if line == "" || strings.HasPrefix(line, ":") {
-		return "", false
+func ssePayloadBytes(line []byte) ([]byte, bool) {
+	line = bytes.TrimRight(line, "\r\n")
+	if len(line) == 0 || line[0] == ':' {
+		return nil, false
 	}
-	if !strings.HasPrefix(line, "data:") {
-		return "", false
+	if !bytes.HasPrefix(line, []byte("data:")) {
+		return nil, false
 	}
-	payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-	if payload == "" {
-		return "", false
+	payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+	if len(payload) == 0 {
+		return nil, false
 	}
 	return payload, true
 }
 
-// sendChunk 投递增量事件，感知 context 取消。
 func sendChunk(ctx context.Context, out chan<- Chunk, chunk Chunk) bool {
 	select {
 	case out <- chunk:
@@ -146,7 +405,6 @@ func sendChunk(ctx context.Context, out chan<- Chunk, chunk Chunk) bool {
 	}
 }
 
-// deliverTerminal 投递终块。不监听 ctx：取消场景下调用方同样需要看到终块。
 func deliverTerminal(out chan<- Chunk, terminal Chunk) {
 	timer := time.NewTimer(terminalGrace)
 	defer timer.Stop()
@@ -154,12 +412,13 @@ func deliverTerminal(out chan<- Chunk, terminal Chunk) {
 	select {
 	case out <- terminal:
 	case <-timer.C:
-		// 调用方已放弃读取，投递无意义
 	}
 }
 
-// toolCallAccumulator 还原流式分片的工具调用：
-// 协议把同一个调用的 name/arguments 切成多段、按 index 跨 chunk 下发。
+// ============================================================================
+// 流式工具调用还原器
+// ============================================================================
+
 type toolCallAccumulator struct {
 	order []int
 	byIdx map[int]*toolCallBuilder
@@ -175,19 +434,21 @@ func newToolCallAccumulator() *toolCallAccumulator {
 	return &toolCallAccumulator{byIdx: make(map[int]*toolCallBuilder)}
 }
 
-func (a *toolCallAccumulator) add(fragments []toolCallFragment) {
-	for _, f := range fragments {
-		builder, ok := a.byIdx[f.index]
+func (a *toolCallAccumulator) add(calls []wireToolCall) {
+	for _, tc := range calls {
+		builder, ok := a.byIdx[tc.Index]
 		if !ok {
 			builder = &toolCallBuilder{}
-			a.byIdx[f.index] = builder
-			a.order = append(a.order, f.index)
+			a.byIdx[tc.Index] = builder
+			a.order = append(a.order, tc.Index)
 		}
-		if f.id != "" {
-			builder.id = f.id
+		if tc.ID != "" {
+			builder.id = tc.ID
 		}
-		builder.name.WriteString(f.name)
-		builder.args.WriteString(f.args)
+		if tc.Function != nil {
+			builder.name.WriteString(tc.Function.Name)
+			builder.args.WriteString(tc.Function.Arguments)
+		}
 	}
 }
 

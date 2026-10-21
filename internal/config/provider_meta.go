@@ -6,16 +6,27 @@ import (
 	"net/http"
 	"strings"
 	"time"
-
-	"my-agent/pkg/llm"
 )
 
-// providerMeta 保存厂商的展示层元数据；
-// 网络事实（端点、chat 路径、默认模型、鉴权、Local）由 pkg/llm.Spec 提供。
+// Provider 是模型厂商标识（规范 ID）。
+type Provider string
+
+const (
+	ProviderLlamaCpp Provider = "llamacpp"
+	ProviderDeepSeek Provider = "deepseek"
+	ProviderGemini   Provider = "gemini"
+	ProviderSpark    Provider = "spark"
+	ProviderOpenAI   Provider = "openai"
+)
+
+// providerMeta 保存厂商的配置与展示层元数据。
 type providerMeta struct {
-	ID                llm.Provider
+	ID                Provider
 	DisplayName       string
 	Description       string
+	BaseURL           string
+	DefaultModel      string
+	Local             bool
 	Aliases           []string
 	RecommendedModels []string
 	ModelPrefixes     []string
@@ -26,39 +37,59 @@ type providerMeta struct {
 // providerMetas 的顺序即前端展示顺序。
 var providerMetas = []providerMeta{
 	{
-		ID:                llm.ProviderLlamaCpp,
+		ID:                ProviderLlamaCpp,
 		DisplayName:       "llama.cpp",
 		Description:       "本地 HTTP 服务 (127.0.0.1:8080)",
+		BaseURL:           "http://127.0.0.1:8080",
+		DefaultModel:      "local-model",
+		Local:             true,
 		Aliases:           []string{"llama", "local"},
 		RecommendedModels: []string{"local-model", "qwen2.5-coder-7b"},
 		ModelSubstrings:   []string{"llama", "local", "qwen"},
 	},
 	{
-		ID:                llm.ProviderDeepSeek,
+		ID:                ProviderDeepSeek,
 		DisplayName:       "DeepSeek",
 		Description:       "官方最新 - 支持 V4 系列与 R1 深度推理",
+		BaseURL:           "https://api.deepseek.com",
+		DefaultModel:      "deepseek-flash",
 		Aliases:           []string{"ds"},
 		RecommendedModels: []string{"deepseek-flash", "deepseek-v4-pro", "deepseek-reasoner"},
 		ModelPrefixes:     []string{"deepseek"},
 		EnvKeys:           []string{"DEEPSEEK_API_KEY"},
 	},
 	{
-		ID:                llm.ProviderGemini,
+		ID:                ProviderGemini,
 		DisplayName:       "Google Gemini",
 		Description:       "官方最新 - 推荐 Flash 极速响应 / Pro 深度代码",
+		BaseURL:           "https://generativelanguage.googleapis.com/v1beta/openai",
+		DefaultModel:      "gemini-2.5-flash",
 		Aliases:           []string{"google"},
 		RecommendedModels: []string{"gemini-2.5-flash", "gemini-2.5-pro"},
 		ModelPrefixes:     []string{"gemini"},
 		EnvKeys:           []string{"GEMINI_API_KEY", "GOOGLE_API_KEY"},
 	},
 	{
-		ID:                llm.ProviderSpark,
+		ID:                ProviderSpark,
 		DisplayName:       "讯飞星辰 MaaS",
 		Description:       "官方免费模型 - 默认 spark-x2.5-4b (0元/tokens无限调用) / spark-x2.5 (256K上下文)",
+		BaseURL:           "https://maas-api.cn-huabei-1.xf-yun.com/v2",
+		DefaultModel:      "spark-x2.5-4b",
 		Aliases:           []string{"maas", "xfyun"},
 		RecommendedModels: []string{"spark-x2.5-4b", "spark-x2.5"},
 		ModelPrefixes:     []string{"spark"},
 		EnvKeys:           []string{"SPARK_API_KEY", "MAAS_API_KEY"},
+	},
+	{
+		ID:                ProviderOpenAI,
+		DisplayName:       "OpenAI / 自定义网关",
+		Description:       "官方或兼容端点 (OneAPI/vLLM/Ollama/Kimi等)",
+		BaseURL:           "https://api.openai.com/v1",
+		DefaultModel:      "gpt-4o",
+		Aliases:           []string{"openai", "custom"},
+		RecommendedModels: []string{"gpt-4o", "gpt-4o-mini", "o1", "o3-mini"},
+		ModelPrefixes:     []string{"gpt", "o1", "o3"},
+		EnvKeys:           []string{"OPENAI_API_KEY"},
 	},
 }
 
@@ -67,11 +98,14 @@ const (
 	sparkX254BModel = "spark-x2.5-4b"
 )
 
-// Spec 是配置层合并后的厂商视图：网络事实 + 展示元数据。
+// Spec 是配置层的厂商规格视图。
 type Spec struct {
-	llm.Spec
+	ID                Provider
 	DisplayName       string
 	Description       string
+	BaseURL           string
+	DefaultModel      string
+	Local             bool
 	Aliases           []string
 	RecommendedModels []string
 	ModelPrefixes     []string
@@ -80,7 +114,7 @@ type Spec struct {
 }
 
 // metaFor 返回厂商展示元数据；调用方应传入已规范的 ID。
-func metaFor(p llm.Provider) providerMeta {
+func metaFor(p Provider) providerMeta {
 	for _, meta := range providerMetas {
 		if meta.ID == p {
 			return meta
@@ -90,14 +124,16 @@ func metaFor(p llm.Provider) providerMeta {
 }
 
 // ProviderSpec 返回厂商的静态规格（未知厂商回退到 llamacpp）。
-func ProviderSpec(p llm.Provider) Spec {
+func ProviderSpec(p Provider) Spec {
 	id := canonical(p)
-	network, _ := llm.Lookup(id)
 	meta := metaFor(id)
 	return Spec{
-		Spec:              network,
+		ID:                meta.ID,
 		DisplayName:       meta.DisplayName,
 		Description:       meta.Description,
+		BaseURL:           meta.BaseURL,
+		DefaultModel:      meta.DefaultModel,
+		Local:             meta.Local,
 		Aliases:           append([]string(nil), meta.Aliases...),
 		RecommendedModels: append([]string(nil), meta.RecommendedModels...),
 		ModelPrefixes:     append([]string(nil), meta.ModelPrefixes...),
@@ -107,7 +143,7 @@ func ProviderSpec(p llm.Provider) Spec {
 }
 
 // ParseProvider 把用户输入（规范 ID 或别名）解析为规范厂商。
-func ParseProvider(raw string) (llm.Provider, bool) {
+func ParseProvider(raw string) (Provider, bool) {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	if s == "" {
 		return "", false
@@ -135,27 +171,27 @@ func ProviderIDs() []string {
 }
 
 // ProviderAliases 返回厂商的快捷别名列表。
-func ProviderAliases(p llm.Provider) []string {
+func ProviderAliases(p Provider) []string {
 	return ProviderSpec(p).Aliases
 }
 
 // RecommendedModels 返回指定厂商官方推荐的高频常用模型列表。
-func RecommendedModels(p llm.Provider) []string {
+func RecommendedModels(p Provider) []string {
 	return ProviderSpec(p).RecommendedModels
 }
 
 // ProviderDisplayName 返回厂商的友好展示名称。
-func ProviderDisplayName(p llm.Provider) string {
+func ProviderDisplayName(p Provider) string {
 	return ProviderSpec(p).DisplayName
 }
 
 // ProviderDescription 返回厂商的能力特征说明。
-func ProviderDescription(p llm.Provider) string {
+func ProviderDescription(p Provider) string {
 	return ProviderSpec(p).Description
 }
 
 // InferProviderFromModel 根据模型名称前缀或特征识别所属厂商，无法识别时返回空串。
-func InferProviderFromModel(model string) llm.Provider {
+func InferProviderFromModel(model string) Provider {
 	m := strings.ToLower(strings.TrimSpace(model))
 	if m == "" {
 		return ""
@@ -176,12 +212,12 @@ func InferProviderFromModel(model string) llm.Provider {
 }
 
 // NormalizeModelName 归一化各厂商的模型名称，自动修复星火平台缺少 x 前缀的笔误。
-func NormalizeModelName(p llm.Provider, model string) string {
+func NormalizeModelName(p Provider, model string) string {
 	m := strings.TrimSpace(model)
 	if m == "" {
 		return ProviderSpec(p).DefaultModel
 	}
-	if canonical(p) == llm.ProviderSpark {
+	if canonical(p) == ProviderSpark {
 		switch strings.ToLower(m) {
 		case "spark-2.5", "2.5":
 			return sparkX25Model
@@ -199,7 +235,7 @@ func ProbeLocal(ctx context.Context, baseURL string) error {
 		ctx = context.Background()
 	}
 
-	spec, _ := llm.Lookup(llm.ProviderLlamaCpp)
+	spec := ProviderSpec(ProviderLlamaCpp)
 	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
 	if base == "" {
 		base = spec.BaseURL

@@ -12,7 +12,6 @@ import (
 
 	"my-agent/internal/config"
 	"my-agent/internal/protocol"
-	"my-agent/pkg/llm"
 )
 
 // 本文件是唯一贯通全链路的集成测试：config → pkg/llm.Client → 真实 HTTP/SSE → Agent → 事件流。
@@ -43,9 +42,9 @@ func newGatewayAgent(t *testing.T, baseURL string) *CoreAgent {
 	t.Helper()
 
 	cfg := &config.Config{
-		Provider:  llm.ProviderDeepSeek,
+		Provider:  config.ProviderDeepSeek,
 		BaseURL:   baseURL,
-		ModelName: config.ProviderSpec(llm.ProviderDeepSeek).DefaultModel,
+		ModelName: config.ProviderSpec(config.ProviderDeepSeek).DefaultModel,
 		APIKey:    "test-key",
 	}
 	ag, err := NewFromConfig(cfg,

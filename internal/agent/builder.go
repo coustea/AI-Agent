@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"my-agent/internal/protocol"
 	"my-agent/internal/tool"
 	"my-agent/internal/tool/builtin"
-	"my-agent/pkg/llm"
 )
 
 // Option 定义 Agent 的函数式拼装算子
@@ -161,7 +159,7 @@ func NewFromConfig(cfg *config.Config, opts ...Option) (*CoreAgent, error) {
 		return nil, fmt.Errorf("agent: config cannot be nil")
 	}
 	client, err := newLLMFromConfig(cfg)
-	if err != nil && !errors.Is(err, llm.ErrNoAPIKey) {
+	if err != nil {
 		return nil, err
 	}
 	// 远程厂商缺密钥：保留未就绪内核（llmClient 为 nil 接口），待 /model 向导补齐后热装客户端

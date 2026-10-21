@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"my-agent/internal/protocol"
-	"my-agent/pkg/llm"
 )
 
 // DefaultSparkAPIKey 系统内置免费星火 API Key。
@@ -20,11 +19,11 @@ var Version = "v1.2.0"
 
 // canonical 把任意厂商输入（ID 或别名）规范化为规范 ID；
 // 未知输入回退到本地厂商——这是配置层的容错策略，pkg/llm 本身不做任何猜测。
-func canonical(p llm.Provider) llm.Provider {
+func canonical(p Provider) Provider {
 	if parsed, ok := ParseProvider(string(p)); ok {
 		return parsed
 	}
-	return llm.ProviderLlamaCpp
+	return ProviderLlamaCpp
 }
 
 // ProviderConfig 保存各厂商的专属模型与密钥配置
@@ -36,7 +35,7 @@ type ProviderConfig struct {
 
 // Config 保存应用的基础模型配置及多厂商独立持久化配置
 type Config struct {
-	Provider  llm.Provider              `json:"provider"`            // 当前激活的模型厂商
+	Provider  Provider                  `json:"provider"`            // 当前激活的模型厂商
 	BaseURL   string                    `json:"base_url,omitempty"`  // 当前激活的服务端点地址
 	ModelName string                    `json:"model_name"`          // 当前激活的具体模型名称
 	APIKey    string                    `json:"api_key,omitempty"`   // 当前激活的 API 密钥
@@ -80,7 +79,7 @@ func DefaultConfigPath() string {
 }
 
 // ProviderFor 获取指定厂商已保存的配置
-func (c Config) ProviderFor(p llm.Provider) ProviderConfig {
+func (c Config) ProviderFor(p Provider) ProviderConfig {
 	if c.Providers == nil {
 		return ProviderConfig{}
 	}
@@ -88,7 +87,7 @@ func (c Config) ProviderFor(p llm.Provider) ProviderConfig {
 }
 
 // SetProviderConfig 记录并更新指定厂商的专属配置
-func (c *Config) SetProviderConfig(p llm.Provider, pcfg ProviderConfig) {
+func (c *Config) SetProviderConfig(p Provider, pcfg ProviderConfig) {
 	if c.Providers == nil {
 		c.Providers = make(map[string]ProviderConfig)
 	}
@@ -96,7 +95,7 @@ func (c *Config) SetProviderConfig(p llm.Provider, pcfg ProviderConfig) {
 }
 
 // SwitchProvider 切换当前激活的厂商，并自动载入该厂商已保存的配置历史
-func (c *Config) SwitchProvider(p llm.Provider) {
+func (c *Config) SwitchProvider(p Provider) {
 	active := canonical(p)
 	spec := ProviderSpec(active)
 	c.Provider = active
@@ -145,7 +144,7 @@ func applyEnvFallbacks(cfg *Config) {
 		}
 
 		key := firstEnv(meta.EnvKeys...)
-		if key == "" && meta.ID == llm.ProviderSpark && strings.TrimSpace(DefaultSparkAPIKey) != "" {
+		if key == "" && meta.ID == ProviderSpark && strings.TrimSpace(DefaultSparkAPIKey) != "" {
 			key = strings.TrimSpace(DefaultSparkAPIKey)
 		}
 		if key == "" {
@@ -185,15 +184,15 @@ func DefaultConfig() *Config {
 	applyEnvFallbacks(cfg)
 
 	// 预置 llamacpp
-	local := ProviderSpec(llm.ProviderLlamaCpp)
-	cfg.SetProviderConfig(llm.ProviderLlamaCpp, ProviderConfig{
+	local := ProviderSpec(ProviderLlamaCpp)
+	cfg.SetProviderConfig(ProviderLlamaCpp, ProviderConfig{
 		BaseURL:   local.BaseURL,
 		ModelName: local.DefaultModel,
 	})
 
 	// 预置 spark 默认端点与默认免费模型 (优先使用用户环境变量/配置；若无则回退到编译期注入的 DefaultSparkAPIKey)
-	spark := ProviderSpec(llm.ProviderSpark)
-	pcfgSpark := cfg.ProviderFor(llm.ProviderSpark)
+	spark := ProviderSpec(ProviderSpark)
+	pcfgSpark := cfg.ProviderFor(ProviderSpark)
 	if pcfgSpark.BaseURL == "" {
 		pcfgSpark.BaseURL = spark.BaseURL
 	}
@@ -203,17 +202,17 @@ func DefaultConfig() *Config {
 	if pcfgSpark.APIKey == "" && strings.TrimSpace(DefaultSparkAPIKey) != "" {
 		pcfgSpark.APIKey = strings.TrimSpace(DefaultSparkAPIKey)
 	}
-	cfg.SetProviderConfig(llm.ProviderSpark, pcfgSpark)
+	cfg.SetProviderConfig(ProviderSpark, pcfgSpark)
 
 	// 默认激活提供商选择：
 	// 1. 若外部环境变量显式配置了 DeepSeek 或 Gemini，优先激活对应厂商；
 	// 2. 否则系统默认激活官方免费模型 (Spark spark-x2.5-4b)
-	if cfg.ProviderFor(llm.ProviderDeepSeek).APIKey != "" {
-		cfg.SwitchProvider(llm.ProviderDeepSeek)
-	} else if cfg.ProviderFor(llm.ProviderGemini).APIKey != "" {
-		cfg.SwitchProvider(llm.ProviderGemini)
+	if cfg.ProviderFor(ProviderDeepSeek).APIKey != "" {
+		cfg.SwitchProvider(ProviderDeepSeek)
+	} else if cfg.ProviderFor(ProviderGemini).APIKey != "" {
+		cfg.SwitchProvider(ProviderGemini)
 	} else {
-		cfg.SwitchProvider(llm.ProviderSpark)
+		cfg.SwitchProvider(ProviderSpark)
 	}
 
 	return cfg
@@ -261,7 +260,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// 确保当前激活项有效
 	if cfg.Provider == "" {
-		cfg.Provider = llm.ProviderLlamaCpp
+		cfg.Provider = ProviderLlamaCpp
 	}
 	spec := ProviderSpec(cfg.Provider)
 
@@ -278,7 +277,7 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	cfg.ModelName = NormalizeModelName(cfg.Provider, cfg.ModelName)
 	for pName, pcfg := range cfg.Providers {
-		pcfg.ModelName = NormalizeModelName(llm.Provider(pName), pcfg.ModelName)
+		pcfg.ModelName = NormalizeModelName(Provider(pName), pcfg.ModelName)
 		cfg.Providers[pName] = pcfg
 	}
 
@@ -338,7 +337,7 @@ func (c *Config) ToView() protocol.ConfigView {
 
 	providers := make([]protocol.ProviderInfo, 0, len(available))
 	for _, pStr := range available {
-		p := llm.Provider(pStr)
+		p := Provider(pStr)
 		spec := ProviderSpec(p)
 		info := protocol.ProviderInfo{
 			ID:                pStr,
