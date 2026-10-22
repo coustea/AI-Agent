@@ -10,9 +10,9 @@
 
 ```go
 client, err := llm.New(llm.Config{
-    BaseURL: "https://api.deepseek.com/v1", // 自动智能兼容纯域名、/v1 或 /chat/completions 后缀
-    APIKey:  os.Getenv("DEEPSEEK_API_KEY"),
-    Model:   "deepseek-chat",
+    BaseURL: "https://api.openai.com/v1", // 自动智能兼容纯域名、/v1 或 /chat/completions 后缀
+    APIKey:  os.Getenv("OPENAI_API_KEY"),
+    Model:   "gpt-4o",
 })
 if err != nil {
     return err

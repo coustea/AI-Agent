@@ -19,7 +19,6 @@ func (m Model) handleModelCommand(arg string) (Model, tea.Cmd) {
 	if strings.TrimSpace(arg) == "" {
 		m.wizardBaseURL = ""
 		m.wizardAPIKey = ""
-		m.wizardModel = ""
 
 		cfg := m.agent.Config()
 		m.baseURLInput.Reset()
@@ -222,7 +221,6 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyEsc:
 			m.wizardBaseURL = ""
 			m.wizardAPIKey = ""
-			m.wizardModel = ""
 			m.state = stateChat
 			m.chatInput.Focus()
 			return m, nil
@@ -253,7 +251,6 @@ func (m Model) updateInputModel(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			m.wizardBaseURL = ""
 			m.wizardAPIKey = ""
-			m.wizardModel = ""
 			m.state = stateChat
 			m.chatInput.Focus()
 			if m.viewportReady {

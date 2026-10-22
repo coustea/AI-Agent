@@ -87,7 +87,7 @@ func DefaultConfig() *Config {
 		baseURL = "https://api.openai.com/v1"
 	}
 
-	apiKey := firstEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY")
+	apiKey := firstEnv("OPENAI_API_KEY")
 
 	modelName := firstEnv("OPENAI_MODEL")
 	if modelName == "" {
@@ -118,15 +118,23 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// 补全环境变量
+	// 补全环境变量与默认值
 	if cfg.BaseURL == "" {
-		cfg.BaseURL = firstEnv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+		if v := firstEnv("OPENAI_BASE_URL"); v != "" {
+			cfg.BaseURL = v
+		} else {
+			cfg.BaseURL = "https://api.openai.com/v1"
+		}
 	}
 	if cfg.APIKey == "" {
-		cfg.APIKey = firstEnv("OPENAI_API_KEY", "DEEPSEEK_API_KEY", "GEMINI_API_KEY")
+		cfg.APIKey = firstEnv("OPENAI_API_KEY")
 	}
 	if cfg.ModelName == "" {
-		cfg.ModelName = firstEnv("OPENAI_MODEL", "gpt-4o")
+		if v := firstEnv("OPENAI_MODEL"); v != "" {
+			cfg.ModelName = v
+		} else {
+			cfg.ModelName = "gpt-4o"
+		}
 	}
 
 	return &cfg, nil

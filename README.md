@@ -63,7 +63,7 @@ tide 是一个用 Go 编写的终端 AI Agent。它不把工作流硬编码进�
 | **Harness 架构** | 一个 ReAct 循环 + 一圈可插拔接缝（工具、权限、记忆、大模型驱动），代码中不含"替模型做决策"的编排逻辑 |
 | **纯数据契约** | `internal/protocol` 零依赖事件流、权限请求与配置视图，TUI 与内核零 UI 耦合，可平滑扩展桌面端与无头宿主 |
 | **自主解题心智** | 打破大模型"我无法获取实时信息"的消极惯性，遇到实时数据（如天气、网络诊断、Git 状态）主动调用工具探查 |
-| **轻量大模型驱动** | `pkg/llm` 独立零依赖驱动包，预置 `llamacpp`（本地）、`deepseek`、`gemini`、`spark`（讯飞星辰 MaaS）等 Provider，统一 OpenAI wire 协议，支持运行时动态热装配且不丢上下文 |
+| **轻量大模型驱动** | `pkg/llm` 纯净独立、零外部依赖的标准通信库，统一由 BaseURL/APIKey/Model 三要素驱动，原生支持任意 OpenAI 兼容端点与本地服务，支持运行时动态热装配且不丢上下文 |
 | **深度思考独立看板** | 专属全屏沉浸式推理链看板（快捷键 `Ctrl+T` 或 `/think`），支持多轮导航、Markdown/Raw 双模式切换与流式增量刷新 |
 | **ReAct 工具循环** | 单轮最多 10 步推理-行动迭代，工具结果以 Observation 形式回灌模型，支持错误自愈 |
 | **三道闸门权限** | 硬拒绝表 → 风险规则精准匹配（删除 / 提权 / 越界写入等）→ 交互式审批（支持会话级信任），常规命令自主放行，高危操作永不静默执行 |
@@ -89,7 +89,7 @@ curl -fsSL https://raw.githubusercontent.com/coustea/AI-Agent/my-agent/install.s
 irm https://raw.githubusercontent.com/coustea/AI-Agent/my-agent/install.ps1 | iex
 ```
 
-安装完成后，直接在终端中运行 `tide` 即可启动！首次启动后输入 `/model` 打开配置向导：**平台看板 → API Key → 模型规格点选**，已就绪平台按 Enter 一键直切。
+安装完成后，直接在终端中运行 `tide` 即可启动！首次启动后输入 `/model` 打开配置向导：三步完成 **BaseURL → API Key → ModelName** 快速配置，也可直接使用 `/model <模型名>` 极速切换模型。
 
 ---
 
@@ -142,7 +142,7 @@ tide
 | Go（若从源码编译） | **1.24 或更高**（推荐 1.26.2+，见 [`go.mod`](./go.mod)） |
 | 终端 | 支持 ANSI 转义的现代终端（iTerm2 / Windows Terminal / Alacritty 等） |
 | 操作系统 | macOS / Linux / Windows |
-| 模型服务 | 本地 `llama-server`，或 DeepSeek / Gemini / 讯飞星辰 MaaS 的 API Key（任选其一） |
+| 模型服务 | 任意兼容 OpenAI 协议的模型服务端点（如 OpenAI、DeepSeek、Gemini、Ollama、llama.cpp、vLLM 等） |
 
 第三方依赖仅四个直接依赖：`bubbles`、`bubbletea`、`lipgloss`、`glamour`，无 CGO 依赖，100% 静态编译。
 
@@ -150,89 +150,58 @@ tide
 
 ## 配置说明
 
-tide 按以下**优先级**解析配置文件：
+tide 全面基于**标准 OpenAI Chat Completions 协议**，不硬编码任何具体厂商。通过 `BaseURL`、`APIKey`、`ModelName` 三要素即可直连任意兼容端点与本地服务。
+
+配置文件按以下**优先级**解析：
 
 1. 代码中显式传入的路径（`LoadConfig(path)`）
 2. **当前工作目录**下的 `config.json`（项目级配置优先）
 3. 用户主目录的全局配置 `~/.tide/config.json`
 
-若配置文件不存在，程序会**从环境变量自动补全**密钥，并按 `DEEPSEEK_API_KEY` → `GEMINI_API_KEY`（兼容 `GOOGLE_API_KEY`）→ `SPARK_API_KEY`（兼容 `MAAS_API_KEY`）→ `llamacpp` 的顺序选择默认激活的 Provider。
+若配置文件不存在，程序会**从环境变量自动补全**配置。
 
-### 方式 A：TUI 向导（推荐）
+### 方式 A：TUI 分步向导（推荐）
 
-启动后输入 `/model` 调出平台看板：已就绪平台按 `Enter` 一键直切，按 `m`（或 `Tab`）点选推荐模型规格，按 `e` 可修改 API Key；未配置的平台会引导输入密钥后进入规格点选（支持自定义模型名）。配置会自动持久化到解析出的配置文件中，各厂商的密钥与模型会**分别记住**，之后切换无需重复输入。
+在对话界面中直接输入 `/model` 即可调出三步配置向导：
+1. **Base URL**：输入服务端点（如 `https://api.openai.com/v1`、`https://api.deepseek.com/v1`，或本地 `http://127.0.0.1:11434/v1`）
+2. **API Key**：输入访问密钥（本地服务免密可直接回车跳过；已有密钥直接回车沿用）
+3. **Model Name**：输入模型名称（如 `gpt-4o`、`deepseek-chat`、`qwen2.5-coder:7b`）
 
-也可在对话中直接使用快捷指令：`/model ds`（按别名直切）、`/model deepseek-reasoner`（按模型名前缀智能识别平台）。
+向导完成后即刻热装配生效并落盘保存。若仅需切换模型名称，可在对话中直接键入：`/model <模型名>`（例如 `/model deepseek-reasoner`、`/model gpt-4o`）。
 
 ### 方式 B：手写 `config.json`
 
 ```json
 {
-  "provider": "deepseek",
-  "base_url": "https://api.deepseek.com",
-  "model_name": "deepseek-flash",
+  "base_url": "https://api.deepseek.com/v1",
   "api_key": "sk-xxxxxxxxxxxxxxxx",
-  "providers": {
-    "deepseek": {
-      "base_url": "https://api.deepseek.com",
-      "model_name": "deepseek-flash",
-      "api_key": "sk-xxxxxxxxxxxxxxxx"
-    },
-    "gemini": {
-      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
-      "model_name": "gemini-2.5-flash",
-      "api_key": "AIza-xxxxxxxxxxxxxxxx"
-    },
-    "llamacpp": {
-      "base_url": "http://127.0.0.1:8080",
-      "model_name": "local-model"
-    },
-    "spark": {
-      "base_url": "https://maas-api.cn-huabei-1.xf-yun.com/v2",
-      "model_name": "spark-x2.5",
-      "api_key": "xxxxxxxxxxxxxxxx"
-    }
-  }
+  "model_name": "deepseek-chat"
 }
 ```
 
-> `provider` / `base_url` / `model_name` / `api_key` 为当前激活项；`providers` 保存各厂商的历史配置。
-> 保存时当前激活项会自动同步进 `providers`，因此手写时只填 `providers` 也能正常工作。
+> 本地端点（包含 `127.0.0.1`、`localhost` 或 `::1`）无需配置 `api_key`。
 
 ### 方式 C：环境变量
 
 ```bash
-export DEEPSEEK_API_KEY="sk-xxxxxxxxxxxxxxxx"
-# 或
-export GEMINI_API_KEY="AIza-xxxxxxxxxxxxxxxx"    # 兼容 GOOGLE_API_KEY
-# 或
-export SPARK_API_KEY="xxxxxxxxxxxxxxxx"          # 讯飞星辰 MaaS，兼容 MAAS_API_KEY
+export OPENAI_BASE_URL="https://api.deepseek.com/v1"
+export OPENAI_API_KEY="sk-xxxxxxxxxxxxxxxx"
+export OPENAI_MODEL="deepseek-chat"
 ```
 
-### 支持的 Provider
-
-| Provider | 标识 | 默认端点 | 默认模型 | 备选模型 | 需要 API Key |
-|---|---|---|---|---|---|
-| 本地 llama.cpp | `llamacpp` | `http://127.0.0.1:8080` | `local-model` | `qwen2.5-coder-7b` | 否 |
-| DeepSeek | `deepseek` | `https://api.deepseek.com` | `deepseek-flash` | `deepseek-v4-pro`、`deepseek-reasoner` | 是 |
-| Google Gemini | `gemini` | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` | `gemini-2.5-pro` | 是 |
-| 讯飞星辰 MaaS | `spark` | `https://maas-api.cn-huabei-1.xf-yun.com/v2` | `spark-x2.5-4b` | `spark-x2.5` | 预置官方免费 Key (开箱即用) |
-
-别名兼容：`llama` / `local` → `llamacpp`，`ds` → `deepseek`，`google` → `gemini`，`maas` / `xfyun` → `spark`。
-
-> Router 会优先按请求的模型名前缀动态路由到对应厂商（`gemini*`、`deepseek*`、`spark*`、`llama*` / `local`），未命中前缀时回退到当前激活平台。
-
-### 本地模型（llama.cpp）准备
+### 本地模型（Ollama / llama.cpp）准备
 
 ```bash
-# 启动 OpenAI 兼容的本地推理服务
-llama-server -m /path/to/model.gguf --port 8080
+# 方式 1：使用 Ollama（自带 OpenAI 兼容接口）
+ollama run qwen2.5-coder:7b
+# 端点为: http://127.0.0.1:11434/v1
 
-# 健康检查（返回 200 表示模型已加载完成）
-curl http://127.0.0.1:8080/health
+# 方式 2：使用 llama.cpp
+llama-server -m /path/to/model.gguf --port 8080
+# 端点为: http://127.0.0.1:8080/v1
 ```
 
-本地 Provider 无需 API Key，是离线场景与隐私敏感任务的推荐选择。
+本地服务无需 API Key，是离线开发与隐私敏感场景的理想选择。
 
 ---
 
@@ -288,20 +257,19 @@ make run            # 等价于 go run ./cmd/tide
 | `y` / `Y` | 权限审批拦截时 → 允许本次执行 |
 | `a` / `A` | 权限审批拦截时 → 本会话始终信任并放行 |
 | `n` / `N` | 权限审批拦截时 → 拒绝本次执行 |
-| `↑` / `↓` / `k` / `j` | 配置向导中移动光标 / JSON 追踪看板中切换事件 |
-| `m` / `Tab` / `→` | 配置向导中打开当前平台的模型规格菜单 / JSON 追踪看板中切换左右栏焦点 |
-| `e` | 配置向导中修改当前平台的 API Key |
-| `q` / `Esc` | 配置向导或 JSON 追踪看板中返回对话 |
+| `Enter` | 确认当前输入并进入下一步 / 提交生效 |
+| `Esc` | 在配置向导或 JSON 追踪看板中取消并返回对话 |
 
 ### 斜杠命令
 
 | 命令 | 说明 |
 |---|---|
+| `/model`、`/config` | 打开三步配置向导（分步配置 BaseURL、API Key 与 Model） |
+| `/model <模型名>` | 一键极速切换当前模型名称（如 `/model gpt-4o`、`/model deepseek-chat`） |
+| `/think` | 呼出深度思考过程沉浸看板（查看思维链 CoT） |
 | `/log`、`/trace` | 呼出全系统执行链路与详细 JSON 追踪看板（查看 100% 原始报文） |
-| `/model`、`/config` | 打开平台看板（一键直切 / 规格点选 / 修改密钥） |
-| `/model <平台>` | 对已就绪平台一键直切，支持别名（如 `/model ds`、`/model spark`）；未就绪则引导输入 API Key |
-| `/model <模型名>` | 按模型名前缀智能识别所属平台并切换（如 `/model gemini-2.5-pro`、`/model deepseek-reasoner`） |
 | `/clear` | 清空当前会话上下文与消息列表 |
+| `/update` | 查看最新版本升级指引 |
 | `/exit`、`/quit`、`/q` | 退出应用 |
 
 ### 权限审批示例
@@ -465,8 +433,8 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <details>
 <summary><b>启动后提示「未配置可用模型」怎么办？</b></summary>
 
-输入 `/model` 打开平台看板完成配置；或设置 `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` / `SPARK_API_KEY` 环境变量后重启。
-若使用本地模型，请确认 `llama-server` 已在 `http://127.0.0.1:8080` 运行。
+输入 `/model` 调出配置向导完成端点与密钥配置；或设置 `OPENAI_API_KEY`（以及可选的 `OPENAI_BASE_URL`、`OPENAI_MODEL`）环境变量后重启。
+若使用本地模型（如 Ollama / llama.cpp），端点设置为本地地址即可免密使用。
 </details>
 
 <details>
@@ -501,8 +469,7 @@ TUI 顶部状态栏会实时显示当前生效的记忆篇数（`🧠 N 篇记�
 <details>
 <summary><b>支持哪些模型？能接入其他 OpenAI 兼容服务吗？</b></summary>
 
-原生预置 `llamacpp` / `deepseek` / `gemini` / `spark` 四大厂商。由于统一走 OpenAI Chat Completions 协议，
-接入其他兼容服务（如 OpenAI 官方、OneAPI、vLLM、Ollama、Kimi 等）只需通过 `llm.Config` 自主输入 `BaseURL`、`APIKey`、`Model` 即可直接调用。
+系统全面基于标准 OpenAI Chat Completions 协议，不硬编码任何具体厂商。通过 `BaseURL`、`APIKey`、`ModelName` 三要素即可直连任意兼容端点（如 OpenAI 官方、DeepSeek、Moonshot、通义千问、Ollama、vLLM、LocalAI 等），本地免密服务（`127.0.0.1` / `localhost`）可直接跳过密钥。
 </details>
 
 <details>

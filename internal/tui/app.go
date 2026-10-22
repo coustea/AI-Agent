@@ -51,7 +51,6 @@ type Model struct {
 	// 配置向导暂存字段（仅在向导流程内有效，取消或保存后清空）
 	wizardBaseURL string
 	wizardAPIKey  string
-	wizardModel   string
 
 	// 状态 1~3: 配置输入框（在 config_wizard.go 中处理）
 	baseURLInput textinput.Model

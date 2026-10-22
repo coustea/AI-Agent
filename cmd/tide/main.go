@@ -27,7 +27,7 @@ func printHelp() {
   tide --help, -h     显示命令行帮助信息
 
 快捷指令 (在 TUI 中使用):
-  /model              切换模型平台与配置 API Key
+  /model              切换模型与配置端点/API Key
   /think              打开深度思考过程独立看板 (或按 Ctrl+T)
   /log                打开全量调用链路与 JSON 追踪看板 (或按 Ctrl+L)
   /update             查看最新版本更新方法
@@ -87,7 +87,7 @@ func main() {
 
 	ag, err := agent.NewFromConfig(cfg, opts...)
 	if err != nil {
-		// 配置语义无效（如未知厂商）时同样回退，保证前端始终获得可注入的内核
+		// 配置语义无效时同样回退，保证前端始终获得可注入的内核
 		ag, err = agent.NewFromConfig(config.DefaultConfig(), opts...)
 	}
 	if err != nil {

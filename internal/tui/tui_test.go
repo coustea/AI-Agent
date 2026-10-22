@@ -1101,9 +1101,9 @@ func TestTUI_WizardStateCleanedOnCancel(t *testing.T) {
 	if m.state != stateChat {
 		t.Fatalf("expected return to stateChat on Esc, got %v", m.state)
 	}
-	if m.wizardBaseURL != "" || m.wizardAPIKey != "" || m.wizardModel != "" {
-		t.Fatalf("wizard temporary state leaked after cancel: url=%q, key=%q, model=%q",
-			m.wizardBaseURL, m.wizardAPIKey, m.wizardModel)
+	if m.wizardBaseURL != "" || m.wizardAPIKey != "" {
+		t.Fatalf("wizard temporary state leaked after cancel: url=%q, key=%q",
+			m.wizardBaseURL, m.wizardAPIKey)
 	}
 }
 
