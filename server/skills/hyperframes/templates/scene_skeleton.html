@@ -1,0 +1,233 @@
+<template>
+  <style>
+    /* =========================================================================
+     * HyperFrames Sub-Composition Contract Skeleton (__SCENE_ID__)
+     *
+     * Rules for SceneSubagent:
+     * 1. Keep <template> as the outer tag, #root[data-composition-id="__SCENE_ID__"],
+     *    and window.__timelines["__SCENE_ID__"] = tl at the bottom.
+     * 2. DO NOT use generic 3-box bullet templates for every scene!
+     *    Design bespoke visuals inside #__SCENE_ID__-camera that match the topic:
+     *    - Architecture / Network: SVG node graphs, animated data packets, protocol arrows
+     *    - Code / Algorithm: terminal/IDE window, step-by-step execution trace, pointer highlight
+     *    - Math / Science: large formula breakdown, coordinate plot, animated vector/curve
+     *    - Comparison / Tradeoff: asymmetric split stage, live metric bars, radar/matrix
+     *    - Storytelling / Concept: hero spotlight + camera zoom/pan across interconnected stages
+     * 3. Use #__SCENE_ID__-camera for camera movements (gsap.fromTo("#__SCENE_ID__-camera", ...)).
+     * 4. Keep bottom 120px clear (y: 960..1080) for the global subtitle overlay.
+     * ========================================================================= */
+    #__SCENE_ID__-stage {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 20%, #16243d 0%, #090e1a 68%, #050811 100%);
+      color: #f8fafc;
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+    }
+
+    #__SCENE_ID__-camera {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      padding: 60px 96px 128px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transform-origin: 50% 50%;
+      will-change: transform, opacity;
+    }
+
+    .__SCENE_ID__-ambient-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(to right, rgba(148, 163, 184, 0.06) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(148, 163, 184, 0.06) 1px, transparent 1px);
+      background-size: 64px 64px;
+      pointer-events: none;
+    }
+
+    .__SCENE_ID__-header {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 5;
+    }
+
+    .__SCENE_ID__-top-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .__SCENE_ID__-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 20px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.15);
+      border: 1px solid rgba(56, 189, 248, 0.38);
+      color: #38bdf8;
+      font-size: 19px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .__SCENE_ID__-progress {
+      color: #94a3b8;
+      font-size: 19px;
+      font-weight: 600;
+    }
+
+    .__SCENE_ID__-title {
+      font-size: 50px;
+      font-weight: 800;
+      line-height: 1.16;
+      color: #f8fafc;
+    }
+
+    .__SCENE_ID__-subtitle {
+      font-size: 24px;
+      color: #94a3b8;
+      max-width: 1400px;
+    }
+
+    .__SCENE_ID__-canvas {
+      position: relative;
+      flex: 1;
+      margin: 28px 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 28px;
+      align-items: stretch;
+      z-index: 5;
+    }
+
+    .__SCENE_ID__-node {
+      background: rgba(30, 41, 59, 0.86);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      border-top: 5px solid #38bdf8;
+      border-radius: 22px;
+      padding: 28px 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+    }
+
+    .__SCENE_ID__-node-tag {
+      color: #38bdf8;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+    }
+
+    .__SCENE_ID__-node-title {
+      font-size: 30px;
+      font-weight: 800;
+      color: #f8fafc;
+      line-height: 1.25;
+    }
+
+    .__SCENE_ID__-node-body {
+      font-size: 22px;
+      color: #cbd5e1;
+      line-height: 1.48;
+    }
+
+    .__SCENE_ID__-takeaway {
+      padding: 16px 28px;
+      border-radius: 16px;
+      background: rgba(56, 189, 248, 0.12);
+      border-left: 6px solid #38bdf8;
+      font-size: 23px;
+      font-weight: 700;
+      color: #f8fafc;
+      z-index: 5;
+    }
+  </style>
+
+  <div
+    id="root"
+    data-composition-id="__SCENE_ID__"
+    data-start="0"
+    data-duration="__DURATION__"
+    data-width="1920"
+    data-height="1080"
+  >
+    <div id="__SCENE_ID__-stage">
+      <div class="__SCENE_ID__-ambient-grid"></div>
+
+      <!-- Camera Rig Container: animate scale/x/y on #__SCENE_ID__-camera for pan & zoom -->
+      <div id="__SCENE_ID__-camera" class="clip" data-start="0" data-duration="__DURATION__">
+        <div id="__SCENE_ID__-hdr" class="__SCENE_ID__-header">
+          <div class="__SCENE_ID__-top-row">
+            <span class="__SCENE_ID__-badge">__SCENE_BADGE__</span>
+            <span class="__SCENE_ID__-progress">SCENE __SCENE_INDEX__ / __TOTAL_SCENES__</span>
+          </div>
+          <h1 class="__SCENE_ID__-title">__SCENE_TITLE__</h1>
+          <p class="__SCENE_ID__-subtitle">__SCENE_SUBTITLE__</p>
+        </div>
+
+        <!-- BESPOKE_SCENE_STAGE: SceneSubagent should customize this stage with SVG diagrams, code execution trace, formula morphing, or interactive flow nodes -->
+        <div id="__SCENE_ID__-canvas" class="__SCENE_ID__-canvas">
+          <div id="__SCENE_ID__-item-1" class="__SCENE_ID__-node">
+            <div class="__SCENE_ID__-node-tag">STAGE 01</div>
+            <div class="__SCENE_ID__-node-title">__CARD_1_TITLE__</div>
+            <div class="__SCENE_ID__-node-body">__CARD_1_BODY__</div>
+          </div>
+          <div id="__SCENE_ID__-item-2" class="__SCENE_ID__-node">
+            <div class="__SCENE_ID__-node-tag">STAGE 02</div>
+            <div class="__SCENE_ID__-node-title">__CARD_2_TITLE__</div>
+            <div class="__SCENE_ID__-node-body">__CARD_2_BODY__</div>
+          </div>
+        </div>
+
+        <div id="__SCENE_ID__-takeaway" class="__SCENE_ID__-takeaway">
+          ★ 核心要点：__SCENE_TAKEAWAY__
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function() {
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+
+      tl.fromTo(
+        "#__SCENE_ID__-hdr",
+        { opacity: 0, y: -26 },
+        { opacity: 1, y: 0, duration: 0.55, ease: "power3.out" },
+        0.05
+      );
+      tl.fromTo(
+        "#__SCENE_ID__-item-1",
+        { opacity: 0, y: 30, scale: 0.96 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power2.out" },
+        0.30
+      );
+      tl.fromTo(
+        "#__SCENE_ID__-item-2",
+        { opacity: 0, y: 30, scale: 0.96 },
+        { opacity: 1, y: 0, scale: 1, duration: 0.55, ease: "power2.out" },
+        0.65
+      );
+      tl.fromTo(
+        "#__SCENE_ID__-takeaway",
+        { opacity: 0, y: 18 },
+        { opacity: 1, y: 0, duration: 0.45, ease: "power2.out" },
+        1.05
+      );
+      tl.fromTo(
+        "#__SCENE_ID__-camera",
+        { scale: 1.0, x: 0, y: 0 },
+        { scale: 1.025, x: -14, y: -8, duration: __HOLD_END__, ease: "sine.inOut" },
+        0.40
+      );
+
+      window.__timelines["__SCENE_ID__"] = tl;
+    })();
+  </script>
+</template>

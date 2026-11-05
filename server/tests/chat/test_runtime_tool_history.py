@@ -8,9 +8,9 @@ os.environ.setdefault("OPENAI_API_KEY", "test-key")
 os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from langchain_core.messages import AIMessage, ToolMessage
+from app.infra.llm import AIMessage, ToolMessage
 
-from app.chat.context_builder import normalize_tool_calls
+from app.chat.context import normalize_tool_calls
 
 
 def testnormalize_tool_calls_restores_tool_transcript():

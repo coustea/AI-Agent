@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, BackgroundTasks
@@ -21,7 +20,6 @@ from app.infra.models import (
     ChatMessage,
     ChatSession,
     GeneratedResource,
-    GeneratedResourceItem,
     LearningEvent,
     LearningPath,
     PathNode,
@@ -29,7 +27,7 @@ from app.infra.models import (
     UserProfile,
     UserProfileDimension,
 )
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 from app.profile import (
     BaseInfoData,
     OnboardingResponse,

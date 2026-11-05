@@ -96,39 +96,39 @@ def test_resource_generation_request_rejects_legacy_diagram_agent():
         )
 
 
-def test_resource_generation_request_accepts_video_agent_config():
+def test_resource_generation_request_accepts_cartoon_agent_config():
     request = ResourceGenerationRequest.model_validate(
         {
             "learning_need": "把 TCP 三次握手生成讲解视频",
             "selected_agents": [
                 {"agent_id": "content", "enabled": True},
                 {"agent_id": "quiz", "enabled": True},
-                {"agent_id": "video", "enabled": True},
+                {"agent_id": "cartoon", "enabled": True},
             ],
             "agent_configs": {
-                "video": {
-                    "style": "precision_light",
-                    "focus": "process",
+                "cartoon": {
+                    "lesson_depth": "standard",
+                    "visual_density": "rich",
+                    "pace": "balanced",
                     "voice": "teacher",
-                    "aspect_ratio": "16:9",
+                    "target_duration_seconds": 120,
                 }
             },
         }
     )
 
-    assert request.enabled_agent_ids() == ["content", "quiz", "video"]
-    assert request.agent_configs.video.style == "precision_light"
-    assert request.agent_configs.video.focus == "process"
+    assert request.enabled_agent_ids() == ["content", "quiz", "cartoon"]
+    assert request.agent_configs.cartoon.voice == "teacher"
 
 
-def test_resource_generation_request_video_is_now_default_enabled():
+def test_resource_generation_request_cartoon_is_now_default_enabled():
     request = ResourceGenerationRequest.model_validate(
         {
             "learning_need": "复习操作系统进程调度",
         }
     )
 
-    assert "video" in request.enabled_agent_ids()
+    assert "cartoon" in request.enabled_agent_ids()
 
 
 # ---------------------------------------------------------------------------

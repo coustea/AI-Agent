@@ -240,8 +240,6 @@
                   || getDisplayContent(msg)
                   || msg.attachments?.length
                   || msg.agentActivities?.length
-                  || msg.teachingDiagramGenerating
-                  || msg.teachingDiagram
                   || msg.videoPreparing
                   || msg.video
                 "
@@ -310,7 +308,7 @@
                   />
 
                   <div
-                    v-if="!msg.videoOnly && getDisplayContent(msg)"
+                    v-if="!msg.videoOnly && getDisplayContent(msg) && !msg.failed"
                     :class="[
                       'bubble',
                       'markdown-body',
@@ -326,6 +324,35 @@
                     />
                   </div>
 
+                  <!-- 失败或超时专用错误卡片 -->
+                  <div
+                    v-if="msg.role === 'ai' && msg.failed"
+                    class="assistant-failed-card"
+                  >
+                    <div class="failed-header">
+                      <span class="failed-icon" aria-hidden="true">
+                        <svg viewBox="0 0 20 20" fill="currentColor">
+                          <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                        </svg>
+                      </span>
+                      <strong class="failed-title">运行超时 / 生成中断</strong>
+                    </div>
+                    <p class="failed-message">{{ msg.errorMessage || msg.content || '请求处理超时或服务异常，请重试。' }}</p>
+                    <div class="failed-actions">
+                      <button
+                        type="button"
+                        class="failed-retry-btn"
+                        :disabled="isAIThinking"
+                        @click.stop="handleRetryAssistantMessage(msg)"
+                      >
+                        <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                          <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                        重试提问
+                      </button>
+                    </div>
+                  </div>
+
                   <div
                     v-if="msg.role === 'ai' && !msg.videoOnly && getDisplayContent(msg) && !isStreamingMessage(msg)"
                     class="message-actions"
@@ -337,41 +364,6 @@
                       </svg>
                       复制回答
                     </button>
-                  </div>
-
-                  <div v-if="!msg.videoOnly && msg.teachingDiagramGenerating" class="diagram-generation-panel">
-                    <div class="diagram-blueprint" aria-hidden="true">
-                      <span class="blueprint-node node-a"></span>
-                      <span class="blueprint-node node-b"></span>
-                      <span class="blueprint-node node-c"></span>
-                      <span class="blueprint-node node-d"></span>
-                      <i class="blueprint-line line-a"></i>
-                      <i class="blueprint-line line-b"></i>
-                      <i class="blueprint-line line-c"></i>
-                    </div>
-                    <div class="diagram-generation-copy">
-                      <span class="diagram-generation-kicker">VISUAL EXPLANATION</span>
-                      <strong>正在绘制教学图解</strong>
-                      <p>将答案整理为关键节点、关系和理解顺序，完成后会直接显示在回答下方。</p>
-                      <div class="diagram-generation-progress" aria-hidden="true"><span></span></div>
-                    </div>
-                  </div>
-
-                  <div v-if="!msg.videoOnly && msg.teachingDiagram" class="msg-teaching-diagram">
-                    <TeachingDiagramImage
-                      v-if="msg.teachingDiagram.kind === 'image'"
-                      :diagram="msg.teachingDiagram"
-                      compact
-                      @expand="previewTeachingDiagram(msg.teachingDiagram)"
-                    />
-                    <TeachingDiagramCard
-                      v-else
-                      :diagram="msg.teachingDiagram"
-                      compact
-                      :retrying="retryingDiagramMessageIds.has(msg.id)"
-                      @expand="previewTeachingDiagram"
-                      @retry="retryTeachingDiagramImage(msg)"
-                    />
                   </div>
 
                   <ChatVideoArtifact
@@ -644,36 +636,6 @@
       </transition>
     </Teleport>
 
-    <!-- 教学图解全屏预览 -->
-    <Teleport to="body">
-      <transition name="modal-fade">
-        <div v-if="teachingDiagramPreviewVisible" class="custom-modal-overlay" @click.self="teachingDiagramPreviewVisible = false">
-          <div class="custom-modal-container diagram-preview-dialog">
-            <header class="custom-modal-header diagram-dialog-header">
-              <div>
-                <span class="diagram-kicker">教学图解</span>
-                <strong class="diagram-title">{{ teachingDiagramTitle(teachingDiagramPreviewData) }}</strong>
-              </div>
-              <button type="button" class="modal-close-btn" @click="teachingDiagramPreviewVisible = false" aria-label="关闭图解">
-                <Close class="close-icon" />
-              </button>
-            </header>
-
-            <div v-if="teachingDiagramPreviewData" class="custom-modal-body diagram-preview-body">
-              <div class="preview-content">
-                <TeachingDiagramImage
-                  v-if="teachingDiagramPreviewData.kind === 'image'"
-                  :diagram="teachingDiagramPreviewData"
-                  show-download
-                />
-                <TeachingDiagramCard v-else :diagram="teachingDiagramPreviewData" />
-              </div>
-            </div>
-          </div>
-        </div>
-      </transition>
-    </Teleport>
-
     <!-- 全局图片预览 -->
     <Teleport to="body">
       <transition name="modal-fade">
@@ -696,7 +658,7 @@
 import { ref, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, computed, watch } from 'vue'
 import {
   PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent
-} from 'radix-vue'
+} from 'reka-ui'
 import {
   PhChatCenteredText as ChatLineRound,
   PhUser as Avatar,
@@ -720,14 +682,11 @@ import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
-import TeachingDiagramCard from '@/features/chat/components/TeachingDiagramCard.vue'
-import TeachingDiagramImage from '@/features/chat/components/TeachingDiagramImage.vue'
 import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
 import ChatVideoArtifact from '@/features/chat/components/ChatVideoArtifact.vue'
 
 import { triggerGlobalProfileRefresh } from '@/features/profile/model/useGlobalProfile'
 import { useChatStreamManager } from '@/features/chat/composables/useChatStreamManager'
-import { useChatVideoTasks } from '@/features/chat/composables/useChatVideoTasks'
 import {
   uploadFile,
   getSessions,
@@ -735,12 +694,10 @@ import {
   deleteSession,
   updateSessionTitle,
   getChatHistory,
-  retryDiagramImage,
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
   ChatVideoArtifact as ChatVideoArtifactData,
-  TeachingDiagram,
 } from '@/features/chat/types/chat'
 import type { ChatEvent } from '@/features/chat/types/chatEvent'
 import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
@@ -756,7 +713,6 @@ import {
   type ChatMsg,
   assignPersistedAssistantMessageId,
   type AgentActivity,
-  normalizeTeachingDiagram,
   getDocumentType,
   getDocumentIconColor,
   formatFileSize,
@@ -879,7 +835,6 @@ const {
     clearAsrProcessing()
     clearAsrPreview()
     clearAvatarThinkingTimeout()
-    stopTeachingDiagramGeneratingForCurrentAi()
     isAIThinking.value = false
 
     if (streamingMsgId.value !== null) {
@@ -890,7 +845,6 @@ const {
       if (
         pendingMessage
         && !pendingMessage.content.trim()
-        && !pendingMessage.teachingDiagram
         && !pendingMessage.video
       ) {
         messages.value.splice(index, 1)
@@ -943,7 +897,6 @@ const {
         role: 'ai',
         content: '',
         time: now(),
-        teachingDiagramGenerating: needTeachingDiagram.value,
       })
       streamingMsgId.value = aiMsgId
       streamingMsgRef.value = messages.value[messages.value.length - 1] || null
@@ -954,36 +907,6 @@ const {
     if (streamingMsgId.value !== null) {
       enqueueStreamChunk(streamingMsgId.value, chunk)
     }
-  },
-  onDiagram: (diagram) => {
-    if (!diagram) return
-    const normalizedDiagram = normalizeTeachingDiagram(diagram as TeachingDiagram)
-    if (!normalizedDiagram) return
-
-    let aiMsg = streamingMsgId.value !== null
-      ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
-      : undefined
-
-    // A diagram can arrive before the complete assistant sentence is revealed.
-    // It still belongs to the current turn, so create that turn's AI row now.
-    // Never fall back to the previous AI row: doing so places the new diagram
-    // above the user question that requested it.
-    if (!aiMsg) {
-      const aiMsgId = Date.now() + 1
-      aiMsg = {
-        id: aiMsgId,
-        role: 'ai',
-        content: '',
-        time: now(),
-      }
-      messages.value.push(aiMsg)
-      streamingMsgId.value = aiMsgId
-      streamingMsgRef.value = aiMsg
-    }
-
-    aiMsg.teachingDiagram = normalizedDiagram
-    aiMsg.teachingDiagramGenerating = false
-    scrollToBottom()
   },
   onVideo: (data) => {
     const assistantMessageId = Number(data?.assistant_message_id)
@@ -1009,12 +932,9 @@ const {
     aiMsg.content = ''
     aiMsg.videoOnly = true
     aiMsg.agentActivities = []
-    aiMsg.teachingDiagram = null
-    aiMsg.teachingDiagramGenerating = false
     aiMsg.video = video
     streamingMsgId.value = assistantMessageId
     streamingMsgRef.value = aiMsg
-    watchChatVideo(sessionId, assistantMessageId, true)
     scrollToBottom()
   },
   onAssistantComplete: () => {
@@ -1025,10 +945,6 @@ const {
     flushPendingStreamText(true)
     if (streamingMsgId.value !== null) {
       commitStreamTextToMessage(streamingMsgId.value)
-    }
-    const lastAiMsg = [...messages.value].reverse().find(m => m.role === 'ai')
-    if (lastAiMsg && lastAiMsg.teachingDiagramGenerating && !lastAiMsg.teachingDiagram) {
-      lastAiMsg.teachingDiagramGenerating = false
     }
     isAIThinking.value = false
     streamingMsgId.value = null
@@ -1120,7 +1036,6 @@ const {
     asrRecoveryStatus.value = ''
     clearAvatarThinkingTimeout()
     clearAsrProcessing()
-    stopTeachingDiagramGeneratingForCurrentAi()
     if (streamingMsgId.value !== null) {
       flushPendingStreamText(true)
       commitStreamTextToMessage(streamingMsgId.value)
@@ -1205,7 +1120,6 @@ const canSendMessage = computed(() => (
 
 // 流式消息管理器（全局单例）
 const streamManager = useChatStreamManager()
-const videoTasks = useChatVideoTasks()
 // 数字人思考超时定时器
 let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
 const isAvatarThinkingSlow = ref(false)
@@ -1297,18 +1211,17 @@ const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
   }
 
   if (event.event === 'message.completed' || event.event === 'message.failed') {
+    const isFailed = event.event === 'message.failed'
+    const errorText = isFailed
+      ? (typeof data.error === 'string' && data.error.trim()) || event.message || '运行超时或服务异常'
+      : undefined
     finalizeAssistantGeneration(
       aiMsg,
-      event.event === 'message.failed' ? 'failed' : 'done',
+      isFailed ? 'failed' : 'done',
+      errorText,
     )
-    return
-  }
-
-  if (event.event === 'diagram.ready') {
-    const diagram = normalizeTeachingDiagram(data as unknown as TeachingDiagram)
-    if (diagram) {
-      aiMsg.teachingDiagram = diagram
-      aiMsg.teachingDiagramGenerating = false
+    if (isFailed && !aiMsg.content) {
+      aiMsg.content = errorText || '运行超时或服务异常'
     }
     return
   }
@@ -1399,17 +1312,6 @@ const pauseForegroundStreaming = () => {
   streamingMsgRef.value = null
 }
 
-const stopTeachingDiagramGeneratingForCurrentAi = () => {
-  const target = (
-    (streamingMsgId.value !== null
-      ? messages.value.find(m => m.id === streamingMsgId.value && m.role === 'ai')
-      : null)
-    || [...messages.value].reverse().find(m => m.role === 'ai')
-  )
-  if (target) {
-    target.teachingDiagramGenerating = false
-  }
-}
 
 const clearAsrProcessing = () => {
   isAsrProcessing.value = false
@@ -1555,37 +1457,6 @@ const digitalHumanStatusText = computed(() => {
   if (isVoiceChatting.value) return '正在准备语音识别...'
   return '数字人已就绪'
 })
-
-const teachingDiagramPreviewVisible = ref(false)
-const teachingDiagramPreviewData = ref<TeachingDiagram | null>(null)
-const retryingDiagramMessageIds = ref(new Set<number>())
-
-// 打开教学图解预览弹窗
-const previewTeachingDiagram = (diagram: TeachingDiagram) => {
-  teachingDiagramPreviewData.value = diagram
-  teachingDiagramPreviewVisible.value = true
-}
-
-const teachingDiagramTitle = (diagram: TeachingDiagram | null) => {
-  if (!diagram) return '图解说明'
-  return diagram.kind === 'fallback' ? diagram.diagram.title : diagram.title
-}
-
-const retryTeachingDiagramImage = async (message: ChatMsg) => {
-  if (!message.id || message.teachingDiagram?.kind !== 'fallback') return
-  retryingDiagramMessageIds.value = new Set(retryingDiagramMessageIds.value).add(message.id)
-  try {
-    const response = await retryDiagramImage(message.id)
-    const diagram = normalizeTeachingDiagram(response.data.data?.diagram)
-    if (diagram?.kind === 'image') message.teachingDiagram = diagram
-  } catch (error) {
-    toast.error(getErrorMessage(error))
-  } finally {
-    const pending = new Set(retryingDiagramMessageIds.value)
-    pending.delete(message.id)
-    retryingDiagramMessageIds.value = pending
-  }
-}
 
 const handleEnter = (e: KeyboardEvent) => {
   if (isComposing.value || e.isComposing) return
@@ -1879,8 +1750,6 @@ const finishStream = (messageId: number) => {
 
 const completeStreamingMessage = (messageId: number) => {
   isStreamDone = true
-  const aiMsg = messages.value.find(message => message.id === messageId)
-  if (aiMsg) aiMsg.teachingDiagramGenerating = false
   if (pendingRenderQueueStart >= pendingRenderQueue.length) {
     finishStream(messageId)
     return
@@ -2143,10 +2012,6 @@ const loadHistoryFromAPI = async (
         }))
       const contentAttachments = [...imageAttachments, ...fileAttachments]
       const attachments = contentAttachments.length > 0 ? contentAttachments : null
-      const diagram = normalizeTeachingDiagram(
-        msg.diagram as TeachingDiagram | null | undefined
-          ?? msg.usage_metadata?.diagram as TeachingDiagram | null | undefined,
-      )
       const rawVideo = msg.video ?? msg.usage_metadata?.video
       const video = rawVideo && typeof rawVideo === 'object'
         ? rawVideo as ChatVideoArtifactData
@@ -2161,7 +2026,6 @@ const loadHistoryFromAPI = async (
         time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
         attachments,
         agentActivities: (msg.activities || []) as AgentActivity[],
-        teachingDiagram: diagram,
         video,
         videoOnly,
       }
@@ -2173,7 +2037,6 @@ const loadHistoryFromAPI = async (
       item.role === 'user'
       || Boolean(item.content.trim())
       || Boolean(item.attachments?.length)
-      || Boolean(item.teachingDiagram)
       || Boolean(item.video)
     ))
 
@@ -2202,7 +2065,6 @@ const loadHistoryFromAPI = async (
             time: item.time,
             attachments: null,
             agentActivities: [],
-            teachingDiagram: null,
             video: item.video,
             videoOnly: true,
           })
@@ -2226,11 +2088,6 @@ const loadHistoryFromAPI = async (
         && previousAttachmentKey === currentAttachmentKey
       )
     })
-    for (const message of messages.value) {
-      if (message.video?.status === 'queued' || message.video?.status === 'running') {
-        watchChatVideo(sessionId, message.id, chatMode.value === 'digital_human')
-      }
-    }
     return true
   } catch (err) {
     if (shouldApply()) {
@@ -2252,7 +2109,6 @@ const switchSession = async (sessionId: string) => {
   )
 
   setAvatarExternalActivityBusy(false)
-  videoTasks.dispose()
   const nextSessionIds = selectSessionForMode(modeAtStart, sessionId, {
     standard: currentSessionId.value,
     digitalHuman: digitalHumanSessionId.value,
@@ -2328,13 +2184,13 @@ const switchSession = async (sessionId: string) => {
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(m => m.id === aiMsgId)
         if (aiMsg) {
-          finalizeAssistantGeneration(aiMsg, 'failed')
+          const errText = _err?.message || '连接中断或运行超时，请重试。'
+          finalizeAssistantGeneration(aiMsg, 'failed', errText)
           if (!aiMsg.content) {
-            aiMsg.content = "生成失败，请重试。"
+            aiMsg.content = errText
           }
         }
-        stopTeachingDiagramGeneratingForCurrentAi()
-        isAIThinking.value = false
+            isAIThinking.value = false
         streamingMsgId.value = null
         streamingMsgRef.value = null
       },
@@ -2577,25 +2433,6 @@ const handleAvatarSpeechRateChange = (val: number) => {
   setAvatarSpeechRate(val)
 }
 
-const watchChatVideo = (
-  sessionId: string,
-  assistantMessageId: number,
-  keepAvatarConnected = false,
-) => {
-  if (keepAvatarConnected) setAvatarExternalActivityBusy(true)
-  videoTasks.watch(sessionId, assistantMessageId, (video) => {
-    const message = messages.value.find(item => item.id === assistantMessageId)
-    if (message) {
-      message.video = video
-      message.videoPreparing = false
-    }
-    if (keepAvatarConnected && video.status !== 'queued' && video.status !== 'running') {
-      setAvatarExternalActivityBusy(false)
-    }
-    if (video.status === 'completed') scrollToBottom()
-  })
-}
-
 // 发送消息：上传附件 → 创建 AI 消息 → 启动 SSE 流 / 数字人消息
 const handleSend = async () => {
   const text = userInput.value.trim()
@@ -2743,7 +2580,6 @@ const handleSend = async () => {
           title: 'Mentorly 正在理解问题',
           message: '正在准备回答',
         }],
-    teachingDiagramGenerating: shouldGenerateTeachingDiagram,
     videoPreparing: shouldGenerateVideo,
     videoOnly: shouldGenerateVideo,
   })
@@ -2757,9 +2593,6 @@ const handleSend = async () => {
   if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
     if (shouldGenerateVideo) setAvatarExternalActivityBusy(true)
     startAvatarThinkingTimeout()
-    const aiMsg = messages.value.find(message => message.id === aiMsgId)
-    if (aiMsg) aiMsg.teachingDiagramGenerating = shouldGenerateTeachingDiagram
-
     sendAvatarText({
       text: text || '请分析这些附件',
       need_diagram: shouldGenerateTeachingDiagram,
@@ -2794,7 +2627,6 @@ const handleSend = async () => {
             aiMsg.content = ''
             aiMsg.videoOnly = true
             aiMsg.videoPreparing = false
-            aiMsg.teachingDiagram = null
             const video = data.video
             if (video && typeof video === 'object') {
               aiMsg.video = video as ChatVideoArtifactData
@@ -2805,9 +2637,6 @@ const handleSend = async () => {
           ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
           : aiMsgId
         if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
-        if (shouldGenerateVideo && aiMsg?.video) {
-          watchChatVideo(activeSessionId, persistedMessageId)
-        }
         completeStreamingMessage(persistedMessageId)
         void refreshSessionTitleWithRetry(activeSessionId)
       },
@@ -2818,13 +2647,13 @@ const handleSend = async () => {
         commitStreamTextToMessage(aiMsgId)
         const aiMsg = messages.value.find(message => message.id === aiMsgId)
         if (aiMsg) {
-          finalizeAssistantGeneration(aiMsg, 'failed')
+          const errText = _err?.message || '连接中断或运行超时，请重试。'
+          finalizeAssistantGeneration(aiMsg, 'failed', errText)
           aiMsg.videoPreparing = false
           aiMsg.videoOnly = false
-          if (!aiMsg.content) aiMsg.content = '连接中断，请刷新页面后重试。'
+          if (!aiMsg.content) aiMsg.content = errText
         }
-        stopTeachingDiagramGeneratingForCurrentAi()
-        isAIThinking.value = false
+            isAIThinking.value = false
         streamingMsgId.value = null
         streamingMsgRef.value = null
       },
@@ -2834,6 +2663,27 @@ const handleSend = async () => {
       },
     },
   )
+}
+
+// 失败或超时消息快捷重试
+const handleRetryAssistantMessage = (failedMsg: ChatMsg) => {
+  if (isAIThinking.value) return
+  const msgIdx = messages.value.findIndex(m => m.id === failedMsg.id)
+  let retryText = ''
+  if (msgIdx > 0) {
+    const prevUserMsg = messages.value.slice(0, msgIdx).reverse().find(m => m.role === 'user')
+    if (prevUserMsg) {
+      retryText = prevUserMsg.content
+      messages.value = messages.value.filter(m => m.id !== failedMsg.id && m.id !== prevUserMsg.id)
+    }
+  }
+  if (!retryText) {
+    messages.value = messages.value.filter(m => m.id !== failedMsg.id)
+    toast.error('未找到可重试的提问内容')
+    return
+  }
+  userInput.value = retryText
+  void handleSend()
 }
 
 // 监听聊天模式切换：数字人 ↔ 标准文本
@@ -2982,7 +2832,6 @@ onBeforeUnmount(() => {
   }
   isStreamDone = false
   streamingMsgRef.value = null
-  videoTasks.dispose()
   clearPendingFiles()
   if (dimTimer) clearTimeout(dimTimer)
   document.removeEventListener('mousedown', handleGlobalClick)
@@ -5017,6 +4866,87 @@ onBeforeUnmount(() => {
 
 .message-row.ai .assistant-answer {
   padding: 14px 16px;
+}
+
+.assistant-failed-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 100%;
+  padding: 12px 14px;
+  background: #fff8f8;
+  border: 1px solid #fecaca;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(239, 68, 68, 0.06);
+}
+
+.failed-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.failed-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: #dc2626;
+}
+
+.failed-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.failed-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #b91c1c;
+}
+
+.failed-message {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: #7f1d1d;
+  word-break: break-word;
+}
+
+.failed-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 4px;
+}
+
+.failed-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #fff;
+  background: #dc2626;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.failed-retry-btn:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
+.failed-retry-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.failed-retry-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 .message-row.user .bubble {

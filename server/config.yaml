@@ -18,28 +18,21 @@ jwt:
   expire_days: 7
 
 # ============ 模型配置 ============
+# 全系统统一定义两个模型：文本模型 (text) 与 视觉模型 (vision)
 models:
-  # 主模型：系统默认调用
-  main:
+  text:
     base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
     api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
     model_name: "astron-code-latest"
-    max_tokens: 8192
     timeout: 300
     max_retries: 2
-    temperature:
-      default: 0.7
-      json: 0.1
-      stream: 1.0
-
-  # 视觉模型：图片理解
   vision:
     base_url: "https://open.bigmodel.cn/api/paas/v4/"
     api_key: "a905a82165e24eaea6acbfc22a521872.5i9Hyi99pIEygWWC"
     model_name: "glm-4.6v-flash"
-    temperature: 0.7
     timeout: 300
     max_retries: 2
+
 
 # 星火 WebSocket API（Vision 用，TTS 也回退到此配置）
 spark:
@@ -59,11 +52,6 @@ avatar:
   background_source: "res_key"
   background_image: "22SLM2teIw+aqR6Xsm2JbH6Ng310kDam2NiCY/RQ9n6s3nYJXloZWW1l64/g32vrn7d2lJQR7m9xD5EHYkVs1zuP4AyAYT6ujNjsPymLI/WxeAzv8DjuimJOQlzH+66+Pc7W/Dug9AuYPnJkluZEQyoPrYAzp5Au+YU4hioS6cTosd4rev2C8fcKvtuWjZXJEFhyZMD8c+ssuXeQE1StdaR11kxFrbyVEVCzQmhikzYwMT7cljAvIlsK/ptuXqi4qHI8xSQ+tfk5s6SQoqA/2PfPxTvC/ZQGruKSUb6y8q7OmlkFRb0dpkvT5TAcRlkkV2oaULluWs4NuYqVuuR2s5k6pPWJlfl2JcuLrqHSbiI="
   background_encoding: "jpg"
-
-# 搜索服务
-search:
-  tavily_key: "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"
-  spark_key: "fJBSbtdchNCLigLHcEMn:HWSLhFEcXxAItAvgvERb"
 
 # 路径配置
 paths:
@@ -107,11 +95,6 @@ chat:
     - webp
   # 构建对话上下文时拉取的历史消息条数
   history_limit: 20
-
-# 评估配置
-evaluation:
-  # 连续学习天数判定阈值（秒），每天至少这么多秒才算活跃
-  streak_min_seconds: 300
 
 # 路径规划配置
 paths_config:

@@ -5,7 +5,6 @@ import type {
   RegisterParams,
   LoginData,
   UserData,
-  UserUpdateParams,
   AvatarUploadData,
 } from '@/features/auth/model/auth' // 导入认证相关 DTO 类型
 
@@ -14,7 +13,6 @@ export type { // 重导出 DTO 类型供外部使用
   RegisterParams,
   LoginData,
   UserData,
-  UserUpdateParams,
   AvatarUploadData,
 }
 
@@ -41,11 +39,6 @@ export function getAuthStatus() { // 检查认证状态（轮询用）
 // 获取当前登录用户的基础信息
 export function getMe() { // 获取当前登录用户信息
   return http.get<ApiResponse<LoginData['user']>>('/users/me')
-}
-
-// 更新当前用户资料（如用户名、邮箱、是否首次登录等）
-export function updateMe(params: UserUpdateParams) { // 更新当前用户信息
-  return http.patch<ApiResponse<LoginData['user']>>('/users/me', params)
 }
 
 // 上传头像：multipart/form-data 包装文件后提交

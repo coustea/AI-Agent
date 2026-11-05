@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from app.infra.llm import get_llm
+from app.infra.llm import LLM
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_resource_context
@@ -23,7 +23,7 @@ class ContentAgent(BaseResourceAgent):
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
-        self.llm = get_llm()
+        self.llm = LLM(temperature=0.7)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         return await self._generate_content(
@@ -52,7 +52,7 @@ class ContentAgent(BaseResourceAgent):
         llm_started = time.perf_counter()
         # 长耗时生成，期间定时发送心跳
         content = await self.run_with_heartbeat(
-            self.llm.ainvoke_text(full_prompt),
+            self.llm.text(full_prompt),
             messages=[
                 "正在生成讲解文档主体内容...",
                 "正在补充关键概念与学习提示...",

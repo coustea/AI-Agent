@@ -17,28 +17,57 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from collections.abc import Sequence
+
 from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.evaluation.event_types import MODULE_RESOURCE, RESOURCE_GENERATED
+from app.evaluation.request import LearningEventCreate
+from app.evaluation.service import EvaluationService
 from app.infra.logging import get_module_logger
-from app.resource.catalog import AGENT_CONTENT_FORMAT
-from app.resource.events import record_resource_generated_event
 from app.infra.models import (
     GeneratedResource,
     GeneratedResourceAgentRun,
     GeneratedResourceItem as ItemModel,
     GeneratedResourceRunEvent,
 )
+from app.resource.catalog import AGENT_CONTENT_FORMAT
 from app.resource.schemas import (
     AgentResult,
     GeneratedResourceItem,
     ResourceBundle,
     ResourceGenerationRequest,
+    ResourceLifecycleStatus,
     ResourceStatusSnapshot,
 )
-from app.resource.status import ResourceLifecycleStatus
 
 logger = get_module_logger("resource", sub="service")
+
+
+async def record_resource_generated_event(
+    db: AsyncSession,
+    user_id: int,
+    resource_id: int,
+    status: str,
+    course: str | None = None,
+    topic: str | None = None,
+    agent_types: Sequence[str] | None = None,
+) -> None:
+    """记录一次资源生成埋点事件到 learning_events 表。"""
+    payload = LearningEventCreate(
+        module=MODULE_RESOURCE,
+        entity_id=str(resource_id),
+        event_type=RESOURCE_GENERATED,
+        course=course,
+        topic=topic,
+        event_metadata={
+            "resource_id": resource_id,
+            "status": status,
+            "agent_types": list(agent_types) if agent_types else [],
+        },
+    )
+    await EvaluationService().record_event(db, user_id=user_id, payload=payload)
 
 
 def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | None, str | None]:

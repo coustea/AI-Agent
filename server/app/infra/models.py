@@ -371,6 +371,35 @@ class ChatLongTermMemory(SQLModel, table=True):
     )
 
 
+class LlmUsage(SQLModel, table=True):
+    """LLM 调用用量明细 — 每次模型调用一行。"""
+
+    __tablename__ = "llm_usage"
+    __table_args__ = (
+        Index("ix_llm_usage_user_created", "user_id", "created_at"),
+        Index("ix_llm_usage_profile_created", "profile", "created_at"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(default=0, index=True)
+    session_id: str = Field(default="", max_length=64, index=True)
+    # 调用用途（chat / resource / path / evaluation ...）
+    purpose: str = Field(default="", max_length=64)
+    # 模型档案名与真实模型
+    profile: str = Field(default="", max_length=64)
+    provider: str = Field(default="", max_length=64)
+    model: str = Field(default="", max_length=128)
+    prompt_tokens: int = Field(default=0)
+    completion_tokens: int = Field(default=0)
+    cached_tokens: int = Field(default=0)
+    latency_ms: int = Field(default=0)
+    ok: bool = Field(default=True)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(TIMESTAMP(timezone=True)),
+    )
+
+
 class UserProfile(SQLModel, table=True):
     """用户主画像表 — 每个用户一条主画像记录。
 
@@ -404,6 +433,13 @@ class UserProfile(SQLModel, table=True):
 
     # 上次画像推理完成时间（Step1文字画像 + Step2分数画像），阈值计数基于此重置
     profile_updated_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+    )
+
+    # 每用户 AGENT.md：系统根据画像生成的个性化教学指令
+    agent_md: str = Field(default="", sa_column=Column(Text, server_default=""))
+    agent_md_updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
     )
@@ -994,6 +1030,7 @@ class WrongQuestion(SQLModel, table=True):
 # 所有需要建表的模型类注册表，init_db() 据此创建或更新表结构
 REGISTERED_MODELS = (
     ActiveToken,
+    LlmUsage,
     UserDailyActivity,
     ChatSession,
     ChatMessage,

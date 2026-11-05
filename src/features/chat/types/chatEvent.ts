@@ -9,7 +9,6 @@ export type ChatEventName =
   | 'activity.failed'
   | 'content.delta'
   | 'content.replace'
-  | 'diagram.ready'
   | 'message.completed'
   | 'message.failed'
 

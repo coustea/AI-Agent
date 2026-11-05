@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import copy
 import math
-from typing import Any
 
 from app.algorithm_visualizer.official_adapters._base import BaseAdapter
 

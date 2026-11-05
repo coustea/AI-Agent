@@ -8,7 +8,6 @@ highlighted cells and their dependencies.
 from __future__ import annotations
 
 import copy
-from typing import Any
 
 from app.algorithm_visualizer.official_adapters._base import BaseAdapter
 

@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 from app.infra.database import session_scope
 from app.infra.models import GeneratedResourceRunEvent
 from app.infra.logging import get_logger
+from app.resource.schemas import ResourceLifecycleStatus
 from app.resource.service import ResourceService
-from app.resource.status import ResourceLifecycleStatus
 
 logger = get_logger(__name__)
 

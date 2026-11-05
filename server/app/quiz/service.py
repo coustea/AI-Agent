@@ -11,7 +11,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.infra.models import QuizQuestion
-from app.infra.llm import get_llm
+from app.infra.llm import LLM
 from app.infra.logging import get_logger
 from app.infra.utils import parse_first_json_object
 from app.quiz.schemas import QuizQuestionListResponse, QuizQuestionRead
@@ -34,7 +34,7 @@ _FILL_BLANK_TYPES = frozenset({"填空题", "fill_blank", "fill"})
 _ANSWER_PART_SPLIT = re.compile(r"[,，、;；\n]+")
 _WHITESPACE_RE = re.compile(r"\s+")
 
-# 精简评分规则（替代超长 quiz_review.md，保留关键给分口径）
+# 精简评分规则，保留关键给分口径
 _COMPACT_SCORING_RULES = """评分规则：
 - 要点全覆盖 → score>=80；大部分覆盖有遗漏 → 60-79；严重偏离 → <60
 - 分析题：过程正确结果有误 → 60-75
@@ -507,8 +507,12 @@ class QuizReviewService:
         user_answer: str,
         knowledge_points: list[str],
     ) -> QuizReviewOutput:
-        """轻量 LLM 评阅：ainvoke_text + 限 max_tokens，失败走关键词 fallback。"""
-        llm = get_llm()
+        """轻量 LLM 评阅：text + 限 max_tokens，失败走关键词 fallback。"""
+        llm = LLM(
+            temperature=0.1,
+            max_tokens=QUIZ_REVIEW_MAX_TOKENS,
+            timeout=QUIZ_REVIEW_TIMEOUT_SECONDS,
+        )
         prompt = self._build_messages(
             question_type=question_type,
             question_content=question_content,
@@ -519,7 +523,7 @@ class QuizReviewService:
         try:
             async with self._llm_semaphore:
                 raw = await asyncio.wait_for(
-                    llm.ainvoke_text(
+                    llm.text(
                         prompt,
                         temperature=0.1,
                         max_tokens=QUIZ_REVIEW_MAX_TOKENS,
@@ -541,19 +545,20 @@ class QuizReviewService:
         """一次 LLM 评多道题。成功返回 question_id -> result；失败返回 None。"""
         if not items:
             return {}
-        llm = get_llm()
-        prompt = self._build_multi_prompt(items)
         # 多题输出稍放宽 token，但仍远小于默认 8192
         max_tokens = min(900, QUIZ_REVIEW_MAX_TOKENS * max(2, len(items)))
+        timeout = QUIZ_REVIEW_TIMEOUT_SECONDS + 4 * max(0, len(items) - 1)
+        llm = LLM(
+            temperature=0.1,
+            max_tokens=max_tokens,
+            timeout=timeout,
+        )
+        prompt = self._build_multi_prompt(items)
         try:
             async with self._llm_semaphore:
                 raw = await asyncio.wait_for(
-                    llm.ainvoke_text(
-                        prompt,
-                        temperature=0.1,
-                        max_tokens=max_tokens,
-                    ),
-                    timeout=QUIZ_REVIEW_TIMEOUT_SECONDS + 4 * max(0, len(items) - 1),
+                    llm.text(prompt),
+                    timeout=timeout,
                 )
             payload = parse_first_json_object(raw)
             rows = payload.get("results") if isinstance(payload, dict) else None

@@ -6,38 +6,25 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.135.3",
-    "langchain>=1.2.14",
-    "langgraph>=1.1.4",
     "sqlmodel>=0.0.38",
     "asyncpg>=0.30.0",
     "pyjwt>=2.10.0",
     "passlib[bcrypt]>=1.7.4",
-    "langgraph-cli[inmem]>=0.4.19",
-    "langchain-openai>=1.1.12",
+    "openai>=2.31.0",
     "pyyaml>=6.0.3",
     "pymupdf>=1.27.2.2",
     "python-docx>=1.2.0",
-    "faiss-cpu>=1.13.2",
-    "langchain-community>=0.4.1",
-    "langchain-unstructured>=1.0.1",
-    "unstructured>=0.22.16",
     "markdown>=3.10.2",
     "chromadb>=0.6.3",
-    "langchain-chroma>=0.2.2",
-    "anthropic>=0.94.0",
     "jieba>=0.42.1",
     "rank-bm25>=0.2.2",
     "rich>=14.3.3",
-    "tavily-python>=0.7.23",
     "python-pptx>=1.0.2",
     "fonttools>=4.62.1",
     "greenlet>=3.3.2",
-    "zhipuai>=1.0.7",
     "uvicorn>=0.44.0",
-    "ddgs>=9.13.1",
     "websockets>=12.0,<14",
     "loguru>=0.7.2",
-    "deepagents>=0.5.3",
     "httpx>=0.28.1",
     "playwright>=1.59.0",
     "serpapi>=1.0.2",
@@ -46,12 +33,15 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "openpyxl>=3.1.5",
     "requests>=2.33.1",
-    "langchain-tavily>=0.2.18",
     "mutagen>=1.47.0",
     "pypdf>=6.10.0",
     "pygments>=2.20.0",
     "xfyunsdkspeech>=0.0.4",
     "edge-tts>=7.2.8",
+    # RAG 索引侧仍用 LangChain 的纯文档抽象与文本切分（无 LLM 耦合）
+    "langchain-core>=1.2.14",
+    "langchain-community>=0.4.1",
+    "langchain-text-splitters>=1.0.0",
 ]
 
 [dependency-groups]
@@ -62,3 +52,7 @@ dev = [
     "python-jose>=3.5.0",
     "vulture>=2.16",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

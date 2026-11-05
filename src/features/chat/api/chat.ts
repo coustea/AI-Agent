@@ -3,8 +3,6 @@ import type { ApiResponse } from '@/shared/api/http' // 导入响应信封类型
 import type {
   ChatMessageItem,
   ChatSession,
-  TeachingDiagramImage,
-  ChatVideoArtifact,
   UploadResult,
   StreamChatParams,
 } from '@/features/chat/types/chat' // 导入聊天 DTO 类型
@@ -97,14 +95,3 @@ export function createChatMessage(params: StreamChatParams) {
   )
 }
 
-export function retryDiagramImage(messageId: number) {
-  return http.post<ApiResponse<{ diagram: TeachingDiagramImage }>>(
-    `/ai/chat/messages/${messageId}/diagram-image/retry`,
-  )
-}
-
-export function getChatVideo(sessionId: string, assistantMessageId: number) {
-  return http.get<ApiResponse<{ assistant_message_id: number, video: ChatVideoArtifact }>>(
-    `/ai/chat/sessions/${sessionId}/videos/${assistantMessageId}`,
-  )
-}

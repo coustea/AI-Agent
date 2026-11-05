@@ -25,6 +25,8 @@ class FakeMessage:
     created_at: datetime
     tool_calls: list[dict] | None = None
     tool_call_id: str | None = None
+    user_message_id: int | None = None
+    usage_metadata: dict | None = None
 
 
 class FakeMemoryService:
@@ -46,6 +48,12 @@ class FakeMemoryService:
                 created_at=datetime(2026, 4, 1, 8, 0),
             )
         ]
+
+    async def list_attachment_analyses(self, **kwargs):
+        return []
+
+    async def list_activities(self, **kwargs):
+        return []
 
 
 def test_chat_history_basic(monkeypatch):

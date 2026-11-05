@@ -13,11 +13,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user, get_current_user_flexible
 from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
-from app.evaluation.service import evaluation_service, ConcurrencyError
+from app.evaluation.service import evaluation_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import LearningSession, User, LearningAssessment, UserDailyActivity
-from app.infra.response import HttpResponse
+from app.infra.models import User, LearningAssessment, UserDailyActivity
+from app.response import HttpResponse
 
 router = APIRouter()
 logger = get_logger(__name__)

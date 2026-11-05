@@ -12,19 +12,6 @@ export type ResourceContentFormat = 'markdown' | 'json' | 'html' | 'mp4'
 
 export type ResourceContent = Record<string, unknown> | unknown[] | string | null
 
-export interface CartoonResourceMetadata extends Record<string, unknown> {
-  agent_id: 'cartoon'
-  schema_version: 'cartoon/v8'
-  engine: 'hyperframes'
-  has_audio: true
-  quality_passed: true
-  video_url: string
-  preview_url: string
-  captions_url: string
-  duration_seconds: number
-  scene_count: number
-}
-
 // 学习场景的标识联合类型
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 

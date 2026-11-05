@@ -59,7 +59,7 @@ def test_get_active_path_endpoint(authenticated_client):
 
     with patch("app.path.api.PathService") as MockService:
         mock_service_instance = MockService.return_value
-        mock_service_instance.get_active_path_overview = AsyncMock(return_value=mock_response)
+        mock_service_instance.list_active_path_overviews = AsyncMock(return_value=[mock_response])
 
         response = authenticated_client.get("/api/v1/ai/path-plan/active")
 
@@ -67,8 +67,8 @@ def test_get_active_path_endpoint(authenticated_client):
         json_data = response.json()
         assert json_data["code"] == 200
         assert json_data["message"] == "success"
-        assert json_data["data"]["title"] == "SQL Path"
-        assert json_data["data"]["nodes"][0]["node_id"] == "sql-basics"
+        assert json_data["data"][0]["title"] == "SQL Path"
+        assert json_data["data"][0]["nodes"][0]["node_id"] == "sql-basics"
 
 
 def test_get_path_learning_evaluation_endpoint(authenticated_client):
@@ -134,6 +134,9 @@ def test_list_path_resources_endpoint(authenticated_client):
         def all(self):
             return []
 
+        def first(self):
+            return 0
+
     mock_session.exec.return_value = _EmptyResult()
 
     async def override_get_session():
@@ -166,9 +169,7 @@ def test_record_path_learning_event_endpoint(authenticated_client):
         created_at=datetime.now(),
     )
 
-    with patch("app.path.api.PathService") as MockService, patch(
-        "app.path.api.bg_apply_profile_update_from_learning_event", new_callable=AsyncMock
-    ) as mock_profile_update:
+    with patch("app.path.api.PathService") as MockService:
         mock_service_instance = MockService.return_value
         mock_service_instance.record_learning_event = AsyncMock(
             return_value=(mock_event, {"event_type": "quiz_submitted", "topic": "SQL Join"})
@@ -188,12 +189,9 @@ def test_record_path_learning_event_endpoint(authenticated_client):
         assert response.status_code == 200
         json_data = response.json()
         assert json_data["code"] == 200
-        assert json_data["data"]["path_id"] == 12
-        assert json_data["data"]["node_id"] == "sql-join"
-        mock_profile_update.assert_awaited_once()
-        assert mock_profile_update.await_args.args[0] == 1
-        assert mock_profile_update.await_args.args[1]["event_type"] == "quiz_submitted"
-        assert mock_profile_update.await_args.args[1]["topic"] == "SQL Join"
+        assert json_data["data"]["entity_id"] == "12"
+        assert json_data["data"]["event_metadata"]["node_id"] == "sql-join"
+        mock_service_instance.record_learning_event.assert_awaited_once()
 
 
 def test_generation_task_endpoints_removed(authenticated_client):
@@ -210,28 +208,38 @@ def test_generation_task_endpoints_removed(authenticated_client):
 
 
 def test_generate_cartoon_endpoint(authenticated_client):
-    mock_response = MagicMock()
-    mock_response.model_dump.return_value = {
-        "id": 1,
-        "resource_type": "cartoon",
-        "version_no": 1,
-        "title": "Cartoon",
-        "content_format": "mp4",
-        "content_text": "cartoon-video-url",
-        "created_at": "2026-07-06T11:00:00",
+    mock_task = MagicMock()
+    mock_task.resource.id = 1
+    mock_task.model_dump.return_value = {
+        "resource": {
+            "id": 1,
+            "resource_type": "cartoon",
+            "version_no": 1,
+            "title": "Cartoon",
+            "content_format": "mp4",
+            "content_text": "cartoon-video-url",
+            "created_at": "2026-07-06T11:00:00",
+        },
+        "run_id": "test-run-123",
     }
 
-    with patch("app.path.api.PathService") as MockService:
+    with patch("app.path.api.PathService") as MockService, patch(
+        "app.path.api.PathEvents"
+    ) as MockEvents, patch(
+        "app.path.api.run_resource_generation_bg", new_callable=AsyncMock
+    ):
+        mock_events_instance = AsyncMock()
+        MockEvents.return_value = mock_events_instance
         mock_service_instance = MockService.return_value
-        mock_service_instance.generate_node_resource = AsyncMock(return_value=mock_response)
+        mock_service_instance.create_node_resource_task = AsyncMock(return_value=mock_task)
 
-        response = authenticated_client.post("/api/v1/ai/path-plan/nodes/101/cartoon")
+        response = authenticated_client.post("/api/v1/ai/path-plan/nodes/101/resources/cartoon")
 
-        assert response.status_code == 200
+        assert response.status_code == 202
         json_data = response.json()
         assert json_data["code"] == 200
-        assert json_data["data"]["resource_type"] == "cartoon"
-        mock_service_instance.generate_node_resource.assert_awaited_once_with(1, 101, "cartoon")
+        assert json_data["data"]["resource"]["resource_type"] == "cartoon"
+        mock_service_instance.create_node_resource_task.assert_awaited_once()
 
 
 def test_get_cartoon_endpoint(authenticated_client):
@@ -250,7 +258,7 @@ def test_get_cartoon_endpoint(authenticated_client):
         mock_service_instance = MockService.return_value
         mock_service_instance.get_node_resource_by_type = AsyncMock(return_value=mock_response)
 
-        response = authenticated_client.get("/api/v1/ai/path-plan/nodes/101/cartoon")
+        response = authenticated_client.get("/api/v1/ai/path-plan/nodes/101/resources/cartoon")
 
         assert response.status_code == 200
         json_data = response.json()

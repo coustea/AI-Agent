@@ -18,7 +18,7 @@ from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
 from app.config import user_avatar_dir, avatar_url
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 
 logger = get_logger(__name__)
 

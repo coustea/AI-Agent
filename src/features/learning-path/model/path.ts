@@ -149,20 +149,6 @@ export interface PathResourceTaskResponse {
   run_id: string
 }
 
-export type PathResourceEventName = 'resource.started' | 'resource.running' | 'resource.completed' | 'resource.failed'
-
-export interface PathResourceEvent {
-  sequence: number
-  run_id: string
-  path_id: number
-  event: PathResourceEventName
-  stage: string
-  message: string
-  progress: number | null
-  data: Record<string, unknown>
-  timestamp: number
-}
-
 // 单题作答
 export interface PathQuizAnswerItem {
   question_id: number

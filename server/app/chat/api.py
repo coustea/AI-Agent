@@ -14,44 +14,24 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.auth.security import get_current_user_flexible
-from app.chat.emitter import (
+from app.chat.stream import (
     ChatEvents,
     encode_chat_sse,
     get_chat_channel,
     has_active_chat_channel,
 )
 from app.chat.memory.service import get_chat_memory_service
-from app.chat.diagram_image_renderer import render_teaching_diagram_png
 from app.chat.schemas import DiagramMode
 from app.chat.service import get_chat_usecases, run_chat_agent
-from app.chat.video import get_chat_video_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, School, User
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 
 logger = get_logger(__name__)
 
 # 聊天路由集合，统一挂载在 /api/v1/ai/chat/ 下
 router = APIRouter()
-
-
-@router.get("/chat/sessions/{session_id}/videos/{assistant_message_id}")
-async def get_chat_video(
-    session_id: str,
-    assistant_message_id: int,
-    current_user: User = Depends(get_current_user_flexible),
-):
-    """Poll a persisted answer-grounded video task independently of chat SSE."""
-    video = await get_chat_video_service().get_task(
-        user_id=current_user.id,
-        session_id=session_id,
-        assistant_message_id=assistant_message_id,
-    )
-    if video is None:
-        logger.debug("[ChatAPI] 视频任务不存在: user_id=%s session_id=%s assistant_message_id=%s", current_user.id, session_id, assistant_message_id)
-        return HttpResponse.error(code=404, message="视频任务不存在或无权限")
-    return HttpResponse.success(data={"assistant_message_id": assistant_message_id, "video": video})
 
 
 async def _get_owned_assistant_message(
@@ -72,41 +52,6 @@ async def _get_owned_assistant_message(
     return result.first()
 
 
-@router.post("/chat/messages/{message_id}/diagram-image/retry")
-async def retry_diagram_image(
-    message_id: int,
-    current_user: User = Depends(get_current_user_flexible),
-    session: AsyncSession = Depends(get_session),
-):
-    """Retry PNG rendering for the caller's persisted fallback diagram."""
-    message = await _get_owned_assistant_message(session, current_user.id, message_id)
-    if message is None:
-        return HttpResponse.error(code=404, message="找不到图解消息")
-
-    fallback = (message.usage_metadata or {}).get("diagram")
-    if not isinstance(fallback, dict) or fallback.get("kind") != "fallback":
-        return HttpResponse.error(code=409, message="当前图解无需重新生成")
-
-    diagram = fallback.get("diagram")
-    if not isinstance(diagram, dict):
-        return HttpResponse.error(code=404, message="找不到可重试的图解")
-
-    try:
-        image = await render_teaching_diagram_png(
-            diagram,
-            username=current_user.username,
-            session_id=message.session_id,
-        )
-    except Exception:
-        logger.exception("[ChatAPI] 图解图片重试渲染失败: message_id=%s", message_id)
-        return HttpResponse.error(code=503, message="图片生成暂时失败，请稍后重试")
-
-    message.usage_metadata = {**(message.usage_metadata or {}), "diagram": image}
-    session.add(message)
-    await session.commit()
-    return HttpResponse.success(data={"diagram": image})
-
-
 # ---------------------------------------------------------------------------
 # 聊天路由
 # ---------------------------------------------------------------------------
@@ -121,7 +66,6 @@ async def create_mentor_chat_message(
     attachments: str | None = Form(default=None),
     diagram_mode: DiagramMode = Form(default="auto"),
     video_mode: bool = Form(default=False),
-    enable_web_search: bool = Form(default=False),
     current_user: User = Depends(get_current_user_flexible),
 ):
     # 获取用例层并解析附件 JSON 参数
@@ -189,60 +133,17 @@ async def create_mentor_chat_message(
     )
     await events.open()
 
-    if video_mode:
-        video_service = get_chat_video_service()
-        try:
-            assistant_message = await memory_svc.save_message(
-                user_id=current_user.id,
-                session_id=effective_session,
-                user_message_id=user_message_id,
-                role="assistant",
-                content=[],
-                usage_metadata={"response_mode": "video"},
-            )
-            if assistant_message.id is None:
-                raise RuntimeError("视频任务消息保存失败")
-            task = await video_service.create_task(
-                user_id=current_user.id,
-                session_id=effective_session,
-                assistant_message_id=assistant_message.id,
-            )
-        except Exception:
-            logger.exception("[ChatAPI] 创建视频任务失败: user_message_id=%s", user_message_id)
-            await events.send(
-                event="message.failed",
-                message="视频任务创建失败",
-                data={"error": "视频任务创建失败，请稍后重试"},
-            )
-            return HttpResponse.error(code=500, message="视频任务创建失败，请稍后重试")
-
-        background_tasks.add_task(
-            get_chat_usecases().publish_video_task_accepted,
-            user_id=current_user.id,
-            session_id=effective_session,
-            user_message_id=user_message_id,
-            assistant_message_id=assistant_message.id,
-            video=task["video"],
-        )
-        background_tasks.add_task(
-            video_service.run_task,
-            user_id=current_user.id,
-            username=current_user.username,
-            session_id=effective_session,
-            assistant_message_id=assistant_message.id,
-        )
-    else:
-        background_tasks.add_task(
-            run_chat_agent,
-            user_message_id=user_message_id,
-            user_id=current_user.id,
-            username=current_user.username,
-            session_id=effective_session,
-            user_input=effective_message,
-            attachments=[str(item.get("url") or "") for item in parsed_attachments],
-            enable_web_search=enable_web_search,
-            diagram_mode=diagram_mode,
-        )
+    background_tasks.add_task(
+        run_chat_agent,
+        user_message_id=user_message_id,
+        user_id=current_user.id,
+        username=current_user.username,
+        session_id=effective_session,
+        user_input=effective_message,
+        attachments=[str(item.get("url") or "") for item in parsed_attachments],
+        diagram_mode=diagram_mode,
+        video_mode=video_mode,
+    )
 
     logger.info(
         "[ChatAPI] 开始处理用户消息: user_message_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
@@ -296,31 +197,6 @@ async def get_uploaded_file(
             owner_username=owner_username,
             session_id=session_id,
             filename=filename,
-        )
-    except PermissionError as exc:
-        return HttpResponse.error(code=403, message=str(exc))
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    except FileNotFoundError as exc:
-        return HttpResponse.error(code=404, message=str(exc))
-    return FileResponse(path=str(file_path), filename=filename)
-
-
-# 返回已生成的图解图片文件
-@router.get("/chat/uploads/{owner_username}/{session_id}/diagrams/{filename}")
-async def get_diagram_file(
-    owner_username: str,
-    session_id: str,
-    filename: str,
-    current_user: User = Depends(get_current_user_flexible),
-):
-    uc = get_chat_usecases()
-    try:
-        file_path = uc.resolve_uploaded_file(
-            current_username=current_user.username,
-            owner_username=owner_username,
-            session_id=session_id,
-            filename=f"diagrams/{filename}",
         )
     except PermissionError as exc:
         return HttpResponse.error(code=403, message=str(exc))

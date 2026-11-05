@@ -13,10 +13,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
 from sqlmodel import delete, func, select
 
 from app.chat.memory.compression import ChatSessionCompressor
@@ -34,12 +34,12 @@ from app.config import (
     COMPRESS_MIN_MESSAGES,
     COMPRESS_MIN_TOKENS,
     LTM_MIN_CONFIDENCE,
+    SUMMARY_CONTEXT_BLOCKS,
     UPDATE_MIN_MESSAGES,
     UPDATE_MIN_TOKENS,
-    SUMMARY_CONTEXT_BLOCKS,
 )
 from app.infra.database import session_scope
-from app.infra.llm import get_llm
+from app.infra.llm import HumanMessage, LLM, SystemMessage
 from app.infra.logging import get_logger
 from app.infra.models import (
     ChatActivity,
@@ -80,7 +80,7 @@ class ChatMemoryService:
         self.long_term_memory = ChatLongTermMemoryService(
             min_confidence=LTM_MIN_CONFIDENCE,
         )
-        self.llm = get_llm()
+        self.llm = LLM(temperature=0.7, max_tokens=32)
 
     # -------------------------------------------------------------------
     # create_session: 创建新的聊天会话
@@ -199,7 +199,7 @@ class ChatMemoryService:
         fallback = self._clean_session_title(first_message) or DEFAULT_SESSION_TITLE
         title = fallback
         try:
-            resp = await self.llm.ainvoke(
+            resp = await self.llm.text(
                 [
                     SystemMessage(content="你是会话标题生成器。只输出一个简短中文标题，不要标点、引号或解释。"),
                     HumanMessage(content=f"为这段学习辅导对话生成标题，最多12个中文字符：\n{first_message}"),
@@ -638,34 +638,6 @@ class ChatMemoryService:
             return f"## {heading}\n暂无信息。"
         return f"## {heading}\n{match.group('body').strip()}"
 
-    # -------------------------------------------------------------------
-    # compress_session: 会话压缩入口
-    #
-    # 当 session 中消息数 ≥ min_messages 或 token ≥ min_tokens 时，
-    # 将旧消息通过 LLM 摘要化，保留最近 keep_recent 条原始消息。
-    # 返回压缩后的 summary block（None 表示无需压缩）。
-    # -------------------------------------------------------------------
-    # 检查会话是否需要压缩（不实际压缩）
-    async def should_compress_session(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-    ) -> bool:
-        """检查会话是否需要压缩（不实际执行压缩）。"""
-        try:
-            async with session_scope() as db:
-                # 委托压缩器判断是否达标
-                result = await self.compressor.needs_compression(
-                    db=db,
-                    user_id=user_id,
-                    session_id=session_id,
-                )
-                logger.info("[ChatMemoryService] 压缩检查: user_id=%s session_id=%s needs_compression=%s", user_id, session_id, result)
-                return result
-        except Exception as exc:
-            logger.error("[ChatMemoryService] 压缩需求检查失败: %s", exc)
-            return False
 
     # 组合执行 LTM + 压缩的 token/消息阈值检查（后台任务调度用）
     async def evaluate_post_turn_jobs(
@@ -898,3 +870,54 @@ def get_chat_memory_service() -> ChatMemoryService:
     if _chat_memory_service is None:
         _chat_memory_service = ChatMemoryService()
     return _chat_memory_service
+
+
+async def run_background_memory_jobs(
+    memory_service: ChatMemoryService,
+    *,
+    user_id: int,
+    session_id: str,
+    user_message: str = "",
+    assistant_reply: str = "",
+) -> None:
+    """对话轮次结束后的后台记忆管线：按阈值并行触发会话压缩与长期记忆更新。"""
+    try:
+        evaluation = await memory_service.evaluate_post_turn_jobs(
+            user_id=user_id,
+            session_id=session_id,
+            user_message=user_message,
+            assistant_reply=assistant_reply,
+        )
+        should_ltm = bool(evaluation.get("should_ltm"))
+        ltm_schedule = evaluation.get("ltm_schedule") or {}
+        should_compress = bool(evaluation.get("should_compress"))
+
+        tasks: list[asyncio.Task[Any]] = []
+        if should_compress:
+            tasks.append(
+                asyncio.create_task(
+                    memory_service.compress_session(
+                        user_id=user_id,
+                        session_id=session_id,
+                        reason="post_turn",
+                    ),
+                    name="compress",
+                )
+            )
+        if should_ltm:
+            tasks.append(
+                asyncio.create_task(
+                    memory_service.update_long_term_memory(
+                        user_id=user_id,
+                        session_id=session_id,
+                        user_message=user_message,
+                        assistant_reply=assistant_reply,
+                        signal_detected=bool(ltm_schedule.get("signal_detected")),
+                    ),
+                    name="ltm_update",
+                )
+            )
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
+    except Exception as exc:
+        logger.error("[ChatMemoryService] 后台记忆任务失败: %s", exc)

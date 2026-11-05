@@ -10,21 +10,21 @@ from app.infra.logging import get_logger
 from app.path.schemas import PathResourceRequest
 from app.resource.schemas import AgentResult
 from app.shared.cartoon import (
+    CartoonAgent,
     CartoonBrief,
     CartoonGenerationConfig,
     CartoonGenerationError,
-    CartoonPipeline,
     CartoonResourceMetadata,
 )
-from app.shared.cartoon.models import LessonDepth
+from app.shared.cartoon.schemas import LessonDepth
 
 
 logger = get_logger(__name__)
 
 
 class PathCartoonAdapter:
-    def __init__(self, *, pipeline: CartoonPipeline | None = None) -> None:
-        self._pipeline = pipeline or CartoonPipeline()
+    def __init__(self, *, pipeline: CartoonAgent | None = None) -> None:
+        self._pipeline = pipeline or CartoonAgent()
 
     async def generate(self, request: PathResourceRequest) -> AgentResult:
         started = time.perf_counter()

@@ -1,326 +1,183 @@
-"""Tests for PPTGenerator orchestration and PPTAgent."""
+"""Tests for the refactored PPTAgent (Plan-and-Execute + python-pptx + Skill Loading) and CartoonAgent (HyperFrames)."""
 
 from __future__ import annotations
 
 import asyncio
-import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
-import pytest
-
-from app.resource.agents.ppt import PPTAgent, build_resource_ppt_request, build_path_ppt_request
+from app.resource.agents.cartoon import CartoonAgent
+from app.resource.agents.ppt import PPTAgent
+from app.resource.schemas import (
+    DownstreamContext,
+    ResourceInput,
+    ResourcePlan,
+    ResourcePlanTask,
+)
+from app.shared.cartoon import (
+    CartoonArtifact,
+    CartoonGenerationError,
+    build_cartoon_subagent_tool,
+)
+from app.shared.tools import get_skill_loader
 from app.shared.ppt import (
     PPTArtifact,
     PPTGenerationError,
-    PPTGenerator,
-    ResourcePPTRequest,
-    PathPPTRequest,
-)
-from app.shared.ppt.models import PPTPlan, PPTSlide, KeyPoint
-from app.resource.schemas import (
-    AgentResult,
-    DownstreamContext,
-    NodeInput,
-    ResourceInput,
+    build_ppt_subagent_tool,
 )
 
 
-def _deck_plan() -> PPTPlan:
-    return PPTPlan(
-        title="Intro to Python",
-        subtitle="Beginners",
-        purpose="Intro to Python",
-        audience="Beginners",
-        density="speaker_led",
-        narrative="Start simple, build up",
-        language="zh-CN",
-        slides=[
-            PPTSlide(
-                role="cover",
-                shape="statement",
-                title="Python Basics",
-                statement="Welcome to Python",
+def _sample_teaching_plan() -> ResourcePlan:
+    return ResourcePlan(
+        learner_goal="深入理解 async/await 与事件循环调度机制",
+        scope=["协程基础", "事件循环", "并发任务调度"],
+        tasks=[
+            ResourcePlanTask(
+                agent_id="content",
+                objective="讲解协程挂起与恢复的核心概念",
+                focus=["协程基础"],
+                required_elements=["定义", "代码示例"],
             ),
-            PPTSlide(
-                role="explain",
-                shape="concept",
-                title="What is a Variable",
-                points=[KeyPoint(label="Variable", detail="A container for value")],
+            ResourcePlanTask(
+                agent_id="ppt",
+                objective="制作事件循环可视化教学演示课件",
+                focus=["事件循环"],
+                required_elements=["核心流程", "对比卡片"],
             ),
-            PPTSlide(
-                role="summary",
-                shape="statement",
-                title="Summary",
-                statement="Python is easy",
+            ResourcePlanTask(
+                agent_id="cartoon",
+                objective="通过动画直观呈现并发任务调度过程",
+                focus=["并发任务调度"],
+                required_elements=["状态流转", "关键结论"],
             ),
         ],
     )
 
 
-def _source_pack() -> ResourcePPTRequest:
-    return ResourcePPTRequest(
-        learning_need="Learn Python basics",
-        learning_scenario="self_study",
-        profile={},
-        teaching_plan=None,
-        artifacts=[],
-    )
-
-
-def _resource_input(**overrides: object) -> ResourceInput:
+def _sample_resource_input(**overrides: object) -> ResourceInput:
     defaults = dict(
         resource_id=42,
-        learning_need="Learn Python",
+        username="alice",
+        learning_need="深入理解 Python 协程与事件循环",
         learning_scenario="self_study",
         profile={},
+        teaching_plan=_sample_teaching_plan(),
+        upstream_handoffs={
+            "content": DownstreamContext(
+                source_agent="content",
+                title="Python 协程核心讲义",
+                one_sentence_summary="讲解协程挂起与恢复的底层原理",
+                materials=["协程通过 await 让出控制权", "事件循环负责驱动就绪任务"],
+            )
+        },
     )
     return ResourceInput(**{**defaults, **overrides})
 
 
-def _node_input(**overrides: object) -> NodeInput:
-    defaults = dict(
-        path_id=1,
-        node_id=7,
-        node_key="n7",
-        path_title="Python Path",
-        path_goal="Master Python",
-        node_title="Variables",
-        difficulty="easy",
-        tutorial_title="Variables Tutorial",
-        tutorial_markdown="# Variables\n...",
-        profile={},
-    )
-    return NodeInput(**{**defaults, **overrides})
+def test_local_skills_installed_and_loadable() -> None:
+    loader = get_skill_loader()
+    assert "pptx" in loader.skills
+    assert "hyperframes" in loader.skills
+    assert "hyperframes-cli" in loader.skills
+
+    pptx_doc = loader.get_content("pptx")
+    assert "<skill name=\"pptx\">" in pptx_doc
+    assert "60-30-10" in pptx_doc
+
+    hf_format = loader.get_content("hyperframes", "format.md")
+    assert "<template>" in hf_format
 
 
-# ---------------------------------------------------------------------------
-# 1. Pipeline execution passes
-# ---------------------------------------------------------------------------
-
-
-def test_pipeline_execution_passes():
-    async def _run():
-        # Mock LLM: ainvoke returns a response with .content (Markdown text)
-        mock_response = MagicMock()
-        mock_response.content = """# Test Deck
-
----
-
-## [cover|statement|reveal] Test
-
-**核心论点：** Welcome
-
----
-
-## [explain|concept|reveal] Topic
-
-**核心论点：** A topic
-- **Point：** Detail here
-**总结金句：** Summary
-
----
-
-## [summary|statement|reveal] End
-
-**核心论点：** Done
-"""
-        llm = MagicMock()
-        llm.ainvoke = AsyncMock(return_value=mock_response)
-        generator = PPTGenerator(llm=llm)
-
-        resolved_deck = MagicMock()
-        resolved_deck.template.manifest.id = "neon-cyber"
-        resolved_deck.template.manifest.name = "Neon Cyber"
-        resolved_deck.slides = [MagicMock() for _ in range(6)]
-
-        with patch.object(generator._templates, "resolve", return_value=resolved_deck):
-            with patch.object(generator._renderer, "render", return_value="<html>ok</html>"):
-                with patch("app.shared.ppt.generator.PPTHTMLPublisher") as mock_pub_cls:
-                    mock_pub = MagicMock()
-                    mock_pub.publish.return_value = Path("/tmp/test.html")
-                    mock_pub_cls.return_value = mock_pub
-
-                    artifact = await generator.generate(_source_pack(), output_dir=Path("/tmp"))
-
-                    assert artifact.slide_count == 6
-                    assert artifact.template_id == "neon-cyber"
-                    assert artifact.template_name == "Neon Cyber"
-                    mock_pub.publish.assert_called_once_with("slides", "<html>ok</html>")
-
-    asyncio.run(_run())
-
-
-# ---------------------------------------------------------------------------
-# 2. PPTAgent standalone resource — file_id and html_url
-# ---------------------------------------------------------------------------
-
-
-def test_ppt_agent_standalone_resource():
-    async def _run():
-        with tempfile.NamedTemporaryFile(
-            suffix=".html", delete=False, mode="w"
-        ) as tmp:
-            tmp.write("<html>slide</html>")
-            tmp_path = Path(tmp.name)
+def test_ppt_agent_generate_resource_success(tmp_path: Path) -> None:
+    async def _run() -> None:
+        html_file = tmp_path / "slides.html"
+        pptx_file = tmp_path / "deck.pptx"
+        html_file.write_text("<html>viewer</html>", encoding="utf-8")
+        pptx_file.write_bytes(b"PK\x03\x04dummy-pptx")
 
         artifact = PPTArtifact(
-            path=tmp_path,
-            plan=_deck_plan(),
-            template_id="neon-cyber",
-            template_name="Neon Cyber",
-            slide_count=6,
+            title="Python 协程与事件循环",
+            path=html_file,
+            pptx_path=pptx_file,
+            generated_at=datetime.now(timezone.utc),
+            slide_count=7,
         )
 
-        with patch("app.resource.agents.ppt.PPTGenerator.generate", new_callable=AsyncMock) as mock_generate:
-            mock_generate.return_value = artifact
-            agent = PPTAgent()
-
-            result = await agent.generate_resource(_resource_input())
-
-            assert result.success is True
-            assert result.file_type == "html"
-            mock_generate.assert_awaited_once()
-            call_kwargs = mock_generate.call_args
-            assert call_kwargs.kwargs["output_dir"] == Path("/Users/apple/Code/software/server/static/anonymous/resources/42/ppt")
-        # html_url is derived from user_resource_ppt_dir
-        assert "/static/" in result.metadata["html_url"]
-        tmp_path.unlink(missing_ok=True)
-
-    asyncio.run(_run())
-
-
-# ---------------------------------------------------------------------------
-# 3. PPTAgent path node — node key and path ID used in URL
-# ---------------------------------------------------------------------------
-
-
-def test_ppt_agent_path_node():
-    async def _run():
-        with tempfile.NamedTemporaryFile(
-            suffix=".html", delete=False, mode="w"
-        ) as tmp:
-            tmp.write("<html>slide</html>")
-            tmp_path = Path(tmp.name)
-
-        artifact = PPTArtifact(
-            path=tmp_path,
-            plan=_deck_plan(),
-            template_id="neon-cyber",
-            template_name="Neon Cyber",
-            slide_count=6,
-        )
-
-        mock_source_pack = _source_pack()
-        with patch("app.resource.agents.ppt.build_path_ppt_request", return_value=mock_source_pack):
-            with patch("app.resource.agents.ppt.PPTGenerator.generate", new_callable=AsyncMock) as mock_generate:
-                mock_generate.return_value = artifact
-                agent = PPTAgent()
-                result = await agent.generate_node(_node_input())
+        agent = PPTAgent()
+        with patch.object(agent._ppt_service, "generate", new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = artifact
+            result = await agent.generate_resource(_sample_resource_input())
 
         assert result.success is True
-        mock_generate.assert_awaited_once()
-        call_kwargs = mock_generate.call_args
-        assert call_kwargs.kwargs["output_dir"] == Path("/Users/apple/Code/software/server/static/anonymous/paths/1/nodes/7/ppt")
-        assert "/static/" in result.metadata["html_url"]
-        tmp_path.unlink(missing_ok=True)
-
-    asyncio.run(_run())
-
-
-# ---------------------------------------------------------------------------
-# 4. Result metadata shape — file_type, content, metadata fields
-# ---------------------------------------------------------------------------
-
-
-def test_ppt_agent_result_metadata():
-    async def _run():
-        with tempfile.NamedTemporaryFile(
-            suffix=".html", delete=False, mode="w"
-        ) as tmp:
-            tmp.write("<html>slide</html>")
-            tmp_path = Path(tmp.name)
-
-        artifact = PPTArtifact(
-            path=tmp_path,
-            plan=_deck_plan(),
-            template_id="neon-cyber",
-            template_name="Neon Cyber",
-            slide_count=8,
-        )
-
-        mock_source_pack = _source_pack()
-        with patch("app.resource.agents.ppt.build_resource_ppt_request", return_value=mock_source_pack):
-            with patch("app.resource.agents.ppt.PPTGenerator.generate", new_callable=AsyncMock) as mock_generate:
-                mock_generate.return_value = artifact
-                agent = PPTAgent()
-                result = await agent.generate_resource(_resource_input())
-
         assert result.file_type == "html"
-        assert result.content == ""
-        # metadata must contain exactly the new fields from PPTAgent
-        expected_keys = {
-            "agent_id",
-            "html_file_path",
-            "html_url",
-            "slide_count",
-            "style_name",
-            "template_id",
-            "density",
-            "file_size",
-        }
-        assert set(result.metadata.keys()) == expected_keys
-        assert result.metadata["slide_count"] == 8
-        assert result.metadata["density"] == "speaker_led"
-        assert result.metadata["style_name"] == "Neon Cyber"
-        assert result.metadata["template_id"] == "neon-cyber"
-        assert result.metadata["file_size"] == tmp_path.stat().st_size
-        tmp_path.unlink(missing_ok=True)
+        assert result.metadata["slide_count"] == 7
+        assert result.metadata["html_url"].endswith("/ppt/slides.html")
+        assert result.metadata["pptx_file_path"] == str(pptx_file)
+        assert result.metadata["ppt_pipeline"]["engine"] == "python-pptx-harness-v2"
 
     asyncio.run(_run())
 
 
-# ---------------------------------------------------------------------------
-# 5. PPTGenerationError — Agent returns success=False
-# ---------------------------------------------------------------------------
-
-
-def test_ppt_agent_generation_error():
-    async def _run():
-        mock_source_pack = _source_pack()
-        with patch("app.resource.agents.ppt.build_resource_ppt_request", return_value=mock_source_pack):
-            with patch("app.resource.agents.ppt.PPTGenerator.generate", new_callable=AsyncMock) as mock_generate:
-                mock_generate.side_effect = PPTGenerationError(
-                    "planning", "presentation failed"
-                )
-                agent = PPTAgent()
-                result = await agent.generate_resource(_resource_input())
+def test_ppt_agent_handles_generation_error() -> None:
+    async def _run() -> None:
+        agent = PPTAgent()
+        with patch.object(
+            agent._ppt_service,
+            "generate",
+            new_callable=AsyncMock,
+            side_effect=PPTGenerationError("OOXML geometry check failed", stage="ooxml-audit"),
+        ):
+            result = await agent.generate_resource(_sample_resource_input())
 
         assert result.success is False
-        assert result.error != ""
-        assert "failed" in result.error.lower()
+        assert "OOXML" in (result.error or "")
+        assert result.metadata["generation_stage"] == "ooxml-audit"
 
     asyncio.run(_run())
 
 
-# ---------------------------------------------------------------------------
-# 6. Standalone and path don't share source-pack builders
-# ---------------------------------------------------------------------------
+def test_cartoon_agent_generate_resource_success(tmp_path: Path) -> None:
+    async def _run() -> None:
+        html_path = tmp_path / "index.html"
+        video_path = tmp_path / "video.mp4"
+        vtt_path = tmp_path / "captions.vtt"
+        lesson_path = tmp_path / "lesson.json"
+        timeline_path = tmp_path / "timeline.json"
+        audit_path = tmp_path / "audit.json"
+        for p in (html_path, video_path, vtt_path, lesson_path, timeline_path, audit_path):
+            p.write_text("ok", encoding="utf-8")
+
+        artifact = CartoonArtifact(
+            title="Python 协程动画",
+            duration_ms=18500,
+            scene_count=3,
+            output_dir=tmp_path,
+            html_path=html_path,
+            video_path=video_path,
+            caption_path=vtt_path,
+            lesson_path=lesson_path,
+            timeline_path=timeline_path,
+            audit_path=audit_path,
+        )
+
+        mock_pipeline = AsyncMock()
+        mock_pipeline.generate = AsyncMock(return_value=artifact)
+        agent = CartoonAgent(pipeline=mock_pipeline)
+        result = await agent.generate_resource(_sample_resource_input())
+
+        assert result.success is True
+        assert result.file_type == "mp4"
+        assert result.metadata["scene_count"] == 3
+        assert result.metadata["video_url"].endswith(".mp4")
+        assert result.metadata["preview_url"].endswith(".html")
+        assert result.metadata["captions_url"].endswith(".vtt")
+
+    asyncio.run(_run())
 
 
-def test_ppt_agent_standalone_and_path_use_different_source_pack_builders():
-    """Verify standalone uses build_resource_ppt_request and path uses
-    build_path_ppt_request — they must not share records."""
-
-    resource_input = _resource_input()
-    resource_req = build_resource_ppt_request(resource_input)
-
-    assert isinstance(resource_req, ResourcePPTRequest)
-    assert not hasattr(resource_req, "node_title")
-
-    node_input = _node_input()
-    node_req = build_path_ppt_request(node_input)
-
-    assert isinstance(node_req, PathPPTRequest)
-    assert node_req.node_title == "Variables"
-    assert node_req.path_title == "Python Path"
+def test_subagent_tool_wrappers_exposed() -> None:
+    ppt_tool = build_ppt_subagent_tool(username="alice")
+    video_tool = build_cartoon_subagent_tool(username="alice")
+    assert ppt_tool.name == "generate_ppt_deck"
+    assert video_tool.name == "generate_teaching_video"

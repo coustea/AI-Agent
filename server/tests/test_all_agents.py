@@ -6,14 +6,13 @@ import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.resource.schemas import ResourcePlan, DownstreamContext, AgentResult
+from app.resource.schemas import ResourcePlan, DownstreamContext, AgentResult, ResourcePlanTask
 from app.resource.agents.content import ContentAgent
 from app.resource.agents.mindmap import MindmapAgent
 from app.resource.agents.quiz import QuizAgent
 from app.resource.agents.code import CodeAgent
 from app.resource.agents.reading import ReadingAgent
 from app.resource.agents.ppt import PPTAgent as PptAgent
-from app.resource.agents.video import VideoAgent
 from app.resource.agents.planning import PlanningAgent
 
 
@@ -26,12 +25,29 @@ def test_core_schemas_exist():
 
 def test_resource_plan_validates():
     plan = ResourcePlan(
-        content="# 资源生成协同计划\n\n## 1. 用户需求理解\n- 理解三次握手\n\n### [content]\n- 生成目标：讲解TCP三次握手\n- 重点聚焦：流程\n- 必须包含：时序图\n- 应避免：拥塞控制\n\n### [mindmap]\n- 生成目标：知识结构\n- 重点聚焦：TCP连接\n- 必须包含：握手步骤\n- 应避免：重复讲解",
-        title="TCP三次握手",
+        schema_version=1,
+        learner_goal="掌握TCP三次握手与四次挥手的核心原理与状态流转过程",
+        scope=["三次握手流程", "SYN/ACK标志位", "连接建立状态"],
+        tasks=[
+            ResourcePlanTask(
+                agent_id="content",
+                objective="系统化梳理TCP握手的状态迁移与报文结构",
+                focus=["状态迁移", "报文序列号"],
+                required_elements=["SYN标志位", "ACK标志位"],
+                avoid=["拥塞控制算法"],
+            ),
+            ResourcePlanTask(
+                agent_id="mindmap",
+                objective="构建TCP握手整体知识脉络与关联考点思维导图",
+                focus=["知识架构", "关键步骤"],
+                required_elements=["三次握手结构"],
+                avoid=["细节过度展开"],
+            ),
+        ],
     )
     assert plan.agent_ids == ["content", "mindmap"]
-    assert plan.has_agent("content")
-    assert not plan.has_agent("quiz")
+    assert "content" in plan.agent_ids
+    assert "quiz" not in plan.agent_ids
 
 
 def test_downstream_context_validates():
@@ -66,7 +82,6 @@ def test_all_agents_instantiable():
         CodeAgent,
         ReadingAgent,
         PptAgent,
-        VideoAgent,
         PlanningAgent,
     ]
     for cls in agent_classes:

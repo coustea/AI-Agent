@@ -3,7 +3,7 @@
 包含：
 1. 路径规划智能体 (PathPlannerAgent) 与 LangGraph 规划工作流
 2. 节点学习智能体 (NodeLearningAgent) — 生成教程和测验题目
-3. 节点学习工作流 (get_learn_workflow) — 教程/测验/资源的完整流程
+3. 节点学习工作流 (run_learn_workflow) — 教程/测验/资源的完整流程
 4. 兜底与修复函数 (build_fallback_plan, repair_plan)
 
 工作流拓扑：
@@ -17,14 +17,12 @@ import json
 import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable, TypedDict
-from langchain_core.messages import HumanMessage, SystemMessage
-from langgraph.graph import END, START, StateGraph
 from loguru import logger as loguru_logger
 from sqlmodel import col, select
 
 from app.config import PATH_PASS_SCORE, PATH_QUIZ_SIZE
 from app.infra.logging import get_logger
-from app.infra.llm import get_llm
+from app.infra.llm import HumanMessage, LLM, SystemMessage, chat_json, chat_text
 from app.infra.prompts import prompts
 from app.infra.models import (
     LearningPath,
@@ -36,9 +34,7 @@ from app.infra.models import (
     WrongQuestion,
 )
 from app.profile.service import get_profile_service
-from app.resource.schemas import AgentResult
 from app.rag.tools import build_knowledge_tool
-from app.shared.research import ResearchAgent, ResearchTask
 
 # 从本地合并后的 schemas 导入
 from app.path.schemas import (
@@ -49,7 +45,6 @@ from app.path.schemas import (
     PathPreferences,
     LearnState,
     AgentQuestionSet,
-    LearningPathTutorialDTO,
 )
 
 logger = get_logger(__name__)
@@ -319,117 +314,58 @@ ProgressCallback = Callable[[str, int, str], Awaitable[None]]
 
 
 # LangGraph 规划工作流状态
-class PathState(TypedDict):
-    """LangGraph 状态图中 research → strategist 的全局状态。"""
-    request: PathRequest
-    profile: dict[str, Any]
-    profile_markdown: str
-    search_context: str
-    progress_callback: ProgressCallback | None
-    final_plan: LearningPlan | None
-    guidance_strategy: dict[str, Any]
-
-
 # 路径规划智能体：联网检索 + LLM 生成阶段与节点
 class PathPlannerAgent:
     """课程级学习路径规划智能体。
 
-    使用 LangGraph 编排 research → strategist 两个阶段：
+    两阶段：research → strategist：
     - research：联网检索课程结构参考
     - strategist：基于画像和目标生成阶段与节点
     """
 
     def __init__(self) -> None:
-        self.llm = get_llm()
-        self.research_agent = ResearchAgent()
+        self.llm = LLM(temperature=0.1, max_tokens=4096)
         self.system_prompt = prompts.get("path").get("planner_system")
-        self.generate_graph = self._build_graph()
 
-    # 构建规划工作流状态图：research → strategist
-    def _build_graph(self):
-        workflow = StateGraph(PathState)
+        # 检索参考资料（原 research 节点）
+    async def _research(
+        self,
+        request: PathRequest,
+        profile: dict[str, Any],
+        progress_callback: ProgressCallback | None,
+    ) -> str:
+        loguru_logger.info("[PathPlanner] research 开始")
+        await emit_progress(progress_callback, "researching", 30, "正在检索高价值参考资料")
+        context = await self._search(request=request, profile=profile)
+        loguru_logger.info("[PathPlanner] research 完成, 上下文长度=%d", len(context))
+        return context
 
-        # research 节点：联网检索课程结构参考资料
-        async def research_node(state: PathState) -> dict[str, Any]:
-            loguru_logger.info("LangGraph [Path Research] 开始...")
-            await emit_progress(
-                state.get("progress_callback"),
-                "researching",
-                30,
-                "正在检索高价值参考资料",
-            )
-            search_context = await self._search(
-                request=state["request"],
-                profile=state["profile"],
-            )
-            loguru_logger.info(
-                "LangGraph [Path Research] 完成, 上下文长度=%d",
-                len(search_context),
-            )
-            return {"search_context": search_context}
+    # 生成结构化学习计划（原 strategist 节点）
+    async def _strategize(
+        self,
+        request: PathRequest,
+        profile: dict[str, Any],
+        profile_markdown: str,
+        search_context: str,
+        progress_callback: ProgressCallback | None,
+    ) -> LearningPlan:
+        loguru_logger.info("[PathPlanner] strategist 开始")
+        await emit_progress(progress_callback, "analyzing", 44, "正在分析画像、目标与课程结构")
+        await emit_progress(progress_callback, "strategizing", 58, "正在生成阶段与学习节点")
 
-        # strategist 节点：基于画像、目标与检索结果生成阶段与节点
-        async def node_strategist_node(state: PathState) -> dict[str, Any]:
-            loguru_logger.info("LangGraph [Node Strategist] 开始...")
-            await emit_progress(
-                state.get("progress_callback"),
-                "analyzing",
-                44,
-                "正在分析画像、目标与课程结构",
-            )
-            await emit_progress(
-                state.get("progress_callback"),
-                "strategizing",
-                58,
-                "正在生成阶段与学习节点",
-            )
+        profile_md = ""
+        if request.preferences.use_profile:
+            profile_md = profile_markdown or json.dumps(profile, ensure_ascii=False, indent=2)
 
-            # 根据用户偏好决定是否融合个人画像
-            use_profile = state["request"].preferences.use_profile
-            if not use_profile:
-                profile_md = ""
-            else:
-                profile_md = state.get("profile_markdown", "")
-                if not profile_md:
-                    profile_md = json.dumps(
-                        state["profile"], ensure_ascii=False, indent=2
-                    )
-
-            request_context = _format_request(state["request"])
-            search_context = state.get("search_context", "")
-            messages = _build_planner_messages(
-                request_context=request_context,
-                search_context=search_context,
-                profile_markdown=profile_md,
-            )
-
-            # 调用 LLM 生成结构化学习计划
-            result = await self.llm.ainvoke_json(
-                LearningPlan,
-                messages,
-                max_tokens=4096,
-            )
-
-            # 修复对齐 stages 与 nodes
-            result = repair_plan(
-                plan=result,
-                macro_stages=result.stages,
-                request=state["request"],
-            )
-            loguru_logger.info(
-                "LangGraph [Node Strategist] 完成, 节点数=%d",
-                len(result.nodes),
-            )
-            return {"final_plan": result}
-
-        # 注册节点与边，编译状态图
-        workflow.add_node("research", research_node)
-        workflow.add_node("strategist", node_strategist_node)
-        workflow.add_edge(START, "research")
-        workflow.add_edge("research", "strategist")
-        workflow.add_edge("strategist", END)
-
-        return workflow.compile()
+        messages = _build_planner_messages(
+            request_context=_format_request(request),
+            search_context=search_context,
+            profile_markdown=profile_md,
+        )
+        result = await self.llm.json(LearningPlan, messages)
+        result = repair_plan(plan=result, macro_stages=result.stages, request=request)
+        loguru_logger.info("[PathPlanner] strategist 完成, 节点数=%d", len(result.nodes))
+        return result
 
     async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "", guidance_strategy: dict[str, Any] = None) -> LearningPlan:
         """执行路径规划工作流，返回 LearningPlan。
@@ -438,20 +374,14 @@ class PathPlannerAgent:
         """
         loguru_logger.info("PathPlannerAgent 开始规划路径 - Topic: {}", request.topic)
         try:
-            initial_state: PathState = {
-                "request": request,
-                "profile": profile,
-                "profile_markdown": profile_markdown,
-                "search_context": "",
-                "progress_callback": progress_callback,
-                "final_plan": None,
-                "guidance_strategy": guidance_strategy or {},
-            }
-            final_state = await self.generate_graph.ainvoke(initial_state)
-            plan = final_state.get("final_plan")
-            if plan is None:
-                raise ValueError("路径规划未返回 final_plan")
-            return plan
+            search_context = await self._research(request, profile, progress_callback)
+            return await self._strategize(
+                request=request,
+                profile=profile,
+                profile_markdown=profile_markdown,
+                search_context=search_context,
+                progress_callback=progress_callback,
+            )
         except Exception as exc:
             loguru_logger.error(
                 "PathPlannerAgent 路径规划失败，使用兜底路径: {}", str(exc)
@@ -464,55 +394,17 @@ class PathPlannerAgent:
             )
             return build_fallback_plan(request)
 
-    # 将搜索结果格式化为纯文本上下文
-    @staticmethod
-    def _format_sources(report: "ResearchReport") -> str:
-        """将 ResearchReport.sources 格式化为纯文本上下文。"""
-        if not report.sources:
-            return ""
-        parts = []
-        for s in report.sources:
-            entry = s.title
-            if s.url:
-                entry += f"\n链接: {s.url}"
-            if s.summary:
-                entry += f"\n摘要: {s.summary}"
-            parts.append(entry)
-        return "\n\n".join(parts)
-
     # 联网检索课程结构参考，返回格式化上下文
     async def _search(
         self,
         request: PathRequest,
         profile: dict[str, Any],
     ) -> str:
+        """联网检索课程结构参考。
 
-        try:
-            # 构造检索任务并执行
-            query = f"{request.topic or request.goal} 学习路径 课程结构"
-            report = await self.research_agent.run(
-                ResearchTask(
-                    query=query,
-                    objective="为学习路径规划收集课程结构、知识点和教学参考",
-                    sources={"web"},
-                    depth="standard",
-                )
-            )
-            context = self._format_sources(report)
-            if not context:
-                return ""
-
-            return (
-                "\n\n联网检索参考:\n"
-                "以下内容只作为课程路径规划的外部参考。必须优先服从用户目标、画像和已掌握知识；"
-                "不得编造检索资料未支持的事实，不要把搜索摘要中的广告、无关页面或不确定内容写成课程结论。\n\n"
-                + context[:6000]
-            )
-        except Exception as exc:
-            loguru_logger.warning(
-                "[PathPlannerAgent] ResearchAgent 检索失败: %s", exc
-            )
-            return ""
+        当前未接入搜索源，直接返回空。接入后在此实现。
+        """
+        return ""
 
 
 # 组装路径规划的 system + human 消息
@@ -610,7 +502,6 @@ def _format_preferences(preferences: PathPreferences) -> str:
     return "\n".join(lines)
 
 
-
 # 安全触发进度回调（回调为空时忽略）
 async def emit_progress(
     callback: ProgressCallback | None,
@@ -635,9 +526,6 @@ class NodeLearningAgent:
     - generate_tutorial：生成教程 Markdown
     - generate_questions：生成 5 道测验题目
     """
-
-    def __init__(self) -> None:
-        self.llm = get_llm()
 
     # 生成节点教程 Markdown 内容（调用 LLM）
     async def generate_tutorial(
@@ -681,8 +569,7 @@ class NodeLearningAgent:
             profile_section=profile_section,
             kb_section=kb_section,
         )
-        response = await self.llm.ainvoke(prompt)
-        content = response.content if hasattr(response, "content") else str(response)
+        content = await chat_text(prompt, temperature=0.7)
         return {
             "title": f"{node_title} - {tutorial_type}",
             "summary": tutorial_type,
@@ -716,7 +603,7 @@ class NodeLearningAgent:
         last_error: Exception | None = None
         for attempt in range(max_retries):
             try:
-                result = await self.llm.ainvoke_json(AgentQuestionSet, prompt)
+                result = await chat_json(AgentQuestionSet, prompt, temperature=0.1)
                 questions = result.questions if hasattr(result, "questions") else []
                 if len(questions) == PATH_QUIZ_SIZE:
                     # 归一化每道题的字段结构
@@ -771,77 +658,45 @@ COMPLETED_NODE_STATUSES = frozenset({"completed", "completed_with_gaps"})
 ACTIVE_NODE_STATUSES = frozenset({"available", "in_progress"})
 
 
-# 工作流路由函数：根据 phase 字段决定下一个节点
-def _route_by_phase(state: LearnState) -> str:
-    """路由函数：根据 phase 字段决定下一个节点。"""
-    return state["phase"]
+# 执行节点学习工作流：按 phase 顺序调度节点函数（无图）
+async def run_learn_workflow(state: LearnState) -> dict[str, Any]:
+    """执行节点学习工作流。
 
+    拓扑（原 LangGraph 条件边，现为普通分支）：
 
-# 工作流路由函数：根据测验结果决定下一步（直接解锁）
-def _route_by_outcome(state: LearnState) -> str:
-    """路由函数：根据测验结果决定下一步（简化流程：直接解锁后续节点）。"""
-    return "unlock_progress"
-
-
-# 构建节点学习 LangGraph 工作流（教程 → 测验 → 资源）
-def _build_learn_workflow() -> StateGraph:
-    """构建节点学习 LangGraph 工作流。
-
-    拓扑：
-      START → load_context → [phase 路由]
-        - start: gen_tutorial → persist → END
-        - questions: gen_questions → persist → END
-        - quiz: score_answers → advance_state → [outcome 路由] → END
-        - resource: gen_resource → persist → END
+      load_context → start:     gen_tutorial → persist → END
+                   → questions: gen_questions → persist → END
+                   → quiz:      score_answers → advance_state → unlock → record_event
     """
-    wf = StateGraph(LearnState)
+    ctx = await node_load_context(state)
+    if ctx.get("error"):
+        return ctx
+    state.update(ctx)  # type: ignore[typeddict-item]
 
-    wf.add_node("load_context", node_load_context)
-    wf.add_node("gen_primary_tutorial", node_generate_tutorial)
-    wf.add_node("persist_tutorial_start", node_persist_tutorial_and_mark)
-    wf.add_node("gen_questions", node_generate_questions)
-    wf.add_node("persist_questions", node_persist_questions)
-    wf.add_node("score_answers", node_score_answers)
-    wf.add_node("advance_state", node_advance_state)
-    wf.add_node("unlock_progress", node_unlock_and_update_progress)
-    wf.add_node("record_event", node_record_quiz_event)
+    phase = state["phase"]
 
-    wf.add_edge(START, "load_context")
+    if phase == "start":
+        state.update(await node_generate_tutorial(state))  # type: ignore[typeddict-item]
+        if state.get("error"):
+            return dict(state)
+        state.update(await node_persist_tutorial_and_mark(state))  # type: ignore[typeddict-item]
+        return dict(state)
 
-    wf.add_conditional_edges(
-        "load_context",
-        _route_by_phase,
-        {
-            "start": "gen_primary_tutorial",
-            "questions": "gen_questions",
-            "quiz": "score_answers",
-        },
-    )
+    if phase == "questions":
+        state.update(await node_generate_questions(state))  # type: ignore[typeddict-item]
+        if state.get("error"):
+            return dict(state)
+        state.update(await node_persist_questions(state))  # type: ignore[typeddict-item]
+        return dict(state)
 
-    wf.add_edge("gen_primary_tutorial", "persist_tutorial_start")
-    wf.add_edge("persist_tutorial_start", END)
+    if phase == "quiz":
+        state.update(await node_score_answers(state))  # type: ignore[typeddict-item]
+        state.update(await node_advance_state(state))  # type: ignore[typeddict-item]
+        state.update(await node_unlock_and_update_progress(state))  # type: ignore[typeddict-item]
+        state.update(await node_record_quiz_event(state))  # type: ignore[typeddict-item]
+        return dict(state)
 
-    wf.add_edge("gen_questions", "persist_questions")
-    wf.add_edge("persist_questions", END)
-
-    wf.add_edge("score_answers", "advance_state")
-    wf.add_edge("advance_state", "unlock_progress")
-
-    wf.add_edge("unlock_progress", "record_event")
-
-    return wf.compile()
-
-
-_learn_workflow: StateGraph | None = None
-
-
-# 获取节点学习工作流编译后状态图（单例）
-def get_learn_workflow() -> StateGraph:
-    """获取节点学习工作流的编译后状态图（单例）。"""
-    global _learn_workflow
-    if _learn_workflow is None:
-        _learn_workflow = _build_learn_workflow()
-    return _learn_workflow
+    return {"error": f"未知 phase: {phase}"}
 
 
 # ── 工作流节点函数 ──────────────────────────────────────────────────────────
@@ -1226,8 +1081,6 @@ async def node_record_quiz_event(state: LearnState) -> dict:
     return {}
 
 
-
-
 # ── 内部辅助函数 ──────────────────────────────────────────────────────────
 
 # 查询节点最新测验轮次编号
@@ -1235,19 +1088,6 @@ async def _latest_round(session, node_id: int) -> int:
     stmt = select(PathNodeQuestion).where(PathNodeQuestion.node_id == node_id)
     questions = list((await session.exec(stmt)).all())
     return max((q.round_no for q in questions), default=0)
-
-
-# 获取节点的主教程（primary，最早版本）
-async def _primary_tutorial(session, node_id: int) -> PathNodeTutorial | None:
-    stmt = (
-        select(PathNodeTutorial)
-        .where(
-            PathNodeTutorial.node_id == node_id,
-            PathNodeTutorial.tutorial_type == "primary",
-        )
-        .order_by(col(PathNodeTutorial.version_no).asc())
-    )
-    return (await session.exec(stmt)).first()
 
 
 # 按优先级获取路径的所有节点
@@ -1267,25 +1107,6 @@ async def _count_resources(session, node_id: int, resource_type: str) -> int:
         PathNodeResource.resource_type == resource_type,
     )
     return len(list((await session.exec(stmt)).all()))
-
-
-# 将 PathNodeResource 序列化为 DTO 字典
-def _resource_to_dict(resource) -> dict:
-    return {
-        "id": resource.id,
-        "resource_type": resource.resource_type,
-        "version_no": resource.version_no,
-        "title": resource.title,
-        "content_format": resource.content_format,
-        "content_text": resource.content_text,
-        "content_json": resource.content_json,
-        "summary": resource.summary,
-        "status": resource.status or "completed",
-        "error_message": resource.error_message,
-        "created_at": (
-            resource.created_at.isoformat() if resource.created_at else ""
-        ),
-    }
 
 
 # 将路径测验错题写入错题本
@@ -1341,7 +1162,7 @@ async def _save_wrong_questions(
 __all__ = [
     "NodeLearningAgent",
     "PathPlannerAgent",
-    "get_learn_workflow",
+    "run_learn_workflow",
     "repair_plan",
     "build_fallback_plan",
     "COMPLETED_NODE_STATUSES",

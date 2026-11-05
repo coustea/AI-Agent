@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.chat.utils.files import read_uploaded_file_content, analyze_documents
+from app.chat.attachment import read_uploaded_file_content, analyze_documents
 
 
 class TestReadUploadedFileContent:
@@ -67,13 +67,13 @@ class TestReadUploadedFileContent:
 class TestAnalyzeDocuments:
     def setup_method(self):
         self.tmpdir = tempfile.mkdtemp()
-        import app.chat.utils.files as mod
-        self._orig = mod.UPLOAD_DIR
-        mod.UPLOAD_DIR = Path(self.tmpdir)
+        import app.chat.attachment as mod
+        self._orig = mod.WORKPLACE_DIR
+        mod.WORKPLACE_DIR = Path(self.tmpdir).resolve()
 
     def teardown_method(self):
-        import app.chat.utils.files as mod
-        mod.UPLOAD_DIR = self._orig
+        import app.chat.attachment as mod
+        mod.WORKPLACE_DIR = self._orig
 
     def _create_file(self, rel_path: str, content: str = "test content") -> Path:
         p = Path(self.tmpdir) / rel_path
@@ -83,16 +83,16 @@ class TestAnalyzeDocuments:
 
     @pytest.mark.asyncio
     async def test_no_files(self):
-        result = await analyze_documents(current_user_id=1, file_urls=[], question="分析")
+        result = await analyze_documents(current_username="user1", file_urls=[], question="分析")
         assert result["success"] is False
         assert "未找到" in result["error"]
 
     @pytest.mark.asyncio
     async def test_one_file(self):
-        self._create_file("1/s1/doc.txt", "文档内容ABC")
+        self._create_file("user1/chat/s1/uploads/doc.txt", "文档内容ABC")
         result = await analyze_documents(
-            current_user_id=1,
-            file_urls=["/api/v1/ai/chat/uploads/1/s1/doc.txt"],
+            current_username="user1",
+            file_urls=["/static/user1/chat/s1/uploads/doc.txt"],
             question="总结这个文档",
         )
         assert result["success"] is True
@@ -101,23 +101,23 @@ class TestAnalyzeDocuments:
 
     @pytest.mark.asyncio
     async def test_forbidden_user(self):
-        self._create_file("2/s1/secret.txt", "secret")
+        self._create_file("user2/chat/s1/uploads/secret.txt", "secret")
         result = await analyze_documents(
-            current_user_id=1,
-            file_urls=["/api/v1/ai/chat/uploads/2/s1/secret.txt"],
+            current_username="user1",
+            file_urls=["/static/user2/chat/s1/uploads/secret.txt"],
             question="分析",
         )
         assert result["success"] is False
 
     @pytest.mark.asyncio
     async def test_multiple_files(self):
-        self._create_file("1/s1/a.txt", "content A")
-        self._create_file("1/s1/b.txt", "content B")
+        self._create_file("user1/chat/s1/uploads/a.txt", "content A")
+        self._create_file("user1/chat/s1/uploads/b.txt", "content B")
         result = await analyze_documents(
-            current_user_id=1,
+            current_username="user1",
             file_urls=[
-                "/api/v1/ai/chat/uploads/1/s1/a.txt",
-                "/api/v1/ai/chat/uploads/1/s1/b.txt",
+                "/static/user1/chat/s1/uploads/a.txt",
+                "/static/user1/chat/s1/uploads/b.txt",
             ],
             question="分析",
         )

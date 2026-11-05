@@ -10,14 +10,13 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from langchain_core.messages import HumanMessage
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.infra.database import session_scope
-from app.infra.llm import get_llm
+from app.infra.llm import HumanMessage, LLM
 from app.infra.logging import get_logger
 from app.infra.models import (
     School,
@@ -83,7 +82,7 @@ class ProfileService:
 
     def __init__(self, *, module: str = "mentor") -> None:
         self.module = module
-        self.llm = get_llm()
+        self.llm = LLM(temperature=0.1)
 
     async def get_profile(
         self,
@@ -431,7 +430,7 @@ class ProfileService:
                     "onboarding",
                     onboarding_data=json.dumps(base_info, ensure_ascii=False),
                 )
-                resp = await self.llm.ainvoke_json(
+                resp = await self.llm.json(
                     ProfileDimensionsPatch,
                     [HumanMessage(content=prompt)],
                 )
@@ -500,7 +499,7 @@ class ProfileService:
                     events_md=events_md,
                     profile_text=profile_text,
                 )
-                resp = await self.llm.ainvoke_json(
+                resp = await self.llm.json(
                     ProfileDimensionsPatch,
                     [HumanMessage(content=prompt)],
                 )
@@ -564,7 +563,7 @@ class ProfileService:
                 profile_text=profile_text,
             )
 
-            resp = await self.llm.ainvoke_json(
+            resp = await self.llm.json(
                 ProfileScoreOutput,
                 [HumanMessage(content=prompt)],
             )

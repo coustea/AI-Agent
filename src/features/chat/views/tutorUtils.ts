@@ -1,4 +1,4 @@
-import type { ChatVideoArtifact, StructuredTeachingDiagram, TeachingDiagram } from '@/features/chat/types/chat'
+import type { ChatVideoArtifact } from '@/features/chat/types/chat'
 
 export interface PendingFile {
   file?: File
@@ -59,13 +59,13 @@ export interface ChatMsg {
   content: string
   time: string
   attachments?: Attachment[] | null
-  teachingDiagram?: TeachingDiagram | null
-  teachingDiagramGenerating?: boolean
   video?: ChatVideoArtifact | null
   videoPreparing?: boolean
   videoOnly?: boolean
   agentActivities?: AgentActivity[]
   sources?: KnowledgeSource[]  // 知识库来源
+  failed?: boolean
+  errorMessage?: string
 }
 
 // 将活动中所有 running 状态统一标记为 done/failed
@@ -90,55 +90,17 @@ export const finalizeRunningAgentActivities = (
 export const finalizeAssistantGeneration = (
   message: ChatMsg,
   status: Extract<AgentActivity['status'], 'done' | 'failed'>,
+  errorMessage?: string,
 ): void => {
+  if (status === 'failed') {
+    message.failed = true
+    if (errorMessage) {
+      message.errorMessage = errorMessage
+    }
+  }
   message.agentActivities = status === 'done'
     ? []
     : finalizeRunningAgentActivities(message.agentActivities, status)
-  message.teachingDiagramGenerating = false
-}
-
-const SUPPORTED_DIAGRAM_TYPES = new Set([
-  'comparison',
-  'flowchart',
-  'sequence',
-  'framework',
-  'summary',
-  'hierarchy',
-  'tree',
-  'grid',
-  'protocol',
-  'timeline',
-])
-
-const isStructuredTeachingDiagram = (diagram: unknown): diagram is StructuredTeachingDiagram => {
-  if (!diagram || typeof diagram !== 'object') return false
-  const candidate = diagram as Partial<StructuredTeachingDiagram>
-  return Boolean(
-    typeof candidate.graph_type === 'string'
-    && SUPPORTED_DIAGRAM_TYPES.has(candidate.graph_type)
-    && candidate.title
-    && candidate.visual_content
-    && candidate.teaching_content,
-  )
-}
-
-// 兼容旧的结构化 payload、PNG payload，以及 PNG 生成失败时保留的结构化回退。
-export const normalizeTeachingDiagram = (diagram: unknown): TeachingDiagram | null => {
-  if (!diagram || typeof diagram !== 'object') return null
-  const candidate = diagram as Record<string, unknown>
-  if (candidate.kind === 'image') {
-    return typeof candidate.title === 'string' && typeof candidate.image_url === 'string' && candidate.image_url
-      ? candidate as unknown as TeachingDiagram
-      : null
-  }
-  if (candidate.kind === 'fallback') {
-    return isStructuredTeachingDiagram(candidate.diagram)
-      && typeof candidate.render_error === 'string'
-      && typeof candidate.retryable === 'boolean'
-      ? candidate as unknown as TeachingDiagram
-      : null
-  }
-  return isStructuredTeachingDiagram(candidate) ? candidate : null
 }
 
 // 根据文件名获取文档类型分类

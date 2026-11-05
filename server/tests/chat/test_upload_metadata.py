@@ -21,17 +21,17 @@ def test_save_upload_returns_structured_file_metadata(tmp_path, monkeypatch):
             return Record()
 
     class FakeFileStore:
-        def list_files(self, *, user_id: int, session_id: str):
+        def list_files(self, *, username: str, session_id: str):
             return []
 
-        async def save_upload(self, *, filename: str, content: bytes, user_id: int, session_id: str):
+        async def save_upload(self, *, filename: str, content: bytes, username: str, session_id: str):
             return UploadResponse(
-                url=f"/api/v1/ai/chat/uploads/{user_id}/{session_id}/{filename}",
+                url=f"/static/{username}/chat/{session_id}/uploads/{filename}",
                 file_type="image",
                 original_name=filename,
                 size_bytes=len(content),
             ).model_dump() | {
-                "storage_key": f"{user_id}/{session_id}/{filename}",
+                "storage_key": f"{username}/{session_id}/{filename}",
                 "mime_type": "image/png",
                 "extension": ".png",
             }
@@ -44,15 +44,15 @@ def test_save_upload_returns_structured_file_metadata(tmp_path, monkeypatch):
         use_cases.save_upload(
             filename="diagram.png",
             content=b"png-bytes",
-            user_id=7,
+            username="user7",
             session_id="s-1",
         )
     )
 
-    assert payload["url"] == "/api/v1/ai/chat/uploads/7/s-1/diagram.png"
+    assert payload["url"] == "/static/user7/chat/s-1/uploads/diagram.png"
     assert payload["file_type"] == "image"
     assert payload["original_name"] == "diagram.png"
     assert payload["size_bytes"] == 9
-    assert payload["storage_key"] == "7/s-1/diagram.png"
+    assert payload["storage_key"] == "user7/s-1/diagram.png"
     assert payload["mime_type"] == "image/png"
     assert payload["extension"] == ".png"

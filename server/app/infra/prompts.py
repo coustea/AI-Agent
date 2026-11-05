@@ -8,8 +8,8 @@ Usage::
 
     from app.infra.prompts import prompts
 
-    prompts.get("chat").render("tutor_system", session_summary_context=...)
-    prompts.get("resource").get("ppt")
+    prompts.get("chat").render("tutor_agent", session_summary_context=...)
+    prompts.get("resource").get("mindmap")
 """
 
 # 本模块加载与管理各业务模块的 prompt 模板，支持变量渲染与预热加载
@@ -193,9 +193,6 @@ prompts.register("chat_memory", _APP_DIR / "chat" / "memory" / "prompts")
 prompts.register("resource", _APP_DIR / "resource" / "prompts")
 prompts.register("path", _APP_DIR / "path" / "prompts")
 prompts.register("profile", _APP_DIR / "profile" / "prompts")
-prompts.register("quiz", _APP_DIR / "quiz" / "prompts")
-prompts.register("ppt", _APP_DIR / "shared" / "ppt")
-prompts.register("cartoon", _APP_DIR / "shared" / "cartoon")
 prompts.register("evaluation", _APP_DIR / "evaluation" / "prompts")
 
 __all__ = ["prompts", "PromptRegistry", "ModulePromptLoader", "PromptNotFoundError"]

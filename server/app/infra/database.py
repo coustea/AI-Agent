@@ -21,7 +21,6 @@ from dataclasses import dataclass, field
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
-from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import (
@@ -179,7 +178,7 @@ async def _seed_initial_data() -> None:
 
     分别检查学校、408题库数据是否为空，为空则导入。
     """
-    from app.infra.import_data import import_408_quiz, import_schools
+    from app.infra.seed import import_408_quiz, import_schools
 
     logger.info("[Database] 开始检查种子数据...")
 

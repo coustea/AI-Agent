@@ -5,15 +5,16 @@ from __future__ import annotations
 import json
 import time
 
-from app.infra.llm import get_llm
+from app.infra.llm import LLM
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_resource_context
 from app.infra.prompts import prompts
-from app.resource.schemas import AgentResult, ResourceInput
-from app.resource.schemas.quiz import (
+from app.resource.schemas import (
+    AgentResult,
     QuizBlueprintSlot,
     QuizPayload,
+    ResourceInput,
     build_quiz_blueprint,
     validate_quiz_payload,
 )
@@ -30,7 +31,7 @@ class QuizAgent(BaseResourceAgent):
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
-        self.llm = get_llm()
+        self.llm = LLM(temperature=0.1)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         parts = build_resource_context(input_data)
@@ -148,7 +149,7 @@ class QuizAgent(BaseResourceAgent):
             payload = QuizPayload.model_validate(candidate)
             validate_quiz_payload(payload, blueprint)
 
-        payload = await self.llm.ainvoke_json(
+        payload = await self.llm.json(
             QuizPayload,
             prompt,
             validator=validate_blueprint,

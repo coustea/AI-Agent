@@ -56,25 +56,6 @@ export interface UserData {
   }
 }
 
-export interface UserUpdateParams {
-  username?: string
-  email?: string
-  avatar?: string
-  onboarding_completed?: boolean
-  school?: string | null
-  school_level?: string | null
-  major?: string | null
-  grade?: string | null
-  daily_study_time?: string | null
-  global_learning_goal?: string | null
-  programming_languages?: string[] | null
-  courses?: string[] | null
-  foundational_level?: string | null
-  learning_style?: string | null
-  content_depth?: string | null
-  weak_points?: string[] | null
-}
-
 export interface AvatarUploadData {
   avatar: string
 }

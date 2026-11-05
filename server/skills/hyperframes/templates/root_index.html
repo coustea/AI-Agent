@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=1920, height=1080" />
+  <title>__TITLE__</title>
+  <script src="./assets/vendor/gsap.min.js"></script>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+    html, body {
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: #080c16;
+      font-family: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, -apple-system, sans-serif;
+      color: #f8fafc;
+    }
+    #root {
+      position: relative;
+      width: 1920px;
+      height: 1080px;
+      overflow: hidden;
+      background: radial-gradient(circle at 18% 18%, #152238 0%, #090e1a 60%, #050811 100%);
+    }
+    .hf-caption-pill {
+      position: absolute;
+      left: 180px;
+      right: 180px;
+      bottom: 34px;
+      min-height: 60px;
+      padding: 12px 32px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.88);
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: #F8FAFC;
+      font-size: 27px;
+      font-weight: 600;
+      line-height: 1.35;
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.38);
+    }
+  </style>
+</head>
+<body>
+  <div id="root" data-composition-id="main" data-start="0" data-duration="__TOTAL_DURATION__" data-width="1920" data-height="1080">
+<!-- SCENE_MOUNTS -->
+<!-- AUDIO_CLIPS -->
+<!-- CAPTION_CLIPS -->
+  </div>
+  <script>
+    window.__timelines = window.__timelines || {};
+    const tl = gsap.timeline({ paused: true });
+    window.__timelines["main"] = tl;
+  </script>
+</body>
+</html>

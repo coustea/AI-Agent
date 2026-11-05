@@ -21,7 +21,6 @@ from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import ActiveToken, User
-from app.infra.response import HttpResponse
 
 # 获取当前模块的日志记录器
 logger = get_logger(__name__)

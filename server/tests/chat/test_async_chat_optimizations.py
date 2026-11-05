@@ -1,25 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from types import SimpleNamespace
-from typing import Any
-
 import pytest
-
-
-@pytest.mark.asyncio
-async def test_knowledge_base_has_async_context_formatter(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.chat.tools import knowledge
-
-    def sync_format(query: str, *, course_name: str | None = None, top_k: int | None = None) -> tuple[str, list[dict[str, Any]]]:
-        return f"context:{query}:{top_k}", [{"rank": 1, "metadata": {}, "distance": 0.1}]
-
-    monkeypatch.setattr(knowledge, "format_knowledge_context", sync_format)
-
-    context, rows = await knowledge.aformat_knowledge_context("缓存", top_k=2)
-
-    assert context == "context:缓存:2"
-    assert rows[0]["rank"] == 1
 
 
 @pytest.mark.asyncio

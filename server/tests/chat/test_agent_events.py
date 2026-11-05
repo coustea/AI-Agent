@@ -1,54 +1,22 @@
+"""chat 事件契约与 TutorAgent ReAct 循环测试。"""
+
 from __future__ import annotations
 
-import asyncio
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.chat.agent import TutorAgent, TutorAgentState
-from app.chat.emitter import ChatEventName, SSE_EVENT_MAP, runtime_status
-from app.chat.schemas import TutorRuntimeEvent
-
-
-# ── Verify new event types exist in ChatEventName ──
+from app.chat.agent import TutorAgent
+from app.chat.schemas import TutorInput
+from app.chat.stream import ChatEventName, runtime_status
+from app.infra.llm import TextDelta, ToolCall, TurnDone
 
 
 class TestChatEventNames:
     def test_content_replace_is_valid(self):
         event: ChatEventName = "content.replace"
         assert event == "content.replace"
-
-    def test_attachment_running_is_valid(self):
-        event: ChatEventName = "attachment.running"
-        assert event == "attachment.running"
-
-    def test_attachment_completed_is_valid(self):
-        event: ChatEventName = "attachment.completed"
-        assert event == "attachment.completed"
-
-    def test_attachment_failed_is_valid(self):
-        event: ChatEventName = "attachment.failed"
-        assert event == "attachment.failed"
-
-
-# ── Verify SSE_EVENT_MAP includes event types ──
-
-
-class TestSseEventMap:
-    def test_agent_status_mapped(self):
-        assert "agent_status" in SSE_EVENT_MAP
-        assert SSE_EVENT_MAP["agent_status"] == "agent_status"
-
-    def test_content_replace_mapped(self):
-        assert "content_replace" in SSE_EVENT_MAP
-        assert SSE_EVENT_MAP["content_replace"] == "content_replace"
-
-    def test_diagram_mapped(self):
-        assert "diagram" in SSE_EVENT_MAP
-        assert SSE_EVENT_MAP["diagram"] == "diagram"
-
-
-# ── Verify runtime_status ──
 
 
 class TestRuntimeStatus:
@@ -65,58 +33,101 @@ class TestRuntimeStatus:
         assert runtime_status(None) == "running"
 
 
-class TestEmitEvent:
+def _make_input() -> TutorInput:
+    return TutorInput(
+        user_id=1,
+        username="u",
+        session_id="s1",
+        user_message_id=1,
+        question="hi",
+    )
+
+
+class TestSaveActivity:
     @pytest.mark.asyncio
-    async def test_emit_appends_to_events(self):
-        agent = TutorAgent.__new__(TutorAgent)
-        agent.memory_service = MagicMock()
+    async def test_persists_activity(self):
+        memory_service = AsyncMock()
+        agent = TutorAgent(memory_service=memory_service)
+        inp = _make_input()
+        payload = {"stage": "thinking", "status": "running"}
 
-        state: TutorAgentState = {
-            "event_queue": asyncio.Queue(),
-            "user_id": 1,
-            "session_id": "s1",
-        }
-        event = TutorRuntimeEvent(
-            type="agent_status",
-            payload={"tool_name": "search", "status": "running"},
-        )
-        result = await agent._emit_event(state, event)
-        assert len(result) == 1
-        assert result[0].type == "agent_status"
+        await agent._save_activity(inp, payload)
 
-    @pytest.mark.asyncio
-    async def test_emit_put_to_queue(self):
-        agent = TutorAgent.__new__(TutorAgent)
-        agent.memory_service = MagicMock()
-
-        queue = asyncio.Queue()
-        state: TutorAgentState = {
-            "event_queue": queue,
-            "user_id": 1,
-            "session_id": "s1",
-        }
-        event = TutorRuntimeEvent(
-            type="agent_status",
-            payload={"status": "running"},
-        )
-        await agent._emit_event(state, event)
-        assert not queue.empty()
-        queued = queue.get_nowait()
-        assert queued.type == "agent_status"
+        memory_service.upsert_activity.assert_awaited_once()
+        kwargs = memory_service.upsert_activity.await_args.kwargs
+        assert kwargs["user_id"] == 1
+        assert kwargs["session_id"] == "s1"
+        assert kwargs["payload"] == payload
 
     @pytest.mark.asyncio
-    async def test_emit_no_queue_still_returns_event(self):
-        agent = TutorAgent.__new__(TutorAgent)
-        agent.memory_service = MagicMock()
+    async def test_persist_failure_is_swallowed(self):
+        memory_service = AsyncMock()
+        memory_service.upsert_activity.side_effect = RuntimeError("db down")
+        agent = TutorAgent(memory_service=memory_service)
 
-        state: TutorAgentState = {
-            "user_id": 1,
-            "session_id": "s1",
-        }
-        event = TutorRuntimeEvent(
-            type="agent_status",
-            payload={"status": "running"},
-        )
-        result = await agent._emit_event(state, event)
-        assert len(result) == 1
-        assert result[0].type == "agent_status"
+        await agent._save_activity(_make_input(), {"stage": "thinking"})
+
+
+class _FakeLLM:
+    def __init__(self, rounds: list[list[Any]]) -> None:
+        self._rounds = rounds
+        self.calls: list[dict[str, Any]] = []
+
+    async def stream(self, messages, *, tools=None, tool_choice=None):
+        self.calls.append({"messages": list(messages), "tools": tools, "tool_choice": tool_choice})
+        items = self._rounds.pop(0) if self._rounds else [TurnDone(text="")]
+        for item in items:
+            yield item
+
+
+class TestTutorAgentLoop:
+    @pytest.mark.asyncio
+    async def test_agent_yields_plain_event_dicts(self):
+        agent = TutorAgent(memory_service=AsyncMock())
+        fake_llm = _FakeLLM([[TextDelta("你好"), TurnDone(text="你好")]])
+
+        with (
+            patch("app.chat.agent.build_messages", AsyncMock(return_value=[])),
+            patch("app.chat.agent.build_tutor_tools", return_value=[]),
+            patch("app.chat.agent.LLM", return_value=fake_llm),
+        ):
+            events = [e async for e in agent.chat(_make_input())]
+
+        assert all(set(e) == {"event", "data"} for e in events)
+        kinds = [e["event"] for e in events]
+        assert "token" in kinds
+        assert "done" in kinds
+        done = next(e for e in events if e["event"] == "done")
+        assert done["data"]["final_answer"] == "你好"
+
+    @pytest.mark.asyncio
+    async def test_agent_executes_tool_and_continues(self):
+        from pydantic import BaseModel
+        from app.shared.tools import Tool
+
+        class _Args(BaseModel):
+            q: str
+
+        async def _echo(q: str) -> dict[str, Any]:
+            return {"text": f"知识:{q}", "sources": [{"title": "T", "url": "https://x"}]}
+
+        echo_tool = Tool("echo", "Echo tool", _Args, _echo)
+        agent = TutorAgent(memory_service=AsyncMock())
+        fake_llm = _FakeLLM([
+            [TurnDone(text="", tool_calls=(ToolCall(id="c1", name="echo", args={"q": "TCP"}),))],
+            [TextDelta("最终回答"), TurnDone(text="最终回答")],
+        ])
+
+        with (
+            patch("app.chat.agent.build_messages", AsyncMock(return_value=[])),
+            patch("app.chat.agent.build_tutor_tools", return_value=[echo_tool]),
+            patch("app.chat.agent.LLM", return_value=fake_llm),
+        ):
+            events = [e async for e in agent.chat(_make_input())]
+
+        done = next(e for e in events if e["event"] == "done")
+        assert done["data"]["final_answer"] == "最终回答"
+        assert len(done["data"]["tool_invocations"]) == 1
+        assert done["data"]["tool_invocations"][0]["tool_name"] == "echo"
+        assert len(done["data"]["sources"]) == 1
+        assert done["data"]["sources"][0]["url"] == "https://x"

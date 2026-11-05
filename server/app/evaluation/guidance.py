@@ -2,7 +2,7 @@ from copy import deepcopy
 from typing import Any
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from app.infra.models import UserProfile, LearningAssessment
+from app.infra.models import UserProfile
 
 DEFAULT_GUIDANCE_STRATEGY = {
     "version": 1,

@@ -27,7 +27,7 @@ from app.profile.service import ProfileService
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 from app.resource.event import (
     RESOURCE_TERMINAL_EVENTS,
     ResourceEvents,

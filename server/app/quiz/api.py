@@ -13,7 +13,7 @@ from app.infra.logging import get_logger
 from app.infra.database import get_session
 from app.quiz.events import record_quiz_submit_event
 from app.infra.models import QuizQuestion, QuizAnswerHistory, School, User, WrongQuestion
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 from app.quiz.schemas import (
     ObjectiveQuestionResult,
     ObjectiveSubmitRequest,

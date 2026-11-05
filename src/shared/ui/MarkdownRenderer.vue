@@ -1,13 +1,14 @@
 <script setup lang="ts">
 // Markdown 渲染器：通过 Worker 异步渲染 markdown，支持流式更新、主题切换和代码复制
 
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 import {
   escapeHtml,
   renderMarkdown,
   type MarkdownTheme,
 } from '@/shared/markdown/markdown'
+import { renderMermaidBlocks } from '@/shared/markdown/mermaid'
 import { appendStreamingCaret } from '@/shared/markdown/streamingCaret'
 
 const props = withDefaults(defineProps<{
@@ -18,6 +19,7 @@ const props = withDefaults(defineProps<{
   streaming: false,
 })
 
+const contentRoot = ref<HTMLElement | null>(null)
 const renderedHtml = ref('')
 const displayedHtml = computed(() => (
   props.streaming ? appendStreamingCaret(renderedHtml.value) : renderedHtml.value
@@ -48,6 +50,8 @@ async function performRender(content: string): Promise<void> {
 
     renderedHtml.value = result.html
     degraded.value = result.degraded
+    await nextTick()
+    void renderMermaidBlocks(contentRoot.value, theme.value)
   } catch {
     if (version !== renderVersion) {
       return
@@ -189,6 +193,6 @@ onBeforeUnmount(() => {
     :data-degraded="degraded ? 'true' : 'false'"
     @click="handleClick"
   >
-    <div class="model-content" v-html="displayedHtml" />
+    <div ref="contentRoot" class="model-content" v-html="displayedHtml" />
   </div>
 </template>

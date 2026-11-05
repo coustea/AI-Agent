@@ -8,10 +8,16 @@
 from __future__ import annotations
 
 import asyncio
+import os
 
 import pytest
 
 from app.quiz.service import QuizReviewService
+
+pytestmark = pytest.mark.skipif(
+    os.getenv("RUN_LIVE_TESTS") != "1",
+    reason="Live LLM tests disabled; set RUN_LIVE_TESTS=1 to run.",
+)
 
 # 这些 case 关注「分数是否落在合理区间」，允许模型有一定波动。
 ACCURACY_CASES = [

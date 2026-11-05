@@ -19,6 +19,9 @@ class _ExecResult:
     def all(self):
         return self._rows
 
+    def first(self):
+        return len(self._rows) if self._rows else 0
+
 
 class _Session:
     def __init__(self, resources, nodes):

@@ -11,7 +11,7 @@
 | **语言** | TypeScript | ~5.9.3 |
 | **路由** | Vue Router | ^4.6.4 |
 | **样式** | Tailwind CSS | ^4.3.1 |
-| **UI 组件** | shadcn-vue + radix-vue | - |
+| **UI 组件** | shadcn-vue 结构 + reka-ui | - |
 | **状态管理** | Vue Composition API | - |
 | **HTTP 客户端** | Axios | ^1.14.0 |
 | **图表** | ECharts + vue-echarts | ^6.0.0 |
@@ -49,15 +49,14 @@ src/
 │   ├── auth/                # 认证工具（token 管理）
 │   ├── content/             # 内容渲染组件
 │   ├── markdown/            # Markdown 渲染
-│   ├── model/               # 数据模型/类型定义
 │   ├── styles/              # 全局样式
 │   └── ui/                  # 通用 UI 组件
 │
-├── components/               # 全局组件（已废弃，迁移到 shared/ui）
+├── components/ui/            # shadcn-vue 基础组件（avatar/button/dialog/select 等）
 ├── lib/                      # 工具库
 ├── test/                     # 测试文件
 ├── style.css                 # 全局样式入口
-└── main.ts                   # 应用入口
+└── app/main.ts               # 应用入口
 ```
 
 ---

@@ -126,6 +126,9 @@ def test_list_path_resources_uses_path_source_only():
             def all(self):
                 return []
 
+            def first(self):
+                return 0
+
         mock_session.exec.return_value = _EmptyResult()
 
         async def override_get_session():

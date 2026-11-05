@@ -27,12 +27,6 @@ except ImportError:  # pragma: no cover - exercised in minimal test envs
     _loguru_logger = None
     _HAS_LOGURU = False
 
-from app.config import (
-    DEEPAGENTS_DEBUG,
-    LANGCHAIN_DEBUG,
-    LANGCHAIN_VERBOSE,
-    LANGGRAPH_DEBUG,
-)
 from app.config import LOGS_DIR as LOG_DIR
 
 
@@ -208,48 +202,6 @@ def configure_logging() -> None:
     setup_logging(level="INFO", force=True)
 
 
-# 解析日志级别字符串，非法值回退为 INFO
-def _parse_level(raw: str) -> str:
-    value = (raw or "").strip().upper()
-    return value if value in {"TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"} else "INFO"
-
-
-# 判断是否启用了任意框架的调试日志
-def _debug_logging_enabled() -> bool:
-    return LANGCHAIN_DEBUG or LANGGRAPH_DEBUG or DEEPAGENTS_DEBUG
-
-
-# 设置 LangChain / LangGraph 的 debug/verbose 全局开关
-def _configure_langchain_debug_flags() -> None:
-    try:
-        from langchain_core.globals import set_debug, set_verbose
-    except Exception:
-        _loguru_logger.bind(logger_name="root").warning(
-            "[Logging] LangChain debug flags unavailable"
-        )
-        return
-
-    set_debug(LANGCHAIN_DEBUG or LANGGRAPH_DEBUG or DEEPAGENTS_DEBUG)
-    set_verbose(LANGCHAIN_VERBOSE)
-
-
-# 根据调试开关设置外部框架（langchain 等）的日志级别
-def _configure_external_logger_levels() -> None:
-    debug_names = {
-        "langchain",
-        "langchain_core",
-        "langgraph",
-        "deepagents",
-    }
-    debug_level = logging.DEBUG if _debug_logging_enabled() else logging.WARNING
-
-    for name in debug_names:
-        ext_logger = logging.getLogger(name)
-        ext_logger.setLevel(debug_level)
-        ext_logger.handlers.clear()
-        ext_logger.propagate = True
-
-
 _CONFIGURED = False
 
 
@@ -278,7 +230,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
 
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-    log_level = "DEBUG" if _debug_logging_enabled() else "INFO"
+    log_level = "INFO"
 
     # 1) 配置 loguru sinks
     _loguru_logger.remove()
@@ -337,9 +289,6 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
         ext_logger = logging.getLogger(name)
         ext_logger.handlers.clear()
         ext_logger.propagate = True
-
-    _configure_langchain_debug_flags()
-    _configure_external_logger_levels()
 
     _loguru_logger.bind(logger_name="root").info(
         "[Logging] 日志系统初始化完成: console=INFO(filtered) file=app.log+error.log level=%s",

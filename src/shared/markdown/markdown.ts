@@ -142,6 +142,14 @@ function rehypePrepareCodeBlocks(): (tree: Root) => Promise<void> {
       if (code?.type !== 'element' || code.tagName !== 'code') return
 
       const requestedLanguage = readLanguage(code)
+
+      // mermaid 代码块交给前端渲染成 SVG，不走语法高亮
+      if (requestedLanguage === 'mermaid') {
+        node.properties.dataLanguage = 'mermaid'
+        code.properties.className = ['language-mermaid']
+        return
+      }
+
       const language = shouldHighlight(toString(code), requestedLanguage) ? requestedLanguage : 'text'
       node.properties.dataLanguage = language
       if (language === 'text') {

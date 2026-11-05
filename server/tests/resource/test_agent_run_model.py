@@ -18,7 +18,7 @@ def test_agent_run_model_contract():
         "resource_id",
         "agent_id",
         "status",
-        "error_message",
+        "message",
         "elapsed_ms",
     }
     assert GeneratedResourceAgentRun in REGISTERED_MODELS

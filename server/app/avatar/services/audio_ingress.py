@@ -50,8 +50,6 @@ class AudioIngress:
             self.frames += 1
         return self.stats
 
-    def offer_item(self, item: AudioQueueItem) -> None:
-        self._offer(item)
 
     def finish(self) -> AudioIngressStats:
         if self.queue is None:

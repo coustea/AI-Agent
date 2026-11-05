@@ -18,7 +18,6 @@ export interface ChatEventHandlers {
   onEvent?: (event: ChatEvent) => void
   onContentDelta?: (delta: string, event: ChatEvent) => void
   onActivity?: (event: ChatEvent) => void
-  onDiagramReady?: (event: ChatEvent) => void
   onCompleted?: (event: ChatEvent) => void
   onFailed?: (error: Error, event: ChatEvent) => void
   onConnectionError?: (event: Event, willRetry: boolean) => void
@@ -118,11 +117,6 @@ export function useChatEvents() {
         event.event === 'activity.failed'
       ) {
         handlers.onActivity?.(event)
-      }
-
-      // 图解就绪
-      if (event.event === 'diagram.ready') {
-        handlers.onDiagramReady?.(event)
       }
 
       // 终态

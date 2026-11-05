@@ -8,15 +8,14 @@ LLM 失败时降级为 extract_fallback_summary_markdown（取前 N 行拼接）
 
 from __future__ import annotations
 
-from langchain_core.messages import HumanMessage, SystemMessage
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.prompts import prompts
-from app.chat.memory.types import extract_content_text, extract_fallback_summary_markdown
-from app.infra.llm import get_llm
+from app.chat.memory.types import extract_content_text
+from app.infra.llm import HumanMessage, LLM, SystemMessage
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
+from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
 
@@ -46,7 +45,7 @@ class ChatSessionCompressor:
         self.keep_recent = keep_recent
         self.min_messages = min_messages
         self.min_tokens = min_tokens
-        self.llm = get_llm()
+        self.llm = LLM(temperature=0.7)
 
     # 条件压缩入口：根据阈值或 force 决定是否压缩
     async def maybe_compress(
@@ -223,33 +222,21 @@ class ChatSessionCompressor:
             for msg in target
         )
 
-        # 尝试通过 LLM 生成摘要（截取前5000字符作为输入）
-        summary_markdown = None
-        try:
-            prompt = prompts.get("chat_memory").render("compression", dialogue_text=chat_text[:5000])
-            prompt = prompt
+        prompt = prompts.get("chat_memory").render("compression", dialogue_text=chat_text[:5000])
+        resp = await self.llm.text(
+            [
+                SystemMessage(content=prompt),
+                HumanMessage(content="请根据以上对话记录输出会话摘要 Markdown。"),
+            ],
+        )
+        summary_markdown = str(resp.content or "").strip()
+        if not summary_markdown:
+            raise RuntimeError("LLM 生成的会话摘要为空")
 
-            resp = await self.llm.ainvoke(
-                [
-                    SystemMessage(content=prompt),
-                    HumanMessage(content="请根据以上对话记录输出会话摘要 Markdown。"),
-                ],
-            )
-            summary_markdown = str(resp.content or "").strip()
-            logger.info(
-                "[ChatSessionCompressor._compress] LLM生成摘要成功: user_id=%s session_id=%s summary_length=%s",
-                user_id, session_id, len(summary_markdown),
-            )
-        except Exception as exc:
-            logger.warning("[ChatSessionCompressor._compress] LLM 压缩失败: %s", exc)
-
-        # LLM 失败或返回空结果时，降级为简易行拼接摘要
-        if not summary_markdown or not summary_markdown.strip():
-            summary_markdown = extract_fallback_summary_markdown(chat_text)
-            logger.info(
-                "[ChatSessionCompressor._compress] 使用降级摘要: user_id=%s session_id=%s summary_length=%s",
-                user_id, session_id, len(summary_markdown),
-            )
+        logger.info(
+            "[ChatSessionCompressor._compress] LLM生成摘要成功: user_id=%s session_id=%s summary_length=%s",
+            user_id, session_id, len(summary_markdown),
+        )
 
         # 计算下一个摘要块索引
         next_block_index = (latest_block.block_index if latest_block else 0) + 1

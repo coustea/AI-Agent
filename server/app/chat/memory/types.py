@@ -88,32 +88,12 @@ def estimate_token_count(text: str) -> int:
     return int(chinese_chars * 1.5) + non_chinese_words
 
 
-from app.chat.utils import compact_text
-
-
-# LLM 不可用时的降级摘要：取前 N 行拼接为简易 Markdown 摘要
-def extract_fallback_summary_markdown(chat_text: str, max_lines: int = 8, char_budget: int = 1200) -> str:
-    """LLM 不可用时的降级摘要 — 取前 N 行拼接为简易 Markdown 摘要。
-
-    作为 LLM 压缩失败时的兜底方案，确保压缩流程不会中断。
-    限制最大行数和总字符数，避免生成过长的摘要。
-    """
-
-    # 清理空行，保留有效内容
-    normalized_lines = [line.strip() for line in str(chat_text or "").splitlines() if line.strip()]
-    # 无有效内容返回空摘要占位
-    if not normalized_lines:
-        return "# 会话摘要\n\n- 暂无可压缩的历史对话。"
-
-    # 取前 max_lines 行，每行截断为140字符
-    selected = normalized_lines[:max_lines]
-    bullets = [f"- {compact_text(line, limit=140)}" for line in selected]
-    # 如果有更多行，添加省略提示
-    if len(normalized_lines) > max_lines:
-        bullets.append(f"- 其余 {len(normalized_lines) - max_lines} 条对话已省略。")
-    body = "\n".join(bullets)
-    # 整体压缩到字符预算内返回
-    return compact_text(f"# 会话摘要\n\n{body}", limit=char_budget)
+def compact_text(text: str, *, limit: int = 3500) -> str:
+    """截断过长文本，防止撑爆模型上下文窗口。"""
+    value = str(text or "").strip()
+    if len(value) <= limit:
+        return value
+    return value[: limit - 3].rstrip() + "..."
 
 
 # 生成空白长期记忆 Markdown 模板（含 7 个分类空占位，首次创建时使用）

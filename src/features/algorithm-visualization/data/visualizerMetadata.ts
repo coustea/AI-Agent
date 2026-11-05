@@ -27,22 +27,6 @@ export const VISUALIZER_LABELS: Record<VisualizerType, string> = {
   'dp-table': '动态规划表格',
 }
 
-// 可视化器类型按领域分类 — 与模板的 domain 分组一致
-export interface VisualizerCategoryGroup {
-  domain: string
-  label: string
-  visualizerTypes: VisualizerType[]
-}
-
-export const VISUALIZER_CATEGORIES: VisualizerCategoryGroup[] = [
-  { domain: 'sorting', label: '排序算法', visualizerTypes: ['array'] },
-  { domain: 'searching', label: '搜索算法', visualizerTypes: ['array'] },
-  { domain: 'base_data_structure', label: '基础数据结构', visualizerTypes: ['linked-list', 'stack-queue'] },
-  { domain: 'tree_structure', label: '树结构', visualizerTypes: ['tree'] },
-  { domain: 'graph_structure', label: '图结构', visualizerTypes: ['graph'] },
-  { domain: 'dynamic_programming', label: '动态规划', visualizerTypes: ['dp-table'] },
-]
-
 const DOMAIN_ORDER = Object.keys(DOMAIN_LABELS)
 
 // 获取领域标签，未匹配时自动转换

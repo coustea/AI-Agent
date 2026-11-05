@@ -1,6 +1,6 @@
 """OpenAI 兼容嵌入模型封装。
 
-使用 langchain_openai.OpenAIEmbeddings 通过 OpenAI 兼容 API 生成查询向量，
+使用 openai.OpenAI 通过 OpenAI 兼容 API 生成查询向量，
 嵌入模型配置独立于全局 LLM 配置。
 
 切换嵌入模型只需修改 config.yaml 中的 knowledge.embed_model、
@@ -16,7 +16,7 @@ import time
 from collections.abc import Sequence
 
 import httpx
-from langchain_openai import OpenAIEmbeddings
+from openai import OpenAI
 
 from app.config import KB_EMBED_API_KEY, KB_EMBED_BASE_URL, KB_EMBED_MODEL
 from app.infra.logging import get_logger
@@ -77,18 +77,16 @@ def reset_breaker() -> None:
 
 
 # 创建嵌入客户端（每次读取最新配置，模型切换无需重启）
-def _get_embeddings_client() -> OpenAIEmbeddings:
+def _get_embeddings_client() -> OpenAI:
     """创建嵌入客户端。每次读取最新配置，模型切换后无需重启。
 
-    不使用 lru_cache：config.yaml 修改 embed_model/embed_base_url/embed_api_key 后
+    不使用缓存：config.yaml 修改 embed_model/embed_base_url/embed_api_key 后
     应立即生效，缓存会导致继续使用旧模型。
     """
-    return OpenAIEmbeddings(
-        model=KB_EMBED_MODEL,
+    return OpenAI(
         api_key=KB_EMBED_API_KEY,
         base_url=KB_EMBED_BASE_URL,
-        check_embedding_ctx_length=False,
-        request_timeout=_REQUEST_TIMEOUT,
+        timeout=_REQUEST_TIMEOUT,
         http_client=_no_proxy_http_client,
     )
 
@@ -106,9 +104,9 @@ def embed_query(query: str) -> list[float] | None:
 
     try:
         client = _get_embeddings_client()
-        result = client.embed_query(query)
+        response = client.embeddings.create(model=KB_EMBED_MODEL, input=query)
         _record_success()
-        return result
+        return list(response.data[0].embedding)
     except Exception as exc:
         # 嵌入失败则记录并触发熔断计数
         _record_failure(exc.__class__.__name__)
@@ -129,9 +127,9 @@ def embed_documents(texts: list[str]) -> list[list[float]] | None:
 
     try:
         client = _get_embeddings_client()
-        result = client.embed_documents(texts)
+        response = client.embeddings.create(model=KB_EMBED_MODEL, input=list(texts))
         _record_success()
-        return result
+        return [list(item.embedding) for item in response.data]
     except Exception as exc:
         # 批量嵌入失败则记录并触发熔断计数
         _record_failure(exc.__class__.__name__)

@@ -1,24 +1,16 @@
-"""HTML PPT agent — 多智能体资源生成。
-
-职责：
-- 数据转换（upstream_handoffs → PPTSource）
-- 构建 ResourcePPT 请求
-- 路径计算和 URL 构建
-- 调用 PPTService 生成
-- 转换 PPTArtifact 为 AgentResult
-
-注意：路径规划模块的 PPT 生成由 path/service.py 直接调用 PPTService。
-"""
+"""PPTAgent — 基于 Plan-and-Execute + python-pptx + 本地 Skill 的多智能体课件生成。"""
 
 from __future__ import annotations
 
+import time as _time
 from typing import Any
 
-from app.config import resource_ppt_url, user_resource_ppt_dir
+from app.config import resource_ppt_url, static_url, user_resource_ppt_dir
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.schemas import AgentResult, DownstreamContext, ResourceInput
 from app.shared.ppt import (
+    PPTArtifact,
     PPTGenerationError,
     PPTPreferences,
     PPTService,
@@ -30,19 +22,14 @@ from app.shared.ppt import (
 logger = get_logger(__name__)
 
 
-# ── 数据转换函数 ──────────────────────────────────────────────────────
-
-
-def _source_artifacts(
-    handoffs: dict[str, DownstreamContext],
-) -> list[PPTSource]:
+def _source_artifacts(handoffs: dict[str, DownstreamContext]) -> list[PPTSource]:
     """将上游交接内容转换为 PPT 素材。"""
     artifacts: list[PPTSource] = []
-    for agent_id, handoff in handoffs.items():
+    for agent_id, handoff in (handoffs or {}).items():
         materials = list(
             dict.fromkeys(
                 str(item).strip()
-                for item in handoff.materials
+                for item in (handoff.materials or [])
                 if str(item).strip()
             )
         )
@@ -58,27 +45,18 @@ def _source_artifacts(
 
 
 def _parse_preferences(agent_config: dict[str, Any]) -> PPTPreferences:
-    """从 agent_config 中提取 PPTPreferences（去掉 agent_id 字段）。"""
-    return PPTPreferences.model_validate(
-        {k: v for k, v in agent_config.items() if k != "agent_id"}
-    )
-
-
-# ── PPTAgent ────────────────────────────────────────────────────────────
+    """从 agent_config 提取 PPTPreferences。"""
+    clean = {
+        k: v
+        for k, v in (agent_config or {}).items()
+        if k in PPTPreferences.model_fields
+    }
+    return PPTPreferences.model_validate(clean)
 
 
 @register_agent
 class PPTAgent(BaseResourceAgent):
-    """PPT Agent — 多智能体资源生成专用。
-
-    只负责 generate_resource，路径规划模块的 PPT 生成由 PathService 直接调用 PPTService。
-
-    调用链：
-    1. 数据转换：upstream_handoffs → artifacts (PPTSource)
-    2. 构建 ResourcePPT + output_dir
-    3. 调用 PPTService.generate() → PPTArtifact
-    4. 填充 html_url，转换为 AgentResult
-    """
+    """PPTAgent — 采用 Plan-and-Execute + python-pptx 生成 .pptx 与交互式预览课件。"""
 
     agent_id = "ppt"
     agent_name = "演示幻灯"
@@ -88,33 +66,14 @@ class PPTAgent(BaseResourceAgent):
         self._ppt_service = PPTService()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
-        """多智能体资源生成入口。
-
-        调用链：
-        1. 数据转换：upstream_handoffs → artifacts (PPTSource)
-        2. 构建 ResourcePPT 请求
-        3. 计算输出路径
-        4. 调用 PPTService.generate() → PPTArtifact
-        5. 填充 html_url，转换为 AgentResult
-        """
-        import time as _time
         started = _time.perf_counter()
-        username = input_data.username
+        username = input_data.username or "anonymous"
         resource_key = (
             str(input_data.resource_id)
             if input_data.resource_id is not None
-            else ""
+            else "default"
         )
 
-        # 1. 数据转换：upstream_handoffs → artifacts
-        artifacts = _source_artifacts(input_data.upstream_handoffs)
-        logger.info(
-            "Agent[%s] 开始生成: learning_need=%s artifacts=%d",
-            self.agent_id, input_data.learning_need[:32], len(artifacts),
-        )
-
-        # 2. 计划以 JSON-safe 快照跨越资源域与共享 PPT 引擎边界。禁止把
-        # Pydantic 模型或拼接后的旧文本计划隐式传入另一个领域。
         if input_data.teaching_plan is None:
             return AgentResult(
                 success=False,
@@ -123,6 +82,14 @@ class PPTAgent(BaseResourceAgent):
                 error="PPT 聚合生成缺少结构化教学计划",
                 metadata={"agent_id": self.agent_id, "generation_stage": "assembling_context"},
             )
+
+        artifacts = _source_artifacts(input_data.upstream_handoffs)
+        logger.info(
+            "Agent[%s] 开始 python-pptx 生成: learning_need=%s artifacts=%d",
+            self.agent_id,
+            input_data.learning_need[:40],
+            len(artifacts),
+        )
 
         request = ResourcePPT(
             username=username,
@@ -134,10 +101,8 @@ class PPTAgent(BaseResourceAgent):
             preferences=_parse_preferences(input_data.agent_config),
         )
 
-        # 3. 计算输出路径
         output_dir = user_resource_ppt_dir(username, resource_key)
 
-        # 4. 调用 PPTService.generate()
         async def progress(message: str, percent: int) -> None:
             await self.emitter.send(self.agent_id, "running", message, percent)
 
@@ -145,9 +110,9 @@ class PPTAgent(BaseResourceAgent):
             artifact = await self.run_with_heartbeat(
                 self._ppt_service.generate(request, output_dir, progress=progress),
                 messages=[
-                    "正在从基础资源提取可讲解的知识事实...",
-                    "正在将知识事实编译为课件结构与图解...",
-                    "正在渲染 HTML 课件，请稍候...",
+                    "正在加载 pptx 技能并规划 60-30-10 课件蓝图...",
+                    "正在并行调度 SlideSubagent 编写 python-pptx 幻灯片代码...",
+                    "正在执行 OOXML 几何防重叠审计与缩略图渲染...",
                 ],
                 interval_seconds=15.0,
                 progress=70,
@@ -156,7 +121,9 @@ class PPTAgent(BaseResourceAgent):
             elapsed_ms = int((_time.perf_counter() - started) * 1000)
             logger.exception(
                 "Agent[%s] PPT生成失败: stage=%s elapsed_ms=%d",
-                self.agent_id, exc.stage, elapsed_ms,
+                self.agent_id,
+                exc.stage,
+                elapsed_ms,
             )
             return AgentResult(
                 success=False,
@@ -169,19 +136,13 @@ class PPTAgent(BaseResourceAgent):
                 },
             )
 
-        # 5. 填充 html_url，转换为 AgentResult
         artifact.html_url = resource_ppt_url(username, resource_key)
-        elapsed_ms = int((_time.perf_counter() - started) * 1000)
-        logger.info(
-            "Agent[%s] 生成完成: slides=%d elapsed_ms=%d",
-            self.agent_id, artifact.slide_count, elapsed_ms,
-        )
+        if artifact.pptx_path and artifact.pptx_path.is_file():
+            artifact.pptx_url = static_url(artifact.pptx_path)
+
         return self._artifact_to_result(artifact)
 
     def _artifact_to_result(self, artifact: object) -> AgentResult:
-        """将 PPTArtifact 转换为 AgentResult。"""
-        from app.shared.ppt.models import PPTArtifact
-
         if not isinstance(artifact, PPTArtifact):
             return AgentResult(
                 success=False,
@@ -193,24 +154,26 @@ class PPTAgent(BaseResourceAgent):
 
         title = artifact.title
         path = artifact.path
-        logger.info(
-            "Agent[%s] 生成完成: slides=%d size_bytes=%d",
-            self.agent_id, artifact.slide_count,
-            path.stat().st_size,
+        pptx_size = (
+            artifact.pptx_path.stat().st_size
+            if artifact.pptx_path and artifact.pptx_path.is_file()
+            else path.stat().st_size
         )
         return AgentResult(
             success=True,
             title=f"{title} - 教学课件",
             file_type="html",
             content="",
-            summary=f"生成 {artifact.slide_count} 页 HTML 教学课件",
+            summary=f"生成 {artifact.slide_count} 页 PPTX 教学课件",
             metrics={"slide_count": artifact.slide_count},
             metadata={
                 "agent_id": self.agent_id,
                 "html_file_path": str(path),
                 "html_url": artifact.html_url,
+                "pptx_file_path": str(artifact.pptx_path or ""),
+                "pptx_url": artifact.pptx_url,
                 "slide_count": artifact.slide_count,
-                "file_size": path.stat().st_size,
+                "file_size": pptx_size,
                 "ppt_pipeline": ppt_pipeline_metadata(),
             },
         )

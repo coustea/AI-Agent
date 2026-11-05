@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.infra.models import LearningEvent, LearningSession
 

@@ -24,7 +24,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Literal
 
-from langchain_core.messages import HumanMessage
+from app.infra.llm import HumanMessage
 from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -181,13 +181,13 @@ class EvaluationService:
         ][:4]
 
         try:
-            from app.infra.llm import get_llm
-            llm = get_llm()
+            from app.infra.llm import LLM
+            llm = LLM(temperature=0.1)
             prompt = prompts.get("evaluation").render(
                 "assessment",
                 facts_json=json.dumps(facts, ensure_ascii=False, indent=2),
             )
-            result = await llm.ainvoke_json(
+            result = await llm.json(
                 AssessmentOutput,
                 [HumanMessage(content=prompt)],
             )

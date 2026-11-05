@@ -45,8 +45,6 @@ export interface ProfileData {
   updated_at: string | null
 }
 
-export type GlobalDimensionValue = DimensionValue
-
 export interface ProfileOnboardingData {
   base_info: BaseInfoData
   student_profile: StudentProfileData
@@ -89,21 +87,4 @@ export interface ProfileUpdate {
 
 export interface ProfileOnboardingUpdateResult {
   inference_ok: boolean
-}
-
-export function isProfileOnboardingComplete(baseInfo: BaseInfoData | null | undefined): boolean {
-  if (!baseInfo) return false
-
-  return Boolean(
-    baseInfo.school &&
-    baseInfo.major &&
-    baseInfo.grade &&
-    baseInfo.daily_study_time &&
-    baseInfo.global_learning_goal &&
-    Array.isArray(baseInfo.courses) &&
-    baseInfo.courses.length > 0 &&
-    baseInfo.foundational_level &&
-    baseInfo.learning_style &&
-    baseInfo.content_depth,
-  )
 }

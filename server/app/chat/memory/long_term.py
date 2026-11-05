@@ -19,7 +19,7 @@ from app.chat.memory.types import (
     make_default_memory_markdown,
     now,
 )
-from app.infra.llm import get_llm
+from app.infra.llm import LLM
 from app.infra.logging import get_logger
 from app.infra.models import ChatLongTermMemory, ChatSession, ChatSessionSummaryBlock
 
@@ -43,10 +43,11 @@ class ChatLongTermMemoryService:
         self,
         *,
         min_confidence: float = 0.75,
+        cooldown_minutes: int = 30,
     ) -> None:
         self.min_confidence = min_confidence
-        self.cooldown_seconds = 0  # 冷却时间由外层 evaluate_post_turn_jobs 控制
-        self.llm = get_llm()
+        self.cooldown_seconds = cooldown_minutes * 60
+        self.llm = LLM(temperature=0.1)
 
     # 判断当前轮次是否含值得持久化的稳定学习信号（用户或助手触发）
     def should_consider_update(
@@ -176,7 +177,7 @@ class ChatLongTermMemoryService:
         )
 
         # 调用 LLM 结构化输出 — 返回 need_update、memory_markdown、confidence
-        resp = await self.llm.ainvoke_json(
+        resp = await self.llm.json(
             MemoryUpdateOutput,
             prompt,
         )

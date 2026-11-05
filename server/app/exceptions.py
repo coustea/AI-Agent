@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app.auth.security import AuthError
 from app.infra.logging import get_logger
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 
 logger = get_logger(__name__)
 

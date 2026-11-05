@@ -222,7 +222,7 @@ async def test_locked_node_resource_generation_is_rejected():
     service._must_get_path = AsyncMock()
 
     with pytest.raises(ValueError, match="未解锁"):
-        await service.generate_node_resource(1, node.id, "mindmap")
+        await service.create_node_resource_task(1, node.id, "mindmap", "run-1")
 
     service._must_get_path.assert_not_awaited()
 
@@ -295,7 +295,7 @@ async def test_question_generation_uses_learn_workflow():
     service._must_get_node = AsyncMock(return_value=node)
     service._must_get_path = AsyncMock(return_value=path)
 
-    # Mock the learn workflow graph
+    # Mock the learn workflow
     mock_questions = [
         PathNodeQuestion(
             id=index,
@@ -312,18 +312,18 @@ async def test_question_generation_uses_learn_workflow():
         )
         for index in range(1, 6)
     ]
-    service.learn_graph = MagicMock()
-    service.learn_graph.ainvoke = AsyncMock(return_value={
-        "quiz_questions": mock_questions,
-        "current_tutorial": tutorial,
-        "round_no": 1,
-    })
+    with patch("app.path.service.run_learn_workflow", new_callable=AsyncMock) as mock_workflow:
+        mock_workflow.return_value = {
+            "quiz_questions": mock_questions,
+            "current_tutorial": tutorial,
+            "round_no": 1,
+        }
 
-    result = await service.generate_node_questions(path.user_id, node.id)
+        result = await service.generate_node_questions(path.user_id, node.id)
 
-    assert result.round_no == 1
-    assert len(result.questions) == 5
-    service.learn_graph.ainvoke.assert_awaited_once()
+        assert result.round_no == 1
+        assert len(result.questions) == 5
+        mock_workflow.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -368,30 +368,18 @@ async def test_auxiliary_resource_generation_uses_learn_workflow():
     service = PathService(session)
     service._must_get_node = AsyncMock(return_value=node)
     service._must_get_path = AsyncMock(return_value=path)
+    service._get_current_tutorial = AsyncMock(return_value=tutorial)
+    service._count_resources = AsyncMock(return_value=0)
 
-    # Mock the learn workflow graph to return a resource DTO with all required fields
-    service.learn_graph = MagicMock()
-    service.learn_graph.ainvoke = AsyncMock(return_value={
-        "resource_dto": {
-            "id": 1,
-            "resource_type": "mindmap",
-            "version_no": 1,
-            "title": "变量与类型 - 思维导图",
-            "content_format": "json",
-            "content_json": {"nodes": []},
-            "summary": "思维导图",
-            "created_at": "2026-06-18T00:00:00Z",
-        },
-    })
-
-    result = await service.generate_node_resource(
+    result = await service.create_node_resource_task(
         path.user_id,
         node.id,
         "mindmap",
+        "run-123",
     )
 
-    assert result.resource_type == "mindmap"
-    service.learn_graph.ainvoke.assert_awaited_once()
+    assert result.resource.resource_type == "mindmap"
+    assert result.run_id == "run-123"
 
 
 @pytest.mark.asyncio
@@ -409,7 +397,7 @@ async def test_path_service_profile_lookup_degrades_to_empty_when_profile_tables
 @pytest.mark.asyncio
 async def test_path_service_profile_markdown_degrades_when_profile_tables_unavailable():
     service = PathService(_CommitSession())
-    service.profile_builder.get_profile_markdown = AsyncMock(
+    service.profile_builder.build_profile_markdown = AsyncMock(
         side_effect=ProgrammingError("SELECT ...", {}, Exception("relation missing"))
     )
 
@@ -461,7 +449,7 @@ async def test_record_learning_event_binds_to_url_path_id_and_node_identity():
         node_id="wrong-node",
     )
 
-    event, profile_payload = await bridge.record_learning_event(path.user_id, path.id, payload)
+    event = await bridge.record_learning_event(path.user_id, path.id, payload)
 
     assert event is recorded
     bridge._must_get_path.assert_awaited_once_with(path.user_id, path.id)
@@ -574,7 +562,8 @@ async def test_path_service_has_progress_related_methods():
     """PathService should expose methods for path progress queries."""
     service = PathService(_CommitSession())
 
-    assert callable(service.get_active_path_overview)
+    assert callable(service.get_latest_active_path_overview)
+    assert callable(service.list_active_path_overviews)
     assert callable(service.get_path_by_id)
     assert callable(service.get_learning_evaluation)
 
@@ -641,27 +630,26 @@ async def test_failed_quiz_delegates_to_learn_workflow():
     service._get_round_questions = AsyncMock(return_value=questions)
     service._get_current_tutorial = AsyncMock(return_value=remediation)
 
-    # Mock the learn workflow graph
-    service.learn_graph = MagicMock()
-    service.learn_graph.ainvoke = AsyncMock(return_value={
-        "score": 0,
-        "passed": False,
-        "outcome": "remediation",
-        "weak_knowledge_points": ["变量"],
-    })
+    with patch("app.path.service.run_learn_workflow", new_callable=AsyncMock) as mock_workflow:
+        mock_workflow.return_value = {
+            "score": 0,
+            "passed": False,
+            "outcome": "completed_with_gaps",
+            "weak_knowledge_points": ["变量"],
+        }
 
-    payload = PathQuizSubmitRequest(
-        answers=[
-            PathQuizAnswerItem(question_id=question.id, response="B")
-            for question in questions
-        ]
-    )
+        payload = PathQuizSubmitRequest(
+            answers=[
+                PathQuizAnswerItem(question_id=question.id, response="B")
+                for question in questions
+            ]
+        )
 
-    result = await service.submit_node_quiz(path.user_id, node.id, payload)
+        result = await service.submit_node_quiz(path.user_id, node.id, payload)
 
-    assert result.outcome == "remediation"
-    assert result.passed is False
-    service.learn_graph.ainvoke.assert_awaited_once()
+        assert result.outcome == "completed_with_gaps"
+        assert result.passed is False
+        mock_workflow.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -726,30 +714,29 @@ async def test_second_failed_quiz_delegates_to_learn_workflow():
     service._get_round_questions = AsyncMock(return_value=questions)
     service._get_current_tutorial = AsyncMock(return_value=reinforced)
 
-    # Mock the learn workflow graph
-    service.learn_graph = MagicMock()
-    service.learn_graph.ainvoke = AsyncMock(return_value={
-        "score": 0,
-        "passed": False,
-        "outcome": "completed_with_gaps",
-        "weak_knowledge_points": ["变量"],
-        "next_node_id": 11,
-    })
+    with patch("app.path.service.run_learn_workflow", new_callable=AsyncMock) as mock_workflow:
+        mock_workflow.return_value = {
+            "score": 0,
+            "passed": False,
+            "outcome": "completed_with_gaps",
+            "weak_knowledge_points": ["变量"],
+            "next_node_id": 11,
+        }
 
-    payload = PathQuizSubmitRequest(
-        answers=[
-            PathQuizAnswerItem(question_id=question.id, response="B")
-            for question in questions
-        ]
-    )
+        payload = PathQuizSubmitRequest(
+            answers=[
+                PathQuizAnswerItem(question_id=question.id, response="B")
+                for question in questions
+            ]
+        )
 
-    result = await service.submit_node_quiz(path.user_id, node.id, payload)
+        result = await service.submit_node_quiz(path.user_id, node.id, payload)
 
-    assert result.outcome == "completed_with_gaps"
-    assert result.passed is False
-    assert result.next_node_id == 11
-    assert result.current_tutorial_id == reinforced.id
-    service.learn_graph.ainvoke.assert_awaited_once()
+        assert result.outcome == "completed_with_gaps"
+        assert result.passed is False
+        assert result.next_node_id == 11
+        assert result.current_tutorial_id == reinforced.id
+        mock_workflow.assert_awaited_once()
 
 
 def test_repair_generated_plan_recovers_empty_final_output_from_macro_stages() -> None:

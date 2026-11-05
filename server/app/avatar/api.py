@@ -5,14 +5,13 @@
 实际的 WebSocket 连接统一走主服务入口的 `/ws/avatar`。
 """
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends
 
 from app.auth.security import get_current_user
 from app.avatar.bridge.manager import avatar_bridge_manager
-from app.chat.service import get_avatar_chat_usecases, get_chat_usecases
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 
 logger = get_logger(__name__)
 
@@ -61,75 +60,3 @@ async def cleanup_avatar(
     await avatar_bridge_manager.cleanup(user.id)
     logger.info("[AvatarAPI] 清理连接资源: user_id=%s", user.id)
     return HttpResponse.success()
-
-
-@router.delete("/avatar/history")  # DELETE 清空数字人会话历史
-async def clear_avatar_history(
-    session_id: str | None = Form(default=None),
-    user: User = Depends(get_current_user),
-):
-    """清空数字人会话历史消息（默认清空当前会话）。"""
-    chat_uc = get_chat_usecases()
-
-    # 优先使用传入的 session_id，否则从 bridge 状态获取
-    target_session_id = (session_id or "").strip()
-    if not target_session_id:
-        status = await avatar_bridge_manager.get_status(user.id)
-        target_session_id = str(status.get("session_id") or "").strip()
-    # 仍未获取到则取用户最近一个会话
-    if not target_session_id:
-        sessions = await chat_uc.list_sessions(user_id=user.id, limit=1)
-        if sessions:
-            target_session_id = str(sessions[0]["id"])
-    # 无会话可清理时直接返回 0
-    if not target_session_id:
-        return HttpResponse.success(data={"session_id": "", "deleted_count": 0})
-
-    deleted_count = await chat_uc.clear_history(user.id, target_session_id)
-    logger.info("[AvatarAPI] 清空会话历史: user_id=%s session_id=%s deleted=%s", user.id, target_session_id, deleted_count)
-    return HttpResponse.success(data={"session_id": target_session_id, "deleted_count": deleted_count})
-
-
-@router.post("/avatar/attachments/analyze")  # POST 上传并分析附件（数字人调用）
-async def analyze_avatar_attachments(
-    question: str = Form(...),
-    session_id: str | None = Form(default=None),
-    files: list[UploadFile] = File(default=[]),
-    file: UploadFile | None = File(default=None),
-    attachments: str | None = Form(default=None),
-    user: User = Depends(get_current_user),
-):
-    """数字人可调用：上传并并行分析附件，返回结构化分析结果。"""
-    uc = get_avatar_chat_usecases()
-
-    # 收集所有上传文件，校验非空文件名
-    upload_payloads: list[tuple[str, bytes]] = []
-    all_uploads = list(files)
-    if file is not None:
-        all_uploads.append(file)
-    for upload in all_uploads:
-        if not upload.filename:
-            return HttpResponse.error(code=400, message="文件名不能为空")
-        upload_payloads.append((upload.filename, await upload.read()))
-
-    # 解析逗号分隔的附件 ID 列表
-    parsed_attachments = [u.strip() for u in attachments.split(",") if u.strip()] if attachments else []
-
-    try:
-        # 调用 chat 服务并行分析附件
-        payload = await uc.analyze_uploaded_attachments(
-            user_id=user.id,
-            question=question,
-            session_id=session_id,
-            files=upload_payloads,
-            attachments=parsed_attachments,
-        )
-    except ValueError as exc:
-        logger.warning("[AvatarAPI] 附件分析参数错误: user_id=%s err=%s", user.id, exc)
-        return HttpResponse.error(code=400, message=str(exc))
-    except Exception as exc:
-        logger.error("[AvatarAPI] 附件分析失败: user_id=%s err=%s", user.id, exc)
-        return HttpResponse.error(code=500, message=f"附件分析失败: {exc}")
-
-    logger.info("[AvatarAPI] 附件分析完成: user_id=%s file_count=%s", user.id, len(upload_payloads))
-    return HttpResponse.success(data=payload)

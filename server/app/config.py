@@ -100,9 +100,8 @@ SERVER_DIR = Path(__file__).resolve().parents[1]
 WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
 # 日志输出目录：server/logs/
 LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
-# 知识库目录：server/app/rag/data/index/（KB_DIR 是别名，供其他模块引用）
-KNOWLEDGE_BASE_DIR = SERVER_DIR / KB_DIR_NAME
-KB_DIR = KNOWLEDGE_BASE_DIR
+# 知识库目录：server/app/rag/data/index/
+KB_DIR = SERVER_DIR / KB_DIR_NAME
 
 
 # ============ 用户路径构建函数 ============
@@ -227,7 +226,6 @@ def chat_upload_url(username: str, session_id: str, filename: str) -> str:
     return f"/static/{username}/chat/{session_id}/uploads/{filename}"
 
 
-
 # 构建资源 PPT URL
 def resource_ppt_url(username: str, resource_id: str) -> str:
     """构建资源 PPT URL：/static/{username}/resources/{resource_id}/ppt/slides.html"""
@@ -239,17 +237,6 @@ def path_node_ppt_url(username: str, path_id: str, node_id: str) -> str:
     """构建路径节点 PPT URL：/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"""
     return f"/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"
 
-
-# 构建资源动画 URL
-def resource_cartoon_url(username: str, resource_id: str, filename: str = "index.html") -> str:
-    """构建资源动画 URL：/static/{username}/resources/{resource_id}/cartoon/{filename}"""
-    return f"/static/{username}/resources/{resource_id}/cartoon/{filename}"
-
-
-# 构建路径节点动画 URL
-def path_node_cartoon_url(username: str, path_id: str, node_id: str, filename: str = "index.html") -> str:
-    """构建路径节点动画 URL：/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"""
-    return f"/static/{username}/paths/{path_id}/nodes/{node_id}/cartoon/{filename}"
 
 # ============ 知识库配置 ============
 # 仅保留部署/调优参数；collection、切分、RRF 等实现细节下沉为 RAG 模块常量
@@ -265,22 +252,6 @@ KB_EMBED_API_KEY = get("knowledge.embed_api_key", "sk-placeholder")
 KB_TOP_K = get("knowledge.top_k", 4)
 # 返回给 ChatAgent 的最大上下文字符数
 KB_MAX_CONTEXT_CHARS = get("knowledge.max_context_chars", 6000)
-
-# ============ 日志配置 ============
-# LangChain 调试开关
-LANGCHAIN_DEBUG = False
-# LangChain 详细输出开关
-LANGCHAIN_VERBOSE = False
-# LangGraph 调试开关
-LANGGRAPH_DEBUG = False
-# DeepAgents 调试开关
-DEEPAGENTS_DEBUG = False
-
-# ============ 搜索引擎 API 密钥 ============
-# Tavily 搜索 API 密钥
-TAVILY_KEY = get("search.tavily_key", "")
-# 讯飞星火搜索 API 密钥
-SPARK_SEARCH_KEY = get("search.spark_key", "")
 
 # ============ 数字人（Avatar）配置 ============
 # 讯飞数字人应用 ID
@@ -317,14 +288,8 @@ SPARK_API_KEY = get("spark.api_key", "")
 # 星火大模型 API 密钥签名
 SPARK_API_SECRET = get("spark.api_secret", "")
 
-# 星火 TTS 配置（回退到通用 Spark 配置）
-SPARK_TTS_APP_ID = get("spark.app_id", SPARK_APP_ID)
-SPARK_TTS_API_KEY = get("spark.api_key", SPARK_API_KEY)
-SPARK_TTS_API_SECRET = get("spark.api_secret", SPARK_API_SECRET)
 
 # ============ 聊天附件与保护机制 ============
-# 单个文件内容最大读取字符数（防止超大文件撑爆上下文）
-MAX_FILE_CONTENT_CHARS = get("chat.max_file_content_chars", 15000)
 # 单次请求最大上传文件数
 MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
 
@@ -343,24 +308,11 @@ UPDATE_MIN_TOKENS = get("memory.update_min_tokens", 6000)
 # 长期记忆最低置信度
 LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
 
-# ============ 模型推理参数 ============
-# 从 models.main.temperature 读取温度参数
-temp_config = get("models.main.temperature", {})
-JSON_TEMPERATURE = temp_config.get("json", 0.1)
-STREAM_TEMPERATURE = temp_config.get("stream", 1.0)
-DEFAULT_TEMPERATURE = temp_config.get("default", 0.7)
-# 视觉模型温度参数
-VISION_TEMPERATURE = get("models.vision.temperature", 0.7)
-
 # ============ Chat 扩展配置 ============
 # 支持的图片扩展名集合
 IMAGE_EXTENSIONS: set[str] = set(get("chat.image_extensions", ["png", "jpg", "jpeg", "gif", "webp"]))
 # 构建对话上下文时拉取的历史消息条数
 CHAT_HISTORY_LIMIT: int = get("chat.history_limit", 20)
-
-# ============ 评估配置 ============
-# 连续学习天数判定阈值（秒），每天至少这么多秒才算活跃
-STREAK_MIN_SECONDS: int = get("evaluation.streak_min_seconds", 300)
 
 # ============ 路径规划配置 ============
 # 路径节点测验题目数量

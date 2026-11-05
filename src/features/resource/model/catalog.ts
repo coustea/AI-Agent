@@ -96,33 +96,9 @@ export const scenarioOptions: Array<{ icon: string; name: string; value: Learnin
   { icon: '径', name: '路径学习', value: 'path_learning' },
 ]
 
-export const getScenarioDesc = (scenario: string) => {
-  const descMap: Record<string, string> = {
-    exam_prep: '针对考试重点进行高强度强化训练',
-    daily_review: '循序渐进地巩固每日所学知识点',
-    project_practice: '侧重于代码实战与工程化应用能力',
-    self_study: '系统化地探索新知识领域的基础架构',
-    path_learning: '基于学习路径节点生成配套资源',
-  }
-  return descMap[scenario] || ''
-}
-
 export const getResourceTypeLabel = (type: string) => {
   const label = getArtifactLabel(type)
   return label === type ? getAgentMeta(type).name || type : label
-}
-
-export const getResourceToneClass = (type: string) => {
-  const toneMap: Record<string, string> = {
-    content: 'tone-blue',
-    mindmap: 'tone-purple',
-    code: 'tone-rose',
-    quiz: 'tone-emerald',
-    reading: 'tone-indigo',
-    ppt: 'tone-pink',
-    cartoon: 'tone-blue',
-  }
-  return toneMap[type] || 'tone-blue'
 }
 
 export type AgentEventLog = {
@@ -166,8 +142,4 @@ export function createDagNode(id: string, isSystem: boolean): DagNodeState {
     eventLogs: [],
     isSystem,
   }
-}
-
-export function getDagNodeIcon(type: string): string {
-  return AGENT_DISPLAY[type]?.icon || '📄'
 }

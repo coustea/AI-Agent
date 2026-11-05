@@ -23,7 +23,7 @@ def test_analysis_prompt_counts_key_intermediate_values_as_process() -> None:
     assert "不得把已经给出算法顺序、公式或关键中间结果的答案认定为“仅写出最终结果”" in prompt
 
 
-def _ainvoke_text_result(score: int, feedback: str = "评分完成", hints: list[str] | None = None) -> str:
+def _text_result(score: int, feedback: str = "评分完成", hints: list[str] | None = None) -> str:
     return json.dumps(
         {
             "score": score,
@@ -41,9 +41,9 @@ def _ainvoke_text_result(score: int, feedback: str = "评分完成", hints: list
 )
 async def test_review_uses_sixty_point_pass_boundary(score: int, is_correct: bool) -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock(return_value=_ainvoke_text_result(score))
+    llm.text = AsyncMock(return_value=_text_result(score))
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         result = await QuizReviewService().review(
             question_type="分析题",
             question_content="分析死锁条件",
@@ -55,17 +55,17 @@ async def test_review_uses_sixty_point_pass_boundary(score: int, is_correct: boo
     assert result["score"] == score
     assert result["is_correct"] is is_correct
     assert result["improvement_hints"] == ["建议1", "建议2"]
-    llm.ainvoke_text.assert_awaited()
-    kwargs = llm.ainvoke_text.await_args.kwargs
+    llm.text.assert_awaited()
+    kwargs = llm.text.await_args.kwargs
     assert kwargs.get("max_tokens") == 220
 
 
 @pytest.mark.asyncio
 async def test_review_falls_back_to_keyword_coverage_when_llm_fails() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock(side_effect=RuntimeError("provider unavailable"))
+    llm.text = AsyncMock(side_effect=RuntimeError("provider unavailable"))
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         result = await QuizReviewService().review(
             question_type="分析题",
             question_content="分析死锁条件",
@@ -80,9 +80,9 @@ async def test_review_falls_back_to_keyword_coverage_when_llm_fails() -> None:
 @pytest.mark.asyncio
 async def test_review_fallback_scores_empty_answer_as_zero() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock(side_effect=RuntimeError("provider unavailable"))
+    llm.text = AsyncMock(side_effect=RuntimeError("provider unavailable"))
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         result = await QuizReviewService().review(
             question_type="分析题",
             question_content="分析死锁条件",
@@ -92,7 +92,7 @@ async def test_review_fallback_scores_empty_answer_as_zero() -> None:
 
     assert result["score"] == 0
     assert result["is_correct"] is False
-    llm.ainvoke_text.assert_not_called()
+    llm.text.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -102,10 +102,10 @@ async def test_review_timeout_uses_fallback_without_hanging() -> None:
     async def never_finishes(*_args, **_kwargs):
         await asyncio.sleep(10)
 
-    llm.ainvoke_text = AsyncMock(side_effect=never_finishes)
+    llm.text = AsyncMock(side_effect=never_finishes)
 
     with (
-        patch("app.quiz.service.get_llm", return_value=llm),
+        patch("app.quiz.service.LLM", return_value=llm),
         patch("app.quiz.service.QUIZ_REVIEW_TIMEOUT_SECONDS", 0.01),
     ):
         result = await QuizReviewService().review(
@@ -122,9 +122,9 @@ async def test_review_timeout_uses_fallback_without_hanging() -> None:
 @pytest.mark.asyncio
 async def test_fill_blank_exact_match_skips_llm() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock()
+    llm.text = AsyncMock()
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         result = await QuizReviewService().review(
             question_type="填空题",
             question_content="操作系统的英文缩写是？",
@@ -135,15 +135,15 @@ async def test_fill_blank_exact_match_skips_llm() -> None:
     assert result["score"] == 100
     assert result["is_correct"] is True
     assert result["feedback"] == "答案正确"
-    llm.ainvoke_text.assert_not_called()
+    llm.text.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_fill_blank_multi_blank_and_alternatives_skip_llm() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock()
+    llm.text = AsyncMock()
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         result = await QuizReviewService().review(
             question_type="fill_blank",
             question_content="填写概念",
@@ -153,15 +153,15 @@ async def test_fill_blank_multi_blank_and_alternatives_skip_llm() -> None:
 
     assert result["score"] == 100
     assert result["is_correct"] is True
-    llm.ainvoke_text.assert_not_called()
+    llm.text.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_fill_blank_mismatch_skips_llm_and_scores_zero() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock()
+    llm.text = AsyncMock()
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         result = await QuizReviewService().review(
             question_type="填空题",
             question_content="操作系统的英文缩写是？",
@@ -171,15 +171,15 @@ async def test_fill_blank_mismatch_skips_llm_and_scores_zero() -> None:
 
     assert result["score"] == 0
     assert result["is_correct"] is False
-    llm.ainvoke_text.assert_not_called()
+    llm.text.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_empty_answer_skips_llm() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock()
+    llm.text = AsyncMock()
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         result = await QuizReviewService().review(
             question_type="分析题",
             question_content="分析死锁条件",
@@ -190,13 +190,13 @@ async def test_empty_answer_skips_llm() -> None:
     assert result["score"] == 0
     assert result["is_correct"] is False
     assert result["feedback"] == "本题未作答"
-    llm.ainvoke_text.assert_not_called()
+    llm.text.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_review_batch_preserves_order_and_mixes_rule_with_llm() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock(
+    llm.text = AsyncMock(
         return_value=json.dumps(
             {
                 "score": 88,
@@ -208,7 +208,7 @@ async def test_review_batch_preserves_order_and_mixes_rule_with_llm() -> None:
     )
 
     service = QuizReviewService(concurrency=2)
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         results = await service.review_batch(
             [
                 {
@@ -243,13 +243,13 @@ async def test_review_batch_preserves_order_and_mixes_rule_with_llm() -> None:
     assert results[1]["score"] == 88
     assert results[2]["score"] == 0
     # 仅 1 道分析题 → 单题路径，调用 1 次
-    assert llm.ainvoke_text.await_count == 1
+    assert llm.text.await_count == 1
 
 
 @pytest.mark.asyncio
 async def test_review_batch_multi_analysis_uses_one_llm_call() -> None:
     llm = AsyncMock()
-    llm.ainvoke_text = AsyncMock(
+    llm.text = AsyncMock(
         return_value=json.dumps(
             {
                 "results": [
@@ -278,7 +278,7 @@ async def test_review_batch_multi_analysis_uses_one_llm_call() -> None:
     )
 
     service = QuizReviewService(concurrency=2)
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         results = await service.review_batch(
             [
                 {
@@ -295,7 +295,7 @@ async def test_review_batch_multi_analysis_uses_one_llm_call() -> None:
 
     assert [item["score"] for item in results] == [70, 80, 90]
     # 3 道分析题合并为 1 次 LLM
-    assert llm.ainvoke_text.await_count == 1
+    assert llm.text.await_count == 1
 
 
 @pytest.mark.asyncio
@@ -310,12 +310,12 @@ async def test_review_parallel_limits_llm_concurrency() -> None:
         max_active = max(max_active, active)
         await asyncio.sleep(0.05)
         active -= 1
-        return _ainvoke_text_result(70, "ok", [])
+        return _text_result(70, "ok", [])
 
-    llm.ainvoke_text = AsyncMock(side_effect=slow_text)
+    llm.text = AsyncMock(side_effect=slow_text)
     service = QuizReviewService(concurrency=2)
 
-    with patch("app.quiz.service.get_llm", return_value=llm):
+    with patch("app.quiz.service.LLM", return_value=llm):
         results = await asyncio.gather(
             *[
                 service.review(
@@ -330,4 +330,4 @@ async def test_review_parallel_limits_llm_concurrency() -> None:
 
     assert len(results) == 5
     assert max_active <= 2
-    assert llm.ainvoke_text.await_count == 5
+    assert llm.text.await_count == 5

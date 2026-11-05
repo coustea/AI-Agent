@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from app.infra.llm import get_llm
+from app.infra.llm import LLM
 from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.agents.common import build_path_context, build_resource_context
@@ -27,7 +27,7 @@ class CodeAgent(BaseResourceAgent):
 
     def __init__(self, emitter=None):
         super().__init__(emitter=emitter)
-        self.llm = get_llm()
+        self.llm = LLM(temperature=0.7)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         return await self._generate_code(
@@ -97,7 +97,7 @@ class CodeAgent(BaseResourceAgent):
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))
         llm_started = time.perf_counter()
         content = await self.run_with_heartbeat(
-            self.llm.ainvoke_text(full_prompt),
+            self.llm.text(full_prompt),
             messages=[
                 "正在生成教学示例代码...",
                 "正在补充代码注释与运行说明...",

@@ -10,15 +10,31 @@ from pydantic import ValidationError
 from app.resource.schemas import ResourcePlan
 from app.resource.agents.reading import ReadingPayload
 from app.resource.agents.quiz import QuizPayload
-from app.shared.video.schemas import VideoMaterialDigest, VideoOutline, SceneDraft
 from app.chat.memory.types import MemoryUpdateOutput
 
 
 # ============ 典型 LLM 输出样本 ============
 
 RESOURCE_PLAN_JSON = {
-    "content": "# 资源生成协同计划\n\n## 1. 用户需求理解\n- 理解三次握手\n\n### [content]\n- 生成目标：讲解TCP三次握手\n\n### [mindmap]\n- 生成目标：知识结构",
-    "title": "TCP三次握手",
+    "schema_version": 1,
+    "learner_goal": "掌握TCP三次握手与四次挥手的核心原理与状态流转过程",
+    "scope": ["三次握手流程", "SYN/ACK标志位", "连接建立状态"],
+    "tasks": [
+        {
+            "agent_id": "content",
+            "objective": "系统化梳理TCP握手的状态迁移与报文结构",
+            "focus": ["状态迁移", "报文序列号"],
+            "required_elements": ["SYN标志位", "ACK标志位"],
+            "avoid": ["拥塞控制算法"],
+        },
+        {
+            "agent_id": "mindmap",
+            "objective": "构建TCP握手整体知识脉络与关联考点思维导图",
+            "focus": ["知识架构", "关键步骤"],
+            "required_elements": ["三次握手结构"],
+            "avoid": ["细节过度展开"],
+        },
+    ],
 }
 
 READING_PAYLOAD_JSON = {
@@ -63,52 +79,6 @@ MEMORY_UPDATE_OUTPUT_JSON = {
     "update_reason": "发现新的学习偏好",
 }
 
-VIDEO_MATERIAL_DIGEST_JSON = {
-    "topic": "Python 爬虫",
-    "audience": "初学者",
-    "learning_goal": "理解爬虫原理",
-    "core_concepts": ["requests", "BeautifulSoup"],
-    "facts": ["requests 是最流行的 HTTP 库"],
-    "examples": ["import requests"],
-    "process_steps": ["发送请求", "解析响应"],
-    "misconceptions": ["爬虫不是黑客工具"],
-    "practice_prompts": ["尝试抓取一个网页"],
-    "visual_opportunities": ["代码演示"],
-    "source_map": {"content": ["o1"]},
-}
-
-VIDEO_OUTLINE_JSON = {
-    "title": "Python 爬虫视频教程",
-    "topic": "Python 爬虫",
-    "duration_seconds": 120,
-    "scenes": [
-        {
-            "scene_id": "sc1",
-            "index": 1,
-            "role": "hook",
-            "title": "简介",
-            "duration_seconds": 60,
-            "learning_objective": "了解爬虫概念",
-            "visual_type": "title_intro",
-            "content_hint": "主持人开场",
-            "required_sources": ["reading"],
-        },
-    ],
-}
-
-SCENE_DRAFT_JSON = {
-    "scene_id": "sc1",
-    "index": 1,
-    "title": "开场介绍",
-    "narration": "今天我们学习 Python 爬虫",
-    "captions": ["欢迎"],
-    "on_screen_text": ["Python 爬虫入门"],
-    "visual_prompt": "主持人讲解",
-    "visual_type": "concept_explain",
-    "visual": {"concept": "网络爬虫", "explanation": "自动获取网页内容的程序"},
-    "source_agents": ["reading"],
-}
-
 
 # ============ 测试 ============
 
@@ -116,13 +86,13 @@ SCENE_DRAFT_JSON = {
 class TestResourcePlanSchema:
     def test_parses_valid_json(self) -> None:
         result = ResourcePlan.model_validate(RESOURCE_PLAN_JSON)
-        assert result.title == "TCP三次握手"
+        assert result.learner_goal.startswith("掌握TCP三次握手")
         assert result.agent_ids == ["content", "mindmap"]
-        assert result.has_agent("content")
+        assert "content" in result.agent_ids
 
     def test_rejects_empty_content(self) -> None:
         with pytest.raises(ValidationError):
-            ResourcePlan.model_validate({"content": "", "title": "test"})
+            ResourcePlan.model_validate({"tasks": []})
 
 
 class TestReadingPayloadSchema:
@@ -136,16 +106,6 @@ class TestQuizPayloadSchema:
     def test_parses_valid_json(self) -> None:
         result = QuizPayload.model_validate(QUIZ_PAYLOAD_JSON)
         assert result.questions[0].answer == "A"
-
-
-class TestVideoSchemas:
-    def test_video_material_digest_parses(self) -> None:
-        result = VideoMaterialDigest.model_validate(VIDEO_MATERIAL_DIGEST_JSON)
-        assert result.topic != ""
-
-    def test_scene_draft_parses(self) -> None:
-        result = SceneDraft.model_validate(SCENE_DRAFT_JSON)
-        assert result.scene_id == "sc1"
 
 
 class TestSchemaRoundTrip:

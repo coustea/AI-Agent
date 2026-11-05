@@ -352,3 +352,34 @@
     animation: none;
   }
 }
+
+/* Mermaid 图解：由前端渲染成 SVG，占满内容宽度并居中 */
+.markdown-renderer .mermaid-diagram {
+  display: flex;
+  justify-content: center;
+  margin: 1.25rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  border-radius: 12px;
+  background: var(--surface-raised, rgba(255, 255, 255, 0.6));
+}
+
+.markdown-renderer .mermaid-diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+/* Mermaid 渲染失败：保留源码并标红提示 */
+.markdown-renderer pre[data-mermaid-error='true'] {
+  border-left: 3px solid #dc2626;
+}
+
+.markdown-renderer pre[data-mermaid-error='true']::after {
+  content: '图解渲染失败，已显示源码';
+  display: block;
+  padding: 0.25rem 0.75rem 0.5rem;
+  font-size: 0.75rem;
+  color: #dc2626;
+}

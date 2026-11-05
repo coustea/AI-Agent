@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>__DECK_TITLE__</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0f172a;
+      color: #f8fafc;
+      font-family: "PingFang SC", -apple-system, BlinkMacSystemFont, sans-serif;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .stage {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px 20px 8px;
+      min-height: 0;
+    }
+    .slide-frame {
+      max-width: 100%;
+      max-height: 100%;
+      aspect-ratio: 16 / 9;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: #1e293b;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .slide-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .bottom-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 20px;
+      background: rgba(15, 23, 42, 0.92);
+      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      font-size: 13px;
+    }
+    .notes-box {
+      flex: 1;
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn:hover { background: #334155; }
+    .btn-primary {
+      background: #2563eb;
+      border-color: #3b82f6;
+    }
+    .btn-primary:hover { background: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="slide-frame">
+      <img id="slide-img" alt="Slide Preview" />
+    </div>
+  </div>
+  <div class="bottom-bar">
+    <div class="notes-box" id="slide-notes"></div>
+    <div class="controls">
+      <button class="btn" id="prev-btn" type="button">上一页</button>
+      <span id="page-indicator">1 / 1</span>
+      <button class="btn" id="next-btn" type="button">下一页</button>
+      <a class="btn btn-primary" href="./deck.pptx" download="__DECK_TITLE__.pptx">下载 .pptx 原文件</a>
+    </div>
+  </div>
+  <script>
+    const SLIDES = __SLIDES_JSON__;
+    let current = 1;
+    const total = SLIDES.length || 1;
+
+    function notifyParent(type) {
+      try {
+        window.parent?.postMessage({
+          source: 'mentorly-ppt',
+          type: type || 'state',
+          current: current,
+          total: total,
+        }, '*');
+      } catch (_) {}
+    }
+
+    function render() {
+      const item = SLIDES[current - 1] || {};
+      const img = document.getElementById('slide-img');
+      const notes = document.getElementById('slide-notes');
+      const indicator = document.getElementById('page-indicator');
+      if (img && item.image) img.src = item.image;
+      if (notes) notes.textContent = item.notes ? ('讲稿：' + item.notes) : '';
+      if (indicator) indicator.textContent = current + ' / ' + total;
+      notifyParent('state');
+    }
+
+    function go(delta) {
+      const next = Math.max(1, Math.min(total, current + delta));
+      if (next !== current) {
+        current = next;
+        render();
+      }
+    }
+
+    document.getElementById('prev-btn')?.addEventListener('click', () => go(-1));
+    document.getElementById('next-btn')?.addEventListener('click', () => go(1));
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') go(1);
+      if (e.key === 'ArrowLeft' || e.key === 'PageUp') go(-1);
+    });
+
+    window.addEventListener('message', (event) => {
+      const data = event.data;
+      if (!data || data.source !== 'mentorly-ppt' || data.type !== 'command') return;
+      if (data.action === 'next') go(1);
+      else if (data.action === 'previous') go(-1);
+      else if (data.action === 'state') notifyParent('state');
+    });
+
+    render();
+    notifyParent('ready');
+  </script>
+</body>
+</html>

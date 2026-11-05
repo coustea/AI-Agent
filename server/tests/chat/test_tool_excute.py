@@ -1,8 +1,8 @@
-"""Tool 和 ToolExcute 单元测试 — 自研工具调用框架。
+"""Tool 和 ToolRegistry 单元测试 — 自研工具调用框架。
 
 测试覆盖：
   - Tool 类：注册、描述 Schema 生成、参数校验
-  - ToolExcute 类：注册与查询工具、参数校验、执行、并发执行、生命周期事件
+  - ToolRegistry 类：注册与查询工具、参数校验、执行、并发执行、生命周期事件
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from pydantic import BaseModel, Field
 
-from app.infra.tool_excute import Tool, ToolExcute
+from app.shared.tools import Tool, ToolRegistry
 
 
 class EchoArgs(BaseModel):
@@ -69,27 +69,27 @@ class TestTool:
         assert schema["function"]["parameters"]["required"] == ["message"]
 
 
-# ── ToolExcute 注册测试 ──
+# ── ToolRegistry 注册测试 ──
 
 
-class TestToolExcuteRegistration:
-    def test_tool_excute_has_no_model_or_model_invocation_responsibility(self):
-        tool_excute = ToolExcute()
+class TestToolRegistryRegistration:
+    def test_tool_registry_has_no_model_or_model_invocation_responsibility(self):
+        registry = ToolRegistry()
 
-        assert not hasattr(tool_excute, "model")
-        assert not hasattr(tool_excute, "invoke")
-        assert not hasattr(ToolExcute, "_normalize_response_calls")
+        assert not hasattr(registry, "model")
+        assert not hasattr(registry, "invoke")
+        assert not hasattr(ToolRegistry, "_normalize_response_calls")
 
     def test_register_single_tool(self):
         async def handler() -> str:
             return "ok"
 
-        tool_excute = ToolExcute()
-        tool = tool_excute.register(
+        registry = ToolRegistry()
+        tool = registry.register(
             Tool("test", "Test tool.", EchoArgs, handler)
         )
         assert tool.name == "test"
-        assert tool_excute.get_tool("test") == tool
+        assert registry.get_tool("test") == tool
 
     def test_register_many_tools(self):
         async def echo(msg: str) -> str:
@@ -102,55 +102,54 @@ class TestToolExcuteRegistration:
             Tool("echo", "Echo tool.", EchoArgs, echo),
             Tool("search", "Search tool.", SearchArgs, search),
         ]
-        tool_excute = ToolExcute(tools=tools)
-        assert len(tool_excute.get_tools()) == 2
-        assert tool_excute.get_tool("echo").name == "echo"
-        assert tool_excute.get_tool("search").name == "search"
+        registry = ToolRegistry(tools=tools)
+        assert registry.get_tool("echo").name == "echo"
+        assert registry.get_tool("search").name == "search"
 
     def test_duplicate_registration_raises(self):
         async def handler() -> str:
             return ""
 
-        tool_excute = ToolExcute()
-        tool_excute.register(Tool("test", "Test.", EchoArgs, handler))
+        registry = ToolRegistry()
+        registry.register(Tool("test", "Test.", EchoArgs, handler))
         with pytest.raises(ValueError, match="Tool already registered"):
-            tool_excute.register(Tool("test", "Another.", EchoArgs, handler))
+            registry.register(Tool("test", "Another.", EchoArgs, handler))
 
     def test_get_unknown_tool_raises(self):
-        tool_excute = ToolExcute()
+        registry = ToolRegistry()
         with pytest.raises(KeyError, match="Unknown tool"):
-            tool_excute.get_tool("nonexistent")
+            registry.get_tool("nonexistent")
 
 
-# ── ToolExcute.get_tools_description 测试 ──
+# ── ToolRegistry.get_tools_description 测试 ──
 
 
-class TestToolExcuteDescription:
+class TestToolRegistryDescription:
     def test_get_tools_description_returns_schema_list(self):
         async def echo(msg: str) -> str:
             return msg
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("echo", "Echo.", EchoArgs, echo)],
         )
-        descriptions = tool_excute.get_tools_description()
+        descriptions = registry.get_tools_description()
         assert len(descriptions) == 1
         assert descriptions[0]["function"]["name"] == "echo"
 
 
-# ── ToolExcute.execute 单工具执行测试 ──
+# ── ToolRegistry.execute 单工具执行测试 ──
 
 
-class TestToolExcuteExecute:
+class TestToolRegistryExecute:
     @pytest.mark.asyncio
     async def test_execute_validates_args_with_pydantic(self):
         async def echo(message: str, repeat: int = 1) -> str:
             return message * repeat
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("echo", "Echo.", EchoArgs, echo)],
         )
-        result = await tool_excute.execute({
+        result = await registry.execute({
             "name": "echo",
             "args": {"message": "hi", "repeat": 3},
         })
@@ -161,10 +160,10 @@ class TestToolExcuteExecute:
         async def echo(message: str, repeat: int = 1) -> str:
             return message * repeat
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("echo", "Echo.", EchoArgs, echo)],
         )
-        result = await tool_excute.execute({
+        result = await registry.execute({
             "name": "echo",
             "args": {"message": "hi"},
         })
@@ -175,132 +174,37 @@ class TestToolExcuteExecute:
         async def echo(message: str, repeat: int = 1) -> str:
             return message * repeat
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("echo", "Echo.", EchoArgs, echo)],
         )
         with pytest.raises(Exception):  # Pydantic ValidationError
-            await tool_excute.execute({
+            await registry.execute({
                 "name": "echo",
                 "args": {"repeat": 10},  # repeat > 5 violates Field(le=5)
             })
 
     @pytest.mark.asyncio
     async def test_execute_empty_name_raises(self):
-        tool_excute = ToolExcute()
+        registry = ToolRegistry()
         with pytest.raises(ValueError, match="Tool call name cannot be empty"):
-            await tool_excute.execute({"name": "", "args": {}})
+            await registry.execute({"name": "", "args": {}})
 
     @pytest.mark.asyncio
     async def test_execute_missing_args_raises(self):
         async def handler() -> str:
             return ""
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("test", "Test.", EchoArgs, handler)],
         )
         with pytest.raises(ValueError, match="Tool arguments must be an object"):
-            await tool_excute.execute({"name": "test", "args": None})
+            await registry.execute({"name": "test", "args": None})
 
 
-# ── ToolExcute.execute_all 并发执行测试 ──
+# ── ToolRegistry 事件通知测试 ──
 
 
-class TestToolExcuteExecuteAll:
-    @pytest.mark.asyncio
-    async def test_execute_all_runs_tools_concurrently(self):
-        import asyncio
-
-        async def slow_handler(message: str, repeat: int = 1) -> str:
-            await asyncio.sleep(0.01)
-            return f"slow-{message}"
-
-        async def fast_handler(query: str, limit: int = 5) -> str:
-            return f"fast-{query}"
-
-        tool_excute = ToolExcute(
-            tools=[
-                Tool("slow", "Slow.", EchoArgs, slow_handler),
-                Tool("fast", "Fast.", SearchArgs, fast_handler),
-            ],
-        )
-        calls = [
-            {"name": "slow", "args": {"message": "a"}},
-            {"name": "fast", "args": {"query": "b"}},
-        ]
-        results = await tool_excute.execute_all(calls)
-        assert len(results) == 2
-        assert "slow-a" in results[0]
-        assert "fast-b" in results[1]
-
-    @pytest.mark.asyncio
-    async def test_execute_all_returns_exceptions_for_failed_calls(self):
-        async def failing_handler(message: str, repeat: int = 1) -> str:
-            raise RuntimeError("tool failed")
-
-        async def working_handler(query: str, limit: int = 5) -> str:
-            return f"result-{query}"
-
-        tool_excute = ToolExcute(
-            tools=[
-                Tool("failing", "Failing.", EchoArgs, failing_handler),
-                Tool("working", "Working.", SearchArgs, working_handler),
-            ],
-        )
-        calls = [
-            {"name": "failing", "args": {"message": "test"}},
-            {"name": "working", "args": {"query": "search"}},
-        ]
-        results = await tool_excute.execute_all(calls)
-
-        assert len(results) == 2
-        assert isinstance(results[0], RuntimeError)
-        assert results[1] == "result-search"
-
-    @pytest.mark.asyncio
-    async def test_execute_all_empty_list_returns_empty(self):
-        tool_excute = ToolExcute()
-        results = await tool_excute.execute_all([])
-        assert results == []
-
-
-# ── ToolExcute.subset 测试 ──
-
-
-class TestToolExcuteSubset:
-    def test_subset_retains_specified_tools(self):
-        async def echo(msg: str) -> str:
-            return msg
-
-        async def search(q: str) -> str:
-            return f"results for {q}"
-
-        tool_excute = ToolExcute(
-            tools=[
-                Tool("echo", "Echo tool.", EchoArgs, echo),
-                Tool("search", "Search tool.", SearchArgs, search),
-            ],
-        )
-        subset = tool_excute.subset(["echo"])
-        assert len(subset.get_tools()) == 1
-        assert subset.get_tool("echo").name == "echo"
-        with pytest.raises(KeyError):
-            subset.get_tool("search")
-
-    def test_subset_preserves_event_handler(self):
-        events: list[dict] = []
-
-        async def handler(event: dict) -> None:
-            events.append(event)
-
-        tool_excute = ToolExcute(tools=[], event_handler=handler)
-        subset = tool_excute.subset([])
-        assert subset._event_handler is handler
-
-
-# ── ToolExcute 事件回调测试 ──
-
-
-class TestToolExcuteEventHandler:
+class TestToolRegistryEventHandler:
     @pytest.mark.asyncio
     async def test_execute_emits_running_then_done(self):
         events: list[dict] = []
@@ -311,11 +215,11 @@ class TestToolExcuteEventHandler:
         async def echo(message: str, repeat: int = 1) -> str:
             return message * repeat
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("echo", "Echo.", EchoArgs, echo)],
             event_handler=handler,
         )
-        await tool_excute.execute({"name": "echo", "args": {"message": "hi"}})
+        await registry.execute({"name": "echo", "args": {"message": "hi"}})
 
         assert len(events) == 2
         assert events[0]["status"] == "running"
@@ -333,13 +237,13 @@ class TestToolExcuteEventHandler:
         async def failing(message: str, repeat: int = 1) -> str:
             raise RuntimeError("tool error")
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("failing", "Failing.", EchoArgs, failing)],
             event_handler=handler,
         )
 
         with pytest.raises(RuntimeError, match="tool error"):
-            await tool_excute.execute({"name": "failing", "args": {"message": "test"}})
+            await registry.execute({"name": "failing", "args": {"message": "test"}})
 
         assert len(events) == 2
         assert events[0]["status"] == "running"
@@ -357,13 +261,13 @@ class TestToolExcuteEventHandler:
         async def echo(message: str, repeat: int = 1) -> str:
             return message * repeat
 
-        tool_excute = ToolExcute(
+        registry = ToolRegistry(
             tools=[Tool("echo", "Echo.", EchoArgs, echo)],
             event_handler=bad_handler,
         )
 
         # Should not raise - handler exceptions are caught internally
-        result = await tool_excute.execute({"name": "echo", "args": {"message": "hi"}})
+        result = await registry.execute({"name": "echo", "args": {"message": "hi"}})
         assert result == "hi"
         # Only running was attempted before exception, done should still emit
         assert "running" in [e["status"] for e in events]

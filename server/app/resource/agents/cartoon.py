@@ -1,4 +1,4 @@
-"""Resource-domain adapter for verified cartoon generation."""
+"""CartoonAgent — 基于 Plan-and-Execute + HyperFrames + 本地 Skill 的多智能体教学视频生成。"""
 
 from __future__ import annotations
 
@@ -13,30 +13,35 @@ from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.schemas import AgentResult, ResourceInput
 from app.shared.cartoon import (
+    CartoonAgent as SharedCartoonAgent,
     CartoonBrief,
     CartoonGenerationConfig,
     CartoonGenerationError,
-    CartoonPipeline,
     CartoonResourceMetadata,
 )
-
 
 logger = get_logger(__name__)
 
 
 @register_agent
 class CartoonAgent(BaseResourceAgent):
+    """CartoonAgent — 采用 Plan-and-Execute + HyperFrames 子场景架构生成带配音与字幕的 MP4 教学视频。"""
+
     agent_id = "cartoon"
     agent_name = "动画讲解"
 
-    def __init__(self, emitter=None, *, pipeline: CartoonPipeline | None = None) -> None:
+    def __init__(self, emitter=None, *, pipeline: SharedCartoonAgent | None = None) -> None:
         super().__init__(emitter=emitter)
-        self._pipeline = pipeline or CartoonPipeline()
+        self._pipeline = pipeline or SharedCartoonAgent()
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
         return await self.run_with_heartbeat(
             self._generate(input_data),
-            messages=["正在设计语义分镜...", "正在合成配音、字幕与动画..."],
+            messages=[
+                "正在加载 HyperFrames 技能并规划视频分镜...",
+                "正在合成 Edge TTS 旁白配音并测定精确时间轴...",
+                "正在并行调度 SceneSubagent 编写子场景动画并渲染 MP4...",
+            ],
             interval_seconds=15.0,
             progress=75,
         )
@@ -49,7 +54,7 @@ class CartoonAgent(BaseResourceAgent):
             resource_key = str(input_data.resource_id) if input_data.resource_id is not None else uuid4().hex
             output_dir = user_resource_cartoon_dir(username, resource_key)
             logger.info(
-                "[CartoonAgent] 开始生成: learning_need=%s voice=%s depth=%s output_dir=%s",
+                "[CartoonAgent] 开始 HyperFrames 生成: learning_need=%s voice=%s depth=%s output_dir=%s",
                 brief.learning_need[:80],
                 brief.configuration.voice,
                 brief.configuration.lesson_depth.value,

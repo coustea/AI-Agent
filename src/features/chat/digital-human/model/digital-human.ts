@@ -32,47 +32,6 @@ export type DigitalHumanStateType =
   | 'error'
 
 // ── WebSocket 消息类型接口 ──
-export interface TurnStartMessage {
-  type: 'turn_start'
-  turn_id: string
-}
-
-export interface DigitalHumanStateMessage {
-  type: 'digital_human_state'
-  state: DigitalHumanStateType
-  turn_id?: string
-  message?: string
-}
-
-export interface AssistantChunkMessage {
-  type: 'assistant_chunk'
-  turn_id?: string
-  content: string
-}
-
-export interface AssistantCompleteMessage {
-  type: 'assistant_complete'
-  turn_id?: string
-}
-
-export interface AvatarSpeakingMessage {
-  type: 'avatar_speaking'
-  turn_id?: string
-  data: unknown
-}
-
-export interface AvatarStoppedMessage {
-  type: 'avatar_stopped'
-  turn_id?: string
-  data: unknown
-}
-
-export interface DiagramMessage {
-  type: 'diagram'
-  turn_id?: string
-  data: unknown
-}
-
 export interface VideoMessage {
   type: 'video'
   turn_id?: string
@@ -81,12 +40,6 @@ export interface VideoMessage {
     session_id: string
     video: import('@/features/chat/types/chat').ChatVideoArtifact
   }
-}
-
-export interface StatusMessage {
-  type: 'status'
-  turn_id?: string
-  data: { stage?: string; message?: string }
 }
 
 export interface ErrorMessage {

@@ -15,7 +15,7 @@ from app.evaluation.schemas import LearningEventCreate
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import LearningEvent, LearningPath, PathNode, PathNodeResource, User
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 from app.path.event import PathEvents, encode_path_sse, get_path_channel
 from app.path.schemas import (
     PathRequest,

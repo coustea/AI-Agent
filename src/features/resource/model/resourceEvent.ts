@@ -21,12 +21,6 @@ export type ResourceEventName =
   | 'generation.failed'
   | 'agent.status'
 
-// 终态事件集合：任务完成或失败即代表整轮生成结束，用于判断是否停止监听
-export const RESOURCE_TERMINAL_EVENTS: Set<ResourceEventName> = new Set([
-  'generation.completed',
-  'generation.failed',
-])
-
 // 单条资源事件的结构定义：携带序号、资源 id、事件名及负载数据
 export interface ResourceEvent {
   sequence: number // 事件序号，用于排序与去重

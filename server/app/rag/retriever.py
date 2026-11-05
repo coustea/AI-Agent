@@ -52,8 +52,6 @@ def _normalize_base_url(value: str) -> str:
     """Normalize only trailing slashes; callers must provide the API root."""
     return value.strip().rstrip("/")
 
-# 并发检索限制
-_semaphore = asyncio.Semaphore(4)
 
 # 混合检索内部参数
 _VECTOR_FETCH_K = 40       # 向量召回数量，先多召回

@@ -26,15 +26,8 @@ from app.avatar.bridge.state import MessageType
 from app.avatar.services import AvatarController
 from app.avatar.services.audio_ingress import AudioIngress
 from app.avatar.services.streaming_asr import AdaptiveVADController, StreamingASRSession
-from app.chat.agent.nodes import (
-    VOICE_DIAGRAM_SUCCESS_REPLY,
-    build_deterministic_fallback_diagram,
-    is_explicit_diagram_request,
-)
-from app.chat.diagram_image_renderer import ensure_teaching_diagram_png_payload
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.service import chat, get_chat_usecases
-from app.chat.video import get_chat_video_service
 from app.config import ASR_VAD_EOS
 from app.infra.logging import get_logger
 
@@ -634,14 +627,6 @@ class RealtimeBridge:
             "turn_id": self._current_turn_id,
         })
 
-    # 开始新对话轮次：生成唯一 turn_id 并向前端发送 turn_start
-    async def _start_new_turn(self) -> str:
-        self._current_turn_id = str(uuid.uuid4())
-        await self._send_to_frontend({
-            "type": "turn_start",
-            "turn_id": self._current_turn_id,
-        })
-        return self._current_turn_id
 
     # 发送带当前 turn_id 的事件到前端（若无则跳过）
     async def _send_event_with_turn_id(self, event_type: str, **kwargs):
@@ -786,9 +771,6 @@ class RealtimeBridge:
                 stats.queued,
             )
 
-    def _put_audio_chunk(self, item: tuple[float, bytes]) -> None:
-        self._bind_audio_ingress_queue()
-        self._audio_ingress.offer_item(item)
 
     def _restore_asr_audio(self, items: list[tuple[float, bytes] | None]) -> None:
         """Put frames consumed by a failed ASR connection before newer audio."""
@@ -1340,17 +1322,14 @@ class RealtimeBridge:
         """执行一轮完整的对话 turn：调用 chat 服务 → 流式处理事件 → 触发 Avatar 播报。"""
         turn_started_at = time.perf_counter()
         turn_id = self._current_turn_id
-        video_requested = bool(need_video)
-        diagram_requested = False if video_requested else (
-            need_diagram or is_explicit_diagram_request(user_text)
-        )
+        diagram_requested = bool(need_diagram)
         # 合并附件 URL 并去重
         merged_attachments = list(dict.fromkeys(attachments or []))
         chat_uc = get_chat_usecases()
         # 自动创建会话（首次对话时）
         if not self.session_id:
-            session = await chat_uc.create_session(user_id=self.user_id)
-            self.session_id = str(session["id"])
+            session = await get_chat_memory_service().create_session(user_id=self.user_id)
+            self.session_id = str(session.id)
 
         attachment_records = [{"url": url} for url in merged_attachments]
         user_message = await chat_uc.create_user_message(
@@ -1364,43 +1343,6 @@ class RealtimeBridge:
         if user_message_id is None:
             raise RuntimeError("保存用户消息失败")
 
-        if video_requested:
-            video_service = get_chat_video_service()
-            assistant_message = await get_chat_memory_service().save_message(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                user_message_id=user_message_id,
-                role="assistant",
-                content=[],
-                usage_metadata={"response_mode": "video"},
-            )
-            if assistant_message.id is None:
-                raise RuntimeError("视频任务消息保存失败")
-            task = await video_service.create_task(
-                user_id=self.user_id,
-                session_id=self.session_id,
-                assistant_message_id=assistant_message.id,
-            )
-            self._spawn_background(
-                video_service.run_task(
-                    user_id=self.user_id,
-                    username=self.username or f"user_{self.user_id}",
-                    session_id=self.session_id,
-                    assistant_message_id=assistant_message.id,
-                ),
-                label=f"chat-video:{assistant_message.id}",
-            )
-            await self._send_event_with_turn_id(
-                "video",
-                data={
-                    "assistant_message_id": assistant_message.id,
-                    "session_id": self.session_id,
-                    "video": task["video"],
-                },
-            )
-            await self._send_event_with_turn_id("assistant_complete")
-            return
-
         # 发送 thinking 状态
         await self._send_digital_human_state("thinking", "Processing user input")
 
@@ -1412,10 +1354,6 @@ class RealtimeBridge:
         event_count = 0
         stream_failed = False
         fail_reason = ""
-        last_diagram_payload = None
-        diagram_forwarded = False
-        video_payload: dict | None = None
-        video_message_id: int | None = None
         try:
             async def _queue_complete_tts_response() -> None:
                 """Submit the complete answer to Avatar as one uninterrupted TTS request."""
@@ -1455,15 +1393,13 @@ class RealtimeBridge:
                     )
                 if append_to_response:
                     full_response += content
-                if self.frontend_ws and not video_requested:
+                if self.frontend_ws:
                     await self._send_event_with_turn_id("assistant_chunk", content=content)
-                if not video_requested:
-                    tts_pending_text += content
+                tts_pending_text += content
 
             async def _consume_stream_events():
                 """消费 chat 服务的 SSE 事件流，转发 token/status/error/diagram 事件。"""
-                nonlocal event_count, full_response, last_diagram_payload, diagram_forwarded
-                nonlocal video_payload, video_message_id
+                nonlocal event_count, full_response
                 nonlocal stream_failed, fail_reason
                 event_stream = chat(
                     user_message_id=user_message_id,
@@ -1473,7 +1409,6 @@ class RealtimeBridge:
                     user_input=user_text,
                     attachments=merged_attachments,
                     diagram_mode="required" if diagram_requested else "auto",
-                    enable_web_search=enable_search,
                     voice_mode=True,
                 )
                 try:
@@ -1529,14 +1464,6 @@ class RealtimeBridge:
                             if self.frontend_ws:
                                 await self._send_event_with_turn_id("error", content=fail_reason)
 
-                        elif event_type == "diagram":
-                            # 教学图事件 → 缓存并转发
-                            if not video_requested:
-                                last_diagram_payload = payload
-                            if self.frontend_ws and not video_requested and not diagram_forwarded:
-                                await self._send_event_with_turn_id("diagram", data=payload)
-                                diagram_forwarded = True
-
                         elif event_type == "done":
                             # 完成事件 → 提取最终回复和教学图
                             if isinstance(payload, dict):
@@ -1545,28 +1472,6 @@ class RealtimeBridge:
                                 )
                                 if maybe_text and not full_response:
                                     await _forward_assistant_chunk(maybe_text)
-                                resources = payload.get("resources")
-                                diagram_payload = None
-                                if isinstance(resources, dict):
-                                    diagram_payload = resources.get("teaching_diagram") or resources.get("diagram")
-                                if not diagram_payload:
-                                    diagram_payload = payload.get("teaching_diagram") or payload.get("diagram")
-                                if diagram_payload and not video_requested:
-                                    last_diagram_payload = diagram_payload
-                                if (
-                                    diagram_payload
-                                    and self.frontend_ws
-                                    and not video_requested
-                                    and not diagram_forwarded
-                                ):
-                                    await self._send_event_with_turn_id("diagram", data=diagram_payload)
-                                    diagram_forwarded = True
-                                raw_video = payload.get("video")
-                                if isinstance(raw_video, dict):
-                                    video_payload = raw_video
-                                raw_message_id = payload.get("saved_message_id")
-                                if isinstance(raw_message_id, int) and raw_message_id > 0:
-                                    video_message_id = raw_message_id
                 finally:
                     aclose = getattr(event_stream, "aclose", None)
                     if callable(aclose):
@@ -1605,34 +1510,6 @@ class RealtimeBridge:
                 await self._send_event_with_turn_id("error", content=f"数字人回答失败: {fail_reason}")
         finally:
             generated_timeout_response = False
-            if last_diagram_payload is not None and not full_response.strip():
-                full_response = VOICE_DIAGRAM_SUCCESS_REPLY
-                generated_timeout_response = True
-
-            if (
-                diagram_requested
-                and "长时间没有进展" in fail_reason
-                and last_diagram_payload is None
-            ):
-                if not full_response.strip():
-                    full_response = "已经为你生成了这张图解，展示了核心概念和关键关系。"
-                    generated_timeout_response = True
-                fallback_diagram = build_deterministic_fallback_diagram(
-                    user_text,
-                    full_response,
-                )
-                if fallback_diagram is not None:
-                    try:
-                        last_diagram_payload = await ensure_teaching_diagram_png_payload(
-                            fallback_diagram,
-                            username=self.username or f"user_{self.user_id}",
-                            session_id=self.session_id,
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "[Bridge] timed-out diagram fallback rendering failed: %s",
-                            exc,
-                        )
 
             if not full_response.strip():
                 full_response = (
@@ -1654,25 +1531,11 @@ class RealtimeBridge:
 
             # The user requested one uninterrupted utterance: only now, after the
             # complete answer is available, submit a single TTS request.
-            if not video_requested:
-                await _queue_complete_tts_response()
+            await _queue_complete_tts_response()
 
             # 流结束后始终发送完成标记
             if self.frontend_ws:
-                if not video_requested and last_diagram_payload is not None and not diagram_forwarded:
-                    await self._send_event_with_turn_id("diagram", data=last_diagram_payload)
-                if video_requested and video_payload is not None and video_message_id is not None:
-                    await self._send_event_with_turn_id(
-                        "video",
-                        data={
-                            "assistant_message_id": video_message_id,
-                            "session_id": self.session_id,
-                            "video": video_payload,
-                        },
-                    )
                 await self._send_event_with_turn_id("assistant_complete")
-                if video_requested:
-                    await self._send_digital_human_state("avatar_ready", "Avatar service ready")
 
             if tts_has_queued_content:
                 logger.info(
@@ -1741,14 +1604,6 @@ class AvatarBridgeManager:
             self._locks[user_id] = asyncio.Lock()
         return self._locks[user_id]
 
-    # 获取或创建用户的 Bridge 实例（线程安全）
-    async def get_or_create_bridge(self, user_id: int, username: str = "") -> RealtimeBridge:
-        lock = self._get_lock(user_id)
-        async with lock:
-            if user_id not in self._bridges:
-                bridge = RealtimeBridge(user_id=user_id, username=username)
-                self._bridges[user_id] = bridge
-            return self._bridges[user_id]
 
     async def attach_frontend(self, user_id: int, ws, username: str = "") -> tuple[RealtimeBridge, object]:
         """Atomically bind the latest frontend connection for a user."""

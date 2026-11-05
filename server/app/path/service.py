@@ -68,7 +68,7 @@ from app.path.schemas import (
 from app.path.workflows import (
     PathPlannerAgent,
     repair_plan,
-    get_learn_workflow,
+    run_learn_workflow,
     ACTIVE_NODE_STATUSES,
     COMPLETED_NODE_STATUSES,
 )
@@ -102,7 +102,6 @@ class PathService:
         self.profile_builder = get_profile_service()
         self.path_planner = PathPlannerAgent()
         self.evaluation_service = EvaluationService()
-        self.learn_graph = get_learn_workflow()
         # 预创建资源生成服务实例，避免重复实例化
         self._resource_services = self._init_resource_services()
 
@@ -371,7 +370,7 @@ class PathService:
                 session=self.session,
                 tutorial_type="primary",
             )
-            result = await self.learn_graph.ainvoke(state)
+            result = await run_learn_workflow(state)
             if result.get("error"):
                 raise ValueError(result["error"])
 
@@ -555,7 +554,7 @@ class PathService:
                 phase="questions",
                 session=self.session,
             )
-            result = await self.learn_graph.ainvoke(state)
+            result = await run_learn_workflow(state)
             if result.get("error"):
                 raise ValueError(result["error"])
 
@@ -595,7 +594,7 @@ class PathService:
             quiz_questions=questions,
             round_no=round_no,
         )
-        result = await self.learn_graph.ainvoke(state)
+        result = await run_learn_workflow(state)
         if result.get("error"):
             raise ValueError(result["error"])
 
@@ -805,19 +804,6 @@ class PathService:
         )
         return (await self.session.exec(stmt)).first()
 
-    # 获取节点主教程（primary 类型，最早版本）
-    async def get_primary_tutorial(
-        self, node_id: int
-    ) -> PathNodeTutorial | None:
-        stmt = (
-            select(PathNodeTutorial)
-            .where(
-                PathNodeTutorial.node_id == node_id,
-                PathNodeTutorial.tutorial_type == "primary",
-            )
-            .order_by(col(PathNodeTutorial.version_no).asc())
-        )
-        return (await self.session.exec(stmt)).first()
 
     # 获取节点最新测验轮次编号
     async def _get_latest_round(self, node_id: int) -> int:
@@ -898,25 +884,6 @@ class PathService:
             )
             return ""
 
-    # 归档用户当前所有激活路径（可排除指定路径）
-    async def _archive_active(
-        self,
-        user_id: int,
-        module: str,
-        exclude_path_id: int | None = None,
-    ) -> None:
-        stmt = select(LearningPath).where(
-            LearningPath.user_id == user_id,
-            LearningPath.module == module,
-            LearningPath.status == "active",
-        )
-        paths = list((await self.session.exec(stmt)).all())
-        for item in paths:
-            if exclude_path_id is not None and item.id == exclude_path_id:
-                continue
-            item.status = "archived"
-            item.updated_at = datetime.now(timezone.utc)
-        await self.session.flush()
 
     # 查询用户所有可继续学习路径（最近更新优先）
     async def _get_active_paths(

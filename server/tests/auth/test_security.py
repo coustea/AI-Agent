@@ -41,6 +41,9 @@ class _FakeSession:
     async def exec(self, *_args, **_kwargs):
         return _Result(self.result)
 
+    async def scalar(self, *_args, **_kwargs):
+        return None
+
     def add(self, item):
         self.added.append(item)
 
@@ -203,7 +206,7 @@ async def test_user_account_store_register_and_login_round_trip(monkeypatch):
             email=user.email,
             avatar=user.avatar,
             created_at=user.created_at.isoformat() if user.created_at else None,
-            is_first_login=user.is_first_login,
+            onboarding_completed=getattr(user, "onboarding_completed", False),
         )
 
     monkeypatch.setattr(auth_service, "_read_user", _patched_read_user)

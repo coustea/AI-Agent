@@ -5,8 +5,6 @@ Separated from __init__.py to avoid circular imports.
 
 from __future__ import annotations
 
-from typing import Any
-
 
 class BaseAdapter:
     """Base class for observation adapters."""

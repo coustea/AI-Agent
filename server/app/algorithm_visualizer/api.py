@@ -31,7 +31,7 @@ from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.infra.response import HttpResponse
+from app.response import HttpResponse
 
 # 算法可视化模块的 API 路由与日志实例
 router = APIRouter()

@@ -257,6 +257,34 @@ COMMENT ON TABLE chat_long_term_memories IS '长期记忆表，每个用户一�
 COMMENT ON COLUMN chat_long_term_memories.memory_markdown IS '记忆内容Markdown';
 
 -- ============================================================
+-- 7c. llm_usage
+-- ============================================================
+CREATE TABLE IF NOT EXISTS llm_usage (
+    id                  BIGSERIAL       PRIMARY KEY,
+    user_id             INTEGER         NOT NULL DEFAULT 0,
+    session_id          VARCHAR(64)     NOT NULL DEFAULT '',
+    purpose             VARCHAR(64)     NOT NULL DEFAULT '',
+    profile             VARCHAR(64)     NOT NULL DEFAULT '',
+    provider            VARCHAR(64)     NOT NULL DEFAULT '',
+    model               VARCHAR(128)    NOT NULL DEFAULT '',
+    prompt_tokens       INTEGER         NOT NULL DEFAULT 0,
+    completion_tokens   INTEGER         NOT NULL DEFAULT 0,
+    cached_tokens       INTEGER         NOT NULL DEFAULT 0,
+    latency_ms          INTEGER         NOT NULL DEFAULT 0,
+    ok                  BOOLEAN         NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ix_llm_usage_user_id ON llm_usage (user_id);
+CREATE INDEX IF NOT EXISTS ix_llm_usage_session_id ON llm_usage (session_id);
+CREATE INDEX IF NOT EXISTS ix_llm_usage_user_created ON llm_usage (user_id, created_at);
+CREATE INDEX IF NOT EXISTS ix_llm_usage_profile_created ON llm_usage (profile, created_at);
+
+COMMENT ON TABLE llm_usage IS 'LLM 调用用量明细，每次模型调用一行';
+COMMENT ON COLUMN llm_usage.purpose IS '调用用途：chat/resource/path/evaluation 等';
+COMMENT ON COLUMN llm_usage.cached_tokens IS '命中的缓存 token 数，用于验证 prompt caching';
+
+-- ============================================================
 -- 8. user_profiles
 -- ============================================================
 CREATE TABLE IF NOT EXISTS user_profiles (
@@ -268,6 +296,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     guidance_updated_at     TIMESTAMPTZ,
     last_assessment_id INTEGER,
     profile_updated_at     TIMESTAMPTZ,
+    agent_md                TEXT            NOT NULL DEFAULT '',
+    agent_md_updated_at     TIMESTAMPTZ,
     created_at              TIMESTAMPTZ     DEFAULT NOW(),
     updated_at              TIMESTAMPTZ     DEFAULT NOW(),
     CONSTRAINT uq_user_profiles_user UNIQUE (user_id)

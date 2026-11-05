@@ -8,13 +8,12 @@ from app.chat.memory.types import (
     LTM_CATEGORY_NAMES,
     STABLE_SIGNAL_PATTERNS,
     MemoryUpdateOutput,
+    compact_text,
     estimate_token_count,
-    extract_fallback_summary_markdown,
     has_stable_signal,
     make_default_memory_markdown,
     now,
 )
-from app.chat.utils import compact_text
 
 
 # ── Constants ──
@@ -81,31 +80,6 @@ class TestCompactText:
 
     def test_empty(self):
         assert compact_text("", limit=10) == ""
-
-
-# ── extract_fallback_summary_markdown ──
-
-
-class TestExtractFallbackSummary:
-    def test_empty(self):
-        result = extract_fallback_summary_markdown("")
-        assert "暂无可压缩" in result
-
-    def test_short_text(self):
-        result = extract_fallback_summary_markdown("line1\nline2")
-        assert "line1" in result
-        assert "line2" in result
-        assert result.startswith("# 会话摘要")
-
-    def test_long_text_truncated(self):
-        text = "\n".join(f"line {i}" for i in range(20))
-        result = extract_fallback_summary_markdown(text, max_lines=5)
-        assert "其余" in result
-
-    def test_char_budget(self):
-        text = "x" * 5000
-        result = extract_fallback_summary_markdown(text, char_budget=100)
-        assert len(result) <= 200
 
 
 # ── make_default_memory_markdown ──
