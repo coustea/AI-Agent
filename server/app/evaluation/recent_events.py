@@ -21,7 +21,6 @@ EVENT_LABELS = {
     "path_node_completed": "完成路径节点",
     "path_quiz_answered": "提交路径练习",
     "quiz_submitted": "提交练习",
-    "visualizer_run": "运行算法可视化",
 }
 
 

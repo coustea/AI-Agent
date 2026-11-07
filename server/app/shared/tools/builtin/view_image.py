@@ -32,13 +32,14 @@ class ViewImageArgs(BaseModel):
 
 
 def _locate(workdir: Path, ref: str) -> Path | None:
-    """按附件 URL、工作区路径、会话上传目录三种来源定位图片文件。"""
+    """按静态上传 URL、工作区相对路径、会话上传目录三种来源定位图片文件。"""
     if ref.startswith("/static/"):
-        from app.chat.attachment import resolve_uploaded_image_path
+        from app.config import WORKPLACE_DIR
 
-        uploaded = resolve_uploaded_image_path(ref)
-        if uploaded is not None and uploaded.is_file():
-            return uploaded
+        root = WORKPLACE_DIR.resolve()
+        candidate = (root / ref.removeprefix("/static/")).resolve()
+        if candidate.is_relative_to(root) and candidate.is_file():
+            return candidate
     try:
         candidate = resolve_sandbox_path(workdir, ref)
     except PermissionError:

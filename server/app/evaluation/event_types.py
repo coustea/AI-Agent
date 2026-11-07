@@ -13,11 +13,10 @@ MODULE_CHAT = "chat"
 MODULE_RESOURCE = "resource"
 MODULE_PATH = "path"
 MODULE_QUIZ = "quiz"
-MODULE_VISUALIZER = "visualizer"
 
 # 系统支持的全部业务模块集合
 ALL_MODULES: frozenset[str] = frozenset({
-    MODULE_CHAT, MODULE_RESOURCE, MODULE_PATH, MODULE_QUIZ, MODULE_VISUALIZER,
+    MODULE_CHAT, MODULE_RESOURCE, MODULE_PATH, MODULE_QUIZ,
 })
 
 # ── Chat 事件类型 ──────────────────────────────────────────────────────────────
@@ -38,16 +37,12 @@ PATH_FEEDBACK = "path_feedback"
 # ── Quiz 事件类型 ──────────────────────────────────────────────────────────────
 QUIZ_SUBMITTED = "quiz_submitted"
 
-# ── Visualizer 事件类型 ────────────────────────────────────────────────────────
-VISUALIZER_RUN = "visualizer_run"
-
 # ── 模块 → 事件类型映射 ──────────────────────────────────────────────────────
 EVENT_TYPES_BY_MODULE: dict[str, frozenset[str]] = {
     MODULE_CHAT: frozenset({CHAT_DIALOGUE}),
     MODULE_RESOURCE: frozenset({RESOURCE_GENERATED, RESOURCE_VIEWED, RESOURCE_COMPLETED, RESOURCE_FEEDBACK}),
     MODULE_PATH: frozenset({PATH_NODE_STARTED, PATH_NODE_COMPLETED, PATH_QUIZ_ANSWERED, PATH_FEEDBACK}),
     MODULE_QUIZ: frozenset({QUIZ_SUBMITTED}),
-    MODULE_VISUALIZER: frozenset({VISUALIZER_RUN}),
 }
 
 # 展开所有模块得到全部合法事件类型集合
@@ -79,6 +74,5 @@ METADATA_SCHEMA: dict[tuple[str, str], list[str]] = {
     ],
     (MODULE_PATH, PATH_FEEDBACK): ["path_id", "path_node_id", "node_id"],
     (MODULE_QUIZ, QUIZ_SUBMITTED): ["is_correct", "attempt_index", "question_type"],
-    (MODULE_VISUALIZER, VISUALIZER_RUN): ["language", "success", "error_message"],
 }
 """每 (module, event_type) 允许写入 metadata 的字段白名单。"""

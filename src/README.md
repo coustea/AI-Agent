@@ -41,8 +41,7 @@ src/
 │   ├── profile/             # 学习者画像
 │   ├── question-bank/       # 题库
 │   ├── evaluation/          # 学习评估
-│   ├── learning-assessment/ # 学习评估（新）
-│   └── algorithm-visualization/  # 算法可视化
+│   └── learning-assessment/ # 学习评估（新）
 │
 ├── shared/                   # 共享模块
 │   ├── api/                 # API 客户端封装
@@ -110,11 +109,6 @@ src/
 - 错题本
 - 题目搜索与筛选
 
-### 算法可视化 (`features/algorithm-visualization`)
-
-- 算法动态演示
-- 交互式学习
-
 ---
 
 ## 路由配置
@@ -139,7 +133,6 @@ src/
 | `/question-bank` | `QuestionBank` | 题库 | 是 |
 | `/profile` | `Profile` | 学习者画像 | 是 |
 | `/assessment` | `LearningAssessment` | 学习评估 | 是 |
-| `/algorithm-visualizer` | `AlgorithmVisualizer` | 算法可视化 | 是 |
 
 ---
 
@@ -305,14 +298,7 @@ use([CanvasRenderer, LineChart, BarChart])
 
 ### Monaco Editor 集成
 
-```typescript
-// vite.config.ts
-import monacoEditorPlugin from 'vite-plugin-monaco-editor'
-
-plugins: [
-  monacoEditorPlugin({}),
-]
-```
+算法可视化的代码查看器直接 `import * as monaco from 'monaco-editor'`，仅为只读 Python 代码做语法着色与行高亮，不需要语言 worker，因此无需任何 Vite 插件或 `MonacoEnvironment` 配置。打包时通过 `manualChunks` 将 `monaco-editor` 拆到 `vendor-monaco`。
 
 ---
 
@@ -325,7 +311,7 @@ plugins: [
 | API 请求 404 | 检查 Vite 代理配置、后端是否启动 |
 | 页面空白 | 检查路由配置、控制台错误信息 |
 | 样式不生效 | 检查 Tailwind 类名、是否正确引入 style.css |
-| Monaco 加载失败 | 检查 vite-plugin-monaco-editor 配置 |
+| Monaco 加载失败 | 检查 monaco-editor 依赖是否安装完整 |
 
 ---
 

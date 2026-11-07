@@ -63,7 +63,6 @@
 | [profile/](app/profile/) | 学习者画像动态推断（`UserProfile` / `UserProfileDimension`），Onboarding 首入问卷，推荐列表 |
 | [evaluation/](app/evaluation/) | 学习事件采集、时长会话统计与异步学习评估生成 |
 | [quiz/](app/quiz/) | 题库练习、随机测试、答题历史、错题本归集与归档 |
-| [algorithm_visualizer/](app/algorithm_visualizer/) | 编译运行、Python AST 代码插装、Trace 生成及输入契约 |
 | [infra/](app/infra/) | 基础设施层（ChromaDB/MySQL、SQLModel 表映射、配置文件、日志处理、通用 Prompt） |
 | [shared/](app/shared/) | 跨领域共享渲染组件（动画 HTML 播放、PPT 演示大纲、研究代理、音效与 TTS） |
 
@@ -289,7 +288,6 @@ uv run python -m app.rag.indexing.build --check-only
 | `/api/v1/ai/quiz` | quiz | 题库练习生成、评分判定、个人刷题历史、练习推荐。 |
 | `/api/v1/ai/wrong` | quiz | 错题本列表、错题温习抽题测试、归档错题、删除错题。 |
 | `/api/v1/ai/evaluation` | evaluation | 手动记录学习事件与会话时长、生成周期性评估报告及辅导策略。 |
-| `/api/v1/ai/algorithm-visualizer`| visualizer | 获取支持的可视化语言、获取模板代码及输入契约、自定义代码 AST 插装分析与 Trace 运行。 |
 
 ---
 

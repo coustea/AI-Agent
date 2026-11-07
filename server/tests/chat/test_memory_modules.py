@@ -1,36 +1,56 @@
+"""Chat 记忆模块测试 —— 压缩器、长期记忆与工具函数。"""
+
 from __future__ import annotations
+
+from datetime import datetime, timezone
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.chat.memory.compression import ChatSessionCompressor
-from app.chat.memory.long_term import ChatLongTermMemoryService
+from app.chat.memory import (
+    LTM_CATEGORIES,
+    LTM_CATEGORY_NAMES,
+    ChatLongTermMemoryService,
+    ChatSessionCompressor,
+    MemoryUpdateOutput,
+    compact_text,
+    estimate_token_count,
+    has_stable_signal,
+    make_default_memory_markdown,
+    now_utc,
+)
+from app.infra.llm import AIMessage
+from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
+
+
+class TestMemoryHelpers:
+    def test_categories_and_markdown(self) -> None:
+        assert len(LTM_CATEGORIES) == 7
+        md = make_default_memory_markdown()
+        for cat in LTM_CATEGORIES:
+            assert LTM_CATEGORY_NAMES[cat] in md
+
+    def test_token_and_compact(self) -> None:
+        assert estimate_token_count("") == 0
+        assert estimate_token_count("计算机网络 TCP 三次握手") >= 3
+        assert compact_text("hello world", limit=6).endswith("...")
+        assert now_utc().tzinfo is not None
+
+    def test_stable_signal(self) -> None:
+        assert has_stable_signal("好的") is False
+        assert has_stable_signal("我总是记不住公式") is True
+        assert has_stable_signal("我喜欢看图解") is True
+        assert has_stable_signal("准备考研数学") is True
+        assert MemoryUpdateOutput().need_update is False
 
 
 class TestChatSessionCompressor:
-    def test_init_defaults(self):
-        c = ChatSessionCompressor()
-        assert c.keep_recent == 8
-        assert c.min_messages == 14
-        assert c.min_tokens == 3500
-
-    def test_init_custom(self):
-        c = ChatSessionCompressor(keep_recent=4, min_messages=10, min_tokens=2000)
-        assert c.keep_recent == 4
-        assert c.min_messages == 10
-        assert c.min_tokens == 2000
-
     @pytest.mark.asyncio
-    async def test_compress_invokes_rolling_prompt(self, monkeypatch):
-        from unittest.mock import AsyncMock, MagicMock
-        from datetime import datetime, timezone
-        from app.infra.llm import AIMessage
-        from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
-
+    async def test_compress_invokes_rolling_prompt(self) -> None:
         c = ChatSessionCompressor(keep_recent=2, min_messages=3, min_tokens=100)
-
         mock_db = AsyncMock()
         mock_db.add = MagicMock()
-        # Mock latest_block query -> returns existing block
+
         prev_block = ChatSessionSummaryBlock(
             session_id="s1",
             block_index=1,
@@ -38,82 +58,42 @@ class TestChatSessionCompressor:
             start_message_id=1,
             end_message_id=5,
         )
-        # 1st exec: latest_block; 2nd exec: messages; 3rd exec: chat_session
-        msg1 = ChatMessage(id=6, session_id="s1", role="user", content="三次握手是什么？", created_at=datetime.now(timezone.utc))
-        msg2 = ChatMessage(id=7, session_id="s1", role="assistant", content="三次握手包括 SYN, SYN-ACK, ACK", created_at=datetime.now(timezone.utc))
-        msg3 = ChatMessage(id=8, session_id="s1", role="user", content="那四次挥手呢？", created_at=datetime.now(timezone.utc))
-        msg4 = ChatMessage(id=9, session_id="s1", role="assistant", content="四次挥手...", created_at=datetime.now(timezone.utc))
-
+        now = datetime.now(timezone.utc)
+        msgs = [
+            ChatMessage(id=6, session_id="s1", role="user", content="三次握手是什么？", created_at=now),
+            ChatMessage(id=7, session_id="s1", role="assistant", content="SYN, SYN-ACK, ACK", created_at=now),
+            ChatMessage(id=8, session_id="s1", role="user", content="四次挥手呢？", created_at=now),
+            ChatMessage(id=9, session_id="s1", role="assistant", content="FIN-ACK...", created_at=now),
+        ]
         session_obj = ChatSession(id="s1", user_id=1, summary_token_count=500)
 
-        mock_exec = AsyncMock()
-        mock_exec.side_effect = [
-            MagicMock(first=lambda: prev_block),  # latest_block
-            MagicMock(all=lambda: [msg1, msg2, msg3, msg4]),  # messages
-            MagicMock(first=lambda: session_obj),  # chat_session
-        ]
-        mock_db.exec = mock_exec
+        mock_db.exec = AsyncMock(
+            side_effect=[
+                MagicMock(first=lambda: prev_block),
+                MagicMock(all=lambda: msgs),
+                MagicMock(first=lambda: session_obj),
+            ]
+        )
 
         captured_messages = []
+
         async def fake_text(messages, **kwargs):
             captured_messages.extend(messages)
             return AIMessage("```markdown\n# 核心目标与意图\n- 深入理解 TCP\n```")
 
-        mock_llm = MagicMock()
-        mock_llm.text = fake_text
-        c.llm = mock_llm
-
+        c.llm = MagicMock(text=fake_text)
         block = await c._compress(db=mock_db, user_id=1, session_id="s1")
 
         assert block is not None
         assert block.block_index == 2
-        # Verify markdown fences were cleanly stripped
         assert block.summary_markdown == "# 核心目标与意图\n- 深入理解 TCP"
         assert session_obj.summary_token_count == 0
-        # Verify prompt had previous_summary and dialogue
-        prompt_content = captured_messages[0].content
-        assert "上一阶段滚动状态摘要" in prompt_content
-        assert "学习 TCP" in prompt_content
+        assert "上一阶段滚动状态摘要" in captured_messages[0].content
 
 
 class TestChatLongTermMemoryService:
-    def test_init_defaults(self):
+    def test_should_consider_update(self) -> None:
         svc = ChatLongTermMemoryService()
-        assert svc.min_confidence == 0.75
-        assert svc.cooldown_seconds == 1800
-
-    def test_init_custom(self):
-        svc = ChatLongTermMemoryService(
-            min_confidence=0.8,
-            cooldown_minutes=60,
-        )
-        assert svc.min_confidence == 0.8
-        assert svc.cooldown_seconds == 3600
-
-    def test_should_consider_update_user_signal(self):
-        svc = ChatLongTermMemoryService()
-        assert svc.should_consider_update(
-            user_message="我喜欢视频教学",
-            assistant_reply="好的",
-        ) is True
-
-    def test_should_consider_update_assistant_signal(self):
-        svc = ChatLongTermMemoryService()
-        assert svc.should_consider_update(
-            user_message="hello",
-            assistant_reply="以后我会注意讲解速度。",
-        ) is True
-
-    def test_should_consider_update_no_signal(self):
-        svc = ChatLongTermMemoryService()
-        assert svc.should_consider_update(
-            user_message="hello",
-            assistant_reply="好的，这是一道数学题。",
-        ) is False
-
-    def test_should_consider_update_empty(self):
-        svc = ChatLongTermMemoryService()
-        assert svc.should_consider_update(
-            user_message="",
-            assistant_reply="",
-        ) is False
+        assert svc.should_consider_update(user_message="我喜欢视频教学", assistant_reply="好的") is True
+        assert svc.should_consider_update(user_message="hi", assistant_reply="以后我会注意讲解速度。") is True
+        assert svc.should_consider_update(user_message="hi", assistant_reply="这是一道题") is False

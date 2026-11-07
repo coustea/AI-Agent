@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from app.resource.schemas import ResourcePlan
 from app.resource.agents.reading import ReadingPayload
 from app.resource.agents.quiz import QuizPayload
-from app.chat.memory.types import MemoryUpdateOutput
+from app.chat.memory import MemoryUpdateOutput
 
 
 # ============ 典型 LLM 输出样本 ============

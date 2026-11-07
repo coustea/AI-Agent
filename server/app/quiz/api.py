@@ -6,11 +6,12 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.auth.schemas import UserClaims
 from app.auth.security import get_current_user
 from app.infra.logging import get_logger
 from app.infra.database import get_session
 from app.quiz.events import record_quiz_submit_event
-from app.infra.models import QuizAnswerHistory, QuizQuestion, User, WrongQuestion
+from app.infra.models import QuizAnswerHistory, QuizQuestion, WrongQuestion
 from app.response import HttpResponse
 from app.quiz.schemas import (
     ObjectiveQuestionResult,
@@ -128,7 +129,7 @@ async def get_quiz_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
 ) -> HttpResponse:
     """获取用户答题历史。返回每道做过的题的最新状态，支持分页和筛选。"""
     from sqlalchemy import func as sa_func
@@ -211,7 +212,7 @@ async def get_quiz_history(
 async def submit_quiz(
     request: ObjectiveSubmitRequest,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
 ) -> HttpResponse:
     """提交客观题结果，自动收录错题。"""
     logger.info("[QuizAPI] 提交客观题: user_id=%s question_count=%s", current_user.id, len(request.results))
@@ -339,7 +340,7 @@ async def list_wrong(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
 ) -> WrongQuestionListResponse:
     """获取错题列表。"""
     # 获取当前用户 ID
@@ -391,7 +392,7 @@ async def list_wrong(
 async def archive_wrong(
     wrong_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
 ) -> HttpResponse:
     """归档错题。"""
     # 查询归属当前用户的错题
@@ -418,7 +419,7 @@ async def archive_wrong(
 async def delete_wrong(
     wrong_id: int,
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
 ) -> HttpResponse:
     """删除错题。"""
     # 查询归属当前用户的错题

@@ -507,8 +507,6 @@ class EvaluationService:
                 module = "chat"
             elif "quiz" in payload.source_page:
                 module = "quiz"
-            elif "visualizer" in payload.source_page:
-                module = "visualizer"
             else:
                 module = "common"
 

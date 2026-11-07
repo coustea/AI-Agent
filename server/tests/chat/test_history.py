@@ -1,107 +1,100 @@
+"""Chat 历史消息组装与上传服务测试（验证过滤中间 tool/tool_calls 消息与无 N+1 快照组装）。"""
+
 from __future__ import annotations
 
-import asyncio
-import os
-import sys
-from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
-os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import pytest
 
-
-@dataclass
-class FakeSession:
-    id: str
+from app.chat import service
+from app.infra.models import ChatMessage, ChatRun as ChatRunRow
 
 
-@dataclass
-class FakeMessage:
-    id: int
-    role: str
-    content: list[dict]
-    created_at: datetime
-    tool_calls: list[dict] | None = None
-    tool_call_id: str | None = None
-    run_id: str | None = None
+@pytest.mark.asyncio
+async def test_get_history_filters_tool_messages_and_attaches_run_state(monkeypatch) -> None:
+    now = datetime(2026, 4, 1, 8, 0, tzinfo=timezone.utc)
+    raw_messages = [
+        ChatMessage(
+            id=1,
+            session_id="s-1",
+            role="user",
+            content=[{"type": "text", "text": "什么是三次握手？"}],
+            created_at=now,
+        ),
+        ChatMessage(
+            id=2,
+            session_id="s-1",
+            run_id="r-1",
+            role="assistant",
+            content=[],
+            tool_calls=[{"id": "c1", "name": "knowledge_search", "args": {"query": "三次握手"}}],
+            created_at=now,
+        ),
+        ChatMessage(
+            id=3,
+            session_id="s-1",
+            run_id="r-1",
+            role="tool",
+            content=[{"type": "text", "text": "内部工具输出不应展示给用户气泡"}],
+            tool_call_id="c1",
+            created_at=now,
+        ),
+        ChatMessage(
+            id=4,
+            session_id="s-1",
+            run_id="r-1",
+            role="assistant",
+            content=[{"type": "text", "text": "三次握手包含 SYN、SYN-ACK、ACK。"}],
+            created_at=now,
+        ),
+    ]
+    raw_runs = [
+        ChatRunRow(
+            id="r-1",
+            session_id="s-1",
+            user_id=7,
+            user_message_id=1,
+            status="completed",
+            phase="completed",
+            phase_label="回答完成",
+            content="三次握手包含 SYN、SYN-ACK、ACK。",
+            total_elapsed_ms=1200,
+            steps=[
+                {
+                    "step_id": "tool:c1",
+                    "kind": "knowledge",
+                    "title": "检索课程知识库",
+                    "subtitle": "检索关键词：三次握手",
+                    "status": "completed",
+                    "elapsed_ms": 400,
+                }
+            ],
+            created_at=now,
+        )
+    ]
 
-
-class FakeMemoryService:
-    calls: list[dict] = []
-
-    def __init__(self, *, module: str) -> None:
-        self.module = module
-
-    async def list_sessions(self, *, user_id: int, limit: int):
-        return [FakeSession(id="s-1")]
-
-    async def list_messages(self, **kwargs):
-        self.calls.append(kwargs)
-        return [
-            FakeMessage(
-                id=1,
-                role="assistant",
-                content=[{"type": "text", "text": "历史回答"}],
-                created_at=datetime(2026, 4, 1, 8, 0),
-            )
+    exec_mock = AsyncMock(
+        side_effect=[
+            SimpleNamespace(all=lambda: list(reversed(raw_messages))),
+            SimpleNamespace(all=lambda: raw_runs),
         ]
+    )
 
-    async def list_attachment_analyses(self, **kwargs):
-        return []
+    @asynccontextmanager
+    async def _fake_scope():
+        yield SimpleNamespace(exec=exec_mock)
 
-    async def list_runs(self, **kwargs):
-        return []
+    monkeypatch.setattr(service, "session_scope", _fake_scope)
 
-
-def test_chat_history_basic(monkeypatch):
-    from app.chat import service
-
-    FakeMemoryService.calls = []
-
-    def fake_get_chat_memory_service():
-        return FakeMemoryService(module="mentor")
-
-    monkeypatch.setattr(service, "get_chat_memory_service", fake_get_chat_memory_service)
-
-    use_cases = service.ChatUseCases()
-    items = asyncio.run(use_cases.get_history(user_id=7, session_id="s-1"))
-
-    assert items[0].content == [{"type": "text", "text": "历史回答"}]
-    assert FakeMemoryService.calls[0].get("limit") == 50
-
-
-def test_chat_history_includes_tool_messages(monkeypatch):
-    from app.chat import service
-
-    class FakeMemoryServiceWithTools(FakeMemoryService):
-        async def list_messages(self, **kwargs):
-            self.calls.append(kwargs)
-            return [
-                FakeMessage(
-                    id=10,
-                    role="assistant",
-                    content=[{"type": "text", "text": "我先搜索一下"}],
-                    created_at=datetime(2026, 4, 1, 8, 0),
-                    tool_calls=[{"id": "call-search-1", "name": "tavily_search"}],
-                ),
-                FakeMessage(
-                    id=11,
-                    role="tool",
-                    content=[{"type": "text", "text": "搜索结果摘要"}],
-                    created_at=datetime(2026, 4, 1, 8, 0, 1),
-                    tool_call_id="call-search-1",
-                ),
-            ]
-
-    monkeypatch.setattr(service, "get_chat_memory_service", lambda: FakeMemoryServiceWithTools(module="mentor"))
-
-    use_cases = service.ChatUseCases()
-    items = asyncio.run(use_cases.get_history(user_id=7, session_id="s-1"))
-
-    assert [item.role for item in items] == ["assistant", "tool"]
-    assert items[0].tool_calls == [{"id": "call-search-1", "name": "tavily_search"}]
-    tool_text_parts = [p for p in items[1].content if p.get("type") == "text"]
-    assert any("搜索结果摘要" in p.get("text", "") for p in tool_text_parts)
-    assert items[1].tool_call_id == "call-search-1"
+    items = await service.get_history(user_id=7, session_id="s-1", limit=50)
+    # 中间带 tool_calls 的 assistant 与 role="tool" 消息均被过滤，仅剩 user + 最终 assistant
+    assert [item.role for item in items] == ["user", "assistant"]
+    assert items[0].id == 1
+    assert items[1].id == 4
+    assert items[1].run is not None
+    assert items[1].run["status"] == "completed"
+    assert len(items[1].run["steps"]) == 1
+    assert items[1].run["steps"][0]["title"] == "检索课程知识库"

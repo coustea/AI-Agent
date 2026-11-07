@@ -17,14 +17,12 @@ from app.response import HttpResponse
 logger = get_logger(__name__)
 
 
-# 处理认证错误，将 AuthError 转换为 HTTP 401 标准响应
+# 处理认证错误，将 AuthError 转换为标准错误响应
 async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
-    """处理认证错误：将 AuthError 转换为 HTTP 401 标准响应。
-
-    当 JWT Token 无效、过期或用户不存在时触发。
-    """
-    logger.warning("[Exception] AuthError: path=%s message=%s", request.url.path, exc.message)
-    return HttpResponse.error(code=401, message=exc.message)
+    """处理认证与授权业务异常，自动附带字段级错误提示。"""
+    logger.warning("[Exception] AuthError: path=%s message=%s field=%s code=%s", request.url.path, exc.message, exc.field, exc.code)
+    data = {"field": exc.field} if exc.field else None
+    return HttpResponse.error(code=exc.code, message=exc.message, data=data)
 
 
 # 处理 FastAPI 内置 HTTPException，映射到统一错误响应格式

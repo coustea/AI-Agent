@@ -6,7 +6,7 @@ import io
 import os
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -16,22 +16,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from httpx import ASGITransport, AsyncClient
 
-from app.main import create_app
+from app.auth.schemas import UserClaims, UserRead
 from app.auth.security import get_current_user
-from app.infra.database import get_session
-from app.infra.models import User
 from app.config import user_avatar_dir
+from app.infra.database import get_session
+from app.main import create_app
 
 
 @pytest.fixture
 def mock_user():
-    user = MagicMock(spec=User)
-    user.id = 42
-    user.username = "testuser"
-    user.email = "test@example.com"
-    user.avatar = None
-    user.is_active = True
-    return user
+    return UserClaims(
+        id=42,
+        username="testuser",
+        email="test@example.com",
+    )
 
 
 @pytest.fixture
@@ -86,11 +84,12 @@ def _make_jpg_bytes() -> bytes:
 @pytest.mark.asyncio
 async def test_upload_avatar_success(app_with_auth, mock_user):
     """POST /me/avatar — 正常上传 PNG 头像。"""
-    with patch("app.auth.service.auth_usecases.update_me", new_callable=AsyncMock) as mock_update:
-        mock_updated = MagicMock(spec=User)
-        mock_updated.id = mock_user.id
-        mock_updated.avatar = "/static/testuser/avatar/avatar.png"
-        mock_update.return_value = mock_updated
+    with patch("app.auth.api.auth_service.update_profile", new_callable=AsyncMock) as mock_update:
+        mock_update.return_value = UserRead(
+            id=mock_user.id,
+            username=mock_user.username,
+            avatar="/static/testuser/avatar/avatar.png",
+        )
 
         transport = ASGITransport(app=app_with_auth)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -111,11 +110,12 @@ async def test_upload_avatar_success(app_with_auth, mock_user):
 @pytest.mark.asyncio
 async def test_upload_avatar_jpg(app_with_auth, mock_user):
     """POST /me/avatar — 上传 JPG 头像。"""
-    with patch("app.auth.service.auth_usecases.update_me", new_callable=AsyncMock) as mock_update:
-        mock_updated = MagicMock(spec=User)
-        mock_updated.id = mock_user.id
-        mock_updated.avatar = "/static/testuser/avatar/avatar.jpg"
-        mock_update.return_value = mock_updated
+    with patch("app.auth.api.auth_service.update_profile", new_callable=AsyncMock) as mock_update:
+        mock_update.return_value = UserRead(
+            id=mock_user.id,
+            username=mock_user.username,
+            avatar="/static/testuser/avatar/avatar.jpg",
+        )
 
         transport = ASGITransport(app=app_with_auth)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -141,7 +141,6 @@ async def test_upload_avatar_unsupported_format(app_with_auth):
             files={"file": ("avatar.svg", io.BytesIO(svg_content), "image/svg+xml")},
         )
 
-    # 后端通过 HttpResponse.error(code=400) 返回，实际 HTTP 状态码为 400
     assert response.status_code == 400
 
 
@@ -150,14 +149,12 @@ async def test_upload_avatar_too_large(app_with_auth):
     """POST /me/avatar — 超过 2MB 的文件应返回 400。"""
     transport = ASGITransport(app=app_with_auth)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        # 生成超过 2MB 的假 PNG
         big_content = b"x" * (2 * 1024 * 1024 + 100)
         response = await client.post(
             "/api/v1/users/me/avatar",
             files={"file": ("big.png", io.BytesIO(big_content), "image/png")},
         )
 
-    # 后端通过 HttpResponse.error(code=400) 返回，实际 HTTP 状态码为 400
     assert response.status_code == 400
 
 
@@ -173,21 +170,21 @@ async def test_upload_avatar_no_auth():
             files={"file": ("avatar.png", io.BytesIO(png_bytes), "image/png")},
         )
 
-    assert response.status_code in (401, 403)
+    assert response.status_code == 401
 
 
-
-
+@pytest.mark.asyncio
 async def test_upload_avatar_writes_file(app_with_auth, mock_user, tmp_path):
     """POST /me/avatar — 验证文件实际写入磁盘。"""
     with (
         patch("app.config.WORKPLACE_DIR", tmp_path),
-        patch("app.auth.service.auth_usecases.update_me", new_callable=AsyncMock) as mock_update,
+        patch("app.auth.api.auth_service.update_profile", new_callable=AsyncMock) as mock_update,
     ):
-        mock_updated = MagicMock(spec=User)
-        mock_updated.id = mock_user.id
-        mock_updated.avatar = "/static/testuser/avatar/avatar.png"
-        mock_update.return_value = mock_updated
+        mock_update.return_value = UserRead(
+            id=mock_user.id,
+            username=mock_user.username,
+            avatar="/static/testuser/avatar/avatar.png",
+        )
 
         transport = ASGITransport(app=app_with_auth)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -209,22 +206,21 @@ async def test_upload_avatar_overwrites_previous(app_with_auth, mock_user, tmp_p
     """POST /me/avatar — 同一用户再次上传应覆盖旧头像。"""
     with (
         patch("app.config.WORKPLACE_DIR", tmp_path),
-        patch("app.auth.service.auth_usecases.update_me", new_callable=AsyncMock) as mock_update,
+        patch("app.auth.api.auth_service.update_profile", new_callable=AsyncMock) as mock_update,
     ):
-        mock_updated = MagicMock(spec=User)
-        mock_updated.id = mock_user.id
-        mock_updated.avatar = "/static/testuser/avatar/avatar.png"
-        mock_update.return_value = mock_updated
+        mock_update.return_value = UserRead(
+            id=mock_user.id,
+            username=mock_user.username,
+            avatar="/static/testuser/avatar/avatar.png",
+        )
 
         transport = ASGITransport(app=app_with_auth)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            # 第一次上传
             png1 = _make_png_bytes()
             await client.post(
                 "/api/v1/users/me/avatar",
                 files={"file": ("avatar.png", io.BytesIO(png1), "image/png")},
             )
-            # 第二次上传（不同内容）
             png2 = _make_png_bytes() + b"\x00"
             response = await client.post(
                 "/api/v1/users/me/avatar",
@@ -232,13 +228,7 @@ async def test_upload_avatar_overwrites_previous(app_with_auth, mock_user, tmp_p
             )
 
     assert response.status_code == 200
-    # 使用 tmp_path 构建路径
     avatar_dir = tmp_path / "testuser" / "avatar"
     written_file = avatar_dir / "avatar.png"
     assert written_file.exists()
-    # 第二次上传的内容应覆盖第一次
     assert written_file.read_bytes() == png2
-
-
-
-

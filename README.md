@@ -51,7 +51,6 @@
     - [question-bank/](src/features/question-bank/) - 题库答题练习
     - [evaluation/](src/features/evaluation/) - 学习数据上报与事件 API 封装
     - [learning-assessment/](src/features/learning-assessment/) - 学习评估与历史看板视图
-    - [algorithm-visualization/](src/features/algorithm-visualization/) - 算法可视化画板与代码运行
   - [src/shared/](src/shared/) - 共享模块（API 封装、通用 UI 组件、Markdown 渲染、数据模型等）
 - [server/](server/) - 后端源码目录
   - [server/app/](server/app/) - API 逻辑代码
@@ -62,7 +61,6 @@
     - [profile/](server/app/profile/) - 学习者画像多维属性服务
     - [evaluation/](server/app/evaluation/) - 学习事件采集、时长计算与学习评估生成
     - [quiz/](server/app/quiz/) - 题库管理、提交判分与错题本
-    - [algorithm_visualizer/](server/app/algorithm_visualizer/) - 算法模板、插装运行、Trace 构建及运行时
     - [rag/](server/app/rag/) - ChromaDB 向量索引与混合检索
     - [shared/](server/app/shared/) - 课件 (PPT) 与动画 (Cartoon) 渲染管线、通用子 Agent 工具、ASR/TTS 桥接
     - [infra/](server/app/infra/) - 基础设施（数据库连接、SQLModel 定义、配置加载、日志处理）
@@ -261,7 +259,6 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
 | `/question-bank` | `QuestionBank.vue` | **是** | 学科题库测试与错题本回顾 |
 | `/profile` | `Profile.vue` | **是** | 学习者个人中心及画像大盘 |
 | `/assessment` | `LearningAssessment.vue` | **是** | 周期性学习评估报告与历史查看 |
-| `/algorithm-visualizer` | `AlgorithmVisualization.vue` | **是** | 算法代码插装 Trace 运行与动态动画可视化播放 |
 
 ---
 
@@ -279,7 +276,6 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
 | `/api/v1/ai/quiz` | quiz | 获取随机练习题目 (`GET /quiz`)、提交答题选项 (`POST /quiz/submit`)、获取个人答题统计指标与历史 (`GET /quiz/stats` & `GET /quiz/history`)、复习回顾 (`POST /quiz/review`)。 |
 | `/api/v1/ai/wrong` | quiz | 获取错题列表 (`GET /wrong`)、随机抽题练习 (`GET /wrong/random`)、移除/彻底删除错题 (`DELETE /wrong/{id}`)、归档已掌握错题 (`POST /wrong/{id}/archive`)。 |
 | `/api/v1/ai/evaluation` | evaluation | 手动上报学习事件 (`POST /evaluation/events`)、离开页面上报时长会话 (`POST /evaluation/sessions`)、触发/获取学习评估报告 (`POST/GET /evaluation/assessments/*`)、个人中心多图表数据聚合 (`GET /evaluation/dashboard`)。 |
-| `/api/v1/ai/algorithm-visualizer` | visualizer | 获取支持的可视化语言 (`GET /algorithm-visualizer/languages`)、列出官方算法模板 (`GET /algorithm-visualizer/algorithms`)、获取算法源码及模板输入 (`GET /algorithm-visualizer/templates`)、自定义代码编译插装契约 (`POST /algorithm-visualizer/custom-contract`)、代码编译及 Trace 运行 (`POST /algorithm-visualizer/run`) |
 
 ---
 

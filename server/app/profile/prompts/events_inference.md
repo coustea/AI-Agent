@@ -53,7 +53,6 @@
 | chat_dialogue | cognitive_style, self_correction_ability | 对话中的提问方式反映认知风格；追问和纠错反映自纠能力 |
 | path_node_started / path_node_completed | knowledge_level, learning_goal_type | 路径选择反映学习目标；完成进度反映知识积累 |
 | path_quiz_answered / quiz_submitted | weak_knowledge_points, knowledge_gap_pattern, self_correction_ability | 得分反映掌握程度；错误模式反映薄弱点和缺口；重复练习反映自纠 |
-| visualizer_run | cognitive_style | 偏好可视化操作反映动觉/视觉型认知风格 |
 
 ## 推断原则
 
@@ -82,7 +81,6 @@
 - 从学习路径中跳过的节点推断缺口
 
 ### cognitive_style（认知风格）
-- 频繁使用 visualizer_run → 视觉/动觉型
 - 大量 chat_dialogue → 读写/听觉型
 - 偏好 resource 生成 → 读写型
 - 结合学习时间和频率推断学习节奏

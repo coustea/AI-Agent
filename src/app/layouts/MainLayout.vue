@@ -97,7 +97,6 @@ import {
   ClockIcon as Clock,
   CompassIcon as Connection,
   CpuIcon as Cpu,
-  GitBranchIcon as Branch,
   GraduationCapIcon as DataBoard,
   LayoutDashboardIcon as Menu,
   LibraryBigIcon as Collection,
@@ -154,8 +153,6 @@ const navItems = [
 // 启动认证状态轮询（每 60 秒检查 Token 有效性）
 useAuthPolling(60000)
 
-navItems.push({ path: '/algorithm-visualizer', label: '算法可视化', icon: Branch, theme: 'nav-theme-visualizer' })
-
 // 当前激活的导航项：根据路由路径匹配高亮
 const activePath = computed(() => {
   const current = pendingPath.value || route.path
@@ -173,9 +170,6 @@ const activePath = computed(() => {
   }
   if (current.startsWith('/assessment')) {
     return '/dashboard'
-  }
-  if (current.startsWith('/algorithm-visualizer')) {
-    return '/algorithm-visualizer'
   }
   if (current.startsWith('/profile')) {
     return '/profile'

@@ -22,13 +22,21 @@ export function useChatRun() {
     state.value = initial
     onChange(initial)
     if (!isRunActive(initial)) return
+
     const epoch = generation
-    const query = new URLSearchParams({ after_sequence: String(initial.sequence) })
+    const query = new URLSearchParams()
     const token = getAuthToken()
     if (token) query.set('token', token)
-    source = new EventSource(`/api/v1/ai/chat/runs/${initial.run_id}/events?${query}`)
+    const qs = query.toString()
+    const url = `/api/v1/ai/chat/runs/${initial.run_id}/events${qs ? `?${qs}` : ''}`
+
+    source = new EventSource(url)
     const connection = source
-    connection.onopen = () => { reconnecting.value = false }
+
+    connection.onopen = () => {
+      reconnecting.value = false
+    }
+
     connection.addEventListener('chat.event', (raw: MessageEvent) => {
       if (epoch !== generation || !state.value) return
       const event = JSON.parse(raw.data) as ChatEvent
@@ -36,7 +44,7 @@ export function useChatRun() {
       onChange(state.value)
       if (!isRunActive(state.value)) close()
     })
-    // EventSource sends Last-Event-ID on automatic retries. A new connection uses snapshot.sequence.
+
     connection.onerror = async () => {
       reconnecting.value = true
       if (connection.readyState !== EventSource.CLOSED) return
@@ -44,7 +52,6 @@ export function useChatRun() {
         const response = await getChatRun(initial.run_id)
         if (epoch === generation) connect(response.data.data, onChange)
       } catch {
-        // Keep the persisted run status intact; a transport failure is not a run failure.
         if (epoch === generation) reconnecting.value = true
       }
     }
@@ -59,7 +66,9 @@ export function useChatRun() {
   }
 
   async function cancel() {
-    if (state.value && isRunActive(state.value)) await cancelChatRun(state.value.run_id)
+    if (state.value && isRunActive(state.value)) {
+      await cancelChatRun(state.value.run_id)
+    }
   }
 
   return { state, reconnecting, start, connect, close, cancel }

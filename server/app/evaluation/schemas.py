@@ -6,14 +6,13 @@ from datetime import datetime
 from typing import Any, Literal
 from pydantic import BaseModel, Field, model_validator
 
-ModuleType = Literal["chat", "resource", "path", "quiz", "visualizer"]
+ModuleType = Literal["chat", "resource", "path", "quiz"]
 
 LearningEventType = Literal[
     "chat_dialogue",
     "resource_generated", "resource_viewed", "resource_completed", "resource_feedback",
     "path_node_started", "path_node_completed", "path_quiz_answered", "path_feedback",
     "quiz_submitted",
-    "visualizer_run",
 ]
 
 

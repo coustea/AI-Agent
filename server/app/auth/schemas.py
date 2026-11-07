@@ -40,6 +40,18 @@ class UserUpdate(BaseModel):
     courses: list[str] | None = None
 
 
+class UserClaims(BaseModel):
+    """JWT Token Payload 中的常用用户信息模型。"""
+
+    id: int
+    username: str
+    email: str | None = None
+    role: str = "user"
+    onboarding_completed: bool = False
+
+    model_config = {"from_attributes": True}
+
+
 class UserRead(BaseModel):
     """用户信息响应体（排除密码等敏感字段）。"""
 
@@ -64,4 +76,4 @@ class UserRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
-__all__ = ["UserRegister", "UserLogin", "UserUpdate", "UserRead"]
+__all__ = ["UserRegister", "UserLogin", "UserUpdate", "UserRead", "UserClaims"]

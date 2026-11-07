@@ -1,6 +1,7 @@
-// src/types/chat.ts — 聊天相关类型定义
+// Chat 业务类型定义
 
-// 附件元数据（URL、类型、名称等）
+import type { RunState } from './chatEvent'
+
 interface AttachmentContentMeta {
   url?: string
   file_type?: string
@@ -10,17 +11,16 @@ interface AttachmentContentMeta {
 }
 
 export type ContentPart =
-  | { type: "text"; text: string }
-  | ({ type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } } & AttachmentContentMeta)
-  | ({ type: "file"; file: { file_id?: string; file_data?: string; filename?: string } } & AttachmentContentMeta)
+  | { type: 'text'; text: string }
+  | ({ type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } } & AttachmentContentMeta)
+  | ({ type: 'file'; file: { file_id?: string; file_data?: string; filename?: string } } & AttachmentContentMeta)
 
 export interface ChatMessageItem {
   id: number
-  role: 'user' | 'assistant' | 'tool'
+  role: 'user' | 'assistant'
   content: ContentPart[]
   run_id?: string
-  run?: import('./chatEvent').RunState | null
-  attachment_analyses?: unknown[]
+  run?: RunState | null
   created_at: string
 }
 
@@ -46,7 +46,6 @@ export interface MessageAttachmentInput {
   mime_type?: string
 }
 
-// SSE 流式聊天请求参数
 export interface ChatRunCreated {
   run_id: string
   message_id: number

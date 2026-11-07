@@ -19,8 +19,6 @@ from app.evaluation.api import router as evaluation_router
 from app.path.api import router as path_router, dashboard_router as path_dashboard_router
 # 学习资源路由
 from app.resource.api import router as resource_router
-# 算法可视化路由
-from app.algorithm_visualizer.api import router as visualizer_router
 
 # 测验与错题本路由
 from app.profile.api import router as profile_router
@@ -39,8 +37,6 @@ def install_routes(app: FastAPI) -> None:
     """
     # 用户认证模块：/api/v1/users/*
     app.include_router(auth_router, prefix="/api/v1/users", tags=["users"])
-    # 算法可视化模块
-    app.include_router(visualizer_router, prefix="/api/v1/ai", tags=["visualizer"])
     # AI 聊天模块：/api/v1/ai/chat/*
     app.include_router(chat_router, prefix="/api/v1/ai", tags=["ai"])
     # 学习资源模块：/api/v1/ai/resource/*

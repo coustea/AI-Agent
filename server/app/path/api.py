@@ -6,14 +6,12 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import (
-    get_current_user,
-    get_current_user_flexible,
-)
+from app.auth.schemas import UserClaims
+from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import LearningEvent, LearningPath, PathNode, User
+from app.infra.models import LearningEvent, LearningPath, PathNode
 from app.response import HttpResponse
 from app.path.event import PathEvents, encode_path_sse, get_path_channel
 from app.path.schemas import PathQuizSubmitRequest, PathRequest
@@ -46,7 +44,7 @@ SSE_HEADERS = {
 @router.post("")  # POST /api/v1/ai/path-plan — 创建学习路径
 async def create_path(
     request: PathRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -82,7 +80,7 @@ async def stream_path_plan_events(
     path_id: int,
     run_id: str,
     after_sequence: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user_flexible),
+    current_user: UserClaims = Depends(get_current_user),
 ):
     """订阅路径规划实时事件流 — 前端 usePathEvents 通过此端点接收生成进度。"""
     events = await get_path_channel(current_user.id, path_id, run_id)
@@ -128,7 +126,7 @@ async def stream_path_plan_events(
 @router.get("/latest")
 async def get_latest_active_path(
     module: str = "mentor",
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -140,7 +138,7 @@ async def get_latest_active_path(
 @router.get("/history")  # GET /api/v1/ai/path-plan/history — 获取路径历史列表
 async def get_path_history(
     module: str = "mentor",
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -155,7 +153,7 @@ async def get_path_history(
 @router.get("/nodes/{node_id}/workspace")  # GET /api/v1/ai/path-plan/nodes/{id}/workspace — 获取节点学习区
 async def get_node_workspace(
     node_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -176,7 +174,7 @@ async def get_node_workspace(
 @router.post("/nodes/{node_id}/start-learning")  # POST 标记节点开始学习（轻量）
 async def start_learning(
     node_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -193,7 +191,7 @@ async def start_learning(
 @router.post("/nodes/{node_id}/tutorial")  # POST 为节点生成教程（耗时）
 async def generate_tutorial(
     node_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -213,7 +211,7 @@ async def generate_tutorial(
 @router.get("/nodes/{node_id}/questions")  # GET 获取最新一轮已有测验题（不重新生成）
 async def get_node_questions(
     node_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -229,7 +227,7 @@ async def get_node_questions(
 @router.post("/nodes/{node_id}/questions")  # POST 生成节点测验题 — LLM 根据教程生成 5 道题
 async def generate_node_questions(
     node_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -247,7 +245,7 @@ async def generate_node_questions(
 async def submit_node_quiz(
     node_id: int,
     payload: PathQuizSubmitRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -273,7 +271,7 @@ async def generate_node_resource(
     node_id: int,
     resource_type: str,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """创建节点辅助资源生成任务 — 支持类型：mindmap, code, ppt, reading, cartoon"""
@@ -324,7 +322,7 @@ async def generate_node_resource(
 @router.get("/{path_id}")  # GET /api/v1/ai/path-plan/{id} — 获取路径详情（含所有节点）
 async def get_path_by_id(
     path_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -344,7 +342,7 @@ async def get_path_by_id(
 async def record_path_learning_event(
     path_id: int,
     payload: LearningEventCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -376,7 +374,7 @@ async def record_path_learning_event(
 @router.get("/{path_id}/evaluation")  # GET 路径学习评估 — 汇总学习信号和优化建议
 async def get_path_learning_evaluation(
     path_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     service = PathService(session)
@@ -404,7 +402,7 @@ def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
 # 仪表盘：获取继续学习数据（每条活跃路径的当前节点）
 @dashboard_router.get("/dashboard/continue-learning")
 async def get_continue_learning(
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取继续学习数据 — 每条活跃路径的当前节点（一条路径只显示一个节点）。"""

@@ -47,10 +47,6 @@ function getContextFromRoute(route: Router['currentRoute']['value']): TrackingCo
     return { sourcePage: 'quiz' }
   }
 
-  if (name === 'AlgorithmVisualizer') {
-    return { sourcePage: 'visualizer' }
-  }
-
   // 学习评估页面
   if (name === 'LearningAssessment') {
     return { sourcePage: 'assessment' }

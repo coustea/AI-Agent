@@ -1,5 +1,5 @@
 // 功能模块类型
-export type ModuleType = 'chat' | 'resource' | 'path' | 'quiz' | 'visualizer'
+export type ModuleType = 'chat' | 'resource' | 'path' | 'quiz'
 
 // 学习事件类型枚举
 export type LearningEventType =
@@ -13,7 +13,6 @@ export type LearningEventType =
   | 'path_quiz_answered'
   | 'path_feedback'
   | 'quiz_submitted'
-  | 'visualizer_run'
 
 // 创建学习事件的请求参数
 export interface LearningEventCreate {

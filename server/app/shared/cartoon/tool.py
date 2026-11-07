@@ -4,9 +4,10 @@ from typing import Any
 from uuid import uuid4
 from pydantic import BaseModel, Field
 from app.config import static_url, user_resource_cartoon_dir
-from app.shared.cartoon.agent import generate
+from app.shared.cartoon.agent import ProgressCallback, generate
 from app.shared.cartoon.schemas import CartoonBrief, CartoonGenerationConfig, CartoonInput
 from app.shared.tools.registry import Tool
+
 
 class GenerateVideoToolArgs(BaseModel):
     topic: str = Field(min_length=2)
@@ -21,6 +22,7 @@ def build_cartoon_subagent_tool(
     resource_id: str | None = None,
     session_id: str | None = None,
     output_dir: Path | None = None,
+    progress: ProgressCallback | None = None,
 ) -> Tool:
     """构造供 chat、resource 等父智能体统一调用的 generate_teaching_video 工具。"""
 
@@ -40,7 +42,7 @@ def build_cartoon_subagent_tool(
             source_materials=list(source_materials or [learning_goal])[:8],
             configuration=CartoonGenerationConfig(voice=voice_val),  # type: ignore[arg-type]
         )
-        artifact = await generate(CartoonInput(output_dir=target_dir, brief=brief))
+        artifact = await generate(CartoonInput(output_dir=target_dir, brief=brief), progress=progress)
         return {
             "status": "ok",
             "title": artifact.title,

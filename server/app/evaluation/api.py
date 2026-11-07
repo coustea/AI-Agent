@@ -11,12 +11,13 @@ from sqlalchemy import func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user, get_current_user_flexible
+from app.auth.schemas import UserClaims
+from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
 from app.evaluation.service import evaluation_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import User, LearningAssessment, UserDailyActivity
+from app.infra.models import LearningAssessment, UserDailyActivity
 from app.response import HttpResponse
 
 router = APIRouter()
@@ -27,7 +28,7 @@ logger = get_logger(__name__)
 @router.post("/evaluation/events")
 async def record_learning_event(
     payload: LearningEventCreate,
-    current_user: User = Depends(get_current_user_flexible),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """记录学习事件 — 资源浏览/完成/测验/对话/资源生成/路径节点/可视化运行等。"""
@@ -50,7 +51,7 @@ async def record_learning_event(
 @router.post("/evaluation/sessions")
 async def record_learning_session(
     payload: LearningSessionCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """记录一次学习会话（前端离开学习页面时上报）。"""
@@ -78,7 +79,7 @@ class AssessmentGenerateRequest(BaseModel):
 @router.post("/evaluation/assessments")
 async def generate_assessment(
     payload: AssessmentGenerateRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """手动触发生成学习评估；已有生成中评估返回 409。
@@ -185,7 +186,7 @@ async def _run_assessment_generation(user_id: int, assessment_id: int, range_day
 # 2. GET /api/v1/ai/evaluation/assessments/latest -> 获取最新 ready 评估
 @router.get("/evaluation/assessments/latest")
 async def get_latest_assessment(
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取最新的一条 ready 评估；无评估则返回 null/None。"""
@@ -210,7 +211,7 @@ async def get_latest_assessment(
 async def get_assessments_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """历史分页列表。不回传 assessment 正文以减小带宽。"""
@@ -248,7 +249,7 @@ async def get_assessments_history(
 @router.get("/evaluation/assessments/{assessment_id}")
 async def get_assessment_detail(
     assessment_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取单次评估详情。如果非本人拥有，返回 404，不泄露存在性。"""
@@ -264,7 +265,7 @@ async def get_assessment_detail(
 @router.get("/evaluation/dashboard")
 async def get_dashboard_data(
     range_days: int = Query(default=7, description="统计天数窗口"),
-    current_user: User = Depends(get_current_user_flexible),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。"""
@@ -291,7 +292,7 @@ async def get_dashboard_data(
 @router.get("/evaluation/assessments/{assessment_id}/dashboard")
 async def get_assessment_dashboard(
     assessment_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """根据历史评估的时间窗口重新计算看板数据，用于历史评估联动看板。"""

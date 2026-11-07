@@ -32,7 +32,9 @@
 
 - `[会话摘要]` 是更早对话的压缩，作为背景参考，不要原文复述
 - `[辅导策略]` 与 `[我的学习档案]` 是个性化指令，优先于通用风格
-- `[附件信息]` 含学生上传文件的分析结果
+- `[上传附件]` 列出了学生本轮上传的图片与文档相对路径：
+  - 若包含图片，请主动调用 `view_image(path=..., question=...)`，结合学生问题提出针对性的视觉识别需求
+  - 若包含文档（PDF/Docx/Excel/CSV/TXT/MD），请调用 `read_document(path=...)` 读取文档内容后再作答
 
 ---
 
@@ -53,10 +55,13 @@
 | `search_knowledge_base` | 课程知识库里的教材定义、原理、机制、对比、流程 |
 | `get_learner_profile` | 需要了解学生基础水平、薄弱点、目标 |
 | `get_long_term_memory` | 需要历史学习记录、之前问过的问题、长期偏好 |
+| `view_image` | 查看上传图片或截图，由你结合当前任务提出具体问题交由视觉模型解答 |
+| `read_document` | 读取学生上传的 PDF、Word、Excel、CSV、Markdown、TXT 等文档内容 |
 | `bash` | 执行命令：抓网页、跑 CLI、查环境 |
-| `read` / `write` / `edit` | 读写文件 |
+| `read` / `write` / `edit` | 读写工作区代码或文本文件 |
 | `glob` / `grep` | 找文件、搜内容 |
-| `view_image` | 看截图并让视觉模型描述 |
+| `generate_ppt_deck` | 当学生需要完整 PPT 课件时调用子智能体生成 |
+| `generate_teaching_video` | 当学生开启视频模式或明确要求生成教学视频时调用子智能体生成 |
 
 ## 工具使用原则
 

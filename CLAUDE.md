@@ -59,7 +59,7 @@ npx remotion --version   # verify Remotion 4.0.478
 
 Organized by app shell + feature domains:
 - `src/app/` — router, layouts, app-level wiring
-- `src/features/` — `auth`, `chat`, `dashboard`, `learning-path`, `profile`, `question-bank`, `resource`, `algorithm-visualization`
+- `src/features/` — `auth`, `chat`, `dashboard`, `learning-path`, `profile`, `question-bank`, `resource`
 - `src/shared/` — `api`, `auth`, `content`, `markdown`, `model`, `styles`, `ui`
 
 Routing lives in `src/app/router/routes.ts`. Authenticated pages render inside `src/app/layouts/MainLayout.vue`.

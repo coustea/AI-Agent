@@ -97,27 +97,6 @@ class User(SQLModel, table=True):
     )
 
 
-# ---------------------------------------------------------------------------
-# Auth — JWT Token 白名单（登出时从白名单移除）
-# ---------------------------------------------------------------------------
-
-class ActiveToken(SQLModel, table=True):
-    """活跃 Token 白名单表 — 用于支持登出失效和强制下线"""
-    __tablename__ = "active_tokens"
-
-    id: int | None = Field(default=None, primary_key=True)
-    # 关联用户，支持按用户批量清理 token
-    user_id: int = Field(index=True)
-    # JWT 字符串，唯一索引用于快速查找
-    token: str = Field(unique=True, index=True)
-    # token 过期时间，用于清理过期记录
-    expires_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-
-
 class UserDailyActivity(SQLModel, table=True):
     """用户每日登录活跃事实，一人一天只保留一条。"""
     __tablename__ = "user_daily_activities"
@@ -241,7 +220,7 @@ class ChatMessage(SQLModel, table=True):
 
 
 class ChatRun(SQLModel, table=True):
-    """一次对话运行 — 承载 RunState 的可持久化快照。"""
+    """一次对话运行 — 承载 RunState 的完整可持久化快照（含阶段、步骤时间线、产物与引用来源）。"""
     __tablename__ = "chat_runs"
     __table_args__ = (
         Index("ix_chat_runs_session_id", "session_id"),
@@ -251,7 +230,6 @@ class ChatRun(SQLModel, table=True):
         ),
     )
 
-    # run_id 与触发它的用户消息主键一致，前端拿 message_id 即可订阅
     id: str = Field(sa_column=Column(String(36), primary_key=True))
     session_id: str = Field(
         sa_column=Column(
@@ -261,16 +239,15 @@ class ChatRun(SQLModel, table=True):
         ),
     )
     user_id: int = Field(index=True)
-    # 用户消息主键（chat_messages.id）
     user_message_id: int = Field(index=True)
     status: str = Field(default="queued", max_length=16)
-    # 已流式产出的最终文本
+    phase: str = Field(default="queued", max_length=32)
+    phase_label: str = Field(default="等待处理", max_length=200)
     content: str = Field(default="", sa_column=Column(Text))
-    # 失败/取消原因
     error: str = Field(default="", sa_column=Column(Text))
-    # 本次运行产出物（video / ppt 等）
+    total_elapsed_ms: int = Field(default=0)
+    steps: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
     artifacts: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
-    # 引用来源
     sources: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
 
     created_at: datetime = Field(
@@ -282,73 +259,6 @@ class ChatRun(SQLModel, table=True):
         sa_column=Column(UtcDateTime(), onupdate=func.now()),
     )
     finished_at: datetime | None = Field(
-        default=None,
-        sa_column=Column(UtcDateTime(), nullable=True),
-    )
-
-
-class ChatRunEvent(SQLModel, table=True):
-    """运行事件流 — SSE 断点续传的唯一事实源（含活动生命周期）。"""
-    __tablename__ = "chat_run_events"
-    __table_args__ = (
-        Index("ix_chat_run_events_run_sequence", "run_id", "sequence"),
-        UniqueConstraint("run_id", "sequence", name="uq_chat_run_events_run_sequence"),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    run_id: str = Field(
-        sa_column=Column(
-            String(36),
-            ForeignKey("chat_runs.id", ondelete="CASCADE"),
-            index=True,
-        ),
-    )
-    # 单调递增的 SSE 断点序号，与自增主键解耦
-    sequence: int = Field(default=0)
-    event: str = Field(max_length=48)
-    data: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(UtcDateTime()),
-    )
-
-
-class ChatAttachmentAnalysis(SQLModel, table=True):
-    """附件分析派生产物，不改写用户原始消息。"""
-    __tablename__ = "chat_attachment_analyses"
-    __table_args__ = (
-        CheckConstraint(
-            "analysis_type IN ('image', 'document')",
-            name="ck_chat_attachment_analyses_type",
-        ),
-        CheckConstraint(
-            "status IN ('running', 'completed', 'failed')",
-            name="ck_chat_attachment_analyses_status",
-        ),
-    )
-
-    id: str = Field(
-        default_factory=lambda: str(uuid.uuid4()),
-        sa_column=Column(String(36), primary_key=True),
-    )
-    run_id: str = Field(
-        sa_column=Column(
-            String(36),
-            ForeignKey("chat_runs.id", ondelete="CASCADE"),
-            index=True,
-        ),
-    )
-    analysis_type: str = Field(max_length=20)
-    status: str = Field(default="running", max_length=20)
-    content: str = Field(default="", sa_column=Column(Text))
-    error_message: str | None = Field(default=None, sa_column=Column(Text))
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(UtcDateTime()),
-    )
-    completed_at: datetime | None = Field(
         default=None,
         sa_column=Column(UtcDateTime(), nullable=True),
     )
@@ -768,7 +678,7 @@ class LearningEvent(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
-    module: str = Field(max_length=50, description="模块: chat/resource/path/quiz/visualizer")
+    module: str = Field(max_length=50, description="模块: chat/resource/path/quiz")
     entity_id: str | None = Field(default=None, max_length=255, description="模块内实体 ID（session_id / resource_id / path_node_id / …）")
     event_type: str = Field(max_length=50, description="模块内事件子类型")
     score: float | None = Field(default=None, description="得分 0–100")
@@ -1092,14 +1002,11 @@ class WrongQuestion(SQLModel, table=True):
 
 # 所有需要建表的模型类注册表，init_db() 据此创建或更新表结构
 REGISTERED_MODELS = (
-    ActiveToken,
     LlmUsage,
     UserDailyActivity,
     ChatSession,
     ChatRun,
-    ChatRunEvent,
     ChatMessage,
-    ChatAttachmentAnalysis,
     ChatSessionSummaryBlock,
     ChatLongTermMemory,
     UserProfile,

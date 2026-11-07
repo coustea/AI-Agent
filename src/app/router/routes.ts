@@ -18,7 +18,6 @@ const ResourceResult = () => import('@/features/resource/views/ResourceResult.vu
 const ResourceItemDetail = () => import('@/features/resource/views/ResourceItemDetail.vue')
 const QuestionBank = () => import('@/features/question-bank/views/QuestionBank.vue')
 const ResourceHistory = () => import('@/features/resource/views/ResourceHistory.vue')
-const AlgorithmVisualizer = () => import('@/features/algorithm-visualization/views/AlgorithmVisualization.vue')
 const LearningAssessment = () => import('@/features/learning-assessment/views/LearningAssessment.vue')
 
 // 路由配置表
@@ -47,14 +46,6 @@ export const routes: RouteRecordRaw[] = [
       { path: 'resource-detail/:id', name: 'ResourceResult', component: ResourceResult },
       { path: '/ai/resources/history', name: 'ResourceHistory', component: ResourceHistory },
       { path: 'question-bank', name: 'QuestionBank', component: QuestionBank },
-      {
-        path: 'algorithm-visualizer',
-        name: 'AlgorithmVisualizer',
-        component: AlgorithmVisualizer,
-        meta: {
-          title: '算法可视化',
-        },
-      },
       {
         path: 'assessment',
         name: 'LearningAssessment',

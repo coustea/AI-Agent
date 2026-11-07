@@ -1,11 +1,8 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
-import monacoEditorPluginModule from 'vite-plugin-monaco-editor'
 import { fileURLToPath, URL } from 'node:url'
 
-// Handle CJS dual-default export from vite-plugin-monaco-editor
-const monacoEditorPlugin = (monacoEditorPluginModule as any).default || monacoEditorPluginModule
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:9999'
@@ -14,7 +11,6 @@ export default defineConfig(({ mode }) => {
     plugins: [
       vue(),
       tailwindcss(),
-      monacoEditorPlugin({}),
     ],
     resolve: {
       alias: {

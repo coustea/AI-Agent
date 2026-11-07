@@ -1,125 +1,169 @@
-"""Chat 模块的数据契约。
-
-- ``SourceItem`` / ``NormalizedToolResult`` 工具结果与引用来源
-- ``UploadResponse`` / ``ChatMessageItem`` 上传与历史消息 DTO
-
-运行事件与快照（``RunEvent`` / ``RunState`` / ``encode_chat_sse``）定义在
-``app.chat.harness.events``。
-"""
+"""Chat 模块统一数据契约 —— 涵盖运行状态、步骤时间线、SSE 事件与历史消息 DTO。"""
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import time
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
 DiagramMode = Literal["auto", "required"]
 
+RunStatus = Literal["queued", "running", "completed", "failed", "cancelled", "interrupted"]
+
+RunPhase = Literal[
+    "queued",
+    "preparing",
+    "thinking",
+    "tool_calling",
+    "streaming",
+    "completed",
+    "failed",
+    "cancelled",
+    "interrupted",
+]
+
+StepKind = Literal[
+    "thinking",
+    "knowledge",
+    "memory",
+    "vision",
+    "document",
+    "code",
+    "subagent",
+    "tool",
+]
+
+StepStatus = Literal["running", "completed", "failed", "cancelled"]
+
+RunEventName = Literal[
+    "run.snapshot",
+    "phase.changed",
+    "step.upsert",
+    "text.delta",
+    "artifact.created",
+    "run.finished",
+]
+
+TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled", "interrupted"})
+
 
 class SourceItem(BaseModel):
-    """来源条目 —— 单个 URL 或知识库来源的元数据。"""
+    """知识库或外部检索的引用来源条目。"""
 
     source: str = ""
     title: str = ""
+    heading: str = ""
     url: str = ""
     summary: str = ""
-    published_at: str | None = None
+    score: float | None = None
 
 
-class NormalizedToolResult(BaseModel):
-    """统一标准化后的工具执行结果。"""
+class SubStep(BaseModel):
+    """子智能体（如 PPT / 视频生成）内部的实时子步骤。"""
 
-    text: str = ""
-    sources: list[SourceItem] = Field(default_factory=list)
+    id: str
+    title: str
+    status: StepStatus = "running"
+    timestamp: float = Field(default_factory=time.time)
+
+
+class RunStep(BaseModel):
+    """Agent 运行过程中的单个透明可观测步骤（推理、工具调用、子智能体执行）。"""
+
+    step_id: str
+    kind: StepKind = "tool"
+    title: str
+    subtitle: str = ""
+    status: StepStatus = "running"
+    tool_name: str = ""
+    input_preview: str = ""
+    output_preview: str = ""
+    error: str = ""
+    started_at: float = Field(default_factory=time.time)
+    elapsed_ms: int = 0
+    progress: int | None = None
+    sub_steps: list[SubStep] = Field(default_factory=list)
+
+
+class RunArtifact(BaseModel):
+    """运行产出的可下载/可预览多模态资源（教学视频 / PPT 课件）。"""
+
+    id: str
+    kind: str
+    title: str = ""
+    url: str = ""
+    preview_url: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
-def normalize_tool_result(raw_result: Any) -> NormalizedToolResult:
-    """把任意工具返回值标准化为 ``NormalizedToolResult``。"""
-    if raw_result is None:
-        return NormalizedToolResult()
-    if isinstance(raw_result, str):
-        return NormalizedToolResult(text=raw_result)
-    if isinstance(raw_result, BaseModel):
-        raw_result = raw_result.model_dump()
-    if isinstance(raw_result, Mapping):
-        text = str(raw_result.get("text") or raw_result.get("message") or "").strip()
-        raw_sources = raw_result.get("sources", [])
-        sources: list[SourceItem] = []
-        if isinstance(raw_sources, list):
-            for item in raw_sources:
-                if isinstance(item, dict):
-                    sources.append(SourceItem(**item))
-                elif isinstance(item, SourceItem):
-                    sources.append(item)
-        metadata = {k: v for k, v in raw_result.items() if k not in ("text", "message", "sources")}
-        return NormalizedToolResult(text=text, sources=sources, metadata=metadata)
-    return NormalizedToolResult(text=str(raw_result).strip())
+class RunState(BaseModel):
+    """一次 Agent 运行的完整实时快照，同时服务 SSE 首帧同步与历史回放。"""
+
+    run_id: str
+    sequence: int = 0
+    status: RunStatus = "queued"
+    phase: RunPhase = "queued"
+    phase_label: str = "等待处理"
+    content: str = ""
+    error: str = ""
+    total_elapsed_ms: int = 0
+    steps: list[RunStep] = Field(default_factory=list)
+    artifacts: list[RunArtifact] = Field(default_factory=list)
+    sources: list[SourceItem] = Field(default_factory=list)
+
+
+class RunEvent(BaseModel):
+    """通过 SSE 推送给前端的单条事件帧。"""
+
+    run_id: str
+    sequence: int
+    event: RunEventName
+    data: dict[str, Any] = Field(default_factory=dict)
+    timestamp: float = Field(default_factory=time.time)
+
+
+def encode_chat_sse(event: RunEvent) -> str:
+    """将 RunEvent 编码为标准 SSE 帧文本（事件名固定为 chat.event）。"""
+    return f"id: {event.sequence}\nevent: chat.event\ndata: {event.model_dump_json()}\n\n"
 
 
 class UploadResponse(BaseModel):
-    """文件上传成功后的响应。"""
+    """文件上传成功后的元数据响应。"""
 
-    url: str = Field(..., description="文件访问 URL")
+    url: str = Field(..., description="文件静态访问 URL")
     file_type: str = Field(default="document", description="image / document")
     original_name: str = Field(default="", description="原始文件名")
-    size_bytes: int = Field(default=0, ge=0, description="文件大小")
+    size_bytes: int = Field(default=0, ge=0, description="文件字节大小")
     mime_type: str | None = Field(default=None, description="MIME 类型")
 
 
-class ChatMessageItem:
-    """历史消息 DTO，供 ``GET /chat/history`` 序列化。"""
+class ChatMessageItem(BaseModel):
+    """会话历史消息 DTO，仅面向前端展示 user 与最终 assistant 对话轮次。"""
 
-    def __init__(
-        self,
-        *,
-        id: int,
-        role: str,
-        content: list[dict[str, Any]],
-        run_id: str | None = None,
-        run: dict[str, Any] | None = None,
-        tool_calls: list[dict[str, Any]] | None = None,
-        tool_call_id: str | None = None,
-        attachment_analyses: list[dict[str, Any]] | None = None,
-        created_at: Any = None,
-    ) -> None:
-        """初始化历史消息 DTO。"""
-        self.id = id
-        self.role = role
-        self.content = content
-        self.run_id = run_id
-        self.run = run
-        self.tool_calls = tool_calls
-        self.tool_call_id = tool_call_id
-        self.attachment_analyses = attachment_analyses or []
-        self.created_at = created_at
-
-    def model_dump(self) -> dict[str, Any]:
-        """序列化为字典，仅输出非空的可选字段。"""
-        data: dict[str, Any] = {
-            "id": self.id,
-            "role": self.role,
-            "content": self.content,
-            "attachment_analyses": self.attachment_analyses,
-            "created_at": self.created_at,
-        }
-        if self.run_id:
-            data["run_id"] = self.run_id
-        if self.run is not None:
-            data["run"] = self.run
-        if self.tool_calls:
-            data["tool_calls"] = self.tool_calls
-        if self.tool_call_id:
-            data["tool_call_id"] = self.tool_call_id
-        return data
+    id: int
+    role: Literal["user", "assistant"]
+    content: list[dict[str, Any]] = Field(default_factory=list)
+    run_id: str | None = None
+    run: dict[str, Any] | None = None
+    created_at: Any = None
 
 
 __all__ = [
     "ChatMessageItem",
     "DiagramMode",
-    "NormalizedToolResult",
+    "RunArtifact",
+    "RunEvent",
+    "RunEventName",
+    "RunPhase",
+    "RunState",
+    "RunStatus",
+    "RunStep",
     "SourceItem",
+    "StepKind",
+    "StepStatus",
+    "SubStep",
+    "TERMINAL_STATUSES",
     "UploadResponse",
-    "normalize_tool_result",
+    "encode_chat_sse",
 ]

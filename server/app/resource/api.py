@@ -20,10 +20,10 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.security import get_current_user, get_current_user_flexible
+from app.auth.schemas import UserClaims
+from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import User
 from app.profile.context import ProfileScope, load_learner_context
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceService
@@ -43,7 +43,7 @@ logger = get_logger(__name__)
 @router.post("/resources")
 async def create_resource_task(
     req: ResourceGenerationRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """启动独立资源生成后台任务。"""
@@ -87,7 +87,7 @@ async def create_resource_task(
 @router.get("/resources/{resource_id}/status")
 async def get_generation_status(
     resource_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """查询后台生成任务的状态。"""
@@ -108,7 +108,7 @@ async def get_resource_events(
     resource_id: int,
     after_sequence: int = Query(default=0, ge=0),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
-    current_user: User = Depends(get_current_user_flexible),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """SSE 推送任务事件。"""
@@ -179,7 +179,7 @@ async def get_resource_events(
 async def list_resources(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """查询资源列表。"""
@@ -215,7 +215,7 @@ async def list_resources(
 @router.get("/resources/{resource_id}")
 async def get_resource(
     resource_id: int,
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """查询资源详情。"""
@@ -264,7 +264,7 @@ def _resource_title(resource: Any) -> str:
 
 @router.get("/dashboard/recent-resources")
 async def get_recent_resources(
-    current_user: User = Depends(get_current_user),
+    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """获取最近生成的学习资源列表。"""

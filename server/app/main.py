@@ -24,6 +24,7 @@ from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging, get_logger
 from app.routes import install_routes
+from app.middleware import JWTMiddleware
 from app.rag.retriever import check_index_health
 
 
@@ -44,7 +45,7 @@ async def lifespan(app: FastAPI):
     # 执行数据库连接检查，确保连接可用
     await check_all()
     # 把上次进程遗留的进行中运行标记为中断
-    from app.chat.harness import mark_interrupted_runs
+    from app.chat.agent import mark_interrupted_runs
 
     interrupted = await mark_interrupted_runs()
     if interrupted:
@@ -107,6 +108,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],         # 允许所有 HTTP 方法
         allow_headers=["*"],         # 允许所有请求头
     )
+
+    # 添加全局 JWT 认证中间件
+    app.add_middleware(JWTMiddleware)
 
     # 注册全局异常处理器（AuthError、HTTPException 等）
     install_exception_handlers(app)

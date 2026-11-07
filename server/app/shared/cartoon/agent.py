@@ -23,6 +23,7 @@ from app.shared.tools.registry import ToolRegistry, format_tool_output
 from app.shared.tools.skills import build_load_skill_tool
 
 _T = TypeVar("_T")
+ProgressCallback = Callable[[str, int], Awaitable[None]]
 
 _PROJECT = Path(__file__).resolve().parents[4]
 _CLI = _PROJECT / "node_modules/.bin/hyperframes"
@@ -60,6 +61,39 @@ def _build_tools(workdir: Path, configuration: CartoonGenerationConfig) -> ToolR
     ])
 
 
+def _describe_video_step(name: str, raw_args: str) -> str:
+    """将视频子智能体的内部工具调用转换为易读的中文进度文案。"""
+    try:
+        args = json.loads(raw_args or "{}")
+    except Exception:
+        args = {}
+    if name == "load_skill":
+        skill = args.get("name") or "hyperframes"
+        ref = args.get("reference")
+        return f"读取技能规范: {skill}{f' ({ref})' if ref else ''}"
+    if name == "synthesize_speech":
+        out = Path(str(args.get("output_path") or "旁白")).name
+        return f"合成中文语音旁白: {out}"
+    if name in {"write", "edit"}:
+        path = Path(str(args.get("path") or "场景文件")).name
+        return f"编写视频场景与字幕文件: {path}"
+    if name == "view_image":
+        path = Path(str(args.get("path") or "关键帧")).name
+        return f"视觉模型审查画面截图: {path}"
+    if name == "bash":
+        cmd = str(args.get("command") or "")
+        if "render" in cmd:
+            return "渲染合成 1080p MP4 视频"
+        if "snapshot" in cmd:
+            return "截取关键帧画面以供审查"
+        if "check" in cmd:
+            return "校验 HyperFrames 时间轴与结构"
+        if "ffprobe" in cmd:
+            return "检验输出音视频流完整性"
+        return "执行视频构建命令"
+    return f"执行视频创作工具: {name}"
+
+
 async def _agent_loop(
     messages: list[dict[str, Any]],
     registry: ToolRegistry,
@@ -67,6 +101,7 @@ async def _agent_loop(
     system: str,
     deliver: Callable[[ToolRegistry], Awaitable[_T]] | None = None,
     required_tools: tuple[str, ...] = (),
+    progress: ProgressCallback | None = None,
     max_steps: int = 50,
     timeout_s: float = 1800.0,
     temperature: float = 0.2,
@@ -77,7 +112,7 @@ async def _agent_loop(
     satisfied: set[str] = set()
 
     async with asyncio.timeout(timeout_s):
-        for _ in range(max_steps):
+        for step in range(1, max_steps + 1):
             response = await client.chat.completions.create(
                 model=spec.model_name, messages=messages, temperature=temperature,
                 tools=tool_schemas, tool_choice="auto",
@@ -87,6 +122,11 @@ async def _agent_loop(
 
             if msg.tool_calls:
                 for call in msg.tool_calls:
+                    if progress is not None:
+                        await progress(
+                            _describe_video_step(call.function.name, call.function.arguments),
+                            min(92, 8 + step * 3),
+                        )
                     # 顺序执行，避免写文件、截图与渲染之间发生竞态。
                     try:
                         raw_res = await registry.execute(call.function.name, call.function.arguments)
@@ -109,7 +149,10 @@ async def _agent_loop(
                 })
                 continue
             try:
-                return await deliver(registry)
+                res = await deliver(registry)
+                if progress is not None:
+                    await progress("视频渲染与质量核验完成", 100)
+                return res
             except (ValueError, OSError, KeyError, TypeError) as exc:
                 messages.append({"role": "user", "content": f"交付检查失败，请修复：{exc}"})
 
@@ -142,7 +185,7 @@ async def _collect_artifact(workdir: Path, registry: ToolRegistry) -> CartoonArt
     )
 
 
-async def generate(input: CartoonInput) -> CartoonArtifact:
+async def generate(input: CartoonInput, *, progress: ProgressCallback | None = None) -> CartoonArtifact:
     """在指定输出目录下生成完整动画视频产物包。"""
     workdir = input.output_dir.resolve() / uuid4().hex
     workdir.mkdir(parents=True)
@@ -153,6 +196,7 @@ async def generate(input: CartoonInput) -> CartoonArtifact:
             system=SYSTEM,
             deliver=partial(_collect_artifact, workdir),
             required_tools=("view_image",),
+            progress=progress,
             max_steps=50,
             timeout_s=1800.0,
         )
