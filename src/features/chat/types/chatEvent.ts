@@ -146,9 +146,6 @@ export function reduceChatEvent(state: RunState, event: ChatEvent): RunState {
   switch (event.event) {
     case 'phase.changed': {
       const nextPhase = (data.phase as RunPhase) || next.phase
-      if (nextPhase === 'thinking' && state.phase === 'tool_calling') {
-        next.content = ''
-      }
       next.phase = nextPhase
       next.phase_label = String(data.phase_label || next.phase_label)
       if (data.status) {

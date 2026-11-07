@@ -552,9 +552,6 @@ async def run_tutor_agent(
                 await stream.set_phase("thinking", f"正在{think_title}...", status="running")
                 await stream.upsert_step(think_step)
 
-                # 若上一轮流式输出过过渡文字而后又调了工具，新一轮重置正文缓冲
-                if step_idx > 1 and stream.state.content:
-                    stream.state.content = ""
 
                 force_final = tool_rounds >= max_tool_rounds
                 done: TurnDone | None = None

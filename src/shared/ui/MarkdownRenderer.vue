@@ -29,10 +29,11 @@ const degraded = ref(false)
 const theme = ref<MarkdownTheme>('light')
 const copyTimers = new Map<HTMLButtonElement, ReturnType<typeof setTimeout>>()
 
-const STREAM_RENDER_INTERVAL_MS = 80
+const STREAM_RENDER_INTERVAL_MS = 48
 
 let renderTimer: ReturnType<typeof setTimeout> | undefined
 let renderVersion = 0
+let lastRenderStartedAt = 0
 let themeObserver: MutationObserver | undefined
 
 function currentTheme(): MarkdownTheme {
@@ -42,6 +43,7 @@ function currentTheme(): MarkdownTheme {
 // 执行渲染调用，通过版本号防止竞态（过期结果被忽略）
 async function performRender(content: string): Promise<void> {
   const version = ++renderVersion
+  lastRenderStartedAt = performance.now()
 
   try {
     const result = await renderMarkdown(content, theme.value)
@@ -52,7 +54,7 @@ async function performRender(content: string): Promise<void> {
     renderedHtml.value = result.html
     degraded.value = result.degraded
     await nextTick()
-    void renderMermaidBlocks(contentRoot.value, theme.value)
+    void renderMermaidBlocks(contentRoot.value, theme.value, props.streaming)
     renderSvgBlocks(contentRoot.value)
   } catch {
     if (version !== renderVersion) {
@@ -65,7 +67,7 @@ async function performRender(content: string): Promise<void> {
   }
 }
 
-// 调度渲染：非流式直接渲染，流式模式防抖聚合
+// 调度渲染：非流式直接渲染，流式模式首帧直出 + 48ms 节流平滑重绘
 function queueRender(): void {
   const content = props.content
   if (!props.streaming) {
@@ -77,20 +79,27 @@ function queueRender(): void {
     return
   }
 
-  // 流式模式下先用转义文本占位
-  if (!renderedHtml.value || degraded.value) {
-    renderedHtml.value = escapeHtml(content)
+  // 尚无已渲染 HTML 时，若距离上次渲染已超过间隔则立即渲染首帧，避免纯文本闪烁
+  const elapsed = performance.now() - lastRenderStartedAt
+  if (!renderedHtml.value && content.trim()) {
+    renderedHtml.value = `<p>${escapeHtml(content)}</p>`
     degraded.value = true
+  }
+
+  if (elapsed >= STREAM_RENDER_INTERVAL_MS && renderTimer === undefined) {
+    void performRender(content)
+    return
   }
 
   if (renderTimer !== undefined) {
     return
   }
 
+  const delay = Math.max(16, STREAM_RENDER_INTERVAL_MS - elapsed)
   renderTimer = setTimeout(() => {
     renderTimer = undefined
     void performRender(props.content)
-  }, STREAM_RENDER_INTERVAL_MS)
+  }, delay)
 }
 
 // 代码复制按钮的标签还原（1.6 秒后恢复）
