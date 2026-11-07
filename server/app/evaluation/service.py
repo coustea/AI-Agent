@@ -22,19 +22,21 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any, Literal
 
-from app.infra.llm import HumanMessage
+from app.infra.llm import HumanMessage, load_prompt
 from pydantic import BaseModel, Field
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.evaluation.request import LearningEventCreate, LearningSessionCreate
+from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
 from app.infra.logging import get_logger
 from app.infra.models import LearningEvent, LearningSession, LearningAssessment
-from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
+
+_EVAL_PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 # 触发阈值配置
 EVENT_THRESHOLD_DEFAULT = 5   # 非 chat 模块
@@ -183,8 +185,8 @@ class EvaluationService:
         try:
             from app.infra.llm import LLM
             llm = LLM(temperature=0.1)
-            prompt = prompts.get("evaluation").render(
-                "assessment",
+            prompt = load_prompt(
+                _EVAL_PROMPTS_DIR / "assessment.md",
                 facts_json=json.dumps(facts, ensure_ascii=False, indent=2),
             )
             result = await llm.json(
@@ -376,7 +378,6 @@ class EvaluationService:
         """
         from app.infra.database import session_scope
         from app.infra.models import UserProfile
-        from app.profile.service import get_profile_service
 
         # 获取上次画像更新时间，作为阈值计数的起点
         profile = await session.scalar(
@@ -432,28 +433,7 @@ class EvaluationService:
 
         async with session_scope() as new_session:
             try:
-                profile_service = get_profile_service()
-
-                # Step 1: 近期学习事件 → MD → LLM 推理文字画像
-                logger.info("[Evaluation] 链路Step1开始 — 文字画像推理: user=%s", user_id)
-                infer_result = await profile_service.infer_profile_from_events(
-                    user_id=user_id,
-                    range_days=DEFAULT_RANGE_DAYS,
-                )
-                logger.info(
-                    "[Evaluation] 链路Step1完成 — 文字画像推理: user=%s inference_ok=%s updated_dims=%s",
-                    user_id, infer_result.get("inference_ok"), infer_result.get("updated_dimensions"),
-                )
-
-                # Step 2: 文字画像 → 分数画像
-                logger.info("[Evaluation] 链路Step2开始 — 分数画像更新: user=%s", user_id)
-                score_result = await profile_service.score_profile(user_id=user_id)
-                logger.info(
-                    "[Evaluation] 链路Step2完成 — 分数画像更新: user=%s overall_score=%s dimension_scores=%s",
-                    user_id, score_result.get("overall_score"), score_result.get("dimension_scores"),
-                )
-
-                # Step 1+2 完成，写入 profile_updated_at 重置阈值
+                # 重置阈值计数起点
                 now_utc = datetime.now(timezone.utc)
                 profile_row = await new_session.scalar(
                     select(UserProfile).where(UserProfile.user_id == user_id)
@@ -468,15 +448,15 @@ class EvaluationService:
                         user_id, now_utc.isoformat(),
                     )
 
-                # Step 3: 近期学习事件 → 学习评估
-                logger.info("[Evaluation] 链路Step3开始 — 学习评估生成: user=%s", user_id)
+                # 近期学习事件 → 学习评估诊断与导学策略更新
+                logger.info("[Evaluation] 自动触发学情诊断评估: user=%s", user_id)
                 await self.generate_assessment(
                     new_session,
                     user_id=user_id,
                     trigger_source="profile_update",
                     range_days=DEFAULT_RANGE_DAYS,
                 )
-                logger.info("[Evaluation] 链路Step3完成 — 学习评估生成成功: user=%s", user_id)
+                logger.info("[Evaluation] 自动学情诊断评估生成成功: user=%s", user_id)
             except ConcurrencyError:
                 logger.info("[Evaluation] 自动评估并发冲突: user=%s", user_id)
             except Exception as e:
@@ -507,44 +487,40 @@ class EvaluationService:
         if ended_at.tzinfo is None:
             ended_at = ended_at.replace(tzinfo=timezone.utc)
 
-        # 读取上报的扩展字段并做类型规整
+        # 归一化多态字段 (module / entity_id / sub_entity_id)
         metadata = payload.event_metadata or {}
+        module = payload.module
+        entity_id = payload.entity_id
+        sub_entity_id = payload.sub_entity_id
 
-        resource_id = metadata.get("resource_id")
-        if resource_id is not None:
-            try:
-                resource_id = int(resource_id)
-            except (ValueError, TypeError):
-                resource_id = None
-
-        path_id = metadata.get("path_id")
-        if path_id is not None:
-            try:
-                path_id = int(path_id)
-            except (ValueError, TypeError):
-                path_id = None
-
-        path_node_id = metadata.get("path_node_id")
-        if path_node_id is not None:
-            try:
-                path_node_id = int(path_node_id)
-            except (ValueError, TypeError):
-                path_node_id = None
-
-        node_id = metadata.get("node_id")
-        if node_id is not None:
-            node_id = str(node_id)
+        # 若未直接指定，则结合 metadata 及 source_page 进行推导
+        if not module or module == "common":
+            if metadata.get("path_id") is not None or "path" in payload.source_page:
+                module = "path"
+                entity_id = entity_id or (str(metadata["path_id"]) if metadata.get("path_id") is not None else None)
+                sub_node = metadata.get("path_node_id") or metadata.get("node_id")
+                sub_entity_id = sub_entity_id or (str(sub_node) if sub_node is not None else None)
+            elif metadata.get("resource_id") is not None or "resource" in payload.source_page:
+                module = "resource"
+                entity_id = entity_id or (str(metadata["resource_id"]) if metadata.get("resource_id") is not None else None)
+            elif "chat" in payload.source_page:
+                module = "chat"
+            elif "quiz" in payload.source_page:
+                module = "quiz"
+            elif "visualizer" in payload.source_page:
+                module = "visualizer"
+            else:
+                module = "common"
 
         learning_session = LearningSession(
             user_id=user_id,
             source_page=payload.source_page,
+            module=module,
+            entity_id=str(entity_id) if entity_id else None,
+            sub_entity_id=str(sub_entity_id) if sub_entity_id else None,
             started_at=started_at,
             ended_at=ended_at,
             duration_seconds=payload.duration_seconds,
-            resource_id=resource_id,
-            path_id=path_id,
-            path_node_id=path_node_id,
-            node_id=node_id,
             course=payload.course,
             topic=payload.topic,
             metadata_json=payload.event_metadata or None,

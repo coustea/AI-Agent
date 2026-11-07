@@ -10,12 +10,13 @@ from app.infra.logging import get_logger
 from app.path.schemas import PathResourceRequest
 from app.resource.schemas import AgentResult
 from app.shared.cartoon import (
-    CartoonAgent,
     CartoonBrief,
     CartoonGenerationConfig,
     CartoonGenerationError,
+    CartoonInput,
     CartoonResourceMetadata,
 )
+from app.shared.cartoon.agent import generate as generate_cartoon
 from app.shared.cartoon.schemas import LessonDepth
 
 
@@ -23,9 +24,6 @@ logger = get_logger(__name__)
 
 
 class PathCartoonAdapter:
-    def __init__(self, *, pipeline: CartoonAgent | None = None) -> None:
-        self._pipeline = pipeline or CartoonAgent()
-
     async def generate(self, request: PathResourceRequest) -> AgentResult:
         started = time.perf_counter()
         try:
@@ -35,7 +33,7 @@ class PathCartoonAdapter:
                 str(request.path_id),
                 str(request.node_id),
             )
-            artifact = await self._pipeline.generate(brief, target)
+            artifact = await generate_cartoon(CartoonInput(output_dir=target, brief=brief))
             duration_seconds = round(artifact.duration_ms / 1_000, 2)
             logger.info(
                 "[PathCartoon] 动画生成成功: node_id=%s scenes=%s duration=%.1fs",

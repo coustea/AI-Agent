@@ -8,7 +8,7 @@
   _format_context()                 将检索结果格式化为上下文文本
   _build_sources()                  构建来源列表
 
-Called by: app/chat/tutor/tools.py (as_tool), app/rag/__init__.py.
+Called by: app/chat/tools.py and app/path/workflows.py.
 Per user: "tools.py 的来源信息太少，只返回 source/title/url/summary，不利于前端展示和防幻觉引用"
 """
 
@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from app.config import KB_MAX_CONTEXT_CHARS
 from app.infra.logging import get_logger
-from app.shared.tools import Tool
+from app.shared.tools.registry import Tool
 from app.rag.models import RetrievalResult
 from app.rag.retriever import retrieve
 
@@ -252,7 +252,3 @@ def build_knowledge_tool() -> Tool:
         SearchKnowledgeBaseArgs,
         _search_knowledge_base_handler,
     )
-
-
-# 向后兼容别名（chat/tutor/tools.py 已引用 as_tool）
-as_tool = build_knowledge_tool

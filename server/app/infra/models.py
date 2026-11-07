@@ -24,9 +24,23 @@ import uuid
 from datetime import date, datetime, timezone
 from typing import Any
 
-from sqlalchemy import ForeignKey, Integer, Text, Column, Index, UniqueConstraint, CheckConstraint, func, text
-from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID as PG_UUID
+from sqlalchemy import (
+    JSON,
+    CheckConstraint,
+    Column,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
+from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID as PG_UUID
 from sqlmodel import SQLModel, Field
+
+from app.infra.types import UtcDateTime
 
 from app.infra.logging import get_logger
 
@@ -60,8 +74,8 @@ class User(SQLModel, table=True):
     grade: str | None = Field(default=None, max_length=50)
     daily_study_time: str | None = Field(default=None, max_length=50)
     global_learning_goal: str | None = Field(default=None, sa_column=Column(Text))
-    programming_languages: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    courses: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    programming_languages: list[str] | None = Field(default=None, sa_column=Column(JSON))
+    courses: list[str] | None = Field(default=None, sa_column=Column(JSON))
 
     # ── 学习画像字段（阶段二采集）──
     # 基础水平：beginner/entry/proficient/master
@@ -71,7 +85,7 @@ class User(SQLModel, table=True):
     # 内容深度：quick_overview/systematic_deep
     content_depth: str | None = Field(default=None, max_length=20)
     # 薄弱知识点列表
-    weak_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    weak_points: list[str] | None = Field(default=None, sa_column=Column(JSON))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -143,52 +157,54 @@ class School(SQLModel, table=True):
 # ---------------------------------------------------------------------------
 
 class ChatSession(SQLModel, table=True):
-    """会话表 — 管理多会话隔离，每个用户可以有多个独立会话"""
+    """会话表 — 每个用户可有多个独立会话，持有压缩与长期记忆的计数水位。"""
     __tablename__ = "chat_sessions"
     __table_args__ = (
         Index(
             "ix_chat_sessions_user_archived_updated",
             "user_id",
             "is_archived",
-            text("updated_at DESC"),
+            "updated_at",
         ),
     )
 
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
+        sa_column=Column(String(36), primary_key=True),
     )
-    # UUID 原生类型主键
+    # 会话归属用户
     user_id: int = Field(index=True)
     # 会话标题（取首条消息前 20 字符）
     title: str = Field(default="新对话", max_length=100)
     # 软删除标记
     is_archived: bool = Field(default=False)
-
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
-    )
+    # 触发压缩的累计 token 水位
     summary_token_count: int = Field(default=0)
+    # 触发长期记忆的累计 token / 消息数水位
     ltm_token_count: int = Field(default=0)
     ltm_message_count: int = Field(default=0)
     last_ltm_message_id: int | None = Field(default=None)
     last_ltm_updated_at: datetime | None = Field(
         default=None,
-        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+        sa_column=Column(UtcDateTime(), nullable=True),
+    )
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(UtcDateTime()),
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(UtcDateTime(), onupdate=func.now()),
     )
 
 
 class ChatMessage(SQLModel, table=True):
-    """模型可见消息；本轮派生消息直接关联发起请求的 UserMessage。"""
+    """模型可见消息链；assistant/tool 消息通过 run_id 归属同一次运行。"""
     __tablename__ = "chat_messages"
     __table_args__ = (
-        Index("ix_chat_messages_session_created_at", "session_id", "created_at"),
-        Index("ix_chat_messages_session_user_message", "session_id", "user_message_id"),
+        Index("ix_chat_messages_session_id_id", "session_id", "id"),
+        Index("ix_chat_messages_run_id_id", "run_id", "id"),
         CheckConstraint(
             "role IN ('user', 'assistant', 'tool', 'system')",
             name="ck_chat_messages_role",
@@ -198,35 +214,110 @@ class ChatMessage(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     session_id: str = Field(
         sa_column=Column(
-            PG_UUID(as_uuid=True),
+            String(36),
             ForeignKey("chat_sessions.id", ondelete="CASCADE"),
             index=True,
         ),
     )
-    user_message_id: int | None = Field(
+    # 本轮运行 ID；用户消息为 NULL，其派生的 assistant/tool 消息指向同一个 run
+    run_id: str | None = Field(
         default=None,
         sa_column=Column(
-            Integer,
-            ForeignKey("chat_messages.id", ondelete="CASCADE"),
+            String(36),
+            ForeignKey("chat_runs.id", ondelete="CASCADE"),
             nullable=True,
-            index=True,
         ),
     )
 
     role: str  # "user" | "assistant" | "tool" | "system"
-    content: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSONB))
-    tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
+    content: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    tool_calls: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
     tool_call_id: str | None = Field(default=None, max_length=120, index=True)
-    usage_metadata: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
 
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), sa_column=Column(TIMESTAMP(timezone=True), index=True))
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(UtcDateTime(), index=True),
+    )
+
+
+class ChatRun(SQLModel, table=True):
+    """一次对话运行 — 承载 RunState 的可持久化快照。"""
+    __tablename__ = "chat_runs"
+    __table_args__ = (
+        Index("ix_chat_runs_session_id", "session_id"),
+        CheckConstraint(
+            "status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')",
+            name="ck_chat_runs_status",
+        ),
+    )
+
+    # run_id 与触发它的用户消息主键一致，前端拿 message_id 即可订阅
+    id: str = Field(sa_column=Column(String(36), primary_key=True))
+    session_id: str = Field(
+        sa_column=Column(
+            String(36),
+            ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+            index=True,
+        ),
+    )
+    user_id: int = Field(index=True)
+    # 用户消息主键（chat_messages.id）
+    user_message_id: int = Field(index=True)
+    status: str = Field(default="queued", max_length=16)
+    # 已流式产出的最终文本
+    content: str = Field(default="", sa_column=Column(Text))
+    # 失败/取消原因
+    error: str = Field(default="", sa_column=Column(Text))
+    # 本次运行产出物（video / ppt 等）
+    artifacts: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    # 引用来源
+    sources: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(UtcDateTime()),
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(UtcDateTime(), onupdate=func.now()),
+    )
+    finished_at: datetime | None = Field(
+        default=None,
+        sa_column=Column(UtcDateTime(), nullable=True),
+    )
+
+
+class ChatRunEvent(SQLModel, table=True):
+    """运行事件流 — SSE 断点续传的唯一事实源（含活动生命周期）。"""
+    __tablename__ = "chat_run_events"
+    __table_args__ = (
+        Index("ix_chat_run_events_run_sequence", "run_id", "sequence"),
+        UniqueConstraint("run_id", "sequence", name="uq_chat_run_events_run_sequence"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: str = Field(
+        sa_column=Column(
+            String(36),
+            ForeignKey("chat_runs.id", ondelete="CASCADE"),
+            index=True,
+        ),
+    )
+    # 单调递增的 SSE 断点序号，与自增主键解耦
+    sequence: int = Field(default=0)
+    event: str = Field(max_length=48)
+    data: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        sa_column=Column(UtcDateTime()),
+    )
 
 
 class ChatAttachmentAnalysis(SQLModel, table=True):
     """附件分析派生产物，不改写用户原始消息。"""
     __tablename__ = "chat_attachment_analyses"
     __table_args__ = (
-        Index("ix_chat_attachment_analyses_user_message_created_at", "user_message_id", "created_at"),
         CheckConstraint(
             "analysis_type IN ('image', 'document')",
             name="ck_chat_attachment_analyses_type",
@@ -239,12 +330,12 @@ class ChatAttachmentAnalysis(SQLModel, table=True):
 
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()),
-        sa_column=Column(PG_UUID(as_uuid=True), primary_key=True),
+        sa_column=Column(String(36), primary_key=True),
     )
-    user_message_id: int = Field(
+    run_id: str = Field(
         sa_column=Column(
-            Integer,
-            ForeignKey("chat_messages.id", ondelete="CASCADE"),
+            String(36),
+            ForeignKey("chat_runs.id", ondelete="CASCADE"),
             index=True,
         ),
     )
@@ -252,55 +343,14 @@ class ChatAttachmentAnalysis(SQLModel, table=True):
     status: str = Field(default="running", max_length=20)
     content: str = Field(default="", sa_column=Column(Text))
     error_message: str | None = Field(default=None, sa_column=Column(Text))
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True)),
+        sa_column=Column(UtcDateTime()),
     )
     completed_at: datetime | None = Field(
         default=None,
-        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
-    )
-
-
-class ChatActivity(SQLModel, table=True):
-    """可公开、可回放的 Agent 生命周期摘要。"""
-    __tablename__ = "chat_activities"
-    __table_args__ = (
-        UniqueConstraint(
-            "user_message_id",
-            "activity_id",
-            name="uq_chat_activities_user_message_activity",
-        ),
-        Index("ix_chat_activities_user_message_started_at", "user_message_id", "started_at"),
-        CheckConstraint(
-            "status IN ('running', 'done', 'failed')",
-            name="ck_chat_activities_status",
-        ),
-    )
-
-    id: int | None = Field(default=None, primary_key=True)
-    user_message_id: int = Field(
-        sa_column=Column(
-            Integer,
-            ForeignKey("chat_messages.id", ondelete="CASCADE"),
-            index=True,
-        ),
-    )
-    activity_id: str = Field(max_length=160)
-    kind: str = Field(default="workflow", max_length=30)
-    stage: str | None = Field(default=None, max_length=80)
-    status: str = Field(default="running", max_length=20)
-    title: str = Field(default="", max_length=255)
-    summary: str = Field(default="", sa_column=Column(Text))
-    message: str = Field(default="", sa_column=Column(Text))
-    detail: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    started_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True)),
-    )
-    completed_at: datetime | None = Field(
-        default=None,
-        sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
+        sa_column=Column(UtcDateTime(), nullable=True),
     )
 
 
@@ -322,7 +372,7 @@ class ChatSessionSummaryBlock(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     session_id: str = Field(
         sa_column=Column(
-            PG_UUID(as_uuid=True),
+            String(36),
             ForeignKey("chat_sessions.id", ondelete="CASCADE"),
             index=True,
         ),
@@ -335,7 +385,7 @@ class ChatSessionSummaryBlock(SQLModel, table=True):
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(UtcDateTime()),
     )
 
 
@@ -363,11 +413,11 @@ class ChatLongTermMemory(SQLModel, table=True):
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True))
+        sa_column=Column(UtcDateTime()),
     )
     updated_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
-        sa_column=Column(TIMESTAMP(timezone=True), onupdate=func.now())
+        sa_column=Column(UtcDateTime(), onupdate=func.now()),
     )
 
 
@@ -421,7 +471,7 @@ class UserProfile(SQLModel, table=True):
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True),
     )
 
-    guidance_strategy: dict = Field(default_factory=dict, sa_column=Column(JSONB))
+    guidance_strategy: dict = Field(default_factory=dict, sa_column=Column(JSON))
     guidance_updated_at: datetime | None = Field(
         default=None,
         sa_column=Column(TIMESTAMP(timezone=True), nullable=True)
@@ -474,7 +524,7 @@ class UserProfileDimension(SQLModel, table=True):
     # 维度正文描述（原 dimensions[*].value）
     value: str = Field(sa_column=Column(Text))
     # 支撑证据列表（原 dimensions[*].evidence / dimension_evidence[*]）
-    evidence: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
+    evidence: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     # 维度得分 0-100（原 dimension_scores[*]）
     score: int | None = Field(default=None, ge=0, le=100)
 
@@ -545,9 +595,9 @@ class GeneratedResource(SQLModel, table=True):
     # 请求在入队前冻结；后台工作流不得依赖 HTTP 进程内参数。
     request_snapshot_json: dict[str, Any] = Field(
         default_factory=dict,
-        sa_column=Column(JSONB, nullable=False),
+        sa_column=Column(JSON, nullable=False),
     )
-    plan_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB, nullable=True))
+    plan_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON, nullable=True))
     status: str = Field(default="pending", max_length=50)
 
     created_at: datetime = Field(
@@ -584,11 +634,11 @@ class GeneratedResourceItem(SQLModel, table=True):
     title: str = Field(max_length=200)
 
     # 内容主体（根据 agent_type 选择存储位置）
-    content_json: dict[str, Any] | list[Any] | None = Field(default=None, sa_column=Column(JSONB))
+    content_json: dict[str, Any] | list[Any] | None = Field(default=None, sa_column=Column(JSON))
     content_text: str | None = Field(default=None, sa_column=Column(Text))
     metadata_json: dict[str, Any] = Field(
         default_factory=dict,
-        sa_column=Column(JSONB, nullable=False),
+        sa_column=Column(JSON, nullable=False),
     )
 
     created_at: datetime = Field(
@@ -647,7 +697,7 @@ class GeneratedResourceRunEvent(SQLModel, table=True):
     phase: str | None = Field(default=None, max_length=64)
     message: str = Field(sa_column=Column(Text, nullable=False))
     progress: int | None = Field(default=None)
-    data_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB, nullable=False))
+    data_json: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True)),
@@ -675,11 +725,11 @@ class QuizQuestion(SQLModel, table=True):
     question_type: str = Field(max_length=100, index=True)
     difficulty: str | None = Field(default=None, max_length=100, index=True)
     content: str = Field(sa_column=Column(Text))
-    options_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    options_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     answer: str | None = Field(default=None, sa_column=Column(Text))
     analysis: str | None = Field(default=None, sa_column=Column(Text))
-    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    tags: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSON))
+    tags: list[str] | None = Field(default=None, sa_column=Column(JSON))
     language: str | None = Field(default=None, max_length=32, index=True)
     split: str | None = Field(default=None, max_length=64, index=True)
 
@@ -724,7 +774,7 @@ class LearningEvent(SQLModel, table=True):
     score: float | None = Field(default=None, description="得分 0–100")
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
-    event_metadata: dict[str, Any] = Field(default_factory=dict, sa_column=Column("event_metadata", JSONB))
+    event_metadata: dict[str, Any] = Field(default_factory=dict, sa_column=Column("event_metadata", JSON))
     client_event_id: str | None = Field(default=None, max_length=64)
     occurred_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -753,6 +803,9 @@ class LearningSession(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     user_id: int = Field(index=True)
     source_page: str = Field(max_length=50, index=True, description="来源页面标识")
+    module: str | None = Field(default=None, max_length=50, description="所属模块")
+    entity_id: str | None = Field(default=None, max_length=100, description="多态业务主实体 ID")
+    sub_entity_id: str | None = Field(default=None, max_length=100, description="多态业务子实体 ID")
     started_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True), index=True))
     ended_at: datetime = Field(sa_column=Column(TIMESTAMP(timezone=True)))
     duration_seconds: int = Field(ge=1, le=14400, description="实际活跃时长(秒)")
@@ -762,12 +815,23 @@ class LearningSession(SQLModel, table=True):
     node_id: str | None = Field(default=None, max_length=50)
     course: str | None = Field(default=None, max_length=200)
     topic: str | None = Field(default=None, max_length=200)
-    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     client_session_id: str | None = Field(default=None, max_length=64)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         sa_column=Column(TIMESTAMP(timezone=True))
     )
+
+    def __init__(self, **data: Any) -> None:
+        """初始化学习会话，根据多态模块和实体自动同步对应的 path_id 或 resource_id。"""
+        if "module" in data and "entity_id" in data:
+            mod = data.get("module")
+            ent = data.get("entity_id")
+            if mod == "path" and ent is not None and str(ent).isdigit() and "path_id" not in data:
+                data["path_id"] = int(ent)
+            elif mod == "resource" and ent is not None and str(ent).isdigit() and "resource_id" not in data:
+                data["resource_id"] = int(ent)
+        super().__init__(**data)
 
 
 # ---------------------------------------------------------------------------
@@ -789,14 +853,14 @@ class LearningPath(SQLModel, table=True):
     title: str = Field(max_length=200)
     goal: str = Field(sa_column=Column(Text))
     topic: str | None = Field(default=None, sa_column=Column(Text))
-    current_knowledge: list[str] = Field(default_factory=list, sa_column=Column(JSONB))
-    preferences: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSONB))
+    current_knowledge: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    preferences: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
 
     overall_progress: int = Field(default=0, ge=0, le=100)
     current_node_key: str | None = Field(default=None, max_length=80, index=True)
     status: str = Field(default="active", max_length=30, index=True)
 
-    stages_json: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSONB))
+    stages_json: list[dict[str, Any]] | None = Field(default=None, sa_column=Column(JSON))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -831,7 +895,7 @@ class PathNode(SQLModel, table=True):
     attempt_count: int = Field(default=0, ge=0)
     current_tutorial_id: int | None = Field(default=None, index=True)
 
-    prerequisites: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    prerequisites: list[str] | None = Field(default=None, sa_column=Column(JSON))
     difficulty: str | None = Field(default=None, max_length=30)
 
     created_at: datetime = Field(
@@ -870,8 +934,8 @@ class PathNodeTutorial(SQLModel, table=True):
     title: str = Field(max_length=200)
     summary: str | None = Field(default=None, sa_column=Column(Text))
     content_markdown: str = Field(sa_column=Column(Text))
-    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
-    weak_knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSON))
+    weak_knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSON))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -904,11 +968,11 @@ class PathNodeQuestion(SQLModel, table=True):
     type: str = Field(default="single_choice", max_length=32)
 
     question: str = Field(sa_column=Column(Text))
-    choice: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    choice: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     answer: str = Field(sa_column=Column(Text))
     response: str | None = Field(default=None, sa_column=Column(Text))
     analysis: str | None = Field(default=None, sa_column=Column(Text))
-    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSONB))
+    knowledge_points: list[str] | None = Field(default=None, sa_column=Column(JSON))
     is_correct: bool | None = Field(default=None, index=True)
 
     created_at: datetime = Field(
@@ -942,12 +1006,12 @@ class PathNodeResource(SQLModel, table=True):
     title: str = Field(max_length=200)
     content_format: str = Field(default="markdown", max_length=32)
     content_text: str | None = Field(default=None, sa_column=Column(Text))
-    content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
-    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    content_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
+    metadata_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     summary: str | None = Field(default=None, sa_column=Column(Text))
     status: str = Field(default="completed", max_length=32)
     error_message: str | None = Field(default=None, sa_column=Column(Text))
-    input_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    input_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
 
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
@@ -989,7 +1053,6 @@ class WrongQuestion(SQLModel, table=True):
     """错题本表 — 记录用户答错的题目"""
     __tablename__ = "wrong_questions"
     __table_args__ = (
-        Index("ix_wrong_questions_user_id", "user_id"),
         Index("ix_wrong_questions_user_question", "user_id", "question_id", unique=True),
     )
 
@@ -1001,7 +1064,7 @@ class WrongQuestion(SQLModel, table=True):
     subject: str = Field(max_length=255)
     question_type: str = Field(max_length=100)
     content: str = Field(sa_column=Column(Text))
-    options_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSONB))
+    options_json: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     standard_answer: str | None = Field(default=None, sa_column=Column(Text))
     analysis: str | None = Field(default=None, sa_column=Column(Text))
 
@@ -1033,9 +1096,10 @@ REGISTERED_MODELS = (
     LlmUsage,
     UserDailyActivity,
     ChatSession,
+    ChatRun,
+    ChatRunEvent,
     ChatMessage,
     ChatAttachmentAnalysis,
-    ChatActivity,
     ChatSessionSummaryBlock,
     ChatLongTermMemory,
     UserProfile,

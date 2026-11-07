@@ -34,7 +34,7 @@ def validate_common_result(
     if result.success is not True:
         raise ValidationError(result.error or "Agent returned success=False")
 
-    if result.file_type not in {"html", "mp4"} and (
+    if result.file_type not in {"pptx", "mp4"} and (
         not isinstance(result.content, str) or not result.content.strip()
     ):
         raise ValidationError("Agent returned empty content")
@@ -50,12 +50,14 @@ def validate_common_result(
 
 
 def validate_content(result: "AgentResult", input_data: "ResourceInput") -> None:
+    """校验课程讲解资源为非空 Markdown 格式。"""
     _ = input_data
     if result.file_type != "markdown" or not result.content.strip():
         raise ValidationError("Content must be non-empty markdown")
 
 
 def validate_mindmap(result: "AgentResult", input_data: "ResourceInput") -> None:
+    """校验思维导图资源符合 Markmap 要求的层级标题规范。"""
     _ = input_data
     if result.file_type != "markdown":
         raise ValidationError("Mindmap must be markdown format")
@@ -70,6 +72,7 @@ def validate_mindmap(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_quiz(result: "AgentResult", input_data: "ResourceInput") -> None:
+    """校验习题资源为满足蓝图约束的合规 JSON 结构。"""
     if result.file_type != "json":
         raise ValidationError("Quiz must be JSON")
     try:
@@ -91,12 +94,14 @@ def validate_quiz(result: "AgentResult", input_data: "ResourceInput") -> None:
 
 
 def validate_code(result: "AgentResult", input_data: "ResourceInput") -> None:
+    """校验代码实操资源为非空代码或 Markdown。"""
     _ = input_data
     if result.file_type not in {"code", "markdown"} or not result.content.strip():
         raise ValidationError("Code must be non-empty code or markdown format")
 
 
 def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None:
+    """校验拓展阅读资源为包含有效 URL 的 JSON 推荐列表。"""
     _ = input_data
     if result.file_type != "json":
         raise ValidationError("Reading must be JSON")
@@ -119,17 +124,21 @@ def validate_reading(result: "AgentResult", input_data: "ResourceInput") -> None
 
 
 def validate_ppt(result: "AgentResult", input_data: "ResourceInput") -> None:
-    _ = input_data
-    if result.file_type != "html":
-        raise ValidationError("PPT resource must be HTML format")
-    metadata = result.metadata or {}
-    if not str(metadata.get("html_file_path", "")).strip():
-        raise ValidationError("PPT resource requires html_file_path")
-    if not str(metadata.get("html_url", "")).strip():
-        raise ValidationError("PPT resource requires html_url")
+    metadata = result.metadata
+    if result.file_type != "pptx":
+        raise ValidationError("PPT resource must be pptx")
+    for key in ("pptx_url", "pdf_url"):
+        if not str(metadata.get(key, "")).strip():
+            raise ValidationError(f"PPT resource requires {key}")
+    previews = metadata.get("preview_urls")
+    if not isinstance(previews, list) or not previews or len(previews) != metadata.get("slide_count"):
+        raise ValidationError("PPT preview count must equal slide_count")
+    if any(not isinstance(url, str) or not url.strip() for url in previews):
+        raise ValidationError("PPT preview URLs must be nonempty")
 
 
 def validate_cartoon(result: "AgentResult", input_data: "ResourceInput") -> None:
+    """校验动画资源为 MP4 格式且元数据契约完整。"""
     _ = input_data
     if result.file_type != "mp4":
         raise ValidationError("Cartoon must be MP4")
@@ -226,6 +235,7 @@ def extract_core_content(
 
 
 def _extract_section(markdown: str, section_title: str) -> str:
+    """从 Markdown 文本中提取指定二级标题下的小节内容。"""
     pattern = rf"^##\s*{re.escape(section_title[3:].strip())}\s*$"
     in_section = False
     section_lines: list[str] = []
@@ -241,6 +251,7 @@ def _extract_section(markdown: str, section_title: str) -> str:
 
 
 def _truncate_block(text: str, limit: int) -> str | None:
+    """按句子标点智能截断文本块以防截断半句话。"""
     if not text:
         return None
     if len(text) <= limit:
@@ -258,6 +269,7 @@ def _truncate_block(text: str, limit: int) -> str | None:
 
 
 def _fallback_paragraph_split(markdown: str, max_blocks: int, block_limit: int) -> list[str]:
+    """兜底逻辑：按段落将长文本拆分为块。"""
     chunks: list[str] = []
     current = ""
     for paragraph in markdown.split("\n\n"):

@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 from app.infra.llm import LLM
 from app.infra.logging import get_logger
-from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.base import BaseResourceAgent, load_resource_prompt, register_agent
 from app.resource.agents.common import build_path_context, build_resource_context
-from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, ResourceInput
 
 if TYPE_CHECKING:
     from app.path.schemas import PathResourceRequest
+    from app.resource.event import ResourceEvents
 
 logger = get_logger(__name__)
 
@@ -25,11 +25,13 @@ class CodeAgent(BaseResourceAgent):
     agent_id = "code"
     agent_name = "代码实操"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter: ResourceEvents | None = None) -> None:
+        """初始化代码实操 Agent 及其 LLM 客户端。"""
         super().__init__(emitter=emitter)
         self.llm = LLM(temperature=0.7)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """根据学习需求生成包含代码示例与讲解的资源。"""
         return await self._generate_code(
             input_text="\n\n".join(build_resource_context(input_data)),
             title_prefix=input_data.learning_need[:32],
@@ -91,7 +93,7 @@ class CodeAgent(BaseResourceAgent):
             input_text += "\n请在代码末尾附带测试用例（使用 assert 或单元测试框架）。"
 
         await self.emitter.send(self.agent_id, "running", "正在构建代码示例提示词...", 45)
-        prompt = prompts.get("resource").get("code")
+        prompt = load_resource_prompt("code")
         await self.emitter.send(self.agent_id, "running", "正在编写教学示例代码...", 60)
         full_prompt = f"{prompt}\n\n{input_text}"
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))

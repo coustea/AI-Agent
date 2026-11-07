@@ -30,7 +30,6 @@ from app.infra.logging import get_logger
 logger = get_logger(__name__)
 
 
-
 # 构建用户消息 content：文本段 + 图片/文件附件段
 def build_user_content(text: str, attachments: list[Any]) -> list[dict[str, Any]]:
     """构建用户消息；原始附件展示信息直接保存在 content 中。"""
@@ -97,10 +96,6 @@ def convert_stored_message(message: Any) -> Message | None:
     raw_content = getattr(message, "content", "")
     tool_calls = getattr(message, "tool_calls", None)
     tool_call_id = getattr(message, "tool_call_id", None)
-
-    metadata = getattr(message, "usage_metadata", None)
-    if isinstance(metadata, dict) and metadata.get("response_mode") == "video":
-        return None
 
     # 用户消息：将结构化 content 转为 HumanMessage（文本/图片/文件）
     if role == "user":
@@ -173,6 +168,33 @@ def sanitize_tool_message_chain(messages: list[Message]) -> list[Message]:
     return result
 
 
+def prune_tool_messages(
+    messages: list[Message],
+    *,
+    keep_recent_turns: int = 2,
+    max_chars: int = 300,
+) -> list[Message]:
+    """裁剪早期对话轮次中冗长的 ToolMessage 输出以控制上下文窗口。"""
+    turn_indices: list[int] = [i for i, m in enumerate(messages) if m.role == "user"]
+    total_turns = len(turn_indices)
+    recent_turn_start = turn_indices[-keep_recent_turns] if total_turns >= keep_recent_turns else 0
+
+    pruned: list[Message] = []
+    for i, m in enumerate(messages):
+        if m.role == "tool" and i < recent_turn_start:
+            content_str = str(m.content or "")
+            if len(content_str) > max_chars:
+                pruned.append(
+                    ToolMessage(
+                        content=f"[Tool output pruned: 原始长 {len(content_str)} 字符]\n{content_str[:max_chars]}...",
+                        tool_call_id=m.tool_call_id,
+                    )
+                )
+                continue
+        pruned.append(m)
+    return pruned
+
+
 # ChatContextBuilder：从数据库读取并组装对话历史为 Message 列表
 class ChatContextBuilder:
     """从数据库构建对话上下文（Message 列表）。"""
@@ -210,39 +232,27 @@ class ChatContextBuilder:
                 for message in raw_messages
                 if int(getattr(message, "id", 0) or 0) > summarized_through_id
             ]
-        # 仅保留未被压缩且属于会话的附件分析，按消息 ID 分组
+        # 附件分析按 run_id 归属，再映射回触发该 run 的用户消息
         analyses = await svc.list_attachment_analyses(
             user_id=user_id,
             session_id=session_id,
             completed_only=True,
         )
+        run_owners = {
+            run.id: run.user_message_id
+            for run in await svc.list_runs(user_id=user_id, session_id=session_id)
+        }
         analyses_by_message_id: dict[int, list[Any]] = {}
         for analysis in analyses:
-            if int(analysis.user_message_id or 0) <= summarized_through_id:
+            message_id = run_owners.get(analysis.run_id)
+            if message_id is None or int(message_id) <= summarized_through_id:
                 continue
-            analyses_by_message_id.setdefault(analysis.user_message_id, []).append(analysis)
+            analyses_by_message_id.setdefault(int(message_id), []).append(analysis)
 
         # 排除本轮用户消息及其附件分析
         if exclude_message_id is not None:
             raw_messages = [m for m in raw_messages if getattr(m, "id", None) != exclude_message_id]
             analyses_by_message_id.pop(exclude_message_id, None)
-
-        video_request_ids = {
-            int(message.user_message_id)
-            for message in raw_messages
-            if getattr(message, "role", "") == "assistant"
-            and isinstance(getattr(message, "usage_metadata", None), dict)
-            and message.usage_metadata.get("response_mode") == "video"
-            and getattr(message, "user_message_id", None) is not None
-        }
-        if video_request_ids:
-            raw_messages = [
-                message for message in raw_messages
-                if getattr(message, "id", None) not in video_request_ids
-                and getattr(message, "user_message_id", None) not in video_request_ids
-            ]
-            for message_id in video_request_ids:
-                analyses_by_message_id.pop(message_id, None)
 
         # 若历史不以用户消息开头，截断到首个用户消息
         if raw_messages and getattr(raw_messages[0], "role", "") != "user":

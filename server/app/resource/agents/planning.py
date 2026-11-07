@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import time
+from typing import TYPE_CHECKING
 
 from app.infra.llm import LLM
 from app.infra.logging import get_logger
-from app.infra.prompts import prompts
-from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.base import BaseResourceAgent, load_resource_prompt, register_agent
 from app.resource.agents.common import _format_profile
 from app.resource.schemas import (
     AgentResult,
@@ -16,6 +16,9 @@ from app.resource.schemas import (
     ResourcePlan,
     validate_resource_plan,
 )
+
+if TYPE_CHECKING:
+    from app.resource.event import ResourceEvents
 
 logger = get_logger(__name__)
 
@@ -37,18 +40,20 @@ class PlanningAgent(BaseResourceAgent):
     agent_id = "planning"
     agent_name = "规划"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter: ResourceEvents | None = None) -> None:
+        """初始化规划 Agent 及其 LLM 客户端。"""
         super().__init__(emitter=emitter)
         self.llm = LLM(temperature=0.1)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """分析学习需求与学习者画像，生成结构化的教学资源协同计划。"""
         title_prefix = input_data.learning_need[:32]
         logger.info("Agent[%s] 开始生成: learning_need=%s", self.agent_id, title_prefix)
         started = time.perf_counter()
 
         await self.emitter.send(self.agent_id, "running", "正在分析学习需求并构建协同计划", 20)
 
-        prompt = prompts.get("resource").get("planning")
+        prompt = load_resource_prompt("planning")
         input_text = self._build_planning_input(input_data)
         full_prompt = f"{prompt}\n\n{input_text}"
 
@@ -84,6 +89,7 @@ class PlanningAgent(BaseResourceAgent):
 
     @staticmethod
     def _build_planning_input(input_data: ResourceInput) -> str:
+        """构建规划提示词输入内容（学习需求、场景、画像与硬性协同任务）。"""
         parts = [
             f"## 学习需求\n{input_data.learning_need}",
             f"## 学习场景\n{input_data.learning_scenario}",

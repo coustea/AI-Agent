@@ -7,13 +7,13 @@ from typing import TYPE_CHECKING
 
 from app.infra.llm import LLM
 from app.infra.logging import get_logger
-from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.base import BaseResourceAgent, load_resource_prompt, register_agent
 from app.resource.agents.common import build_path_context, build_resource_context
-from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, ResourceInput
 
 if TYPE_CHECKING:
     from app.path.schemas import PathResourceRequest
+    from app.resource.event import ResourceEvents
 
 logger = get_logger(__name__)
 
@@ -25,11 +25,13 @@ class MindmapAgent(BaseResourceAgent):
     agent_id = "mindmap"
     agent_name = "思维导图"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter: ResourceEvents | None = None) -> None:
+        """初始化思维导图 Agent 及其 LLM 客户端。"""
         super().__init__(emitter=emitter)
         self.llm = LLM(temperature=0.7)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """根据学习需求生成 Markmap 兼容的思维导图资源。"""
         return await self._generate_mindmap(
             input_text="\n\n".join(build_resource_context(input_data)),
             title_prefix=input_data.learning_need[:32],
@@ -70,7 +72,7 @@ class MindmapAgent(BaseResourceAgent):
         )
 
         await self.emitter.send(self.agent_id, "running", "正在构建知识导图提示词...", 45)
-        prompt = prompts.get("resource").get("mindmap")
+        prompt = load_resource_prompt("mindmap")
         await self.emitter.send(self.agent_id, "running", "正在生成知识图谱结构...", 60)
         full_prompt = f"{prompt}\n\n{input_text}"
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))

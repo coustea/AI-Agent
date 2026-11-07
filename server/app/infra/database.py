@@ -3,11 +3,11 @@
 职责:
     - 校验数据库配置完整性
     - 创建全局异步引擎（连接池）
-    - 初始化数据库（init_db）— 验证连接 + 按需导入种子数据
+    - 初始化数据库（init_db）— 验证连接 + 建表 + 按需导入种子数据
     - 提供会话工厂（get_session）和显式会话（session_scope）
     - 启动健康检测（check_all）
 
-表结构和扩展由外部管理（init_schema.sql），后端仅负责 CRUD。
+表结构由 ``app/infra/models.py`` 唯一定义，启动时 ``create_all`` 建表。
 """
 
 # 本模块负责数据库引擎创建、连接池管理、健康检查、建表初始化与会话工厂
@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import (
@@ -32,6 +33,8 @@ from app.config import (
     DB_URL,
 )
 from app.infra.logging import get_logger
+# 导入模型模块以填充 SQLModel.metadata，create_all 依赖它发现所有表
+from app.infra import models as _models  # noqa: F401
 
 logger = get_logger(__name__)
 
@@ -77,16 +80,22 @@ def _validate_database_settings() -> None:
 _validate_database_settings()
 
 # 创建全局异步数据库引擎（连接池）
-# 全局异步引擎：配置连接池、预检与语句缓存
+# init_command 让每条连接的会话时区固定为 UTC，DATETIME 的写入/读取语义才确定。
+#
+# 不用 pool_pre_ping：SQLAlchemy 2.0.49 的 pymysql 方言在 PyMySQL >= 1.1 上会无参
+# 调用 ping()，而 aiomysql 的异步适配层要求必传 reconnect，取连接即抛 TypeError。
+# 连接新鲜度由 pool_recycle（1800s，远小于 MySQL wait_timeout 28800s）保证。
 engine = create_async_engine(
     DB_URL,
     echo=DB_ECHO,
-    pool_pre_ping=True,
     pool_size=DB_POOL_SIZE,
     max_overflow=DB_MAX_OVERFLOW,
     pool_recycle=DB_POOL_RECYCLE,
     pool_timeout=DB_POOL_TIMEOUT,
-    connect_args={"prepared_statement_cache_size": 0},
+    connect_args={
+        "init_command": "SET time_zone='+00:00'",
+        "charset": "utf8mb4",
+    },
 )
 
 
@@ -149,12 +158,11 @@ async def check_all() -> HealthReport:
     return report
 
 
-# 初始化数据库：验证连接后按需导入种子数据
+# 初始化数据库：验证连接后建表并按需导入种子数据
 async def init_db() -> None:
     """初始化数据库。
 
-    验证连接后，按需导入种子数据（学校、408题库）。
-    已存在则跳过。
+    验证连接 → 按 models.py 定义建表（已存在的表跳过）→ 导入种子数据。
     """
     if not await _test_connection():
         logger.error(
@@ -167,6 +175,11 @@ async def init_db() -> None:
         "[Database] 连接验证通过: url=%s",
         engine.url.render_as_string(hide_password=True),
     )
+
+    # 按 models.py 定义建表；create_all 只创建缺失的表，不会修改已有表结构
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    logger.info("[Database] 表结构检查完成: %d 张表", len(SQLModel.metadata.tables))
 
     # 启动时自动导入种子数据
     await _seed_initial_data()

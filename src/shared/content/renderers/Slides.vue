@@ -2,95 +2,44 @@
   <div class="ppt-resource" :class="{ compact }">
     <Frame :compact="compact" class="ppt-item">
       <div v-if="!compact" class="deck-toolbar">
-        <div class="deck-status">
-          <span class="deck-label">教学课件</span>
-          <span v-if="totalSlides" class="deck-page">{{ currentSlide }} / {{ totalSlides }}</span>
-        </div>
+        <span class="deck-label">教学课件 <span v-if="previews.length">{{ current + 1 }} / {{ previews.length }}</span></span>
         <div class="toolbar-actions">
-          <button class="nav-button" :disabled="currentSlide <= 1" @click="sendCommand('previous')">上一页</button>
-          <button class="nav-button nav-primary" :disabled="!totalSlides || currentSlide >= totalSlides" @click="sendCommand('next')">下一页</button>
-          <button v-if="htmlUrl" class="icon-button" aria-label="全屏预览" @click="toggleFullscreen">
-            <Expand class="w-5 h-5" />
-          </button>
-          <a v-if="htmlUrl" :href="htmlUrl" target="_blank" class="icon-button" aria-label="在新窗口打开">
-            <ArrowSquareOut class="w-5 h-5" />
-          </a>
+          <button class="nav-button" :disabled="current <= 0" @click="current--">上一页</button>
+          <button class="nav-button" :disabled="current >= previews.length - 1" @click="current++">下一页</button>
+          <a v-if="pptxUrl" :href="pptxUrl" class="nav-button" download>下载 PPTX</a>
+          <a v-if="pdfUrl" :href="pdfUrl" class="nav-button" target="_blank" rel="noopener">打开 PDF</a>
+          <button class="nav-button" @click="player?.requestFullscreen()">全屏</button>
         </div>
       </div>
-      <div ref="playerRef" class="player-wrapper">
-        <iframe
-          v-if="htmlUrl"
-          ref="iframeRef"
-          :src="htmlUrl"
-          class="slides-iframe"
-          frameborder="0"
-          sandbox="allow-scripts allow-downloads"
-          allowfullscreen
-          @load="requestDeckState"
-        ></iframe>
-        <div v-else class="no-preview">暂无幻灯片课件预览</div>
+      <div ref="player" class="player-wrapper">
+        <img v-if="previews[current]" :src="previews[current]" :alt="`第 ${current + 1} 页`" class="slide-image" />
+        <div v-else class="no-preview">暂无课件预览</div>
       </div>
     </Frame>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Frame from '../Frame.vue'
-import { PhArrowsOut as Expand, PhArrowSquareOut as ArrowSquareOut } from '@phosphor-icons/vue'
-
 const props = defineProps<{ resource?: unknown; compact?: boolean }>()
-
-const iframeRef = ref<HTMLIFrameElement | null>(null)
-const playerRef = ref<HTMLElement | null>(null)
-const currentSlide = ref(1)
-const totalSlides = ref(0)
-
-function parseObject(value: unknown): Record<string, unknown> | null {
-  if (value && typeof value === 'object') return value as Record<string, unknown>
-  if (typeof value !== 'string') return null
-  try {
-    const parsed = JSON.parse(value)
-    return parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null
-  } catch {
-    return null
+const current = ref(0)
+const player = ref<HTMLElement | null>(null)
+function object(value: unknown): Record<string, unknown> {
+  if (typeof value === 'string') {
+    try { return object(JSON.parse(value)) } catch { return {} }
   }
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {}
 }
-
-const htmlUrl = computed(() => {
-  const resource = parseObject(props.resource)
-  if (!resource) return ''
-  const metadata = parseObject(resource.metadata_json ?? resource.metadata)
-  const content = parseObject(resource.content)
-  const url = metadata?.html_url ?? content?.html_url
-  return typeof url === 'string' ? url : ''
+const metadata = computed(() => {
+  const resource = object(props.resource)
+  return object(resource.metadata_json ?? resource.metadata)
 })
-
-function sendCommand(action: 'previous' | 'next' | 'state') {
-  iframeRef.value?.contentWindow?.postMessage({ source: 'mentorly-ppt', type: 'command', action }, '*')
-}
-
-function requestDeckState() {
-  sendCommand('state')
-}
-
-function handleMessage(event: MessageEvent) {
-  if (event.source !== iframeRef.value?.contentWindow) return
-  const data = event.data
-  if (!data || data.source !== 'mentorly-ppt' || !['ready', 'state'].includes(data.type)) return
-  if (typeof data.current === 'number') currentSlide.value = data.current
-  if (typeof data.total === 'number') totalSlides.value = data.total
-}
-
-function toggleFullscreen() {
-  const player = playerRef.value
-  if (!player) return
-  if (document.fullscreenElement) document.exitFullscreen?.()
-  else player.requestFullscreen?.()
-}
-
-onMounted(() => window.addEventListener('message', handleMessage))
-onBeforeUnmount(() => window.removeEventListener('message', handleMessage))
+const previews = computed(() => Array.isArray(metadata.value.preview_urls)
+  ? metadata.value.preview_urls.filter((url): url is string => typeof url === 'string') : [])
+const pptxUrl = computed(() => typeof metadata.value.pptx_url === 'string' ? metadata.value.pptx_url : '')
+const pdfUrl = computed(() => typeof metadata.value.pdf_url === 'string' ? metadata.value.pdf_url : '')
+watch(previews, () => { current.value = 0 })
 </script>
 
 <style scoped>
@@ -200,11 +149,11 @@ onBeforeUnmount(() => window.removeEventListener('message', handleMessage))
   box-shadow: 0 4px 20px rgba(31, 76, 80, 0.03);
 }
 
-.slides-iframe {
+.slide-image {
   width: 100%;
   height: 100%;
   border: none;
-  background: transparent;
+  object-fit: contain;
 }
 
 .no-preview {

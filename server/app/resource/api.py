@@ -12,9 +12,10 @@ API 端点：
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, Query, Response
 from fastapi.responses import StreamingResponse
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -23,7 +24,7 @@ from app.auth.security import get_current_user, get_current_user_flexible
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
-from app.profile.service import ProfileService
+from app.profile.context import ProfileScope, load_learner_context
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceService
 from app.resource.orchestrator import run_multi_agent_generation
@@ -44,15 +45,20 @@ async def create_resource_task(
     req: ResourceGenerationRequest,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> Response:
     """启动独立资源生成后台任务。"""
     logger.info(
         "[ResourceAPI] 收到后台生成请求: user_id=%s selected_agents=%s",
         current_user.id,
         req.enabled_agent_ids(),
     )
-    profile_service = ProfileService()
-    profile_markdown = await profile_service.build_profile_markdown(user_id=current_user.id)
+    learner_ctx = await load_learner_context(
+        session,
+        user_id=current_user.id,
+        scope=ProfileScope.RESOURCE,
+        topic=req.topic or req.learning_need or "",
+    )
+    profile_markdown = learner_ctx.to_prompt_text(ProfileScope.RESOURCE)
     service = ResourceService(session)
     result = await service.create_task(
         user_id=current_user.id,
@@ -83,7 +89,7 @@ async def get_generation_status(
     resource_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> Response:
     """查询后台生成任务的状态。"""
     logger.debug("[ResourceAPI] 查询生成状态: user_id=%s resource_id=%s", current_user.id, resource_id)
     service = ResourceService(session)
@@ -104,7 +110,7 @@ async def get_resource_events(
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
-):
+) -> Response:
     """SSE 推送任务事件。"""
     logger.debug("[ResourceAPI] SSE订阅: user_id=%s resource_id=%s after=%s", current_user.id, resource_id, after_sequence)
     # 验证资源所有权
@@ -122,7 +128,8 @@ async def get_resource_events(
     if last_event_id and last_event_id.isdigit():
         resume_sequence = max(resume_sequence, int(last_event_id))
 
-    async def event_generator():
+    async def event_generator() -> AsyncIterator[str]:
+        """异步生成 SSE 事件流并在遇到终态事件或超时时退出。"""
         events = ResourceEvents(user_id=current_user.id, resource_id=resource_id)
         queue: asyncio.Queue | None = None
         delivered_sequence = resume_sequence
@@ -174,7 +181,7 @@ async def list_resources(
     offset: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> Response:
     """查询资源列表。"""
     logger.debug("[ResourceAPI] 查询资源列表: user_id=%s limit=%d offset=%d", current_user.id, limit, offset)
     service = ResourceService(session)
@@ -210,7 +217,7 @@ async def get_resource(
     resource_id: int,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> Response:
     """查询资源详情。"""
     logger.debug("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
     service = ResourceService(session)
@@ -259,7 +266,8 @@ def _resource_title(resource: Any) -> str:
 async def get_recent_resources(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-):
+) -> Response:
+    """获取最近生成的学习资源列表。"""
     """获取最近生成的学习资源列表。"""
     from app.infra.models import GeneratedResource, GeneratedResourceItem
 

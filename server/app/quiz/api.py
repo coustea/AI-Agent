@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import random
-
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -12,7 +10,7 @@ from app.auth.security import get_current_user
 from app.infra.logging import get_logger
 from app.infra.database import get_session
 from app.quiz.events import record_quiz_submit_event
-from app.infra.models import QuizQuestion, QuizAnswerHistory, School, User, WrongQuestion
+from app.infra.models import QuizAnswerHistory, QuizQuestion, User, WrongQuestion
 from app.response import HttpResponse
 from app.quiz.schemas import (
     ObjectiveQuestionResult,
@@ -42,81 +40,6 @@ SUBJECTS_408 = ["数据结构与算法", "计算机组成原理", "计算机网�
 # ---------------------------------------------------------------------------
 # 学校 API
 # ---------------------------------------------------------------------------
-
-
-# 学校列表查询接口（支持按层次筛选与分页）
-@router.get("/schools")
-async def list_schools(
-    tier: str | None = Query(default=None, description="院校层次：985/211/双一流/普通本科"),
-    page: int = Query(default=1, ge=1),
-    page_size: int = Query(default=50, ge=1, le=200),
-    session: AsyncSession = Depends(get_session),
-):
-    """获取学校列表。"""
-    # 构建学校查询语句与计数语句
-    stmt = select(School)
-    count_stmt = select(func.count()).select_from(School)
-
-    # 按院校层次过滤
-    if tier:
-        stmt = stmt.where(School.tier == tier)
-        count_stmt = count_stmt.where(School.tier == tier)
-
-    # 执行计数查询，获取学校总数
-    total = (await session.exec(count_stmt)).scalar() or 0
-    # 分页查询学校列表并按 id 排序
-    items = (await session.exec(
-        stmt.order_by(School.id)
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )).scalars().all()
-
-    # 返回学校列表及分页元信息
-    return HttpResponse.success(data={
-        "items": [{"name": s.name, "level": s.level, "tier": s.tier} for s in items],
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-    })
-
-
-# ---------------------------------------------------------------------------
-# 题库 API
-# ---------------------------------------------------------------------------
-
-
-# 408 题库统计接口（按科目统计题量与题型分布）
-@router.get("/quiz/stats")
-async def get_quiz_stats(session: AsyncSession = Depends(get_session)):
-    """获取 408 题库统计。"""
-    # 按科目聚合统计结果
-    stats = {}
-    for subject in SUBJECTS_408:
-        # 统计该科目的题目总数
-        total = (await session.exec(
-            select(func.count()).select_from(QuizQuestion).where(
-                QuizQuestion.subject == subject
-            )
-        )).scalar() or 0
-
-        # 按题型分组统计数量
-        type_rows = (await session.exec(
-            select(QuizQuestion.question_type, func.count().label("c"))
-            .where(QuizQuestion.subject == subject)
-            .group_by(QuizQuestion.question_type)
-        )).all()
-        # 转换为题型-数量字典
-        types = {t: c for t, c in type_rows}
-
-        # 记录该科目的统计结果
-        stats[subject] = {"total": total, "types": types}
-
-    # 返回各科目统计及总体题量
-    return HttpResponse.success(data={
-        "subjects": SUBJECTS_408,
-        "total": sum(s["total"] for s in stats.values()),
-        "stats": stats,
-    })
 
 
 # 题目列表查询接口（委托题库服务执行筛选与分页）
@@ -461,36 +384,6 @@ async def list_wrong(
         subjects=[],
         types=[],
     )
-
-
-# 随机抽题接口：从未归档错题中随机返回一道
-@router.get("/wrong/random")
-async def get_wrong_random(
-    subject: str | None = Query(default=None),
-    session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user),
-) -> HttpResponse:
-    """随机获取一道错题。"""
-    # 获取当前用户 ID
-    user_id = current_user.id
-
-    # 查询当前用户未归档的错题
-    stmt = select(WrongQuestion).where(
-        WrongQuestion.user_id == user_id,
-        WrongQuestion.is_archived == False,
-    )
-    # 可选按科目过滤
-    if subject:
-        stmt = stmt.where(WrongQuestion.subject == subject)
-
-    # 取回全部候选错题
-    items = (await session.exec(stmt)).scalars().all()
-    # 无可练习错题时返回空
-    if not items:
-        return HttpResponse.success(data=None)
-
-    # 随机返回一道错题
-    return HttpResponse.success(data=_to_wrong_read(random.choice(items)))
 
 
 # 错题归档接口：将指定错题标记为已归档

@@ -15,7 +15,7 @@ from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 import json
 from pathlib import Path
-import time
+import re
 from typing import Any, Literal, TypeVar
 
 from openai import AsyncOpenAI
@@ -617,5 +617,33 @@ __all__ = [
     "chat_text",
     "chat_vision",
     "get_llm_client",
+    "load_prompt",
     "normalize_messages",
+    "render_prompt",
 ]
+
+
+_PLACEHOLDER_RE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
+
+
+def render_prompt(text: str, **kwargs: Any) -> str:
+    """安全渲染提示词文本中的 {var} 占位符（支持多行，避免干扰大括号代码块或 JSON）。"""
+    if not text or not kwargs:
+        return text
+
+    def _replace(match: re.Match[str]) -> str:
+        """替换单个正则匹配到的变量占位符。"""
+        name = match.group(1)
+        if name not in kwargs:
+            return match.group(0)
+        value = kwargs[name]
+        return "" if value is None else str(value)
+
+    return _PLACEHOLDER_RE.sub(_replace, text)
+
+
+def load_prompt(file_path: Path | str, **kwargs: Any) -> str:
+    """按需即时读取 Markdown 提示词文件并渲染变量（无预加载与中央缓存）。"""
+    path = Path(file_path)
+    content = path.read_text(encoding="utf-8")
+    return render_prompt(content, **kwargs)

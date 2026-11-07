@@ -12,7 +12,6 @@ from typing import Any, Awaitable, Callable
 from uuid import uuid4
 
 from app.chat.schemas import UploadResponse
-from app.chat.stream import build_attachment_status_payload
 from app.config import (
     IMAGE_EXTENSIONS,
     WORKPLACE_DIR,
@@ -340,6 +339,43 @@ async def analyze_images(image_urls: list[str], question: str) -> str:
 # ── 4. 对话轮前附件预处理编排 ─────────────────────────────────────────────────
 
 
+def _preview(value: Any, *, limit: int = 50) -> str:
+    """截断文本预览，超长时补省略号。"""
+    text = str(value or "").strip()
+    return text if len(text) <= limit else text[:limit].rstrip() + "..."
+
+
+def build_attachment_activity(
+    *,
+    activity_id: str,
+    status: str,
+    file_names: list[str],
+    analysis_type: str,
+    summary: str = "",
+    error: str = "",
+) -> dict[str, Any]:
+    """构建附件分析活动负载，供实时事件与历史回放复用。"""
+    label = "图片分析" if analysis_type == "image" else "文档分析"
+    names = "、".join(name for name in file_names if name) or "附件"
+    if status == "running":
+        message = f"正在进行{label}：{_preview(names)}..."
+    elif status == "failed":
+        message = f"{label}未完成"
+    else:
+        message = f"{label}已完成"
+    return {
+        "activity_id": activity_id,
+        "kind": "attachment",
+        "title": label,
+        "status": status,
+        "detail": {
+            "input": _preview(names),
+            "output": _preview(summary, limit=1000),
+            "error": _preview(error, limit=200),
+        },
+    }
+
+
 @dataclass(slots=True)
 class AttachmentContext:
     """附件分析产出的上下文与错误列表。"""
@@ -354,7 +390,7 @@ async def analyze_attachments(
     user_id: int,
     username: str,
     session_id: str,
-    user_message_id: int,
+    run_id: str,
     memory_service: Any,
     emit: Callable[[dict[str, Any]], Awaitable[None]],
 ) -> AttachmentContext:
@@ -383,18 +419,17 @@ async def analyze_attachments(
         records[kind] = await memory_service.create_attachment_analysis(
             user_id=user_id,
             session_id=session_id,
-            user_message_id=user_message_id,
+            run_id=run_id,
             analysis_type=kind,
         )
-        await emit({
-            "event": "agent_status",
-            "data": build_attachment_status_payload(
+        await emit(
+            build_attachment_activity(
                 activity_id=f"attachment-{kind}-{index}",
                 status="running",
                 file_names=[u.split("/")[-1] for u in urls],
                 analysis_type=kind,
-            ),
-        })
+            )
+        )
 
     if image_urls:
         try:
@@ -454,23 +489,23 @@ async def analyze_attachments(
         if not urls:
             continue
         ok = kind in analysis_results
-        await emit({
-            "event": "agent_status",
-            "data": build_attachment_status_payload(
+        await emit(
+            build_attachment_activity(
                 activity_id=f"attachment-{kind}-{index}",
-                status="done" if ok else "failed",
+                status="completed" if ok else "failed",
                 file_names=[str(u).split("/")[-1] for u in urls],
                 analysis_type=kind,
                 summary=analysis_results.get(kind, "") if ok else "",
                 error=analysis_errors.get(kind, "未提取到可用内容") if not ok else "",
-            ),
-        })
+            )
+        )
 
     return result
 
 
 __all__ = [
     "AttachmentContext",
+    "build_attachment_activity",
     "LocalFileStore",
     "MAX_FILE_CONTENT_CHARS",
     "analyze_attachments",

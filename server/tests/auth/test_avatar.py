@@ -20,7 +20,7 @@ from app.main import create_app
 from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.models import User
-from app.config import user_avatar_dir, WORKPLACE_DIR
+from app.config import user_avatar_dir
 
 
 @pytest.fixture
@@ -176,19 +176,8 @@ async def test_upload_avatar_no_auth():
     assert response.status_code in (401, 403)
 
 
-@pytest.mark.asyncio
-async def test_get_avatar_not_found():
-    """GET /avatars/{filename} — 不存在的头像应返回 404。"""
-    app = create_app()
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/users/avatars/nonexistent_99999.png")
-
-    # 后端 FileResponse 在文件不存在时 HttpResponse.error(code=404) 返回 HTTP 404
-    assert response.status_code == 404
 
 
-@pytest.mark.asyncio
 async def test_upload_avatar_writes_file(app_with_auth, mock_user, tmp_path):
     """POST /me/avatar — 验证文件实际写入磁盘。"""
     with (
@@ -251,20 +240,5 @@ async def test_upload_avatar_overwrites_previous(app_with_auth, mock_user, tmp_p
     assert written_file.read_bytes() == png2
 
 
-@pytest.mark.asyncio
-async def test_get_avatar_serves_file(tmp_path):
-    """GET /avatars/{username}/{filename} — 已存在头像应返回文件。"""
-    app = create_app()
-    # 使用 tmp_path 创建用户头像目录
-    avatar_dir = tmp_path / "testuser" / "avatar"
-    avatar_dir.mkdir(parents=True, exist_ok=True)
-    test_png = _make_png_bytes()
-    (avatar_dir / "avatar.png").write_bytes(test_png)
 
-    with patch("app.config.WORKPLACE_DIR", tmp_path):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/api/v1/users/avatars/testuser/avatar.png")
 
-    assert response.status_code == 200
-    assert response.content == test_png

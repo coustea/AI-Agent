@@ -1,4 +1,4 @@
-"""Tests for the refactored PPTAgent (Plan-and-Execute + python-pptx + Skill Loading) and CartoonAgent (HyperFrames)."""
+"""Tests for the refactored PPTAgent (PptxGenJS harness) and CartoonAgent (HyperFrames)."""
 
 from __future__ import annotations
 
@@ -20,11 +20,11 @@ from app.shared.cartoon import (
     CartoonGenerationError,
     build_cartoon_subagent_tool,
 )
-from app.shared.tools import get_skill_loader
+from app.shared.tools.skills import get_skill_loader
 from app.shared.ppt import (
     PPTArtifact,
     PPTGenerationError,
-    build_ppt_subagent_tool,
+    build_ppt_tool,
 )
 
 
@@ -83,38 +83,37 @@ def test_local_skills_installed_and_loadable() -> None:
 
     pptx_doc = loader.get_content("pptx")
     assert "<skill name=\"pptx\">" in pptx_doc
-    assert "60-30-10" in pptx_doc
+    assert "pptxgenjs" in pptx_doc
 
-    hf_format = loader.get_content("hyperframes", "format.md")
+    hf_format = loader.get_content("hyperframes", "references/format.md")
     assert "<template>" in hf_format
 
 
 def test_ppt_agent_generate_resource_success(tmp_path: Path) -> None:
     async def _run() -> None:
-        html_file = tmp_path / "slides.html"
+        pdf_file = tmp_path / "deck.pdf"
         pptx_file = tmp_path / "deck.pptx"
-        html_file.write_text("<html>viewer</html>", encoding="utf-8")
+        pdf_file.write_bytes(b"%PDF-test")
         pptx_file.write_bytes(b"PK\x03\x04dummy-pptx")
 
         artifact = PPTArtifact(
             title="Python 协程与事件循环",
-            path=html_file,
+            pdf_path=pdf_file,
+            preview_paths=[pdf_file] * 7,
             pptx_path=pptx_file,
-            generated_at=datetime.now(timezone.utc),
             slide_count=7,
         )
 
         agent = PPTAgent()
-        with patch.object(agent._ppt_service, "generate", new_callable=AsyncMock) as mock_gen:
+        with patch.object(agent._generator, "generate", new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = artifact
             result = await agent.generate_resource(_sample_resource_input())
 
         assert result.success is True
-        assert result.file_type == "html"
+        assert result.file_type == "pptx"
         assert result.metadata["slide_count"] == 7
-        assert result.metadata["html_url"].endswith("/ppt/slides.html")
-        assert result.metadata["pptx_file_path"] == str(pptx_file)
-        assert result.metadata["ppt_pipeline"]["engine"] == "python-pptx-harness-v2"
+        assert len(result.metadata["preview_urls"]) == 7
+        assert result.metadata["pptx_url"].endswith("deck.pptx")
 
     asyncio.run(_run())
 
@@ -123,7 +122,7 @@ def test_ppt_agent_handles_generation_error() -> None:
     async def _run() -> None:
         agent = PPTAgent()
         with patch.object(
-            agent._ppt_service,
+            agent._generator,
             "generate",
             new_callable=AsyncMock,
             side_effect=PPTGenerationError("OOXML geometry check failed", stage="ooxml-audit"),
@@ -137,15 +136,12 @@ def test_ppt_agent_handles_generation_error() -> None:
     asyncio.run(_run())
 
 
-def test_cartoon_agent_generate_resource_success(tmp_path: Path) -> None:
+def test_cartoon_agent_generate_resource_success(tmp_path: Path, monkeypatch) -> None:
     async def _run() -> None:
         html_path = tmp_path / "index.html"
         video_path = tmp_path / "video.mp4"
         vtt_path = tmp_path / "captions.vtt"
-        lesson_path = tmp_path / "lesson.json"
-        timeline_path = tmp_path / "timeline.json"
-        audit_path = tmp_path / "audit.json"
-        for p in (html_path, video_path, vtt_path, lesson_path, timeline_path, audit_path):
+        for p in (html_path, video_path, vtt_path):
             p.write_text("ok", encoding="utf-8")
 
         artifact = CartoonArtifact(
@@ -156,15 +152,13 @@ def test_cartoon_agent_generate_resource_success(tmp_path: Path) -> None:
             html_path=html_path,
             video_path=video_path,
             caption_path=vtt_path,
-            lesson_path=lesson_path,
-            timeline_path=timeline_path,
-            audit_path=audit_path,
         )
 
-        mock_pipeline = AsyncMock()
-        mock_pipeline.generate = AsyncMock(return_value=artifact)
-        agent = CartoonAgent(pipeline=mock_pipeline)
-        result = await agent.generate_resource(_sample_resource_input())
+        monkeypatch.setattr(
+            "app.resource.agents.cartoon.generate_cartoon",
+            AsyncMock(return_value=artifact),
+        )
+        result = await CartoonAgent().generate_resource(_sample_resource_input())
 
         assert result.success is True
         assert result.file_type == "mp4"
@@ -177,7 +171,7 @@ def test_cartoon_agent_generate_resource_success(tmp_path: Path) -> None:
 
 
 def test_subagent_tool_wrappers_exposed() -> None:
-    ppt_tool = build_ppt_subagent_tool(username="alice")
+    ppt_tool = build_ppt_tool(username="alice")
     video_tool = build_cartoon_subagent_tool(username="alice")
     assert ppt_tool.name == "generate_ppt_deck"
     assert video_tool.name == "generate_teaching_video"

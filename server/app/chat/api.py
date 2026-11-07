@@ -9,47 +9,30 @@ import asyncio
 import json
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.auth.security import get_current_user_flexible
-from app.chat.stream import (
-    ChatEvents,
+from app.chat.harness import (
+    ChatRunEvents,
     encode_chat_sse,
-    get_chat_channel,
-    has_active_chat_channel,
+    has_active_run,
+    load_run_state,
 )
+from app.chat.harness.events import TERMINAL_EVENTS
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.schemas import DiagramMode
-from app.chat.service import get_chat_usecases, run_chat_agent
+from app.chat.service import get_chat_usecases, run_chat
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import ChatMessage, ChatSession, School, User
+from app.infra.models import ChatRun, User
 from app.response import HttpResponse
 
 logger = get_logger(__name__)
 
 # 聊天路由集合，统一挂载在 /api/v1/ai/chat/ 下
 router = APIRouter()
-
-
-async def _get_owned_assistant_message(
-    session: AsyncSession,
-    user_id: int,
-    message_id: int,
-) -> ChatMessage | None:
-    """Return an assistant message only when its session belongs to the caller."""
-    result = await session.exec(
-        select(ChatMessage)
-        .join(ChatSession, ChatMessage.session_id == ChatSession.id)
-        .where(
-            ChatMessage.id == message_id,
-            ChatMessage.role == "assistant",
-            ChatSession.user_id == user_id,
-        )
-    )
-    return result.first()
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +75,7 @@ async def create_mentor_chat_message(
         effective_message = "请分析我上传的附件，并解答其中的问题。"
 
     # 同一会话若已有进行中的回答则拒绝并发请求
-    if await has_active_chat_channel(current_user.id, effective_session):
+    if await has_active_run(current_user.id, effective_session):
         logger.info("[ChatAPI] 并发请求被拒绝: user_id=%s session_id=%s", current_user.id, effective_session)
         return HttpResponse.error(code=409, message="当前回答尚未完成，请稍候")
 
@@ -125,16 +108,15 @@ async def create_mentor_chat_message(
     if user_message_id is None:
         return HttpResponse.error(code=500, message="保存用户消息失败")
 
-    # 为该条用户消息创建事件频道供前端 SSE 订阅
-    events = ChatEvents(
+    # 创建运行记录并交给后台任务驱动 harness
+    run_id = await _create_run(
         user_id=current_user.id,
         session_id=effective_session,
         user_message_id=user_message_id,
     )
-    await events.open()
-
     background_tasks.add_task(
-        run_chat_agent,
+        run_chat,
+        run_id=run_id,
         user_message_id=user_message_id,
         user_id=current_user.id,
         username=current_user.username,
@@ -146,15 +128,41 @@ async def create_mentor_chat_message(
     )
 
     logger.info(
-        "[ChatAPI] 开始处理用户消息: user_message_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
-        user_message_id,
+        "[ChatAPI] 开始处理用户消息: run_id=%s user_id=%s session_id=%s msg_len=%d attachments=%d",
+        run_id,
         current_user.id, effective_session, len(effective_message), len(parsed_attachments),
     )
-    # 立即返回 202，表示已受理由后台任务异步处理
+    # 立即返回 202，运行事件通过 /chat/runs/{run_id}/events 订阅
     return HttpResponse.success(
-        data={"message_id": user_message_id, "session_id": effective_session},
+        data={
+            "run_id": run_id,
+            "message_id": user_message_id,
+            "session_id": effective_session,
+        },
         status_code=202,
     )
+
+
+# 登记运行行，保证前端拿到 run_id 后能立即订阅事件
+async def _create_run(
+    *,
+    user_id: int,
+    session_id: str,
+    user_message_id: int,
+) -> str:
+    """生成并登记 run_id，返回给前端用于订阅事件流。"""
+    from uuid import uuid4
+
+    from app.chat.harness import ChatRun
+
+    run_id = str(uuid4())
+    await ChatRun.reserve(
+        run_id=run_id,
+        user_id=user_id,
+        session_id=session_id,
+        user_message_id=user_message_id,
+    )
+    return run_id
 
 
 # 上传附件文件，返回可访问的文件元信息
@@ -182,56 +190,6 @@ async def upload_file(
     return HttpResponse.success(data=saved)
 
 
-# 按归属用户/会话/文件名解析并返回已上传的附件文件
-@router.get("/chat/uploads/{owner_username}/{session_id}/{filename}")
-async def get_uploaded_file(
-    owner_username: str,
-    session_id: str,
-    filename: str,
-    current_user: User = Depends(get_current_user_flexible),
-):
-    uc = get_chat_usecases()
-    try:
-        file_path = uc.resolve_uploaded_file(
-            current_username=current_user.username,
-            owner_username=owner_username,
-            session_id=session_id,
-            filename=filename,
-        )
-    except PermissionError as exc:
-        return HttpResponse.error(code=403, message=str(exc))
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    except FileNotFoundError as exc:
-        return HttpResponse.error(code=404, message=str(exc))
-    return FileResponse(path=str(file_path), filename=filename)
-
-
-# 返回会话内的任意聊天文件（与上传文件共用解析逻辑）
-@router.get("/chat/files/{owner_username}/{session_id}/{filename}")
-async def get_chat_file(
-    owner_username: str,
-    session_id: str,
-    filename: str,
-    current_user: User = Depends(get_current_user_flexible),
-):
-    uc = get_chat_usecases()
-    try:
-        file_path = uc.resolve_uploaded_file(
-            current_username=current_user.username,
-            owner_username=owner_username,
-            session_id=session_id,
-            filename=filename,
-        )
-    except PermissionError as exc:
-        return HttpResponse.error(code=403, message=str(exc))
-    except ValueError as exc:
-        return HttpResponse.error(code=400, message=str(exc))
-    except FileNotFoundError as exc:
-        return HttpResponse.error(code=404, message=str(exc))
-    return FileResponse(path=str(file_path), filename=filename)
-
-
 # SSE 响应头：禁用缓存与代理缓冲，保证实时推送
 SSE_HEADERS = {
     "Cache-Control": "no-cache",
@@ -240,44 +198,61 @@ SSE_HEADERS = {
 }
 
 
-# 订阅某条用户消息的实时处理事件，以 SSE 长连接推送
-@router.get("/chat/sessions/{session_id}/messages/{user_message_id}/events")
-async def stream_chat_message_events(
-    session_id: str,
-    user_message_id: int,
+# 读取一次运行的当前快照（刷新页面后恢复渲染）
+@router.get("/chat/runs/{run_id}")
+async def get_chat_run(
+    run_id: str,
+    current_user: User = Depends(get_current_user_flexible),
+    session: AsyncSession = Depends(get_session),
+):
+    """返回指定运行的完整快照。"""
+    run = (
+        await session.exec(
+            select(ChatRun).where(
+                ChatRun.id == run_id,
+                ChatRun.user_id == current_user.id,
+            )
+        )
+    ).first()
+    if run is None:
+        return HttpResponse.error(code=404, message="运行不存在或无权限")
+    state = await load_run_state(run_id)
+    if state is None:
+        return HttpResponse.error(code=404, message="运行不存在或无权限")
+    return HttpResponse.success(data=state.model_dump())
+
+
+# 订阅一次运行的实时事件流（支持 after_sequence 断点续传）
+@router.get("/chat/runs/{run_id}/events")
+async def stream_chat_run_events(
+    run_id: str,
     after_sequence: int = Query(default=0, ge=0),
     current_user: User = Depends(get_current_user_flexible),
     session: AsyncSession = Depends(get_session),
 ):
-    """订阅某条 UserMessage 的实时处理事件。"""
-    # 校验会话归属
-    result = await session.exec(
-        select(ChatSession).where(
-            ChatSession.id == session_id,
-            ChatSession.user_id == current_user.id,
+    """以 SSE 推送运行事件，先回放再实时转发。"""
+    run = (
+        await session.exec(
+            select(ChatRun).where(
+                ChatRun.id == run_id,
+                ChatRun.user_id == current_user.id,
+            )
         )
-    )
-    chat_session = result.first()
-    if chat_session is None:
-        return HttpResponse.error(code=404, message="会话不存在或无权限")
+    ).first()
+    if run is None:
+        return HttpResponse.error(code=404, message="运行不存在或无权限")
 
-    # 获取事件频道，不存在则返回 410
-    events = await get_chat_channel(current_user.id, session_id, user_message_id)
-    if events is None:
-        return HttpResponse.error(code=410, message="事件流已过期或不存在")
+    events = ChatRunEvents(run_id)
+    queue, replay = await events.subscribe(after_sequence)
 
-    # SSE 生成器：先回放历史事件，再实时推送队列事件，终态后关闭
     async def event_stream():
-        queue, replay = await events.subscribe(after_sequence)
         try:
-            # 先回放错过的事件
             for event in replay:
                 yield encode_chat_sse(event)
-            # 若回放已包含终态事件，直接结束
-            if replay and replay[-1].event in {"message.completed", "message.failed"}:
+            if replay and replay[-1].event in TERMINAL_EVENTS:
                 return
-
-            # 持续监听队列，30s 超时发送心跳保活
+            if run.status not in {"queued", "running"}:
+                return
             while True:
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=30.0)
@@ -285,8 +260,7 @@ async def stream_chat_message_events(
                     yield ": heartbeat\n\n"
                     continue
                 yield encode_chat_sse(event)
-                # 遇到终态事件即结束流
-                if event.event in {"message.completed", "message.failed"}:
+                if event.event in TERMINAL_EVENTS:
                     return
         finally:
             await events.unsubscribe(queue)
@@ -296,6 +270,40 @@ async def stream_chat_message_events(
         media_type="text/event-stream",
         headers=SSE_HEADERS,
     )
+
+
+# 请求取消一次运行
+@router.post("/chat/runs/{run_id}/cancel")
+async def cancel_chat_run(
+    run_id: str,
+    current_user: User = Depends(get_current_user_flexible),
+    session: AsyncSession = Depends(get_session),
+):
+    """把运行标记为取消，循环在下一个检查点退出。"""
+    run = (
+        await session.exec(
+            select(ChatRun).where(
+                ChatRun.id == run_id,
+                ChatRun.user_id == current_user.id,
+            )
+        )
+    ).first()
+    if run is None:
+        return HttpResponse.error(code=404, message="运行不存在或无权限")
+    if run.status not in {"queued", "running"}:
+        return HttpResponse.success(data={"run_id": run_id, "status": run.status})
+    # 优先打断进程内的活跃运行，循环会在下一个检查点退出
+    from app.chat.harness import ChatRun
+
+    if ChatRun.request_cancel(run_id):
+        return HttpResponse.success(data={"run_id": run_id, "status": "cancelling"})
+    run.status = "cancelled"
+    run.error = "用户取消运行"
+    session.add(run)
+    await session.commit()
+    return HttpResponse.success(data={"run_id": run_id, "status": "cancelled"})
+
+
 
 
 # ---------------------------------------------------------------------------
@@ -372,38 +380,3 @@ async def chat_history(
     )
     return HttpResponse.success(data=[item.model_dump() for item in items])
 
-
-# ---------------------------------------------------------------------------
-# 学校路由
-# ---------------------------------------------------------------------------
-
-# 按关键词搜索学校（无关键词则返回最近学校）
-@router.get("/schools/search")
-async def search_schools(
-    keyword: str = Query(default="", min_length=0, max_length=50),
-    limit: int = Query(default=20, ge=1, le=100),
-    db: AsyncSession = Depends(get_session),
-):
-    # 有关键词则模糊匹配学校名称，否则按 ID 倒序取最近
-    if keyword:
-        stmt = (
-            select(School)
-            .where(School.name.contains(keyword))
-            .order_by(School.name)
-            .limit(limit)
-        )
-    else:
-        stmt = select(School).order_by(School.id.desc()).limit(limit)
-
-    # 执行查询并序列化结果
-    schools = list((await db.exec(stmt)).all())
-
-    return HttpResponse.success(data=[
-        {
-            "id": school.id,
-            "name": school.name,
-            "level": school.tier or school.level,
-            "tier": school.tier,
-        }
-        for school in schools
-    ])

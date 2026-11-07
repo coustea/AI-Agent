@@ -5,13 +5,6 @@ from sqlmodel import SQLModel
 from sqlmodel.pool import StaticPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.compiler import compiles
-
-@compiles(JSONB, "sqlite")
-def compile_jsonb_sqlite(type_, compiler, **kw):
-    return "JSON"
-
 # Try importing build_assessment_facts
 try:
     from app.evaluation.facts import build_assessment_facts
@@ -160,3 +153,37 @@ def test_topic_is_insufficient_before_five_answers_in_two_attempts():
             assert topic_fact2["enough_evidence"] is True
 
     asyncio.run(run())
+
+
+def test_polymorphic_learning_session_model():
+    now = datetime.now(timezone.utc)
+    sess = LearningSession(
+        user_id=1,
+        source_page="path_study",
+        module="path",
+        entity_id="42",
+        sub_entity_id="node_99",
+        started_at=now - timedelta(minutes=10),
+        ended_at=now,
+        duration_seconds=600,
+        metadata_json={"custom_flag": "test"},
+    )
+    assert sess.module == "path"
+    assert sess.entity_id == "42"
+    assert sess.sub_entity_id == "node_99"
+    assert sess.path_id == 42
+    assert sess.resource_id is None
+
+    res_sess = LearningSession(
+        user_id=1,
+        source_page="resource_view",
+        module="resource",
+        entity_id="88",
+        started_at=now - timedelta(minutes=5),
+        ended_at=now,
+        duration_seconds=300,
+    )
+    assert res_sess.module == "resource"
+    assert res_sess.resource_id == 88
+    assert res_sess.path_id is None
+

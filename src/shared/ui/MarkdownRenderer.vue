@@ -9,6 +9,7 @@ import {
   type MarkdownTheme,
 } from '@/shared/markdown/markdown'
 import { renderMermaidBlocks } from '@/shared/markdown/mermaid'
+import { renderSvgBlocks } from '@/shared/markdown/svgDiagram'
 import { appendStreamingCaret } from '@/shared/markdown/streamingCaret'
 
 const props = withDefaults(defineProps<{
@@ -52,6 +53,7 @@ async function performRender(content: string): Promise<void> {
     degraded.value = result.degraded
     await nextTick()
     void renderMermaidBlocks(contentRoot.value, theme.value)
+    renderSvgBlocks(contentRoot.value)
   } catch {
     if (version !== renderVersion) {
       return

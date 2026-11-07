@@ -8,7 +8,7 @@ export type ResourceLifecycleStatus = 'pending' | 'generating' | 'completed' | '
 
 export type ResourceAgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'interrupted'
 
-export type ResourceContentFormat = 'markdown' | 'json' | 'html' | 'mp4'
+export type ResourceContentFormat = 'markdown' | 'json' | 'pptx' | 'mp4'
 
 export type ResourceContent = Record<string, unknown> | unknown[] | string | null
 

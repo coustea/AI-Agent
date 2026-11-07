@@ -260,30 +260,6 @@ async def get_assessment_detail(
     return HttpResponse.success(data=assessment.model_dump(mode="json"))
 
 
-# 5. GET /api/v1/ai/evaluation/guidance-strategy -> 获取当前辅导策略
-@router.get("/evaluation/guidance-strategy")
-async def get_guidance_strategy(
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """独立输出当前策略；供个人中心和生成服务读取。"""
-    from app.infra.models import UserProfile
-    profile = await session.scalar(select(UserProfile).where(UserProfile.user_id == current_user.id))
-
-    if profile is None:
-        return HttpResponse.success(data={
-            "guidance_strategy": {},
-            "guidance_updated_at": None,
-            "last_assessment_id": None
-        })
-
-    return HttpResponse.success(data={
-        "guidance_strategy": profile.guidance_strategy,
-        "guidance_updated_at": profile.guidance_updated_at.isoformat() if profile.guidance_updated_at else None,
-        "last_assessment_id": profile.last_assessment_id
-    })
-
-
 # 6. GET /api/v1/ai/evaluation/dashboard -> 个人中心看板数据
 @router.get("/evaluation/dashboard")
 async def get_dashboard_data(

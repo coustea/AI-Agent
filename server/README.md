@@ -1,6 +1,6 @@
 # AI 学习平台 · 后端服务
 
-基于 **FastAPI + LangGraph** 的多智能体个性化学习平台后端，提供 AI 辅导对话、多模态学习资源生成、学习路径规划、题库与数字人播报等能力。后端通过三层记忆与学习者画像驱动个性化教学，并将多智能体编排复用于独立资源生成与路径节点学习两条独立的业务链路。
+基于 **FastAPI + LangGraph** 的多智能体个性化学习平台后端，提供 AI 辅导对话、多模态学习资源生成、学习路径规划、题库等能力。后端通过三层记忆与学习者画像驱动个性化教学，并将多智能体编排复用于独立资源生成与路径节点学习两条独立的业务链路。
 
 ---
 
@@ -32,7 +32,6 @@
 - **学习路径规划** — 课程级路径编排，节点内形成「教程 → 测验 → 辅助资源」的学习闭环，节点资源按需单智能体生成。
 - **算法可视化** — 后端基于 Python 抽象语法树（AST）分析与代码插装，支持官方与自定义算法模板运行，生成包含作用域、变量状态、输出及调用栈的可视化 Trace 数据。
 - **题库与错题本** — 编程题与客观题管理，答题事件自动归集错题。
-- **数字人播报** — WebSocket 桥接讯飞数字人，ASR 实时识别 + 数字人播报互动。
 - **动态学习评估** — 聚合用户学习时长与测验得分等事实，通过 LLM 异步生成周期性评估报告并更新辅导建议策略。
 - **GPU 加速动画渲染** — 检测到 NVIDIA GPU + NVENC 时自动启用 GPU 渲染（Ubuntu Linux 优先，无则自动回退至 CPU 软件渲染）。
 
@@ -42,7 +41,7 @@
 |------|------|
 | **Web 框架** | FastAPI · SQLModel · SQLAlchemy (async) |
 | **多智能体编排** | LangGraph · LangChain |
-| **数据库** | PostgreSQL · asyncpg |
+| **数据库** | MySQL · aiomysql |
 | **LLM 接入** | OpenAI 兼容 API（主模型：Astron-code-latest 等；视觉模型：GLM-4.6v-flash 等） |
 | **动画与课件渲染** | HyperFrames 0.7 · Playwright · FFmpeg (NVENC) |
 | **语音技术** | Microsoft Edge-TTS · 讯飞星火 TTS / ASR |
@@ -57,19 +56,18 @@
 
 | 领域 | 职责 |
 |------|------|
-| [auth/](file:///Users/apple/Code/software/server/app/auth) | 注册 / 登录 / 登出，JWT 校验 + `ActiveToken` 白名单，用户头像上传 |
-| [chat/](file:///Users/apple/Code/software/server/app/chat) | SSE 辅导对话、附件分析、会话与三层记忆集成、对话视频生成 |
-| [resource/](file:///Users/apple/Code/software/server/app/resource) | 独立多智能体资源生成（规划、大纲 Planning → 并行生成 Worker → 审查 Review） |
-| [path/](file:///Users/apple/Code/software/server/app/path) | 学习路径规划生成、阶段与节点状态流转、节点工作空间及可继续学习仪表盘聚合 |
-| [profile/](file:///Users/apple/Code/software/server/app/profile) | 学习者画像动态推断（`UserProfile` / `UserProfileDimension`），Onboarding 首入问卷，推荐列表 |
-| [evaluation/](file:///Users/apple/Code/software/server/app/evaluation) | 学习事件采集、时长会话统计与异步学习评估生成 |
-| [quiz/](file:///Users/apple/Code/software/server/app/quiz) | 题库练习、随机测试、答题历史、错题本归集与归档 |
-| [avatar/](file:///Users/apple/Code/software/server/app/avatar) | 数字人 Interact 服务状态获取、说话打断与清理，WebSocket 桥接 |
-| [algorithm_visualizer/](file:///Users/apple/Code/software/server/app/algorithm_visualizer) | 编译运行、Python AST 代码插装、Trace 生成及输入契约 |
-| [infra/](file:///Users/apple/Code/software/server/app/infra) | 基础设施层（ChromaDB/PostgreSQL、SQLModel 表映射、配置文件、日志处理、通用 Prompt） |
-| [shared/](file:///Users/apple/Code/software/server/app/shared) | 跨领域共享渲染组件（动画 HTML 播放、PPT 演示大纲、研究代理、音效与 TTS） |
+| [auth/](app/auth/) | 注册 / 登录 / 登出，JWT 校验 + `ActiveToken` 白名单，用户头像上传 |
+| [chat/](app/chat/) | SSE 辅导对话、附件分析、会话与三层记忆集成、对话视频生成 |
+| [resource/](app/resource/) | 独立多智能体资源生成（规划、大纲 Planning → 并行生成 Worker → 审查 Review） |
+| [path/](app/path/) | 学习路径规划生成、阶段与节点状态流转、节点工作空间及可继续学习仪表盘聚合 |
+| [profile/](app/profile/) | 学习者画像动态推断（`UserProfile` / `UserProfileDimension`），Onboarding 首入问卷，推荐列表 |
+| [evaluation/](app/evaluation/) | 学习事件采集、时长会话统计与异步学习评估生成 |
+| [quiz/](app/quiz/) | 题库练习、随机测试、答题历史、错题本归集与归档 |
+| [algorithm_visualizer/](app/algorithm_visualizer/) | 编译运行、Python AST 代码插装、Trace 生成及输入契约 |
+| [infra/](app/infra/) | 基础设施层（ChromaDB/MySQL、SQLModel 表映射、配置文件、日志处理、通用 Prompt） |
+| [shared/](app/shared/) | 跨领域共享渲染组件（动画 HTML 播放、PPT 演示大纲、研究代理、音效与 TTS） |
 
-应用启动流程集中在 [app/main.py](file:///Users/apple/Code/software/server/app/main.py)：`create_app()` 配置 CORS 与全局异常处理，`lifespan()` 预热 Prompt 模板、初始化数据库并执行知识库（RAG）健康检查，[app/routes.py](file:///Users/apple/Code/software/server/app/routes.py) 统一挂载全部 HTTP 与 WebSocket 路由。
+应用启动流程集中在 [app/main.py](app/main.py)：`create_app()` 配置 CORS 与全局异常处理，`lifespan()` 预热 Prompt 模板、初始化数据库并执行知识库（RAG）健康检查，[app/routes.py](app/routes.py) 统一挂载全部 HTTP 路由。
 
 ### 三条核心运行链路
 
@@ -96,8 +94,8 @@
 |------|------|------|------|
 | **Python** | ≥ 3.13 | 必需 | 后端服务运行时 |
 | **uv** | 最新 | 必需 | Python 虚拟环境与依赖包管理 |
-| **PostgreSQL** | ≥ 12 | 必需 | 主数据库 |
-| **Python 构建工具链** | — | 必需 | 编译 `asyncpg` / `faiss-cpu` / `greenlet` 等 C 扩展 |
+| **MySQL** | ≥ 8.0.13 | 必需 | 主数据库 |
+| **Python 构建工具链** | — | 必需 | 编译 `faiss-cpu` / `greenlet` 等 C 扩展 |
 | **FFmpeg / FFprobe** | ≥ 4.0 | 视频功能必需 | 动画音频拼接、视频编码及合并 |
 | **Node.js** | ≥ 22 | 视频功能必需 | 运行 HyperFrames 动画生成 CLI（Playwright 驱动） |
 | **Playwright / Chromium**| — | 视频功能必需 | 渲染动画帧及 PPT 生成快照 |
@@ -184,16 +182,17 @@ npx --no-install hyperframes doctor
 ```bash
 # 创建角色与数据库（需与 config.yaml -> database.url 一致）
 # 以下使用默认示例用户 "coustea" / 密码 "Aa123456"
-psql -U postgres -c "CREATE USER coustea WITH PASSWORD 'Aa123456';"
-psql -U postgres -c "CREATE DATABASE agent OWNER coustea;"
+mysql -u root -p -e "CREATE USER 'coustea'@'%' IDENTIFIED BY 'Aa123456';"
+mysql -u root -p -e "CREATE DATABASE agent CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;"
+mysql -u root -p -e "GRANT ALL PRIVILEGES ON agent.* TO 'coustea'@'%';"
 
 # 导入建表及索引结构
-psql "postgresql://coustea:Aa123456@127.0.0.1:5432/agent" -f init_schema.sql
+# 表结构无需手工导入：服务启动时按 app/infra/models.py 自动创建
 ```
 
 ### 6. 配置 `config.yaml`
 
-编辑 [server/config.yaml](file:///Users/apple/Code/software/server/config.yaml)，填入数据库连接、LLM API 密钥以及其他的可选星火/数字人/搜索密钥。（详见下节 [配置](#配置)）。
+编辑 [config.yaml](config.yaml)，填入数据库连接、LLM API 密钥以及其他的可选星火/搜索密钥。（详见下节 [配置](#配置)）。
 
 ### 7. 启动开发服务
 
@@ -223,20 +222,20 @@ ffmpeg -hide_banner -encoders | grep h264_nvenc
 
 ### 目录结构
 
-[app/rag/](file:///Users/apple/Code/software/server/app/rag)
+[app/rag/](app/rag/)
 - `data/`
   - `source/` ← 源文档（按课程子目录存放只读文档）
   - `index/` ← 构建产物（ChromaDB 向量数据 + BM25 序列化数据 + 索引描述 manifest）
-- [load.py](file:///Users/apple/Code/software/server/app/rag/load.py) - 文档加载器（支持 `.md` / `.txt` / `.pdf`）
-- [metadata.py](file:///Users/apple/Code/software/server/app/rag/metadata.py) - 文档元数据（标题、章节名、英文目录映射中文课程名）
-- [splitter.py](file:///Users/apple/Code/software/server/app/rag/splitter.py) - 语义块切割
-- [embeddings.py](file:///Users/apple/Code/software/server/app/rag/embeddings.py) - 向量化客户端与超时熔断器
-- [retriever.py](file:///Users/apple/Code/software/server/app/rag/retriever.py) - 双路混合检索与 RRF 归一化融合
-- [indexing/build.py](file:///Users/apple/Code/software/server/app/rag/indexing/build.py) - 知识库一键离线索引构建脚本
+- [load.py](app/rag/load.py) - 文档加载器（支持 `.md` / `.txt` / `.pdf`）
+- [metadata.py](app/rag/metadata.py) - 文档元数据（标题、章节名、英文目录映射中文课程名）
+- [splitter.py](app/rag/splitter.py) - 语义块切割
+- [embeddings.py](app/rag/embeddings.py) - 向量化客户端与超时熔断器
+- [retriever.py](app/rag/retriever.py) - 双路混合检索与 RRF 归一化融合
+- [build.py](app/rag/build.py) - 知识库一键离线索引构建脚本
 
 ### 手动构建索引
 
-保证向量服务（如本地 Ollama 运行且有拉取模型，或者配置了有效的云端 API）在线后，在 [server/](file:///Users/apple/Code/software/server) 目录下执行命令：
+保证向量服务（如本地 Ollama 运行且有拉取模型，或者配置了有效的云端 API）在线后，在 [server/](.) 目录下执行命令：
 
 ```bash
 # 标准构建
@@ -260,17 +259,16 @@ uv run python -m app.rag.indexing.build --check-only
 
 ## 配置说明
 
-所有运行时配置集中在 [server/config.yaml](file:///Users/apple/Code/software/server/config.yaml) 文件。核心配置结构如下：
+所有运行时配置集中在 [config.yaml](config.yaml) 文件。核心配置结构如下：
 
 | 配置键路径 | 是否必填 | 配置内容描述说明 |
 |------------|:--------:|------------------|
 | `app.host` / `app.port` | 否 | 服务监听地址与端口（默认 `127.0.0.1:9999`） |
-| `database.url` | **是** | PostgreSQL 异步连接字符串，需以 `postgresql+asyncpg://` 开头 |
+| `database.url` | **是** | MySQL 异步连接字符串，需以 `mysql+aiomysql://` 开头 |
 | `jwt.secret_key` | **是** | JWT 签名密钥（需防泄漏，长度至少 32 字符） |
-| `models.main` | **是** | 系统最核心的主推理大语言模型连接参数（含 `base_url`, `api_key`, `model_name`） |
-| `models.vision` | 否 | 用于上传图片消息识别及附件分析的视觉模型参数，不填则前端上传图片报错 |
+| `models.text` | **是** | 系统核心文本大语言模型连接参数（含 `base_url`, `api_key`, `model_name`） |
+| `models.vision` | 否 | 用于上传图片消息识别及附件分析的视觉模型参数，不填则无法使用视觉理解 |
 | `spark` | 否 | 讯飞星火 Web API 基础凭证（用于语音识别 ASR 与语音合成 TTS） |
-| `avatar` | 否 | 讯飞互动数字人配置项，含锚点 `anchor_id`、背景、IAT 以及交互端点等 |
 | `search` | 否 | 联网搜索引擎 API 密钥（支持 `tavily_key` 或 `spark_key`） |
 | `knowledge` | 否 | 知识库检索配置参数，包括 `embed_model` 名字及 `embed_base_url` 向量服务器等 |
 | `memory` | 否 | 三层记忆微调参数，包括会话压缩的 Token/消息临界阈值 |
@@ -291,9 +289,7 @@ uv run python -m app.rag.indexing.build --check-only
 | `/api/v1/ai/quiz` | quiz | 题库练习生成、评分判定、个人刷题历史、练习推荐。 |
 | `/api/v1/ai/wrong` | quiz | 错题本列表、错题温习抽题测试、归档错题、删除错题。 |
 | `/api/v1/ai/evaluation` | evaluation | 手动记录学习事件与会话时长、生成周期性评估报告及辅导策略。 |
-| `/api/v1/ai/avatar` | avatar | 获取数字人 Interact 视频流地址、打断数字人发音、清理会话资源。 |
 | `/api/v1/ai/algorithm-visualizer`| visualizer | 获取支持的可视化语言、获取模板代码及输入契约、自定义代码 AST 插装分析与 Trace 运行。 |
-| `/ws/avatar` | websocket | 数字人专属语音对话 WebSocket 鉴权及交互端点。 |
 
 ---
 
@@ -302,12 +298,12 @@ uv run python -m app.rag.indexing.build --check-only
 后端包含一条完整的基于 HTML 快照的视频渲染管线，检测到 NVIDIA GPU 时自动启用 NVENC 硬件编码进行 GPU 加速。
 
 ### 1. PPT 演示生成
-`PPTAgent`（[app/resource/agents/ppt.py](file:///Users/apple/Code/software/server/app/resource/agents/ppt.py)）通过规划生成幻灯片内容，并在对应的用户静态资源目录生成一个可供前端渲染交互的网页 `slides.html`。
+PPTAgent 使用 PptxGenJS 工具循环生成可编辑的 `deck.pptx`，加载 `server/skills/pptx` 官方技能。通过 LibreOffice → PDF → PNG 进行逐页视觉审查，前端显示图片预览并提供 PPTX/PDF 下载。部署依赖和技能来源见 `server/skills/README.md`。
 
 ### 2. HyperFrames 动画讲解
 动画讲解智能体（`CartoonAgent`）将学习大纲转化为分镜及解说词，再借助 TTS 和 HyperFrames 合成导出高清 `.mp4` 视频：
-- **入口**：[app/resource/agents/cartoon.py](file:///Users/apple/Code/software/server/app/resource/agents/cartoon.py) → [app/shared/cartoon/pipeline.py](file:///Users/apple/Code/software/server/app/shared/cartoon/pipeline.py)。
-- **运行器**：[app/shared/cartoon/composer.py](file:///Users/apple/Code/software/server/app/shared/cartoon/composer.py)（动作清单组装）→ [app/shared/cartoon/media.py](file:///Users/apple/Code/software/server/app/shared/cartoon/media.py)（调起 Playwright 浏览器加载页面并运行 HyperFrames 播放渲染）。
+- **核心组件**：[app/shared/cartoon/agent.py](app/shared/cartoon/agent.py)（Agent 执行循环与分镜规划）、[app/shared/cartoon/renderer.py](app/shared/cartoon/renderer.py)（调起 Playwright 浏览器加载页面并运行 HyperFrames 播放渲染）。
+- **工具与校验**：[app/shared/cartoon/tool.py](app/shared/cartoon/tool.py) 与 [app/shared/cartoon/validator.py](app/shared/cartoon/validator.py) 保证分镜规范与元素时序。
 - **渲染器**：调用 `node_modules/.bin/hyperframes` 将渲染帧用 FFmpeg 录制合并为带有字幕及配音的高清视频。
 - **降级保护**：启动时检测系统可用内存。如果物理机内存受限（≤8GB），渲染器会自动降级为单 Worker 模式以防止系统溢出宕机；检测到 GPU 会自动执行硬件编码加速。
 
@@ -332,8 +328,8 @@ uv run pytest
 # 仅运行 chat 模块相关的测试
 uv run pytest tests/chat -q
 
-# 仅运行 算法可视化 Trace 处理的测试 (或特定测试文件)
-uv run pytest tests/algorithm_visualizer/test_runner.py -q
+# 运行指定测试文件
+uv run pytest tests/resource/test_ppt_agent_pipeline.py -q
 ```
 
 ---
@@ -342,7 +338,7 @@ uv run pytest tests/algorithm_visualizer/test_runner.py -q
 
 | 问题现象 | 排查方向 |
 |----------|----------|
-| **后端提示 `active_tokens` 或数据库字段不存在** | 检查物理表结构是否与最新 [server/app/infra/models.py](file:///Users/apple/Code/software/server/app/infra/models.py) 模型保持同步；如果是全新安装，重新执行 `psql -d agent -f init_schema.sql` 刷新结构。 |
+| **后端提示 `active_tokens` 或数据库字段不存在** | 表结构在启动时由 [app/infra/models.py](app/infra/models.py) 自动创建，但 `create_all` 不会修改已有表。字段变更后需重建数据库：`mysql -u root -p -e "DROP DATABASE agent; CREATE DATABASE agent CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;"` 后重启服务。 |
 | **画像推荐接口返回 500** | 确认已提交了 `onboarding` 首入设置，系统需要画像数据建立推荐先验；检查对应 `UserProfile` 在数据库中是否存在。 |
 | **动画渲染失败或报无头浏览器缺失** | 确认已在 `server/` 下运行过 `uv run playwright install chromium` 安装 Playwright 对应的 Chromium 底层渲染包。 |
 | **本地 Ollama 无法提供检索服务** | 检查 Ollama 服务监听的端口号。默认为 `11434`。如果 `config.yaml` 写的向量服务器地址不一致，请手动微调。 |

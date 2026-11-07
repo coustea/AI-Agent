@@ -1,21 +1,24 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: agent-postgres
+  mysql:
+    image: mysql:8.4
+    container_name: agent-mysql
     restart: always
     environment:
-      POSTGRES_USER: coustea
-      POSTGRES_PASSWORD: Aa123456
-      POSTGRES_DB: agent
+      MYSQL_ROOT_PASSWORD: Aa123456
+      MYSQL_DATABASE: agent
+      MYSQL_USER: coustea
+      MYSQL_PASSWORD: Aa123456
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_as_cs
     ports:
-      - "5432:5432"
+      - "3306:3306"
     volumes:
-      - ./server/data:/var/lib/postgresql/data
-      - ./server/init_schema.sql:/docker-entrypoint-initdb.d/init_schema.sql:ro
+      - ./data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$$MYSQL_USER -p$$MYSQL_PASSWORD"]
       interval: 10s
       timeout: 5s
       retries: 5

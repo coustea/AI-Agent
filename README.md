@@ -14,7 +14,6 @@
 - **算法可视化** - 提供官方算法模板与自定义 Python 代码插装执行，生成追踪 Trace 并支持单步动画播放与交互。
 - **学习者画像** - 基于对话、学习事件、题目表现及学习时长沉淀 8 维度动态学习画像。
 - **题库与错题本** - 提供系统题库管理、答题自动评分，并将错题自动归集到错题本，提供针对性巩固练习。
-- **数字人播报** - WebSocket 桥接讯飞数字人，ASR 实时语音识别 + 语音/图像数字人互动交互。
 
 ### 技术栈
 
@@ -30,7 +29,7 @@
 **后端**
 - **核心框架**：FastAPI + SQLModel (SQLAlchemy Async)
 - **多智能体编排**：LangGraph + LangChain
-- **数据存储**：PostgreSQL + `asyncpg` (异步驱动)
+- **数据存储**：MySQL + `aiomysql` (异步驱动)
 - **大模型接入**：OpenAI 兼容 API（主模型：Astron-code-latest 等；视觉模型：GLM-4.6v-flash 等）
 - **向量检索库**：ChromaDB + BM25 + bge-m3（双路混合检索与 RRF 融合）
 - **动画渲染**：HyperFrames 0.7 + Playwright（动画与 PPT 网页快照渲染生成 MP4）
@@ -40,41 +39,38 @@
 
 ## 目录结构
 
-- [src/](file:///Users/apple/Code/software/src) - 前端源码目录
-  - [src/app/](file:///Users/apple/Code/software/src/app) - 应用入口、布局 (MainLayout) 与路由配置
-  - [src/features/](file:///Users/apple/Code/software/src/features) - 业务域功能模块
-    - [auth/](file:///Users/apple/Code/software/src/features/auth) - 认证（登录/注册/引导弹窗）
-    - [chat/](file:///Users/apple/Code/software/src/features/chat) - 智能辅导对话及数字人组件
-    - [dashboard/](file:///Users/apple/Code/software/src/features/dashboard) - 首页仪表盘与概览
-    - [resource/](file:///Users/apple/Code/software/src/features/resource) - 独立资源生成域
-    - [learning-path/](file:///Users/apple/Code/software/src/features/learning-path) - 学习路径规划与节点工作空间
-    - [profile/](file:///Users/apple/Code/software/src/features/profile) - 学习者画像雷达图及偏好设置
-    - [question-bank/](file:///Users/apple/Code/software/src/features/question-bank) - 题库答题练习
-    - [evaluation/](file:///Users/apple/Code/software/src/features/evaluation) - 学习数据上报与事件 API 封装
-    - [learning-assessment/](file:///Users/apple/Code/software/src/features/learning-assessment) - 学习评估与历史看板视图
-    - [algorithm-visualization/](file:///Users/apple/Code/software/src/features/algorithm-visualization) - 算法可视化画板与代码运行
-  - [src/shared/](file:///Users/apple/Code/software/src/shared) - 共享模块（API 封装、通用 UI 组件、Markdown 渲染、数据模型等）
-- [server/](file:///Users/apple/Code/software/server) - 后端源码目录
-  - [server/app/](file:///Users/apple/Code/software/server/app) - API 逻辑代码
-    - [auth/](file:///Users/apple/Code/software/server/app/auth) - 用户认证与令牌白名单
-    - [chat/](file:///Users/apple/Code/software/server/app/chat) - 辅导对话与三层记忆管理
-    - [resource/](file:///Users/apple/Code/software/server/app/resource) - 独立资源生成（多智能体规划并行工作流）
-    - [path/](file:///Users/apple/Code/software/server/app/path) - 学习路径规划、节点管理及仪表盘聚合
-    - [profile/](file:///Users/apple/Code/software/server/app/profile) - 学习者画像多维属性服务
-    - [evaluation/](file:///Users/apple/Code/software/server/app/evaluation) - 学习事件采集、时长计算与学习评估生成
-    - [quiz/](file:///Users/apple/Code/software/server/app/quiz) - 题库管理、提交判分与错题本
-    - [avatar/](file:///Users/apple/Code/software/server/app/avatar) - 数字人交互桥接 REST 接口
-    - [algorithm_visualizer/](file:///Users/apple/Code/software/server/app/algorithm_visualizer) - 算法模板、插装运行、Trace 构建及运行时
-    - [rag/](file:///Users/apple/Code/software/server/app/rag) - ChromaDB 向量索引与混合检索
-    - [shared/](file:///Users/apple/Code/software/server/app/shared) - 课件 (PPT) 与动画 (Cartoon) 渲染渲染管线、ASR/TTS 桥接
-    - [infra/](file:///Users/apple/Code/software/server/app/infra) - 基础设施（数据库连接、SQLModel 定义、配置加载、日志处理）
-    - [main.py](file:///Users/apple/Code/software/server/app/main.py) - 后端主程序入口
-    - [routes.py](file:///Users/apple/Code/software/server/app/routes.py) - 业务路由集中注册中心
-    - [ws.py](file:///Users/apple/Code/software/server/app/ws.py) - 数字人语音 WebSocket 端点
-  - [server/tests/](file:///Users/apple/Code/software/server/tests) - 后端 pytest 单元测试目录
-  - [server/config.yaml](file:///Users/apple/Code/software/server/config.yaml) - 后端运行时配置文件
-  - [server/init_schema.sql](file:///Users/apple/Code/software/server/init_schema.sql) - 数据库建表与初始化 SQL 脚本
-  - [server/pyproject.toml](file:///Users/apple/Code/software/server/pyproject.toml) - Python 依赖定义
+- [src/](src/) - 前端源码目录
+  - [src/app/](src/app/) - 应用入口、布局 (MainLayout) 与路由配置
+  - [src/features/](src/features/) - 业务域功能模块
+    - [auth/](src/features/auth/) - 认证（登录/注册/引导弹窗）
+    - [chat/](src/features/chat/) - 智能辅导对话组件
+    - [dashboard/](src/features/dashboard/) - 首页仪表盘与概览
+    - [resource/](src/features/resource/) - 独立资源生成域
+    - [learning-path/](src/features/learning-path/) - 学习路径规划与节点工作空间
+    - [profile/](src/features/profile/) - 学习者画像雷达图及偏好设置
+    - [question-bank/](src/features/question-bank/) - 题库答题练习
+    - [evaluation/](src/features/evaluation/) - 学习数据上报与事件 API 封装
+    - [learning-assessment/](src/features/learning-assessment/) - 学习评估与历史看板视图
+    - [algorithm-visualization/](src/features/algorithm-visualization/) - 算法可视化画板与代码运行
+  - [src/shared/](src/shared/) - 共享模块（API 封装、通用 UI 组件、Markdown 渲染、数据模型等）
+- [server/](server/) - 后端源码目录
+  - [server/app/](server/app/) - API 逻辑代码
+    - [auth/](server/app/auth/) - 用户认证与令牌白名单
+    - [chat/](server/app/chat/) - 辅导对话与三层记忆管理
+    - [resource/](server/app/resource/) - 独立资源生成（多智能体规划并行工作流）
+    - [path/](server/app/path/) - 学习路径规划、节点管理及仪表盘聚合
+    - [profile/](server/app/profile/) - 学习者画像多维属性服务
+    - [evaluation/](server/app/evaluation/) - 学习事件采集、时长计算与学习评估生成
+    - [quiz/](server/app/quiz/) - 题库管理、提交判分与错题本
+    - [algorithm_visualizer/](server/app/algorithm_visualizer/) - 算法模板、插装运行、Trace 构建及运行时
+    - [rag/](server/app/rag/) - ChromaDB 向量索引与混合检索
+    - [shared/](server/app/shared/) - 课件 (PPT) 与动画 (Cartoon) 渲染管线、通用子 Agent 工具、ASR/TTS 桥接
+    - [infra/](server/app/infra/) - 基础设施（数据库连接、SQLModel 定义、配置加载、日志处理）
+    - [main.py](server/app/main.py) - 后端主程序入口
+    - [routes.py](server/app/routes.py) - 业务路由集中注册中心
+  - [server/tests/](server/tests/) - 后端 pytest 单元测试目录
+  - [server/config.yaml](server/config.yaml) - 后端运行时配置文件
+  - [server/pyproject.toml](server/pyproject.toml) - Python 依赖定义
 
 ---
 
@@ -88,7 +84,7 @@
 | **uv** | 最新版 | Python 包依赖及虚拟环境管理器 |
 | **Node.js** | ≥ 22 | 前端构建与 HyperFrames 动画渲染 CLI |
 | **npm** | 与 Node.js 匹配 | 前端包依赖管理 |
-| **PostgreSQL** | ≥ 12 | 关系型数据库（存储用户、对话、路径、画像等数据） |
+| **MySQL** | ≥ 8.0.13 | 关系型数据库（存储用户、对话、路径、画像等数据） |
 | **Playwright** | 适配系统版本 | HyperFrames 引擎与 PPT 网页快照渲染底层浏览器依赖 |
 | **FFmpeg + FFprobe** | ≥ 4.0 | 视频/动画编码、音频拼接及格式转换 |
 
@@ -127,17 +123,15 @@ uv sync
 ### 4. 初始化数据库
 
 ```bash
-# 1. 确保 PostgreSQL 服务已启动
-# 2. 连接 PostgreSQL 并创建名称为 agent 的数据库
-psql -U postgres -c "CREATE DATABASE agent;"
-
-# 3. 导入数据库 Schema 结构文件
-psql -d agent -f init_schema.sql
+# 1. 确保 MySQL 服务已启动
+# 2. 创建名称为 agent 的数据库（排序规则保持大小写敏感）
+mysql -u root -p -e "CREATE DATABASE agent CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;"
+# 3. 启动后端服务时，系统会自动执行 init_db() 建表与种子数据检查，无需手动执行 SQL
 ```
 
 ### 5. 配置运行时参数
 
-编辑后端 [server/config.yaml](file:///Users/apple/Code/software/server/config.yaml) 文件，配置必要的密钥及服务地址。请注意 `models` 配置中区分为主大语言模型（`main`）与图片理解大模型（`vision`）：
+编辑后端 [server/config.yaml](server/config.yaml) 文件，配置必要的密钥及服务地址。系统统一定义两类模型配置（文本模型 `text` 与视觉模型 `vision`）：
 
 ```yaml
 # 应用配置
@@ -147,23 +141,27 @@ app:
 
 # 数据库连接
 database:
-  url: "postgresql+asyncpg://用户名:密码@127.0.0.1:5432/agent"
+  url: "mysql+aiomysql://用户名:密码@127.0.0.1:3306/agent"
 
 # JWT 认证配置（需保证 secret_key 至少 32 位）
 jwt:
   secret_key: "your-secret-key-at-least-32-characters-long"
   algorithm: "HS256"
 
-# LLM 大模型配置
+# LLM 大模型配置（统一管理文本与多模态视觉模型）
 models:
-  main:
-    base_url: "https://api.openai.com/v1"  # OpenAI 兼容 API 基础地址
-    api_key: "sk-your-openai-api-key"
-    model_name: "gpt-4o-mini"
+  text:
+    base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"  # 文本模型 API 地址
+    api_key: "your-api-key"
+    model_name: "astron-code-latest"
+    timeout: 300
+    max_retries: 2
   vision:
-    base_url: "https://api.openai.com/v1"  # 视觉模型基础地址
-    api_key: "sk-your-openai-api-key"
-    model_name: "gpt-4o"
+    base_url: "https://open.bigmodel.cn/api/paas/v4/"  # 视觉模型 API 地址
+    api_key: "your-api-key"
+    model_name: "glm-4.6v-flash"
+    timeout: 300
+    max_retries: 2
 ```
 
 ### 6. 启动服务
@@ -196,20 +194,22 @@ npm run dev
 
 ```
 用户提问 → 组装多层上下文 (历史/摘要块/长期记忆/RAG源) → 触发画像加载
-        → TutorAgent (LangGraph：分类识别 → 检索/图表工具路由 → 生成回复)
-        → SSE 流式输出 → 存储对话 → 判定并异步触发会话压缩与长期记忆更新
+        → TutorAgent (流式 ReAct 循环：思考/工具决策 → 动态调用工具/图表生成)
+        → SSE 流式输出 (agent_status / tool_call / activity / text_delta)
+        → 存储对话与产物 → 判定并异步触发会话压缩与长期记忆更新
 ```
 
 - **核心端点**：`POST /api/v1/ai/chat/messages`
-- **关键机制**：联网搜索、知识库检索 (RAG)、Mermaid/SVG 教学图重试生成、消息附件（文档与图片）异步视觉分析。
+- **关键机制**：直接流式 ReAct 循环、实时工具执行状态与活动卡片、联网搜索、知识库检索 (RAG)、Mermaid/SVG 教学图生成、消息附件（文档与图片）异步视觉分析、视频与 PPT 产物标签 (`<artifact>`) 自动解析。
 
 ### 2. 独立资源生成（resource 域）
 
 用户直接向 AI 发起多模态资源生成请求（例如直接生成主题 PPT、动画讲解等），不依赖学习路径上下文。
 
 ```
-POST /api/v1/ai/resources → 创建 Resource 任务 → 异步触发多智能体 LangGraph 工作流
+POST /api/v1/ai/resources → 创建 Resource 任务 → 异步触发 DAG 多智能体编排
                           → 大纲 Planning → 并行调用 Content/Mindmap/Quiz/PPT/Cartoon Worker
+                          → 上游教程素材无缝向后传递 (Handoffs) → 独立无状态 Subagent 执行
                           → SSE 进度实时推送 → 生成 GeneratedResourceItem 产物
 ```
 
@@ -241,7 +241,7 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
 
 ## 前端页面路由
 
-路由配置在 [src/app/router/routes.ts](file:///Users/apple/Code/software/src/app/router/routes.ts) 中，已登录页面外层挂载在 `MainLayout` 中：
+路由配置在 [src/app/router/routes.ts](src/app/router/routes.ts) 中，已登录页面外层挂载在 `MainLayout` 中：
 
 | 页面路由 | 页面组件 | 是否需要登录 | 功能描述 |
 |----------|----------|:------------:|----------|
@@ -249,7 +249,7 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
 | `/register` | `Register.vue` | 否 | 用户注册页 |
 | `/onboarding` | `OnboardingDialog.vue` | 否 | 首次登录问卷引导弹窗 |
 | `/dashboard` | `Home.vue` | **是** | 个人首页，包含推荐、画像雷达、快捷动作 |
-| `/tutor` | `Tutor.vue` | **是** | 智能辅导对话与数字人多模态交互 |
+| `/tutor` | `Tutor.vue` | **是** | 智能辅导对话与多模态交互 |
 | `/resource-generator` | `ResourceGenerator.vue` | **是** | 独立资源规划生成界面 |
 | `/resource-detail/:id` | `ResourceResult.vue` | **是** | 独立资源生成进度及总览 |
 | `/resource-detail/:id/:type` | `ResourceItemDetail.vue` | **是** | 独立资源具体项（PPT课件/动画等）详情展示 |
@@ -267,7 +267,7 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
 
 ## 后端 API 路由
 
-路由注册在 [server/app/routes.py](file:///Users/apple/Code/software/server/app/routes.py)，所有接口均返回格式一致的信封：`{code, message, data}`。
+路由注册在 [server/app/routes.py](server/app/routes.py)，所有接口均返回格式一致的信封：`{code, message, data}`。
 
 | API 请求路径前缀 | 关联领域 | 端点主要功能 |
 |------------------|:--------:|--------------|
@@ -279,9 +279,7 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
 | `/api/v1/ai/quiz` | quiz | 获取随机练习题目 (`GET /quiz`)、提交答题选项 (`POST /quiz/submit`)、获取个人答题统计指标与历史 (`GET /quiz/stats` & `GET /quiz/history`)、复习回顾 (`POST /quiz/review`)。 |
 | `/api/v1/ai/wrong` | quiz | 获取错题列表 (`GET /wrong`)、随机抽题练习 (`GET /wrong/random`)、移除/彻底删除错题 (`DELETE /wrong/{id}`)、归档已掌握错题 (`POST /wrong/{id}/archive`)。 |
 | `/api/v1/ai/evaluation` | evaluation | 手动上报学习事件 (`POST /evaluation/events`)、离开页面上报时长会话 (`POST /evaluation/sessions`)、触发/获取学习评估报告 (`POST/GET /evaluation/assessments/*`)、个人中心多图表数据聚合 (`GET /evaluation/dashboard`)。 |
-| `/api/v1/ai/avatar` | avatar | 数字人连接状态与视频流信息获取 (`GET /avatar/status` & `GET /avatar/stream`)、终止数字人语音输出 (`POST /avatar/stop`)、数字人会话历史管理 (`DELETE /avatar/history`)。 |
 | `/api/v1/ai/algorithm-visualizer` | visualizer | 获取支持的可视化语言 (`GET /algorithm-visualizer/languages`)、列出官方算法模板 (`GET /algorithm-visualizer/algorithms`)、获取算法源码及模板输入 (`GET /algorithm-visualizer/templates`)、自定义代码编译插装契约 (`POST /algorithm-visualizer/custom-contract`)、代码编译及 Trace 运行 (`POST /algorithm-visualizer/run`) |
-| `/ws/avatar` | websocket | WebSocket 接口，用于和讯飞 Interact 平台建立连接进行 ASR 语音识别与数字人对话交互。 |
 
 ---
 
@@ -309,7 +307,7 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
    ollama pull bge-m3
    ollama serve
    ```
-2. 在 [server/config.yaml](file:///Users/apple/Code/software/server/config.yaml) 中启用并配置知识库配置组：
+2. 在 [server/config.yaml](server/config.yaml) 中启用并配置知识库配置组：
    ```yaml
    knowledge:
      enabled: true
@@ -319,7 +317,7 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
      top_k: 4
      max_context_chars: 6000
    ```
-3. 导入或者把你的源文档放置于 `server/app/rag/data/source/` 目录中，在 [server/](file:///Users/apple/Code/software/server) 目录下执行脚本进行离线索引构建：
+3. 导入或者把你的源文档放置于 `server/app/rag/data/source/` 目录中，在 [server/](server/) 目录下执行脚本进行离线索引构建：
    ```bash
    uv run python -m app.rag.indexing.build
    ```
@@ -331,7 +329,7 @@ POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNod
 对于生成的 PPT 与动画讲解，系统基于网页前端技术栈实现了脱离 GUI 界面的无头浏览器快照与渲染管线。
 
 ### 1. 网页 PPT 演示生成
-PPT 课件智能体（`PPTAgent`）规划大纲并输出结构化 HTML 及 CSS 排版，存储在用户资源静态目录（如 `static/{username}/resources/{id}/ppt/slides.html`）中，用户可直接在前端交互并投影播放。
+PPTAgent 使用 PptxGenJS 工具循环生成可编辑的 `deck.pptx`，加载 `server/skills/pptx` 官方技能。通过 LibreOffice → PDF → PNG 进行逐页视觉审查，前端显示图片预览并提供 PPTX/PDF 下载。部署依赖和技能来源见 `server/skills/README.md`。
 
 ### 2. HyperFrames 动画讲解生成
 动画智能体（`CartoonAgent`）将学习大纲拆分为若干分镜，为每个分镜生成语音播报脚本：
@@ -343,6 +341,8 @@ PPT 课件智能体（`PPTAgent`）规划大纲并输出结构化 HTML 及 CSS �
 ---
 
 ## 调试与单元测试
+
+### 后端测试
 
 后端采用 `pytest` + `pytest-asyncio` 进行覆盖测试。测试代码结构与 `app/` 模块结构一一映射。
 
@@ -359,8 +359,20 @@ uv run pytest tests/chat -q
 uv run pytest -x
 ```
 
+### 前端测试与构建验证
+
+前端采用 `vitest` 进行组件与数据逻辑测试，使用 `vue-tsc` 执行全量类型检查。
+
+```bash
+# 运行前端全部单元测试
+npm run test:run
+
+# 执行前端全量类型检查与生产构建
+npm run build
+```
+
 > [!NOTE]
-> 数据库测试会在测试启动时自动创建临时 SQLite / PostgreSQL 表或模拟 Session，不污染物理运行数据库。
+> 数据库测试会在测试启动时自动创建临时 SQLite 表或模拟 Session，不污染物理运行数据库。
 
 ---
 
@@ -368,7 +380,7 @@ uv run pytest -x
 
 | 问题现象 | 排查步骤及方向 |
 |----------|----------------|
-| **后台服务启动报错 `asyncpg` 错误** | 确认 PostgreSQL 处于运行状态，并在 [server/config.yaml](file:///Users/apple/Code/software/server/config.yaml) 中核对 `database.url` 的用户名、密码及端口号；核对是否导入了 `init_schema.sql` 中的表结构。 |
+| **后台服务启动报错 `aiomysql` 错误** | 确认 MySQL 处于运行状态，并在 [server/config.yaml](server/config.yaml) 中核对 `database.url` 的用户名、密码及端口号。表结构在启动时按 [app/infra/models.py](server/app/infra/models.py) 自动创建，无需手工导入。 |
 | **前端请求接口提示 500 / 跨域** | 检查 Vite 本地服务器的代理端口。`vite.config.ts` 中的 proxy 默认会将 `/api` 代理至 `http://127.0.0.1:9999`。若后端启动了其他端口，请修改 `VITE_API_PROXY_TARGET` 环境变量。 |
 | **聊天或资源生成进度假死/无反应** | 大模型调用超时导致。请检查国内大模型代理服务的网络联通性，并在 `config.yaml` 对应大模型下调大 `timeout` 限制或增加 `max_retries` 重试。 |
 | **视频/动画生成卡在 `rendering` 状态** | 确认系统里已全局安装了 `ffmpeg` 及 `ffprobe` 工具，且版本不低于 4.0；确认已在 `server` 目录执行过 `npm ci` 完整下载了 HyperFrames 和无头浏览器依赖。各个操作系统的详细动画渲染配置步骤请参阅 `server/README.md`。 |

@@ -11,8 +11,6 @@ from fastapi import FastAPI
 # 导入各业务模块的路由
 # 用户认证路由
 from app.auth.api import router as auth_router
-# 数字人路由
-from app.avatar.api import router as avatar_router
 # AI 聊天路由
 from app.chat.api import router as chat_router
 # 评估路由
@@ -23,8 +21,6 @@ from app.path.api import router as path_router, dashboard_router as path_dashboa
 from app.resource.api import router as resource_router
 # 算法可视化路由
 from app.algorithm_visualizer.api import router as visualizer_router
-# WebSocket 路由
-from app.ws import router as websocket_router
 
 # 测验与错题本路由
 from app.profile.api import router as profile_router
@@ -55,10 +51,6 @@ def install_routes(app: FastAPI) -> None:
     app.include_router(path_dashboard_router, prefix="/api/v1/ai", tags=["path"])
     # 学习评估模块：/api/v1/ai/evaluation/*
     app.include_router(evaluation_router, prefix="/api/v1/ai", tags=["evaluation"])
-    # 数字人模块：/api/v1/ai/avatar/*
-    app.include_router(avatar_router, prefix="/api/v1/ai", tags=["avatar"])
     # 测验与错题本模块：/api/v1/ai/quiz-bank/*, /api/v1/ai/wrong-questions/*
     app.include_router(profile_router, prefix="/api/v1/ai", tags=["profile"])
     app.include_router(quiz_router, prefix="/api/v1/ai", tags=["quiz"])
-    # WebSocket 模块：/ws/*
-    app.include_router(websocket_router)

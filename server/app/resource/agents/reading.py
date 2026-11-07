@@ -10,13 +10,13 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.infra.llm import LLM
 from app.infra.logging import get_logger
-from app.infra.prompts import prompts
-from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.base import BaseResourceAgent, load_resource_prompt, register_agent
 from app.resource.agents.common import build_path_context, build_resource_context
 from app.resource.schemas import AgentResult, ResourceInput
 
 if TYPE_CHECKING:
     from app.path.schemas import PathResourceRequest
+    from app.resource.event import ResourceEvents
 
 logger = get_logger(__name__)
 
@@ -44,6 +44,7 @@ class ReadingResource(BaseModel):
     @field_validator("url")
     @classmethod
     def validate_url(cls, value: str) -> str:
+        """校验 URL 必须使用 http 或 https 协议。"""
         normalized = value.strip()
         if not normalized.startswith(("http://", "https://")):
             raise ValueError("url must use the http or https scheme")
@@ -63,11 +64,13 @@ class ReadingAgent(BaseResourceAgent):
     agent_id = "reading"
     agent_name = "拓展阅读"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter: ResourceEvents | None = None) -> None:
+        """初始化拓展阅读推荐 Agent 及其 LLM 客户端。"""
         super().__init__(emitter=emitter)
         self.llm = LLM(temperature=0.1)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """根据学习需求生成拓展阅读推荐资源。"""
         return await self._generate_reading(
             input_text="\n\n".join(build_resource_context(input_data)),
             title_prefix=input_data.learning_need[:80],
@@ -75,6 +78,7 @@ class ReadingAgent(BaseResourceAgent):
         )
 
     async def generate_for_path(self, request: "PathResourceRequest") -> AgentResult:
+        """为路径规划节点生成拓展阅读推荐资源。"""
         if request.tutorial is None:
             return AgentResult(
                 success=False,
@@ -100,13 +104,14 @@ class ReadingAgent(BaseResourceAgent):
         title_prefix: str,
         config: dict[str, Any],
     ) -> AgentResult:
+        """内部方法：调用 LLM 生成结构化拓展阅读推荐并校验。"""
         started = time.perf_counter()
         coverage = config.get("coverage") or "extended"
         max_items = max(1, int(config.get("max_items", 5)))
         language_preference = config.get("language_preference") or "chinese"
 
         await self.emitter.send(self.agent_id, "running", "正在编排拓展阅读推荐路径...", 50)
-        prompt = prompts.get("resource").get("reading")
+        prompt = load_resource_prompt("reading")
         full_prompt = (
             f"{prompt}\n\n{input_text}\n\n"
             f"## 生成约束\n- 最多输出 {max_items} 条经典权威资源，coverage={coverage}。\n"

@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.shared.tools.registry import Tool
-from app.shared.tools.sandbox import MAX_READ_LINES, resolve, truncate
+from app.shared.tools.sandbox import MAX_READ_LINES, resolve_sandbox_path, truncate_output
 
 
 class ReadArgs(BaseModel):
@@ -23,9 +23,10 @@ def build(workdir: Path) -> Tool:
     """构造 read 工具。"""
 
     async def read(path: str, offset: int = 1, limit: int = MAX_READ_LINES) -> dict[str, Any]:
+        """读取工作区中指定文件的文本内容（支持行偏移与分页限制）。"""
         try:
-            target = resolve(workdir, path)
-        except ValueError as exc:
+            target = resolve_sandbox_path(workdir, path)
+        except PermissionError as exc:
             return {"text": str(exc), "status": "failed"}
         if not target.is_file():
             return {"text": f"文件不存在: {path}", "status": "failed"}
@@ -34,7 +35,7 @@ def build(workdir: Path) -> Tool:
         chunk = lines[offset - 1 : offset - 1 + limit]
         numbered = "\n".join(f"{offset + i:>5}\t{line}" for i, line in enumerate(chunk))
         return {
-            "text": truncate(numbered) or "(空文件)",
+            "text": truncate_output(numbered) or "(空文件)",
             "status": "ok",
             "total_lines": len(lines),
         }

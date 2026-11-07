@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.shared.tools.registry import Tool
-from app.shared.tools.sandbox import MAX_GREP_RESULTS, truncate
+from app.shared.tools.sandbox import MAX_GREP_RESULTS, truncate_output
 
 
 class GrepArgs(BaseModel):
@@ -24,6 +24,7 @@ def build(workdir: Path) -> Tool:
     """构造 grep 工具。"""
 
     async def grep(pattern: str, include: str = "") -> dict[str, Any]:
+        """在工作区文件中使用正则表达式搜索匹配行。"""
         try:
             regex = re.compile(pattern)
         except re.error as exc:
@@ -50,7 +51,7 @@ def build(workdir: Path) -> Tool:
 
         if not results:
             return {"text": f"没有匹配 {pattern} 的行。", "status": "ok"}
-        return {"text": truncate("\n".join(results)), "status": "ok", "count": len(results)}
+        return {"text": truncate_output("\n".join(results)), "status": "ok", "count": len(results)}
 
     return Tool(
         name="grep",

@@ -9,7 +9,6 @@ const monacoEditorPlugin = (monacoEditorPluginModule as any).default || monacoEd
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiProxyTarget = env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:9999'
-  const wsProxyTarget = env.VITE_WS_PROXY_TARGET || apiProxyTarget.replace(/^http/, 'ws')
 
   return {
     plugins: [
@@ -27,11 +26,6 @@ export default defineConfig(({ mode }) => {
       proxy: {
         '/api': {
           target: apiProxyTarget,
-          changeOrigin: true,
-        },
-        '/ws': {
-          target: wsProxyTarget,
-          ws: true,
           changeOrigin: true,
         },
         '/static': {

@@ -6,7 +6,6 @@ from app.infra.models import (
     GeneratedResource,
     GeneratedResourceItem,
     GeneratedResourceAgentRun,
-    REGISTERED_MODELS,
 )
 
 
@@ -21,7 +20,7 @@ def test_agent_run_model_contract():
         "message",
         "elapsed_ms",
     }
-    assert GeneratedResourceAgentRun in REGISTERED_MODELS
+    assert GeneratedResourceAgentRun.__tablename__ == "generated_resource_agent_runs"
 
 
 def test_parent_resource_fields():
@@ -45,12 +44,3 @@ def test_resource_item_fields():
         "content_text",
         "metadata_json",
     }
-
-
-def test_init_schema_contains_agent_run_table():
-    """验证 init_schema.sql 包含 agent_runs 表定义。"""
-    from pathlib import Path
-
-    sql = Path(__file__).resolve().parents[2].joinpath("init_schema.sql").read_text(encoding="utf-8")
-    assert "CREATE TABLE IF NOT EXISTS generated_resource_agent_runs" in sql
-    assert "UNIQUE (resource_id, agent_id)" in sql

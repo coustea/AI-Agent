@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import json
 import time
+from typing import TYPE_CHECKING
 
 from app.infra.llm import LLM
 from app.infra.logging import get_logger
-from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.base import BaseResourceAgent, load_resource_prompt, register_agent
 from app.resource.agents.common import build_resource_context
-from app.infra.prompts import prompts
 from app.resource.schemas import (
     AgentResult,
     QuizBlueprintSlot,
@@ -18,6 +18,9 @@ from app.resource.schemas import (
     build_quiz_blueprint,
     validate_quiz_payload,
 )
+
+if TYPE_CHECKING:
+    from app.resource.event import ResourceEvents
 
 logger = get_logger(__name__)
 
@@ -29,11 +32,13 @@ class QuizAgent(BaseResourceAgent):
     agent_id = "quiz"
     agent_name = "随堂练习"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter: ResourceEvents | None = None) -> None:
+        """初始化习题 Agent 及其低温度 LLM 客户端。"""
         super().__init__(emitter=emitter)
         self.llm = LLM(temperature=0.1)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """根据学习需求生成包含选择题与判断题的 JSON 练习题库资源。"""
         parts = build_resource_context(input_data)
         input_text = "\n\n".join(parts)
         return await self._generate_quiz(
@@ -72,7 +77,7 @@ class QuizAgent(BaseResourceAgent):
             indent=2,
         )
 
-        prompt = prompts.get("resource").get("quiz")
+        prompt = load_resource_prompt("quiz")
 
         full_prompt = (
             f"{prompt}\n\n{input_text}\n\n"
@@ -146,6 +151,7 @@ class QuizAgent(BaseResourceAgent):
         与错误一起交回模型修复一次。因此这里不能再发起脱离原文的第二次生成。
         """
         def validate_blueprint(candidate: object) -> None:
+            """校验生成的结果是否满足预设的习题蓝图约束。"""
             payload = QuizPayload.model_validate(candidate)
             validate_quiz_payload(payload, blueprint)
 

@@ -28,7 +28,7 @@ uv run pytest tests/chat/ -q             # single module
 | Vite dev server | 5173 |
 | FastAPI backend | 9999 |
 
-`vite.config.ts` proxies `/api` → `http://127.0.0.1:9999` and `/ws` → `ws://127.0.0.1:9999`. Configurable via `VITE_API_PROXY_TARGET`. Proxy mismatch → 500s.
+`vite.config.ts` proxies `/api` and `/static` → `http://127.0.0.1:9999`. Configurable via `VITE_API_PROXY_TARGET`. Proxy mismatch → 500s.
 
 ## Testing
 
@@ -45,6 +45,11 @@ Frontend has no tests.
 
 - Frontend: TypeScript, Vue SFCs `<script setup lang="ts">` + `<style scoped>`, 2-space indent, no semicolons. Components `PascalCase.vue`, composables `useXxx.ts`.
 - Backend: 4-space indent, type hints, snake_case modules.
+- **Function Contract & Docstrings**: 每个函数/方法（包括异步函数、内部辅助函数及闭包）**必须**具备完整的参数与返回值类型注解，并第一行提供精炼准确的中文 docstring 说明，格式规范如下：
+  ```python
+  async def build_messages(ctx: TutorInput) -> list[Message]:
+      """构建完整的本轮消息列表（System + 历史 + 本轮 User）。"""
+  ```
 - No linter config is committed — validate with `npm run build` / `uv run pytest`.
 
 ## Architecture
@@ -54,8 +59,7 @@ Frontend has no tests.
 
 API prefixes (from `server/app/routes.py`):
 - `/api/v1/users` — auth
-- `/api/v1/ai/*` — chat, resource, path, dashboard, evaluation, quiz/quiz-bank/wrong-questions, avatar
-- `/ws/avatar` — WebSocket (from `ws.py`)
+- `/api/v1/ai/*` — chat, resource, path, dashboard, evaluation, quiz/quiz-bank/wrong-questions
 
 All responses use `HttpResponse` envelope: `{code, message, data}` (see `app/infra/response.py`).
 
@@ -63,18 +67,23 @@ All responses use `HttpResponse` envelope: `{code, message, data}` (see `app/inf
 JWT + `ActiveToken` whitelist. `get_current_user` / `get_current_user_flexible` in `app/auth/security.py` inject the request-scoped `AsyncSession` directly — **never** use `session_scope()` inside auth deps (causes detached-User greenlet errors).
 
 ### Database
-PostgreSQL via `asyncpg`. Dual source of truth:
-- `server/init_schema.sql` — bootstrap SQL
+MySQL via `aiomysql`. Single source of truth:
 - `server/app/infra/models.py` — SQLModel definitions
 
-Startup does **not** reconcile drift. New tables must be added to `REGISTERED_MODELS` tuple at the bottom of `models.py`.
+`init_db()` runs `SQLModel.metadata.create_all` at startup, which creates missing tables but **never alters existing ones**. After changing a column type or length, drop and recreate the database.
+
+MySQL-specific conventions:
+- Time columns use `UtcDateTime` (`app/infra/types.py`) — stored as UTC `DATETIME(6)`, read back as aware UTC
+- JSON columns use `sqlalchemy.JSON`; they are **not indexed** (MySQL only indexes JSON via generated columns + JSON path)
+- UUID primary keys are `String(36)` holding the standard hyphenated uuid string
+- `pool_pre_ping` is intentionally disabled (SQLAlchemy 2.0.49 + aiomysql signature mismatch); `pool_recycle` covers stale connections
 
 Session patterns:
 - `get_session()` — FastAPI DI, `expire_on_commit=False`, no auto-commit
 - `session_scope()` — context manager, auto-commit, for background tasks
 
 ### Configuration
-`server/config.yaml` only (no `.env`). Loaded by `app/config.py`. Key groups: `app`, `database`, `jwt`, `models`, `spark`, `avatar`, `search`, `paths`, `knowledge`, `memory`, `chat`.
+`server/config.yaml` only (no `.env`). Loaded by `app/config.py`. Key groups: `app`, `database`, `jwt`, `models`, `spark`, `search`, `paths`, `knowledge`, `memory`, `chat`.
 
 ### Backend module pattern
 Each domain under `server/app/` follows `api.py` → `service.py` → schemas. The `infra/` module holds shared infrastructure: `database.py`, `models.py`, `llm.py`, `response.py`, `prompts/`, `logging.py`, `context.py`.

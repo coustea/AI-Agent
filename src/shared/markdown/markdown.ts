@@ -143,10 +143,10 @@ function rehypePrepareCodeBlocks(): (tree: Root) => Promise<void> {
 
       const requestedLanguage = readLanguage(code)
 
-      // mermaid 代码块交给前端渲染成 SVG，不走语法高亮
-      if (requestedLanguage === 'mermaid') {
-        node.properties.dataLanguage = 'mermaid'
-        code.properties.className = ['language-mermaid']
+      // mermaid 与 svg 代码块交给前端渲染成独立图解卡片，不走语法高亮
+      if (requestedLanguage === 'mermaid' || requestedLanguage === 'svg') {
+        node.properties.dataLanguage = requestedLanguage
+        code.properties.className = [`language-${requestedLanguage}`]
         return
       }
 
@@ -203,6 +203,7 @@ function rehypeDecorateCodeBlocks(): (tree: Root) => void {
     visit(tree, 'element', (node, index, parent) => {
       if (node.tagName !== 'pre' || index === undefined || !parent) return
       const language = typeof node.properties.dataLanguage === 'string' ? node.properties.dataLanguage : 'text'
+      if (language === 'mermaid' || language === 'svg') return
       const code = node.children[0]
       if (language === 'text' && code?.type === 'element' && code.tagName === 'code') {
         code.properties.className = ['language-text']

@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
-from fastapi import APIRouter, Depends, BackgroundTasks
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 
 from app.auth.security import get_current_user
@@ -23,8 +23,8 @@ from app.infra.models import (
     LearningEvent,
     LearningPath,
     PathNode,
+    School,
     User,
-    UserProfile,
     UserProfileDimension,
 )
 from app.response import HttpResponse
@@ -64,6 +64,9 @@ async def get_profile(
     dimension_scores = {
         key: dim.get("score", 0) for key, dim in dimensions.items()
     }
+    overall_score = profile.overall_score
+    if overall_score <= 0 and dimension_scores:
+        overall_score = round(sum(dimension_scores.values()) / len(dimension_scores))
 
     # 返回完整画像数据
     return HttpResponse.success(data={
@@ -72,9 +75,9 @@ async def get_profile(
         "base_info": BaseInfoData(**base_info).model_dump(),
         "dimensions": dimensions,
         "profile_score_json": {
-            "overall_score": profile.overall_score,
+            "overall_score": overall_score,
             "dimension_scores": dimension_scores,
-            "scored_at": profile.scored_at.isoformat() if profile.scored_at else None,
+            "scored_at": profile.scored_at.isoformat() if profile.scored_at else (profile.updated_at.isoformat() if profile.updated_at else None),
         },
         "updated_at": profile.updated_at,
     })
@@ -110,34 +113,25 @@ async def get_profile_onboarding(
     ).model_dump())
 
 
-# 更新 onboarding 信息（同步存库 + 后台异步推理画像）
+# 更新 onboarding 信息（同步保存到 User 表，即时生效）
 @router.patch("/profile/onboarding")
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """更新 onboarding 信息：同步保存基础信息到 User 表 → 立即返回 → 后台异步推理画像+评分。"""
+    """更新 onboarding 信息：同步保存基础信息与基线偏好到 User 表，即刻生效。"""
     payload_data = payload.model_dump()
     user_id = int(current_user.id)
     svc = get_profile_service()
-    logger.info("[ProfileAPI] 用户信息: %s", payload_data)
-    # 1. 同步保存基础信息到 User 表
+    logger.info("[ProfileAPI] onboarding 基础信息提交: user_id=%s", user_id)
+    # 同步保存基础信息到 User 表
     await svc.save_onboarding_info(
         user_id=user_id,
         payload=payload_data,
         db=session,
     )
-    logger.info("[ProfileAPI] onboarding base info saved synchronously: user_id=%s", user_id)
-
-    # 2. 异步后台触发画像构建任务（推理 + 评分）
-    background_tasks.add_task(
-        svc.infer_profile_from_onboarding,
-        user_id=user_id,
-        payload=payload_data,
-    )
-    logger.info("[ProfileAPI] onboarding background task registered: user_id=%s", user_id)
+    logger.info("[ProfileAPI] onboarding 基础信息已即时落库: user_id=%s", user_id)
 
     return HttpResponse.success(data={
         "inference_ok": True,
@@ -255,19 +249,18 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
 
 # 聚合用户评分数据（总体分 + 各维度分 + 评分时间）
 async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
-    """获取用户评分数据。"""
-    profile = await get_profile_service().get_profile(user_id=user_id, db=session)
-    dim_rows = (await session.exec(
-        select(UserProfileDimension).where(UserProfileDimension.user_id == user_id)
-    )).all()
+    """获取用户评分数据（支持 JIT 即时装配评分）。"""
+    svc = get_profile_service()
+    profile = await svc.get_profile(user_id=user_id, db=session)
+    dimensions = await svc.get_dimensions(user_id=user_id, db=session)
+    dim_scores = {k: v.get("score", 0) for k, v in dimensions.items()}
+    overall = profile.overall_score
+    if overall <= 0 and dim_scores:
+        overall = round(sum(dim_scores.values()) / len(dim_scores))
     return {
-        "overall_score": profile.overall_score,
-        "dimension_scores": {
-            row.dimension_key: row.score
-            for row in dim_rows
-            if row.score is not None
-        },
-        "scored_at": profile.scored_at.isoformat() if profile.scored_at else None,
+        "overall_score": overall,
+        "dimension_scores": dim_scores,
+        "scored_at": profile.scored_at.isoformat() if profile.scored_at else (profile.updated_at.isoformat() if profile.updated_at else None),
     }
 
 
@@ -296,7 +289,7 @@ async def get_recommendation(
 ):
     """获取首页推荐内容 — 根据用户状态返回个性化学习建议。"""
     logger.info("GET /dashboard/recommendation — user=%d", current_user.id)
-    profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
+    await get_profile_service().get_profile(user_id=current_user.id, db=session)
     goal = _text(current_user.global_learning_goal)
     courses = current_user.courses or []
     primary_course = courses[0] if courses else ""
@@ -420,7 +413,7 @@ async def get_profile_radar(
 ):
     """获取用户画像雷达图数据 — 各维度得分。"""
     logger.info("GET /dashboard/profile-radar — user=%d", current_user.id)
-    profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
+    await get_profile_service().get_profile(user_id=current_user.id, db=session)
     score_dict = await _get_profile_score_json(session, current_user.id)
 
     scores = score_dict.get("dimension_scores") or {}
@@ -456,7 +449,7 @@ async def get_quick_actions(
 ):
     """获取快捷操作和今日建议。"""
     logger.info("GET /dashboard/quick-actions — user=%d", current_user.id)
-    profile = await get_profile_service().get_profile(user_id=current_user.id, db=session)
+    await get_profile_service().get_profile(user_id=current_user.id, db=session)
     recent_events = await _get_recent_events(session, current_user.id, limit=30)
 
     chat_session_count = (await session.exec(
@@ -545,3 +538,33 @@ async def get_quick_actions(
 
     # 返回排序后的快捷操作
     return HttpResponse.success(data={"actions": actions})
+
+
+@router.get("/schools/search")
+async def search_schools(
+    keyword: str = Query(default="", min_length=0, max_length=50),
+    limit: int = Query(default=20, ge=1, le=100),
+    db: AsyncSession = Depends(get_session),
+) -> HttpResponse:
+    """按关键词搜索学校列表（无关键词则返回最近学校）。"""
+    if keyword:
+        stmt = (
+            select(School)
+            .where(School.name.contains(keyword))
+            .order_by(School.name)
+            .limit(limit)
+        )
+    else:
+        stmt = select(School).order_by(School.id.desc()).limit(limit)
+
+    schools = list((await db.exec(stmt)).all())
+
+    return HttpResponse.success(data=[
+        {
+            "id": school.id,
+            "name": school.name,
+            "level": school.tier or school.level,
+            "tier": school.tier,
+        }
+        for school in schools
+    ])

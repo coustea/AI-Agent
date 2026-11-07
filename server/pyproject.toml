@@ -7,7 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "fastapi[standard]>=0.135.3",
     "sqlmodel>=0.0.38",
-    "asyncpg>=0.30.0",
+    "aiomysql>=0.3.2",
     "pyjwt>=2.10.0",
     "passlib[bcrypt]>=1.7.4",
     "openai>=2.31.0",
@@ -23,7 +23,6 @@ dependencies = [
     "fonttools>=4.62.1",
     "greenlet>=3.3.2",
     "uvicorn>=0.44.0",
-    "websockets>=12.0,<14",
     "loguru>=0.7.2",
     "httpx>=0.28.1",
     "playwright>=1.59.0",
@@ -36,12 +35,14 @@ dependencies = [
     "mutagen>=1.47.0",
     "pypdf>=6.10.0",
     "pygments>=2.20.0",
-    "xfyunsdkspeech>=0.0.4",
     "edge-tts>=7.2.8",
     # RAG 索引侧仍用 LangChain 的纯文档抽象与文本切分（无 LLM 耦合）
     "langchain-core>=1.2.14",
     "langchain-community>=0.4.1",
     "langchain-text-splitters>=1.0.0",
+    "defusedxml>=0.7.1",
+    "lxml>=6.0.4",
+    "markitdown[pptx]>=0.1.9",
 ]
 
 [dependency-groups]

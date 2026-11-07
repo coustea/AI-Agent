@@ -9,21 +9,24 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.prompts import prompts
 from app.chat.memory.types import (
     MemoryUpdateOutput,
     has_stable_signal,
     make_default_memory_markdown,
     now,
 )
-from app.infra.llm import LLM
+from app.infra.llm import LLM, load_prompt
 from app.infra.logging import get_logger
 from app.infra.models import ChatLongTermMemory, ChatSession, ChatSessionSummaryBlock
 
 logger = get_logger(__name__)
+
+_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "ltm_update.md"
 
 
 # ChatLongTermMemoryService：跨会话提取与增量更新稳定的学习特征
@@ -167,8 +170,8 @@ class ChatLongTermMemoryService:
         ).first()
 
         # 构建 LLM 提示词 — 包含当前对话、会话摘要和旧记忆，让 LLM 判断是否需要更新
-        prompt = prompts.get("chat_memory").render(
-            "ltm_update",
+        prompt = load_prompt(
+            _PROMPT_PATH,
             new_dialogue=(new_dialogue or "").strip()[:4000],
             user_message=user_message[:1000],
             assistant_reply=assistant_reply[:1000],

@@ -11,7 +11,7 @@ A comprehensive AI-powered learning platform leveraging Multi-Agent Systems (MAS
 
 ### Tech Stack
 - **Frontend**: Vue 3 (Composition API), TypeScript, Vite 7, Element Plus, ECharts, Mermaid, Katex.
-- **Backend**: FastAPI (Python 3.13+), SQLModel (PostgreSQL with `asyncpg`), LangChain, LangGraph.
+- **Backend**: FastAPI (Python 3.13+), SQLModel (MySQL with `aiomysql`), LangChain, LangGraph.
 - **AI/LLM**: Support for OpenAI-compatible APIs (GPT-4o-mini), Zhipu GLM-4V (Vision), and Spark (Voice/Vision).
 - **Tools**: Tavily/SerpAPI/DuckDuckGo for web search, Tesseract OCR for vision analysis.
 
@@ -22,7 +22,7 @@ A comprehensive AI-powered learning platform leveraging Multi-Agent Systems (MAS
 ### Prerequisites
 - Python 3.13+ and [uv](https://docs.astral.sh/uv/)
 - Node.js 18+ and npm
-- PostgreSQL 14+
+- MySQL 8.0+
 - Tesseract OCR (with `chi_sim` and `eng` languages)
 
 ### Backend Setup (in `server/`)

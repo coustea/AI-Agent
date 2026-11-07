@@ -7,11 +7,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Awaitable, Sequence, TypeVar
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Awaitable, Sequence, TypeVar
 
+from app.infra.llm import load_prompt
 from app.infra.logging import get_logger
 
 logger = get_logger(__name__)
+
+_RESOURCE_PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
+
+
+def load_resource_prompt(name: str, **kwargs: Any) -> str:
+    """按需即时读取 resource 模块的提示词文件。"""
+    return load_prompt(_RESOURCE_PROMPTS_DIR / f"{name}.md", **kwargs)
 
 # 类型检查阶段才引入的别名，避免运行时循环依赖
 if TYPE_CHECKING:
@@ -42,11 +51,14 @@ class BaseResourceAgent:
         self,
         emitter: ResourceEvents | None = None,
     ) -> None:
+        """初始化资源 Agent 实例及其事件发布器。"""
         self.emitter = emitter
         if emitter is None:
             class NoopEvents:
-                def __getattr__(self, name):
-                    async def noop(*args, **kwargs):
+                def __getattr__(self, name: str) -> Any:
+                    """拦截未定义方法调用并返回空操作协程。"""
+                    async def noop(*args: Any, **kwargs: Any) -> None:
+                        """空操作协程兜底。"""
                         pass
                     return noop
 

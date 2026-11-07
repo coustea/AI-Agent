@@ -27,7 +27,7 @@ npm run preview
 ```
 
 - No committed frontend lint or test script.
-- `vite.config.ts` proxies `/api`, `/ws`, and `/static` to `http://127.0.0.1:9999` by default, overridable with `VITE_API_PROXY_TARGET` and `VITE_WS_PROXY_TARGET`.
+- `vite.config.ts` proxies `/api` and `/static` to `http://127.0.0.1:9999` by default, overridable with `VITE_API_PROXY_TARGET`.
 
 ### Backend (run from `server/`)
 
@@ -92,7 +92,6 @@ Key domains:
 - `evaluation` — learning events and summaries
 - `dashboard` — homepage aggregation and recommendations
 - `quiz` — question bank and wrong-question APIs
-- `avatar` — digital-human REST endpoints and WebSocket bridge
 - `rag` — knowledge-base retrieval (`retriever.py`, `indexing/`, `embeddings.py`, `tools.py`)
 - `shared/` — cross-domain modules: `video/`, `cartoon/`, `ppt/`, `research/`, `utils/`
 - `infra` — database, models, logging, prompts, config, response envelope, LLM singleton
@@ -110,8 +109,7 @@ Current route grouping (trust `server/app/routes.py` and each domain `api.py` ov
 - `/api/v1/ai/resources*` — standalone resource generation, status, detail, history, agents, SSE
 - `/api/v1/ai/path-plan*` — learning-path generation, active/history views, node workspace, node quizzes/resources, path events/evaluation
 - `/api/v1/ai/cartoon/*` — cartoon video generation
-- `/api/v1/ai/dashboard*`, `/api/v1/ai/evaluation*`, `/api/v1/ai/quiz-bank*`, `/api/v1/ai/wrong-questions*`, `/api/v1/ai/avatar*` — supporting domains
-- `/ws/avatar` — avatar WebSocket bridge authenticated by `?token=...`
+- `/api/v1/ai/dashboard*`, `/api/v1/ai/evaluation*`, `/api/v1/ai/quiz-bank*`, `/api/v1/ai/wrong-questions*` — supporting domains
 
 ## Critical Runtime Flows
 
@@ -193,18 +191,25 @@ When changing personalization behavior, inspect `chat`, `profile`, and `evaluati
 ### Configuration
 
 Backend runtime configuration comes from `server/config.yaml`, not `.env`.
-Important groups: `app`, `database`, `jwt`, `models` (incl. `models.vision`), `spark`, `avatar`, `search`, `paths`, `knowledge`, `memory`, `chat`, `evaluation`, `paths_config`, `resource`, `quiz`, `asr`, `video`.
+Important groups: `app`, `database`, `jwt`, `models` (incl. `models.vision`), `spark`, `search`, `paths`, `knowledge`, `memory`, `chat`, `evaluation`, `paths_config`, `resource`, `quiz`, `video`.
 
 ### Database and schema source of truth
 
-The backend uses PostgreSQL via `asyncpg`.
+The backend uses MySQL via `aiomysql`.
 
-Two files matter whenever schema changes are involved:
-- `server/init_schema.sql` — operational schema/bootstrap SQL
-- `server/app/infra/models.py` — SQLModel definitions used by application code
+`server/app/infra/models.py` is the single source of truth for schema. `init_db()` runs
+`SQLModel.metadata.create_all` at startup, which creates missing tables but **never alters
+existing ones** — after changing a column type or length, drop and recreate the database.
 
-Keep them in sync. Startup does not reconcile schema drift for you.
-New tables must be added to `REGISTERED_MODELS` in `server/app/infra/models.py` so `init_db()` can create them.
+MySQL-specific conventions:
+- Time columns use `UtcDateTime` (`server/app/infra/types.py`): stored as UTC `DATETIME(6)`,
+  read back as aware UTC, so Python-side arithmetic and comparisons keep working.
+- JSON columns use `sqlalchemy.JSON` and are not indexed — MySQL only indexes JSON through
+  generated columns on a JSON path.
+- UUID primary keys are `String(36)` holding the standard hyphenated uuid string.
+- `pool_pre_ping` is intentionally off: SQLAlchemy 2.0.49's pymysql dialect calls `ping()`
+  without arguments on PyMySQL >= 1.1, while aiomysql's async adapter requires the
+  `reconnect` argument. `pool_recycle` handles stale connections instead.
 
 ### Session and auth conventions
 
@@ -243,4 +248,4 @@ Auth resolution in `server/app/auth/security.py` depends on the request-scoped `
 9. `server/app/path/api.py`
 10. `server/app/path/service.py`
 11. `server/app/infra/models.py`
-12. `server/init_schema.sql`
+12. `server/app/infra/types.py`

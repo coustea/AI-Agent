@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.shared.tools.registry import Tool
-from app.shared.tools.sandbox import resolve
+from app.shared.tools.sandbox import resolve_sandbox_path
 
 
 class WriteArgs(BaseModel):
@@ -22,9 +22,10 @@ def build(workdir: Path) -> Tool:
     """构造 write 工具。"""
 
     async def write(path: str, content: str) -> dict[str, Any]:
+        """将内容写入指定工作区文件（自动创建父目录并覆盖已有内容）。"""
         try:
-            target = resolve(workdir, path)
-        except ValueError as exc:
+            target = resolve_sandbox_path(workdir, path)
+        except PermissionError as exc:
             return {"text": str(exc), "status": "failed"}
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")

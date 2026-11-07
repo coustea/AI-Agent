@@ -178,7 +178,7 @@ async def upload_avatar(
 
     # 生成头像访问 URL 并更新用户记录
     avatar_url_str = avatar_url(username, ext)
-    user = await auth_usecases.update_me(
+    await auth_usecases.update_me(
         session,
         current_user.id,
         UserUpdate(avatar=avatar_url_str)
@@ -187,20 +187,3 @@ async def upload_avatar(
     return HttpResponse.success(data={"avatar": avatar_url_str})
 
 
-@router.get("/avatars/{username}/{filename}")
-async def get_avatar(username: str, filename: str):
-    """获取用户头像文件。
-
-    根据用户名和文件名返回头像图片，不存在则返回 404。
-    """
-    # 延迟导入 FileResponse，避免顶层循环依赖
-    from fastapi.responses import FileResponse
-
-    avatar_dir = user_avatar_dir(username)
-    file_path = avatar_dir / filename
-    # 头像文件不存在时返回 404
-    if not file_path.exists():
-        logger.debug("[AuthAPI] 头像文件不存在: username=%s filename=%s", username, filename)
-        return HttpResponse.error(code=404, message="头像不存在")
-    # 直接返回文件响应（FastAPI 自动处理 Content-Type）
-    return FileResponse(file_path)

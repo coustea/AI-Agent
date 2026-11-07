@@ -24,12 +24,11 @@ from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy.exc import ProgrammingError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.config import PATH_QUIZ_SIZE
-from app.evaluation.request import LearningEventCreate
+from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import EvaluationService
 from app.infra.database import session_scope
 from app.path.event import PathEvents
@@ -72,7 +71,7 @@ from app.path.workflows import (
     ACTIVE_NODE_STATUSES,
     COMPLETED_NODE_STATUSES,
 )
-from app.profile.service import get_profile_service
+from app.profile.context import ProfileScope, load_learner_context
 
 
 logger = get_logger(__name__)
@@ -99,7 +98,6 @@ class PathService:
 
     def __init__(self, session: AsyncSession):
         self.session = session
-        self.profile_builder = get_profile_service()
         self.path_planner = PathPlannerAgent()
         self.evaluation_service = EvaluationService()
         # 预创建资源生成服务实例，避免重复实例化
@@ -235,12 +233,6 @@ class PathService:
 
     # ── 路径查询 ────────────────────────────────────────────────────────────
 
-    # 获取用户所有可继续学习的路径概览
-    async def list_active_path_overviews(self, user_id: int, module: str = "mentor") -> list[PathResponse]:
-        """获取用户所有可继续学习的路径概览。"""
-        paths = await self._get_active_paths(user_id, module)
-        return [await self._build_response(path) for path in paths]
-
     # 获取最近更新的可继续学习路径概览
     async def get_latest_active_path_overview(self, user_id: int, module: str = "mentor") -> PathResponse | None:
         """获取最近更新的可继续学习路径概览。"""
@@ -283,19 +275,6 @@ class PathService:
             )
             for path in paths
         ]
-
-    # 继续学习一条历史路径，不影响其他未完成路径
-    async def activate_history_path(
-        self, user_id: int, path_id: int
-    ) -> PathResponse:
-        path = await self._must_get_path(user_id, path_id)
-        if path.status in {"failed", "generating"}:
-            raise ValueError("该学习路径当前不可继续学习")
-        if path.status != "completed":
-            path.status = "active"
-        path.updated_at = datetime.now(timezone.utc)
-        await self.session.commit()
-        return await self._build_response(path)
 
     # ── 节点工作区 ──────────────────────────────────────────────────────────
 
@@ -437,7 +416,7 @@ class PathService:
             resource_type=resource_type,
             version_no=version_no,
             title=f"{node.title} - {resource_type}",
-            content_format={"ppt": "html", "cartoon": "mp4"}.get(resource_type, "markdown"),
+            content_format={"ppt": "pptx", "cartoon": "mp4"}.get(resource_type, "markdown"),
             status="generating",
             input_json={"run_id": run_id},
         )
@@ -461,8 +440,8 @@ class PathService:
         )
         services = self._resource_services
         if resource_type == "ppt":
-            logger.info("[PathService] 调用 PPTService.generate_for_path")
-            return await services["ppt"].generate_for_path(request)
+            logger.info("[PathService] 调用 PathPPTAdapter.generate")
+            return await services["ppt"].generate(request)
         elif resource_type == "cartoon":
             logger.info("[PathService] 调用 PathCartoonAdapter.generate")
             return await services["cartoon"].generate(request)
@@ -480,38 +459,16 @@ class PathService:
     @staticmethod
     def _init_resource_services() -> dict:
         """预创建资源生成服务实例。"""
-        from app.shared.ppt import PPTService
+        from app.path.ppt import PathPPTAdapter
         from app.path.cartoon import PathCartoonAdapter
         from app.resource.agents import AGENT_REGISTRY
         return {
-            "ppt": PPTService(),
+            "ppt": PathPPTAdapter(),
             "cartoon": PathCartoonAdapter(),
             "mindmap": AGENT_REGISTRY["mindmap"](),
             "code": AGENT_REGISTRY["code"](),
             "reading": AGENT_REGISTRY["reading"](),
         }
-
-    # 获取节点指定类型的最新资源
-    async def get_node_resource_by_type(self, user_id: int, node_id: int, resource_type: str) -> LearningPathResourceDTO | None:
-        """获取节点指定类型的最新资源（用于复习回看）。"""
-        if resource_type not in AUX_RESOURCE_TYPES:
-            raise ValueError(f"不支持的资源类型: {resource_type}")
-        node = await self._must_get_node(user_id, node_id)
-        self._ensure_node_accessible(node)
-
-        stmt = (
-            select(PathNodeResource)
-            .where(
-                PathNodeResource.node_id == node.id,
-                PathNodeResource.resource_type == resource_type,
-                PathNodeResource.status == "completed",
-            )
-            .order_by(col(PathNodeResource.version_no).desc())
-        )
-        resource = (await self.session.exec(stmt)).first()
-        if resource is None:
-            return None
-        return LearningPathResourceDTO.from_model(resource)
 
     # ── 测验 ────────────────────────────────────────────────────────────────
 
@@ -836,48 +793,35 @@ class PathService:
         )
         return list((await self.session.exec(stmt)).all())
 
-    # 获取用户画像数据（维度 + 基础信息）
+    # 获取用户画像数据（即时装配）
     async def _get_profile_dict(
         self, user_id: int
     ) -> dict[str, Any]:
-        """获取用户画像数据（维度 + 基础信息）。"""
+        """即时装配用户学情数据。"""
         try:
-            from app.infra.models import User
-            user = (await self.session.exec(select(User).where(User.id == user_id))).first()
-            base_info = {
-                "school": user.school or "",
-                "school_level": user.school_level or "",
-                "major": user.major or "",
-                "grade": user.grade or "",
-                "daily_study_time": user.daily_study_time or "",
-                "global_learning_goal": user.global_learning_goal or "",
-                "programming_languages": user.programming_languages or [],
-                "courses": user.courses or [],
-            } if user else {}
-
-            dimensions = await self.profile_builder.get_dimensions(
-                user_id=user_id, db=self.session
-            )
+            ctx = await load_learner_context(self.session, user_id=user_id, scope=ProfileScope.PATH)
             return {
-                "base_info": base_info,
-                "dimensions": dimensions,
+                "base_info": ctx.base_info,
+                "weak_topics": ctx.weak_topics,
+                "recent_accuracy": ctx.recent_accuracy,
             }
-        except (ProgrammingError, AttributeError) as exc:
+        except Exception as exc:
             logger.warning(
-                "[PathService] 画像表暂不可用，路径规划降级为空画像: "
+                "[PathService] 学情装配异常，路径规划降级为空: "
                 "user_id=%s error=%s",
                 user_id,
                 exc,
             )
             return {}
 
-    # 获取用户画像 Markdown 文本（降级为空串）
+    # 获取用户画像提示词文本（降级为空串）
     async def get_user_learning_profile(self, user_id: int) -> str:
         try:
-            return await self.profile_builder.build_profile_markdown(user_id=user_id)
-        except ProgrammingError as exc:
+            ctx = await load_learner_context(self.session, user_id=user_id, scope=ProfileScope.PATH)
+            return ctx.to_prompt_text(ProfileScope.PATH)
+        except Exception as exc:
             logger.warning(
-                "[PathService] 画像文本暂不可用，教程生成降级无画像: "
+                "[PathService] 画像文本即时加载失败，教程生成降级无画像: "
                 "user_id=%s error=%s",
                 user_id,
                 exc,
@@ -933,13 +877,13 @@ class PathService:
         )
 
     # 汇总路径的有效学习时长（分钟）
-    # 汇总路径的有效学习时长（分钟）
     async def _get_path_active_minutes(
         self, *, user_id: int, path_id: int
     ) -> int:
         stmt = select(LearningSession).where(
             LearningSession.user_id == user_id,
-            LearningSession.path_id == path_id,
+            LearningSession.module == "path",
+            LearningSession.entity_id == str(path_id),
         )
         sessions = list((await self.session.exec(stmt)).all())
         return sum(

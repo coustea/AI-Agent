@@ -8,7 +8,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from app.shared.tools.registry import Tool
-from app.shared.tools.sandbox import resolve
+from app.shared.tools.sandbox import resolve_sandbox_path
 
 
 class EditArgs(BaseModel):
@@ -23,9 +23,10 @@ def build(workdir: Path) -> Tool:
     """构造 edit 工具。"""
 
     async def edit(path: str, old_string: str, new_string: str) -> dict[str, Any]:
+        """对指定文件内容进行精确字符串查找替换。"""
         try:
-            target = resolve(workdir, path)
-        except ValueError as exc:
+            target = resolve_sandbox_path(workdir, path)
+        except PermissionError as exc:
             return {"text": str(exc), "status": "failed"}
         if not target.is_file():
             return {"text": f"文件不存在: {path}", "status": "failed"}

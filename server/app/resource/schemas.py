@@ -124,6 +124,7 @@ class AgentConfigs(BaseModel):
     cartoon: CartoonGenerationConfig = Field(default_factory=CartoonGenerationConfig)
 
     def get(self, agent_id: str, default: Any = None) -> dict[str, Any]:
+        """按 Agent ID 获取对应的配置字典。"""
         value = getattr(self, agent_id, None)
         if value is None:
             return default
@@ -131,6 +132,7 @@ class AgentConfigs(BaseModel):
 
 
 def _agent_sort_key(item: AgentSelection) -> int:
+    """返回用于给已选 Agent 排序的索引键值。"""
     return (
         AGENT_DEFAULT_ORDER.index(item.agent_id.value)
         if item.agent_id.value in AGENT_DEFAULT_ORDER
@@ -151,6 +153,7 @@ class ResourceGenerationRequest(BaseModel):
     @field_validator("learning_need")
     @classmethod
     def validate_learning_need(cls, value: str) -> str:
+        """校验学习需求非空。"""
         value = value.strip()
         if not value:
             raise ValueError("学习需求不能为空")
@@ -158,6 +161,7 @@ class ResourceGenerationRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_selection(self) -> "ResourceGenerationRequest":
+        """校验 Agent 选择列表有效性及聚合依赖关系。"""
         if not self.selected_agents:
             self.selected_agents = [
                 AgentSelection(agent_id=agent_id, enabled=True)
@@ -184,6 +188,7 @@ class ResourceGenerationRequest(BaseModel):
         return self
 
     def enabled_agent_ids(self) -> list[str]:
+        """获取所有已启用的 Agent ID 列表（按默认执行顺序排序）。"""
         return [
             item.agent_id.value
             for item in sorted(self.selected_agents, key=_agent_sort_key)
@@ -219,6 +224,7 @@ class ResourcePlan(BaseModel):
     @field_validator("scope")
     @classmethod
     def reject_empty_strings(cls, values: list[str]) -> list[str]:
+        """校验计划范围列表中不包含空项。"""
         cleaned = [value.strip() for value in values if value and value.strip()]
         if len(cleaned) != len(values):
             raise ValueError("计划列表不能包含空项")
@@ -226,6 +232,7 @@ class ResourcePlan(BaseModel):
 
     @model_validator(mode="after")
     def reject_duplicate_tasks(self) -> "ResourcePlan":
+        """校验计划任务中未出现重复分配的 Agent。"""
         agent_ids = [task.agent_id for task in self.tasks]
         if len(agent_ids) != len(set(agent_ids)):
             raise ValueError("计划中不能为同一 Agent 分配重复任务")
@@ -233,9 +240,11 @@ class ResourcePlan(BaseModel):
 
     @property
     def agent_ids(self) -> list[str]:
+        """获取计划中所有分配了任务的 Agent ID 列表。"""
         return [task.agent_id for task in self.tasks]
 
     def task_for(self, agent_id: str) -> ResourcePlanTask:
+        """获取指定 Agent 对应的任务计划项。"""
         for task in self.tasks:
             if task.agent_id == agent_id:
                 return task
@@ -258,6 +267,8 @@ class PlanValidationError(ValueError):
 
 
 def validate_resource_plan(plan: ResourcePlan, expected_agent_ids: list[str]) -> ResourcePlan:
+    """校验计划分配的任务是否与预期的 Agent 列表完全一致。"""
+    expected = set(expected_agent_ids)
     expected = set(expected_agent_ids)
     actual = set(plan.agent_ids)
     if actual != expected:
@@ -349,6 +360,7 @@ class QuizQuestion(BaseModel):
 
     @model_validator(mode="after")
     def validate_question_contract(self) -> "QuizQuestion":
+        """校验题目类型、选项与答案格式的一致性契约。"""
         labels = [option.label for option in self.options]
         if len(labels) != len(set(labels)):
             raise ValueError("选项标签不能重复")
@@ -477,7 +489,7 @@ class GeneratedResourceItem(BaseModel):
     id: str
     type: ResourceAgentId
     title: str
-    format: Literal["markdown", "json", "html", "mp4"]
+    format: Literal["markdown", "json", "pptx", "mp4"]
     content: Any = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     created_at: str | None = None

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
 from app.infra.llm import LLM
 from app.infra.logging import get_logger
-from app.resource.agents.base import BaseResourceAgent, register_agent
+from app.resource.agents.base import BaseResourceAgent, load_resource_prompt, register_agent
 from app.resource.agents.common import build_resource_context
-from app.infra.prompts import prompts
 from app.resource.schemas import AgentResult, ResourceInput
+
+if TYPE_CHECKING:
+    from app.resource.event import ResourceEvents
 
 logger = get_logger(__name__)
 
@@ -21,11 +24,13 @@ class ContentAgent(BaseResourceAgent):
     agent_id = "content"
     agent_name = "课程讲解"
 
-    def __init__(self, emitter=None):
+    def __init__(self, emitter: ResourceEvents | None = None) -> None:
+        """初始化课程讲解 Agent 及其 LLM 客户端。"""
         super().__init__(emitter=emitter)
         self.llm = LLM(temperature=0.7)
 
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """根据学习需求生成专业课程讲解文档资源。"""
         return await self._generate_content(
             input_text="\n\n".join(build_resource_context(input_data)),
             title_prefix=input_data.learning_need[:32],
@@ -45,7 +50,7 @@ class ContentAgent(BaseResourceAgent):
         started = time.perf_counter()
 
         await self.emitter.send(self.agent_id, "running", "正在构建课程讲解提示词...", 45)
-        prompt = prompts.get("resource").get("content")
+        prompt = load_resource_prompt("content")
         await self.emitter.send(self.agent_id, "running", "正在精解讲义内容...", 60)
         full_prompt = f"{prompt}\n\n{input_text}"
         logger.info("Agent[%s] LLM 调用: input_len=%d", self.agent_id, len(full_prompt))

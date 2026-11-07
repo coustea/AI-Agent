@@ -64,7 +64,7 @@ PORT = get("app.port", 9999)
 
 
 # ============ 数据库配置 ============
-# 数据库连接 URL（如 postgresql://user:pass@host/db）
+# 数据库连接 URL（如 mysql+aiomysql://user:pass@host:3306/db）
 DB_URL = get("database.url", "")
 # 是否打印 SQL 语句（调试用）
 DB_ECHO = get("database.echo", False)
@@ -226,18 +226,6 @@ def chat_upload_url(username: str, session_id: str, filename: str) -> str:
     return f"/static/{username}/chat/{session_id}/uploads/{filename}"
 
 
-# 构建资源 PPT URL
-def resource_ppt_url(username: str, resource_id: str) -> str:
-    """构建资源 PPT URL：/static/{username}/resources/{resource_id}/ppt/slides.html"""
-    return f"/static/{username}/resources/{resource_id}/ppt/slides.html"
-
-
-# 构建路径节点 PPT URL
-def path_node_ppt_url(username: str, path_id: str, node_id: str) -> str:
-    """构建路径节点 PPT URL：/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"""
-    return f"/static/{username}/paths/{path_id}/nodes/{node_id}/ppt/slides.html"
-
-
 # ============ 知识库配置 ============
 # 仅保留部署/调优参数；collection、切分、RRF 等实现细节下沉为 RAG 模块常量
 # 是否启用知识库功能
@@ -252,33 +240,6 @@ KB_EMBED_API_KEY = get("knowledge.embed_api_key", "sk-placeholder")
 KB_TOP_K = get("knowledge.top_k", 4)
 # 返回给 ChatAgent 的最大上下文字符数
 KB_MAX_CONTEXT_CHARS = get("knowledge.max_context_chars", 6000)
-
-# ============ 数字人（Avatar）配置 ============
-# 讯飞数字人应用 ID
-AVATAR_APP_ID = get("avatar.app_id", "")
-# 讯飞数字人 API 密钥
-AVATAR_API_KEY = get("avatar.api_key", "")
-# 讯飞数字人 API 密钥签名
-AVATAR_API_SECRET = get("avatar.api_secret", "")
-# 数字人 WebSocket 服务地址
-AVATAR_URL = get("avatar.url", "")
-# 数字人锚点 ID（用于定位数字人形象）
-AVATAR_ANCHOR = get("avatar.anchor_id", "")
-# 虚拟通道号（Virtual Channel Number）
-AVATAR_VCN = get("avatar.vcn", "")
-# 图片转动画（IAT）服务地址
-AVATAR_IAT_URL = get("avatar.iat_url", "")
-# 数字人背景图（base64 编码）
-AVATAR_BACKGROUND_IMAGE = get("avatar.background_image", "")
-# 数字人背景来源：res_key / image / auto
-AVATAR_BACKGROUND_SOURCE = get("avatar.background_source", "")
-# 数字人背景图编码格式（如 jpg、png）
-AVATAR_BACKGROUND_ENCODING = get("avatar.background_encoding", "")
-
-# ASR 配置（回退到通用 Avatar 配置）
-ASR_APP_ID = get("avatar.app_id", AVATAR_APP_ID)
-ASR_API_KEY = get("avatar.api_key", AVATAR_API_KEY)
-ASR_API_SECRET = get("avatar.api_secret", AVATAR_API_SECRET)
 
 # ============ 星火 Spark WebSocket 配置 ============
 # 星火大模型应用 ID
@@ -320,9 +281,5 @@ PATH_QUIZ_SIZE: int = get("paths_config.quiz_size", 5)
 # 通过测验的最低分数
 PATH_PASS_SCORE: int = get("paths_config.pass_score", 3)
 
-# ============ ASR 配置 ============
-# VAD 结束静默时长（毫秒）
-ASR_VAD_EOS: int = get("asr.vad_eos", 1000)
-ASR_DIRECT_IP: str = str(get("asr.direct_ip", "") or "").strip()
 
 

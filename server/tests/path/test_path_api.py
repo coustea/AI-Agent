@@ -11,7 +11,6 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.auth.security import get_current_user
 from app.infra.models import User
-from app.path.schemas import PathResponse, LearningPathNodeDTO
 
 # Setup test client
 client = TestClient(app)
@@ -30,45 +29,8 @@ def authenticated_client(monkeypatch):
     app.dependency_overrides.pop(get_current_user, None)
 
 
-def test_get_active_path_endpoint(authenticated_client):
-    mock_response = PathResponse(
-        id=12,
-        module="mentor",
-        title="SQL Path",
-        goal="Learn SQL Joins",
-        topic=None,
-        overall_progress=0,
-        current_node_key=None,
-        status="active",
-        stages=[],
-        nodes=[
-            LearningPathNodeDTO(
-                id=101,
-                node_id="sql-basics",
-                stage_id="stage-1",
-                title="SQL Basics",
-                status="available",
-                priority=10,
-                attempt_count=0,
-                prerequisites=[]
-            )
-        ],
-        created_at="2026-05-29T11:44:08",
-        updated_at="2026-05-29T11:44:08",
-    )
 
-    with patch("app.path.api.PathService") as MockService:
-        mock_service_instance = MockService.return_value
-        mock_service_instance.list_active_path_overviews = AsyncMock(return_value=[mock_response])
 
-        response = authenticated_client.get("/api/v1/ai/path-plan/active")
-
-        assert response.status_code == 200
-        json_data = response.json()
-        assert json_data["code"] == 200
-        assert json_data["message"] == "success"
-        assert json_data["data"][0]["title"] == "SQL Path"
-        assert json_data["data"][0]["nodes"][0]["node_id"] == "sql-basics"
 
 
 def test_get_path_learning_evaluation_endpoint(authenticated_client):
@@ -94,63 +56,12 @@ def test_get_path_learning_evaluation_endpoint(authenticated_client):
         assert json_data["data"]["needs_optimization"] is True
 
 
-def test_get_path_resource_detail_endpoint(authenticated_client):
-    from app.infra.models import PathNodeResource
-    from app.infra.database import get_session
-    from sqlmodel.ext.asyncio.session import AsyncSession
-
-    mock_resource = PathNodeResource(
-        id=88,
-        path_id=1,
-        node_id=1,
-        user_id=1,
-        resource_type="content",
-        title="路径节点资源",
-        content_format="markdown",
-        content_text="test",
-    )
-
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_session.get = AsyncMock(return_value=mock_resource)
-
-    async def override_get_session():
-        yield mock_session
-
-    app.dependency_overrides[get_session] = override_get_session
-    response = authenticated_client.get("/api/v1/ai/path-plan/resources/88")
-    app.dependency_overrides.pop(get_session, None)
-
-    assert response.status_code == 200
 
 
-def test_list_path_resources_endpoint(authenticated_client):
-    from app.infra.database import get_session
-    from sqlmodel.ext.asyncio.session import AsyncSession
 
-    mock_session = AsyncMock(spec=AsyncSession)
-    mock_session.exec = AsyncMock()
 
-    class _EmptyResult:
-        def all(self):
-            return []
 
-        def first(self):
-            return 0
 
-    mock_session.exec.return_value = _EmptyResult()
-
-    async def override_get_session():
-        yield mock_session
-
-    app.dependency_overrides[get_session] = override_get_session
-    response = authenticated_client.get("/api/v1/ai/path-plan/resources?limit=12&offset=24")
-    app.dependency_overrides.pop(get_session, None)
-
-    assert response.status_code == 200
-    json_data = response.json()
-    assert json_data["code"] == 200
-    assert json_data["data"]["items"] == []
-    assert json_data["data"]["total"] == 0
 
 
 def test_record_path_learning_event_endpoint(authenticated_client):
@@ -242,26 +153,5 @@ def test_generate_cartoon_endpoint(authenticated_client):
         mock_service_instance.create_node_resource_task.assert_awaited_once()
 
 
-def test_get_cartoon_endpoint(authenticated_client):
-    mock_response = MagicMock()
-    mock_response.model_dump.return_value = {
-        "id": 1,
-        "resource_type": "cartoon",
-        "version_no": 1,
-        "title": "Cartoon",
-        "content_format": "mp4",
-        "content_text": "cartoon-video-url",
-        "created_at": "2026-07-06T11:00:00",
-    }
 
-    with patch("app.path.api.PathService") as MockService:
-        mock_service_instance = MockService.return_value
-        mock_service_instance.get_node_resource_by_type = AsyncMock(return_value=mock_response)
 
-        response = authenticated_client.get("/api/v1/ai/path-plan/nodes/101/resources/cartoon")
-
-        assert response.status_code == 200
-        json_data = response.json()
-        assert json_data["code"] == 200
-        assert json_data["data"]["resource_type"] == "cartoon"
-        mock_service_instance.get_node_resource_by_type.assert_awaited_once_with(1, 101, "cartoon")

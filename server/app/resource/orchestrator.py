@@ -26,7 +26,6 @@ from app.resource.event import ResourceEvents
 from app.resource.schemas import (
     DownstreamContext,
     ResourceInput,
-    ResourceLifecycleStatus,
     ResourcePlan,
     SUCCESSFUL_RESOURCE_STATUSES,
     validate_resource_plan,
@@ -59,6 +58,7 @@ async def _record_agent_failure(
     started_at: float,
     events: ResourceEvents,
 ) -> None:
+    """记录 Agent 执行失败日志并向事件通道上报失败状态。"""
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     error_message = str(exc)[:300] or type(exc).__name__
     logger.error(
@@ -235,6 +235,7 @@ def _build_agent_input(
     profile: dict[str, Any],
     upstream_handoffs: dict[str, DownstreamContext],
 ) -> ResourceInput:
+    """装配传递给单个 Agent 的 ResourceInput 上下文。"""
     cfg = dict(agent_configs.get(agent_id, {}))
     cfg["agent_id"] = agent_id
     return ResourceInput(

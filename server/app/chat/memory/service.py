@@ -42,10 +42,10 @@ from app.infra.database import session_scope
 from app.infra.llm import HumanMessage, LLM, SystemMessage
 from app.infra.logging import get_logger
 from app.infra.models import (
-    ChatActivity,
     ChatAttachmentAnalysis,
     ChatLongTermMemory,
     ChatMessage,
+    ChatRun,
     ChatSession,
     ChatSessionSummaryBlock,
 )
@@ -233,11 +233,11 @@ class ChatMemoryService:
         session_id: str,
         role: str,
         content: list[dict[str, Any]],
-        user_message_id: int | None = None,
+        run_id: str | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         tool_call_id: str | None = None,
-        usage_metadata: dict[str, Any] | None = None,
     ) -> ChatMessage:
+        """写入一条模型可见消息并递增会话的记忆水位。"""
         async with session_scope() as db:
             chat_session = (await db.exec(select(ChatSession).where(ChatSession.id == session_id))).first()
             if chat_session:
@@ -247,32 +247,17 @@ class ChatMemoryService:
             else:
                 chat_session = ChatSession(id=session_id, user_id=user_id)
             db.add(chat_session)
-            # 校验关联的用户消息存在
-            if user_message_id is not None:
-                root_message = (
-                    await db.exec(
-                        select(ChatMessage).where(
-                            ChatMessage.id == user_message_id,
-                            ChatMessage.session_id == session_id,
-                            ChatMessage.role == "user",
-                        )
-                    )
-                ).first()
-                if root_message is None:
-                    raise ValueError("关联的用户消息不存在")
-
             # 文本或列表统一归一化为列表格式
             normalized_content = content
             if not isinstance(normalized_content, list):
                 normalized_content = [{"type": "text", "text": str(content or "")}]
             message = ChatMessage(
                 session_id=session_id,
-                user_message_id=user_message_id,
+                run_id=run_id,
                 role=role,
                 content=normalized_content,
                 tool_calls=tool_calls,
                 tool_call_id=tool_call_id,
-                usage_metadata=usage_metadata,
             )
             db.add(message)
             await db.flush()
@@ -336,26 +321,23 @@ class ChatMemoryService:
         *,
         user_id: int,
         session_id: str,
-        user_message_id: int,
+        run_id: str,
         analysis_type: str,
     ) -> ChatAttachmentAnalysis:
+        """创建一条 running 状态的附件分析记录。"""
         async with session_scope() as db:
-            user_message = (
+            owned = (
                 await db.exec(
-                    select(ChatMessage).where(
-                        ChatMessage.id == user_message_id,
-                        ChatMessage.session_id == session_id,
-                        ChatMessage.session_id.in_(
-                            select(ChatSession.id).where(ChatSession.user_id == user_id)
-                        ),
-                        ChatMessage.role == "user",
+                    select(ChatSession).where(
+                        ChatSession.id == session_id,
+                        ChatSession.user_id == user_id,
                     )
                 )
             ).first()
-            if user_message is None:
-                raise ValueError("用户消息不存在")
+            if owned is None:
+                raise ValueError("会话不存在或不属于当前用户")
             analysis = ChatAttachmentAnalysis(
-                user_message_id=user_message_id,
+                run_id=run_id,
                 analysis_type=analysis_type,
                 status="running",
             )
@@ -397,17 +379,14 @@ class ChatMemoryService:
         session_id: str,
         completed_only: bool = False,
     ) -> list[ChatAttachmentAnalysis]:
+        """列出会话内全部附件分析（可按状态过滤）。"""
         async with session_scope() as db:
             stmt = (
                 select(ChatAttachmentAnalysis)
-                .join(
-                    ChatMessage,
-                    ChatMessage.id == ChatAttachmentAnalysis.user_message_id,
-                )
-                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+                .join(ChatRun, ChatRun.id == ChatAttachmentAnalysis.run_id)
                 .where(
-                    ChatSession.user_id == user_id,
-                    ChatMessage.session_id == session_id,
+                    ChatRun.user_id == user_id,
+                    ChatRun.session_id == session_id,
                 )
             )
             if completed_only:
@@ -415,100 +394,19 @@ class ChatMemoryService:
             stmt = stmt.order_by(ChatAttachmentAnalysis.created_at.asc())
             return list((await db.exec(stmt)).all())
 
-    # 保存/更新活动摘要（同 activity_id 原位更新，终态写完成时间）
-    async def upsert_activity(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-        user_message_id: int,
-        payload: dict[str, Any],
-    ) -> ChatActivity | None:
-        """保存公开状态摘要；同一 activity_id 的生命周期原位更新。"""
-        activity_id = str(payload.get("activity_id") or "").strip()
-        # 无 activity_id 则不记录
-        if not activity_id:
-            return None
-        # 归一化状态字段
-        status = str(payload.get("status") or "running")
-        if status in {"completed", "finished"}:
-            status = "done"
-        elif status == "error":
-            status = "failed"
-        if status not in {"running", "done", "failed"}:
-            status = "running"
-
+    # 读取会话内全部运行记录
+    async def list_runs(self, *, user_id: int, session_id: str) -> list[ChatRun]:
+        """返回会话内全部运行记录（按创建时间正序）。"""
         async with session_scope() as db:
-            # 查询是否已存在该活动
-            activity = (
-                await db.exec(
-                    select(ChatActivity)
-                    .join(ChatMessage, ChatMessage.id == ChatActivity.user_message_id)
-                    .join(ChatSession, ChatSession.id == ChatMessage.session_id)
-                    .where(
-                        ChatSession.user_id == user_id,
-                        ChatMessage.session_id == session_id,
-                        ChatActivity.user_message_id == user_message_id,
-                        ChatActivity.activity_id == activity_id,
-                    )
-                )
-            ).first()
-            # 不存在则校验关联用户消息后新建
-            if activity is None:
-                user_message = (
-                    await db.exec(
-                        select(ChatMessage).where(
-                            ChatMessage.id == user_message_id,
-                            ChatMessage.session_id == session_id,
-                            ChatMessage.session_id.in_(
-                                select(ChatSession.id).where(ChatSession.user_id == user_id)
-                            ),
-                            ChatMessage.role == "user",
-                        )
-                    )
-                ).first()
-                if user_message is None:
-                    return None
-                activity = ChatActivity(
-                    user_message_id=user_message_id,
-                    activity_id=activity_id,
-                )
-
-            # 用负载字段覆盖活动记录
-            activity.kind = str(payload.get("kind") or activity.kind or "workflow")
-            activity.stage = str(payload.get("stage") or "") or None
-            activity.status = status
-            activity.title = str(payload.get("title") or activity.title or "")
-            activity.summary = str(payload.get("summary") or "")
-            activity.message = str(payload.get("message") or "")
-            detail = payload.get("detail")
-            activity.detail = detail if isinstance(detail, dict) else None
-            if status in {"done", "failed"}:
-                activity.completed_at = now()
-            db.add(activity)
-            await db.commit()
-            await db.refresh(activity)
-            return activity
-
-    # 列出会话活动（按开始时间正序）
-    async def list_activities(
-        self,
-        *,
-        user_id: int,
-        session_id: str,
-    ) -> list[ChatActivity]:
-        async with session_scope() as db:
-            stmt = (
-                select(ChatActivity)
-                .join(ChatMessage, ChatMessage.id == ChatActivity.user_message_id)
-                .join(ChatSession, ChatSession.id == ChatMessage.session_id)
+            result = await db.exec(
+                select(ChatRun)
                 .where(
-                    ChatSession.user_id == user_id,
-                    ChatMessage.session_id == session_id,
+                    ChatRun.user_id == user_id,
+                    ChatRun.session_id == session_id,
                 )
-                .order_by(ChatActivity.started_at.asc(), ChatActivity.id.asc())
+                .order_by(ChatRun.created_at.asc())
             )
-            return list((await db.exec(stmt)).all())
+            return list(result.all())
 
     # 删除会话全部短期消息（清理），返回删除条数
     async def delete_short_term_messages(self, *, user_id: int, session_id: str) -> int:

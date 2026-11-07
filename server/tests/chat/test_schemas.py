@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from app.chat.schemas import (
     NormalizedToolResult,
     SourceItem,
-    TutorInput,
     UploadResponse,
     normalize_tool_result,
 )
@@ -94,11 +93,3 @@ class TestUploadResponse:
             mime_type="image/png",
         )
         assert r.mime_type == "image/png"
-
-
-class TestTutorInput:
-    def test_minimal(self):
-        inp = TutorInput(user_id=1, username="test", session_id="s1", user_message_id=1, question="hi")
-        assert inp.attachments == []
-        assert inp.diagram_mode == "auto"
-        assert inp.video_mode is False

@@ -3,7 +3,6 @@ from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query
 from fastapi.responses import StreamingResponse
-from sqlalchemy import func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -14,14 +13,10 @@ from app.auth.security import (
 from app.evaluation.schemas import LearningEventCreate
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import LearningEvent, LearningPath, PathNode, PathNodeResource, User
+from app.infra.models import LearningEvent, LearningPath, PathNode, User
 from app.response import HttpResponse
 from app.path.event import PathEvents, encode_path_sse, get_path_channel
-from app.path.schemas import (
-    PathRequest,
-    LearningPathResourceDTO,
-    PathQuizSubmitRequest,
-)
+from app.path.schemas import PathQuizSubmitRequest, PathRequest
 from app.path.service import (
     PathService,
     build_learning_event_item,
@@ -129,17 +124,6 @@ async def stream_path_plan_events(
 
 
 # 获取当前用户所有可继续学习的路径概览
-@router.get("/active")  # GET /api/v1/ai/path-plan/active — 获取所有可继续学习路径
-async def get_active_paths(
-    module: str = "mentor",
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    responses = await service.list_active_path_overviews(current_user.id, module)
-    return HttpResponse.success(data=[item.model_dump(mode="json") for item in responses])
-
-
 # 获取最近更新的可继续学习路径概览
 @router.get("/latest")
 async def get_latest_active_path(
@@ -162,23 +146,6 @@ async def get_path_history(
     service = PathService(session)
     items = await service.list_path_history(current_user.id, module)
     return HttpResponse.success(data=[item.model_dump(mode="json") for item in items])
-
-
-# 激活历史路径，同时归档其他激活路径
-@router.post("/{path_id}/activate")  # POST /api/v1/ai/path-plan/{id}/activate — 激活历史路径
-async def activate_history_path(
-    path_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    service = PathService(session)
-    try:
-        result = await service.activate_history_path(current_user.id, path_id)
-    except ValueError as exc:
-        logger.warning("[PathAPI] 激活路径失败: user_id=%s path_id=%s error=%s", current_user.id, path_id, exc)
-        return HttpResponse.error(code=404, message=str(exc))
-    logger.info("[PathAPI] 路径已激活: user_id=%s path_id=%s", current_user.id, path_id)
-    return HttpResponse.success(data=result.model_dump(mode="json"))
 
 
 # ── 节点工作区 ───────────────────────────────────────────────────────────
@@ -350,132 +317,7 @@ async def generate_node_resource(
 
 
 # 获取节点辅助资源
-@router.get("/nodes/{node_id}/resources/{resource_type}")
-async def get_node_resource(
-    node_id: int,
-    resource_type: str,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    """获取节点辅助资源 — 支持类型：mindmap, code, ppt, reading, cartoon"""
-    if resource_type not in RESOURCE_TYPES:
-        logger.warning("[PathAPI] 不支持的资源类型(查询): %s", resource_type)
-        return HttpResponse.error(code=400, message=f"不支持的资源类型: {resource_type}")
-    service = PathService(session)
-    try:
-        result = await service.get_node_resource_by_type(current_user.id, node_id, resource_type)
-    except ValueError as exc:
-        logger.warning("[PathAPI] 获取节点资源失败: user_id=%s node_id=%s type=%s error=%s", current_user.id, node_id, resource_type, exc)
-        return HttpResponse.error(code=400, message=str(exc))
-    return HttpResponse.success(data=result.model_dump(mode="json") if result else None)
-
-
 # ── 资源列表与详情 ───────────────────────────────────────────────────────────
-
-
-# 获取路径资源列表（支持分页）
-@router.get("/resources")  # GET /api/v1/ai/path-plan/resources — 获取路径资源列表
-async def list_path_resources(
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    stmt = (
-        select(PathNodeResource)
-        .where(PathNodeResource.user_id == current_user.id)
-        .order_by(col(PathNodeResource.created_at).desc())
-        .offset(offset)
-        .limit(limit)
-    )
-    rows = list((await session.exec(stmt)).all())
-    node_map: dict[int, PathNode] = {}
-    if rows:
-        node_ids = {row.node_id for row in rows}
-        node_rows = list((await session.exec(select(PathNode).where(PathNode.id.in_(node_ids)))).all())
-        node_map = {node.id: node for node in node_rows if node.id is not None}
-    total_stmt = select(func.count()).select_from(PathNodeResource).where(
-        PathNodeResource.user_id == current_user.id
-    )
-    total = (await session.exec(total_stmt)).first() or 0
-    return HttpResponse.success(data={
-        "items": [
-            {
-                "id": row.id,
-                "learning_need": row.title,
-                "status": row.status or "completed",
-                "error_message": row.error_message,
-                "summary": row.summary,
-                "resource_types": [row.resource_type],
-                "resource_type": row.resource_type,
-                "title": row.title,
-                "path_id": row.path_id,
-                "path_node_id": row.node_id,
-                "node_id": node_map.get(row.node_id).node_id if node_map.get(row.node_id) else None,
-                "node_title": node_map.get(row.node_id).title if node_map.get(row.node_id) else None,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
-            }
-            for row in rows
-        ],
-        "total": total,
-    })
-
-
-# 资源生成 SSE 端点
-@router.get("/resources/{resource_id}/runs/{run_id}/events")
-async def stream_path_resource_events(
-    resource_id: int,
-    run_id: str,
-    after_sequence: int = Query(default=0, ge=0),
-    current_user: User = Depends(get_current_user),
-):
-    events = await get_path_channel(current_user.id, resource_id, run_id)
-    if events is None:
-        return HttpResponse.error(code=410, message="事件流已过期或不存在")
-
-    async def event_stream():
-        queue, replay = await events.subscribe(after_sequence)
-        try:
-            for event in replay:
-                yield encode_path_sse(event)
-            if replay and replay[-1].event in {"resource.completed", "resource.failed"}:
-                return
-            if not replay and events.is_terminal and after_sequence >= events.last_sequence:
-                return
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                except asyncio.TimeoutError:
-                    if events.is_terminal:
-                        return
-                    yield ": heartbeat\n\n"
-                    continue
-                yield encode_path_sse(event)
-                if event.event in {"resource.completed", "resource.failed"}:
-                    return
-        finally:
-            await events.unsubscribe(queue)
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers=SSE_HEADERS,
-    )
-
-
-# 获取单个路径资源详情
-@router.get("/resources/{resource_id}")  # GET 路径资源详情
-async def get_path_resource(
-    resource_id: int,
-    current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-):
-    resource = await session.get(PathNodeResource, resource_id)
-    if resource is None or resource.user_id != current_user.id:
-        logger.debug("[PathAPI] 路径资源不存在或无权限: user_id=%s resource_id=%s", current_user.id, resource_id)
-        return HttpResponse.error(code=404, message="路径资源不存在")
-    return HttpResponse.success(data=LearningPathResourceDTO.from_model(resource).model_dump(mode="json"))
 
 
 # 获取路径详情（含所有节点）

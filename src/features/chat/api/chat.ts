@@ -2,10 +2,12 @@ import http from '@/shared/api/http' // 导入配置好的 axios 实例
 import type { ApiResponse } from '@/shared/api/http' // 导入响应信封类型
 import type {
   ChatMessageItem,
+  ChatRunCreated,
   ChatSession,
   UploadResult,
   StreamChatParams,
 } from '@/features/chat/types/chat' // 导入聊天 DTO 类型
+import type { RunState } from '@/features/chat/types/chatEvent'
 
 // ==========================================
 // 聊天历史 API
@@ -81,12 +83,8 @@ export function createChatMessage(params: StreamChatParams) {
   if (params.video_mode != null) {
     formData.append('video_mode', String(Boolean(params.video_mode)))
   }
-  // 是否启用网络搜索增强
-  if (params.enable_web_search != null) {
-    formData.append('enable_web_search', String(Boolean(params.enable_web_search))) // 是否启用网络搜索
-  }
 
-  return http.post<ApiResponse<{ message_id: number; session_id: string }>>(
+  return http.post<ApiResponse<ChatRunCreated>>(
     '/ai/chat/messages',
     formData,
     {
@@ -95,3 +93,13 @@ export function createChatMessage(params: StreamChatParams) {
   )
 }
 
+
+// 读取一次运行的完整快照（刷新页面后恢复渲染）
+export function getChatRun(runId: string) {
+  return http.get<ApiResponse<RunState>>(`/ai/chat/runs/${runId}`)
+}
+
+// 请求取消一次运行
+export function cancelChatRun(runId: string) {
+  return http.post<ApiResponse<{ run_id: string; status: string }>>(`/ai/chat/runs/${runId}/cancel`)
+}

@@ -22,6 +22,7 @@ def build(workdir: Path) -> Tool:
     """构造 glob 工具。"""
 
     async def glob(pattern: str) -> dict[str, Any]:
+        """按 glob 通配符模式查找工作区中的文件路径。"""
         matches = [
             str(p.relative_to(workdir))
             for p in workdir.rglob("*")

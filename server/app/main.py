@@ -23,30 +23,32 @@ from app.config import KB_ENABLED, KB_EMBED_MODEL, WORKPLACE_DIR
 from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging, get_logger
-from app.infra.prompts import prompts
 from app.routes import install_routes
 from app.rag.retriever import check_index_health
 
 
 @asynccontextmanager
-# 应用生命周期管理器：启动阶段预热提示词、初始化数据库与知识库，关闭阶段暂留空
+# 应用生命周期管理器：启动阶段初始化数据库与知识库，关闭阶段暂留空
 async def lifespan(app: FastAPI):
     """FastAPI 应用生命周期管理器。
 
     启动阶段（yield 之前）：
-    1. 预热所有提示词模板（避免首次请求时的延迟）
-    2. 初始化数据库连接（创建表、建立连接池）
-    3. 执行数据库健康检查
+    1. 初始化数据库连接（创建表、建立连接池）
+    2. 执行数据库健康检查
 
     关闭阶段（yield 之后）：
     - 当前未实现清理逻辑，可在此添加关闭连接池等操作
     """
-    # 预热所有提示词模板，将其编译并缓存
-    prompts.warm_all()
     # 初始化数据库：创建表结构（如果不存在）
     await init_db()
     # 执行数据库连接检查，确保连接可用
     await check_all()
+    # 把上次进程遗留的进行中运行标记为中断
+    from app.chat.harness import mark_interrupted_runs
+
+    interrupted = await mark_interrupted_runs()
+    if interrupted:
+        get_logger("main").warning("[Chat] 标记中断运行: %d 条", interrupted)
 
     # 知识库索引状态检查（不自动构建，构建请执行: python -m app.rag）
     log = get_logger("main")

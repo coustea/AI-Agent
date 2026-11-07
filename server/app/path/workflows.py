@@ -14,16 +14,16 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import re
 from datetime import datetime, timezone
-from typing import Any, Awaitable, Callable, TypedDict
+from typing import Any, Awaitable, Callable
 from loguru import logger as loguru_logger
 from sqlmodel import col, select
 
 from app.config import PATH_PASS_SCORE, PATH_QUIZ_SIZE
 from app.infra.logging import get_logger
-from app.infra.llm import HumanMessage, LLM, SystemMessage, chat_json, chat_text
-from app.infra.prompts import prompts
+from app.infra.llm import HumanMessage, LLM, SystemMessage, chat_json, chat_text, load_prompt
 from app.infra.models import (
     LearningPath,
     PathNode,
@@ -33,7 +33,7 @@ from app.infra.models import (
     User,
     WrongQuestion,
 )
-from app.profile.service import get_profile_service
+from app.profile.context import ProfileScope, load_learner_context
 from app.rag.tools import build_knowledge_tool
 
 # 从本地合并后的 schemas 导入
@@ -48,6 +48,8 @@ from app.path.schemas import (
 )
 
 logger = get_logger(__name__)
+
+_PATH_PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 # ======================================================================
 # 偏好参数语义化映射
@@ -141,7 +143,6 @@ def build_fallback_plan(request: PathRequest) -> LearningPlan:
     生成 3 个阶段、6 个节点的标准学习路径结构。
     """
     topic = (request.topic or request.goal or "课程学习").strip()
-    goal = (request.goal or topic).strip()
 
     stages = [
         AgentStage(stage_id="stage-1", title="基础认知与前置补齐"),
@@ -325,7 +326,7 @@ class PathPlannerAgent:
 
     def __init__(self) -> None:
         self.llm = LLM(temperature=0.1, max_tokens=4096)
-        self.system_prompt = prompts.get("path").get("planner_system")
+        self.system_prompt = load_prompt(_PATH_PROMPTS_DIR / "planner_system.md")
 
         # 检索参考资料（原 research 节点）
     async def _research(
@@ -421,7 +422,7 @@ def _build_planner_messages(
     - Human: 结构化的请求上下文 + 画像 + 检索参考
     """
     sys_msg = SystemMessage(
-        content=prompts.get("path").get("planner_system")
+        content=load_prompt(_PATH_PROMPTS_DIR / "planner_system.md")
     )
 
     # 构建画像融合提示
@@ -560,8 +561,8 @@ class NodeLearningAgent:
             kb_section = "无"
         # 根据 tutorial_type 选择对应的 prompt
         prompt_key = "tutorial_primary"  # 简化：只生成主教程
-        prompt = prompts.get("path").render(
-            prompt_key,
+        prompt = load_prompt(
+            _PATH_PROMPTS_DIR / f"{prompt_key}.md",
             path_goal=path_goal,
             node_title=node_title,
             mastery_target=mastery_target,
@@ -590,8 +591,8 @@ class NodeLearningAgent:
         max_retries: int = 3,
     ) -> list[dict[str, Any]]:
         """生成测验题目，带重试机制确保返回 5 道题。"""
-        prompt = prompts.get("path").render(
-            "question_generation",
+        prompt = load_prompt(
+            _PATH_PROMPTS_DIR / "question_generation.md",
             path_goal=path_goal,
             node_title=node_title,
             mastery_target=mastery_target,
@@ -728,8 +729,8 @@ async def node_load_context(state: LearnState) -> dict:
     current_tutorial = next((t for t in tutorials if t.is_current), None)
 
     try:
-        profile_service = get_profile_service()
-        profile_markdown = await profile_service.build_profile_markdown(user_id=user_id)
+        ctx = await load_learner_context(session, user_id=user_id, scope=ProfileScope.PATH)
+        profile_markdown = ctx.to_prompt_text(ProfileScope.PATH)
     except Exception:
         profile_markdown = ""
 

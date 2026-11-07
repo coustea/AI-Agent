@@ -39,6 +39,7 @@ class ResourceEvent(BaseModel):
 
 
 def _to_event(row: GeneratedResourceRunEvent) -> ResourceEvent:
+    """将数据库运行事件行转换为 ResourceEvent DTO。"""
     return ResourceEvent(
         sequence=int(row.id or 0),
         resource_id=row.resource_id,
@@ -59,10 +60,12 @@ class _LiveSubscribers:
     """同一 API 进程内的低延迟 fan-out；不缓存、不负责重放。"""
 
     def __init__(self) -> None:
+        """初始化进程内订阅队列映射与并发锁。"""
         self._queues: dict[int, set[asyncio.Queue[ResourceEvent]]] = {}
         self._lock = asyncio.Lock()
 
     async def subscribe(self, resource_id: int) -> asyncio.Queue[ResourceEvent]:
+        """为指定资源注册新的事件监听队列。"""
         queue: asyncio.Queue[ResourceEvent] = asyncio.Queue(maxsize=128)
         async with self._lock:
             self._queues.setdefault(resource_id, set()).add(queue)
@@ -70,6 +73,7 @@ class _LiveSubscribers:
         return queue
 
     async def unsubscribe(self, resource_id: int, queue: asyncio.Queue[ResourceEvent]) -> None:
+        """移除指定资源的事件监听队列。"""
         async with self._lock:
             queues = self._queues.get(resource_id)
             if queues is None:
@@ -80,6 +84,7 @@ class _LiveSubscribers:
         logger.debug("[ResourceEvent] SSE取消订阅: resource_id=%s remaining=%d", resource_id, len(self._queues.get(resource_id, set())))
 
     async def publish(self, event: ResourceEvent) -> None:
+        """向指定资源的所有在线监听队列广播事件。"""
         async with self._lock:
             queues = list(self._queues.get(event.resource_id, set()))
         for queue in queues:
@@ -100,6 +105,7 @@ class ResourceEvents:
     """
 
     def __init__(self, *, user_id: int, resource_id: int) -> None:
+        """初始化资源事件通道，绑定用户 ID 与资源 ID。"""
         self._user_id = user_id
         self._resource_id = resource_id
 
@@ -112,6 +118,7 @@ class ResourceEvents:
         *,
         data: dict[str, Any] | None = None,
     ) -> ResourceEvent:
+        """持久化并向在线客户端广播状态变更事件。"""
         payload = data or {}
         phase = str(payload.get("phase") or "working")
         raw_elapsed_ms = payload.get("elapsed_ms")
@@ -156,13 +163,16 @@ class ResourceEvents:
         return event
 
     async def subscribe(self) -> asyncio.Queue[ResourceEvent]:
+        """订阅当前资源的实时事件流队列。"""
         return await _subscribers.subscribe(self._resource_id)
 
     async def unsubscribe(self, queue: asyncio.Queue[ResourceEvent]) -> None:
+        """取消订阅当前资源的实时事件流队列。"""
         await _subscribers.unsubscribe(self._resource_id, queue)
 
 
 def encode_resource_sse(event: ResourceEvent) -> str:
+    """将 ResourceEvent 编码为 SSE 规范字符串。"""
     return f"id: {event.sequence}\nevent: resource.event\ndata: {event.model_dump_json()}\n\n"
 
 

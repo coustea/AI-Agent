@@ -48,7 +48,13 @@ server/.langgraph_api/
 server/data/
 server/doc/
 server/scripts/
-server/tests/
+server/tests/*
+!server/tests/shared/
+server/tests/shared/*
+!server/tests/shared/test_ppt_agent.py
+!server/tests/profile/
+server/tests/profile/*
+!server/tests/profile/test_learner_context.py
 server/GEMINI.md
 server/mindmap.zip
 server/test_pdf_md.py

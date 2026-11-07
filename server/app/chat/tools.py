@@ -9,7 +9,6 @@ from pydantic import BaseModel, Field
 
 from app.chat.memory.service import get_chat_memory_service
 from app.chat.memory.types import LTM_CATEGORIES, compact_text
-from app.chat.schemas import TutorInput
 from app.config import user_chat_dir
 from app.infra.logging import get_logger
 from app.profile.service import get_profile_service
@@ -111,18 +110,20 @@ def _default_workdir(username: str, session_id: str) -> Path:
 
 
 def build_tutor_tools(
-    ctx: TutorInput,
     *,
+    user_id: int,
+    username: str,
+    session_id: str,
     workdir: Path | None = None,
 ) -> list[Tool]:
-    """装配 TutorAgent 单轮可用的完整工具集：内置工具 + 用户画像/记忆 + 课程知识库 + PPT/视频工具。"""
-    effective_workdir = workdir or _default_workdir(ctx.username, ctx.session_id)
+    """装配本轮可用的完整工具集：内置工具 + 画像/记忆 + 知识库 + PPT/视频工具。"""
+    effective_workdir = workdir or _default_workdir(username, session_id)
     return [
         *build_builtin_tools(effective_workdir),
-        *build_user_context_tools(ctx.user_id),
+        *build_user_context_tools(user_id),
         build_knowledge_tool(),
-        build_ppt_subagent_tool(username=ctx.username, session_id=ctx.session_id),
-        build_cartoon_subagent_tool(username=ctx.username, session_id=ctx.session_id),
+        build_ppt_subagent_tool(username=username, session_id=session_id),
+        build_cartoon_subagent_tool(username=username, session_id=session_id),
     ]
 
 

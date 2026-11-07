@@ -14,7 +14,7 @@ from app.infra.models import (
     PathNodeResource,
     PathNodeTutorial,
 )
-from app.evaluation.request import LearningEventCreate
+from app.evaluation.schemas import LearningEventCreate
 from app.path.service import PathService
 from app.path.schemas import (
     LearningPlan,
@@ -383,11 +383,11 @@ async def test_auxiliary_resource_generation_uses_learn_workflow():
 
 
 @pytest.mark.asyncio
-async def test_path_service_profile_lookup_degrades_to_empty_when_profile_tables_unavailable():
+async def test_path_service_profile_lookup_degrades_to_empty_when_profile_tables_unavailable(monkeypatch):
     service = PathService(_CommitSession())
-    service.profile_builder.get_profile = AsyncMock(
-        side_effect=ProgrammingError("SELECT ...", {}, Exception("relation missing"))
-    )
+    async def mock_fail(*args, **kwargs):
+        raise ProgrammingError("SELECT ...", {}, Exception("relation missing"))
+    monkeypatch.setattr("app.path.service.load_learner_context", mock_fail)
 
     result = await service._get_profile_dict(1)
 
@@ -395,11 +395,11 @@ async def test_path_service_profile_lookup_degrades_to_empty_when_profile_tables
 
 
 @pytest.mark.asyncio
-async def test_path_service_profile_markdown_degrades_when_profile_tables_unavailable():
+async def test_path_service_profile_markdown_degrades_when_profile_tables_unavailable(monkeypatch):
     service = PathService(_CommitSession())
-    service.profile_builder.build_profile_markdown = AsyncMock(
-        side_effect=ProgrammingError("SELECT ...", {}, Exception("relation missing"))
-    )
+    async def mock_fail(*args, **kwargs):
+        raise ProgrammingError("SELECT ...", {}, Exception("relation missing"))
+    monkeypatch.setattr("app.path.service.load_learner_context", mock_fail)
 
     result = await service.get_user_learning_profile(1)
 
@@ -563,7 +563,6 @@ async def test_path_service_has_progress_related_methods():
     service = PathService(_CommitSession())
 
     assert callable(service.get_latest_active_path_overview)
-    assert callable(service.list_active_path_overviews)
     assert callable(service.get_path_by_id)
     assert callable(service.get_learning_evaluation)
 

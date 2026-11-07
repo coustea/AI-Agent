@@ -39,7 +39,7 @@ _CONSOLE_NOISY_PREFIXES = (
     "httpx",
     "openai",
     "sqlalchemy",
-    "asyncpg",
+    "aiomysql",
     "uvicorn.access",
 )
 
@@ -284,7 +284,7 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
         "fastapi",
         "sqlalchemy",
         "sqlalchemy.engine",
-        "asyncpg",
+        "aiomysql",
     ):
         ext_logger = logging.getLogger(name)
         ext_logger.handlers.clear()

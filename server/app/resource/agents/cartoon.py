@@ -1,4 +1,4 @@
-"""CartoonAgent — 基于 Plan-and-Execute + HyperFrames + 本地 Skill 的多智能体教学视频生成。"""
+"""CartoonAgent — 基于工具循环、HyperFrames CLI 与视觉反馈的教学视频生成。"""
 
 from __future__ import annotations
 
@@ -13,40 +13,39 @@ from app.infra.logging import get_logger
 from app.resource.agents.base import BaseResourceAgent, register_agent
 from app.resource.schemas import AgentResult, ResourceInput
 from app.shared.cartoon import (
-    CartoonAgent as SharedCartoonAgent,
     CartoonBrief,
     CartoonGenerationConfig,
     CartoonGenerationError,
+    CartoonInput,
     CartoonResourceMetadata,
 )
+from app.shared.cartoon.agent import generate as generate_cartoon
 
 logger = get_logger(__name__)
 
 
 @register_agent
 class CartoonAgent(BaseResourceAgent):
-    """CartoonAgent — 采用 Plan-and-Execute + HyperFrames 子场景架构生成带配音与字幕的 MP4 教学视频。"""
+    """CartoonAgent — 采用 HyperFrames CLI 与视觉反馈生成带配音与字幕的 MP4 教学视频。"""
 
     agent_id = "cartoon"
     agent_name = "动画讲解"
 
-    def __init__(self, emitter=None, *, pipeline: SharedCartoonAgent | None = None) -> None:
-        super().__init__(emitter=emitter)
-        self._pipeline = pipeline or SharedCartoonAgent()
-
     async def generate_resource(self, input_data: ResourceInput) -> AgentResult:
+        """生成带心跳上报的动画视频资源。"""
         return await self.run_with_heartbeat(
             self._generate(input_data),
             messages=[
                 "正在加载 HyperFrames 技能并规划视频分镜...",
                 "正在合成 Edge TTS 旁白配音并测定精确时间轴...",
-                "正在并行调度 SceneSubagent 编写子场景动画并渲染 MP4...",
+                "正在编写动画、检查截图并通过 HyperFrames CLI 渲染 MP4...",
             ],
             interval_seconds=15.0,
             progress=75,
         )
 
     async def _generate(self, input_data: ResourceInput) -> AgentResult:
+        """调用底层流水线生成动画分镜、语音与视频产物。"""
         started = time.perf_counter()
         try:
             brief = self._brief(input_data)
@@ -60,7 +59,7 @@ class CartoonAgent(BaseResourceAgent):
                 brief.configuration.lesson_depth.value,
                 output_dir,
             )
-            artifact = await self._pipeline.generate(brief, output_dir)
+            artifact = await generate_cartoon(CartoonInput(output_dir=output_dir, brief=brief))
             elapsed_ms = round((time.perf_counter() - started) * 1000)
             logger.info(
                 "[CartoonAgent] 生成成功: title=%s duration_ms=%d scene_count=%d elapsed_ms=%d",
@@ -95,6 +94,7 @@ class CartoonAgent(BaseResourceAgent):
 
     @staticmethod
     def _brief(input_data: ResourceInput) -> CartoonBrief:
+        """从资源输入构造动画生成所需的 CartoonBrief。"""
         if input_data.teaching_plan is None:
             raise CartoonGenerationError(
                 "资源动画缺少结构化教学计划",
@@ -127,6 +127,7 @@ class CartoonAgent(BaseResourceAgent):
 
     @staticmethod
     def _source_materials(handoffs: dict[str, Any]) -> list[str]:
+        """从上游依赖产物中提取结构化教学素材列表。"""
         sections: list[str] = []
         for source, raw in (handoffs or {}).items():
             payload = raw.model_dump(mode="json") if isinstance(raw, BaseModel) else raw
@@ -146,11 +147,13 @@ class CartoonAgent(BaseResourceAgent):
 
     @staticmethod
     def _safe_username(value: Any) -> str:
+        """清洗用户名以保证目录路径安全。"""
         safe = "".join(char for char in str(value or "anonymous") if char.isalnum() or char in "-_")
         return safe[:80] or "anonymous"
 
     @staticmethod
     def _result(artifact: Any, started: float) -> AgentResult:
+        """将生成的视频产物封装为标准 AgentResult。"""
         duration_seconds = round(artifact.duration_ms / 1_000, 2)
         metadata = CartoonResourceMetadata(
             video_url=static_url(artifact.video_path),
@@ -174,6 +177,7 @@ class CartoonAgent(BaseResourceAgent):
 
     @staticmethod
     def _failure(title: str, exc: CartoonGenerationError, started: float) -> AgentResult:
+        """将异常封装为标准失败 AgentResult。"""
         return AgentResult(
             success=False,
             title=f"{title[:48]} - 动画讲解视频",

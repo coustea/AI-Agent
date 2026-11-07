@@ -28,9 +28,12 @@ export interface LearningEventCreate {
   occurred_at?: string
 }
 
-// 创建学习会话的请求参数
+// 创建学习会话的请求参数（多态实体设计）
 export interface LearningSessionCreate {
   source_page: string
+  module?: string
+  entity_id?: string | null
+  sub_entity_id?: string | null
   started_at: string
   ended_at: string
   duration_seconds: number

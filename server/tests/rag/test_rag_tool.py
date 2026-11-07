@@ -134,11 +134,11 @@ class TestRagToolHandler:
             assert len(result["sources"]) == 1
 
 
-class TestAsTool:
-    def test_returns_tool(self):
-        from app.rag.tools import as_tool
+class TestKnowledgeTool:
+    def test_builds_tool(self):
+        from app.rag.tools import build_knowledge_tool
 
-        tool = as_tool()
+        tool = build_knowledge_tool()
         assert tool.name == "search_knowledge_base"
         assert tool.args_model is not None
 

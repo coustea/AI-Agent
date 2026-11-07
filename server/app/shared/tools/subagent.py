@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from app.infra.llm import get_llm_client
 from app.infra.logging import get_logger
 from app.shared.tools.builtin import build_builtin_tools
-from app.shared.tools.registry import Tool, ToolRegistry
+from app.shared.tools.registry import Tool, ToolRegistry, format_tool_output
 
 logger = get_logger(__name__)
 
@@ -60,7 +60,7 @@ async def run_subagent(
     # 过滤掉任何名为 subagent 的工具，防止子智能体递归派生
     safe_extra = [t for t in extra_tools if t.name != "subagent"]
     registry = ToolRegistry([*base_tools, *safe_extra])
-    tool_schemas = registry.get_tools_description()
+    tool_schemas = registry.openai_schemas()
 
     client, spec = get_llm_client("text")
     messages: list[dict[str, Any]] = [
@@ -103,11 +103,11 @@ async def run_subagent(
                     return (msg.content or "").strip() or "Subagent task completed."
 
                 async def _exec_tc(tc: Any) -> dict[str, Any]:
-                    output = await registry.execute_as_text(
+                    res = await registry.execute(
                         tc.function.name,
                         tc.function.arguments or "{}",
-                        call_id=tc.id,
                     )
+                    output = format_tool_output(res)
                     return {
                         "role": "tool",
                         "tool_call_id": tc.id,

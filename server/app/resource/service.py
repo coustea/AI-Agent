@@ -23,7 +23,7 @@ from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.evaluation.event_types import MODULE_RESOURCE, RESOURCE_GENERATED
-from app.evaluation.request import LearningEventCreate
+from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import EvaluationService
 from app.infra.logging import get_module_logger
 from app.infra.models import (
@@ -82,8 +82,8 @@ def _split_content(result: AgentResult) -> tuple[dict[str, Any] | list[Any] | No
         if not isinstance(value, (dict, list)):
             raise ValueError("JSON resource content must be an object or array")
         return value, None
-    # 文件型（html/mp4）正文为空，引用见 metadata
-    if result.file_type in {"html", "mp4"}:
+    # 文件型（pptx/mp4）正文为空，引用见 metadata
+    if result.file_type in {"pptx", "mp4"}:
         return None, None
     # 文本型：存入 content_text
     if result.file_type in {"markdown", "mermaid", "text", "code"}:
@@ -107,7 +107,7 @@ def _item_to_dto(item: ItemModel, *, include_content: bool = True) -> GeneratedR
             content = item.content_json
         elif content_format in {"markdown", "mermaid", "text", "code"}:
             content = item.content_text
-        elif content_format in {"html", "mp4"}:
+        elif content_format in {"pptx", "mp4"}:
             content = None
         else:
             content = None
@@ -130,7 +130,8 @@ class ResourceService:
     - finalize_generation: 计算终态
     """
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
+        """初始化资源服务及绑定的数据库会话。"""
         self.session = session
 
     async def _commit(self, model: Any) -> None:
@@ -396,6 +397,7 @@ class ResourceService:
         resource_id: int,
         after_sequence: int = 0,
     ) -> list[GeneratedResourceRunEvent]:
+        """查询指定资源在给定序列号之后的运行事件列表。"""
         result = await self.session.exec(
             select(GeneratedResourceRunEvent)
             .where(GeneratedResourceRunEvent.resource_id == resource_id)
@@ -417,6 +419,7 @@ class ResourceService:
         return list((await self.session.exec(stmt)).all())
 
     async def list_resource_type_summary(self, user_id: int, resource_ids: list[int]) -> dict[int, list[str]]:
+        """汇总指定资源列表中每个资源包含的 Agent 类型。"""
         if not resource_ids:
             return {}
         stmt = (
@@ -518,6 +521,7 @@ class ResourceService:
     # =========================================================================
 
     async def get_resource(self, user_id: int, resource_id: int) -> GeneratedResource | None:
+        """查询指定用户所属的单个资源记录。"""
         resource = await self.session.get(GeneratedResource, resource_id)
         # 校验归属后返回，否则视为不可见
         if resource and resource.user_id == user_id:
@@ -525,6 +529,7 @@ class ResourceService:
         return None
 
     async def list_resources(self, user_id: int, limit: int = 20, offset: int = 0) -> list[GeneratedResource]:
+        """分页查询当前用户的资源记录列表。"""
         stmt = (
             select(GeneratedResource)
             .where(GeneratedResource.user_id == user_id)
@@ -535,6 +540,7 @@ class ResourceService:
         return list((await self.session.exec(stmt)).all())
 
     async def count_resources(self, user_id: int) -> int:
+        """统计当前用户的资源记录总数。"""
         stmt = select(func.count(GeneratedResource.id)).where(GeneratedResource.user_id == user_id)
         return (await self.session.exec(stmt)).one()
 
@@ -620,6 +626,7 @@ class ResourceService:
         )
 
     async def get_resource_bundle(self, user_id: int, resource_id: int) -> ResourceBundle | None:
+        """组装并返回指定资源的完整聚合包（包含各子项）。"""
         resource = await self.get_resource(user_id, resource_id)
         if resource is None:
             return None

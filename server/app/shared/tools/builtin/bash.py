@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from app.shared.tools.registry import Tool
-from app.shared.tools.sandbox import BASH_TIMEOUT_S, truncate
+from app.shared.tools.sandbox import BASH_TIMEOUT_S, truncate_output
 
 
 class BashArgs(BaseModel):
@@ -19,10 +20,11 @@ class BashArgs(BaseModel):
     command: str = Field(min_length=1, max_length=8000, description="要执行的 shell 命令")
 
 
-def build(workdir: Path) -> Tool:
+def build(workdir: Path, *, timeout_s: float = BASH_TIMEOUT_S) -> Tool:
     """构造 bash 工具。``workdir`` 是命令的工作目录。"""
 
     async def bash(command: str) -> dict[str, Any]:
+        """在工作目录执行 shell 命令；工作目录不构成系统沙箱。"""
         dangerous = ("rm -rf /", "sudo ", "shutdown", "reboot")
         if any(d in command for d in dangerous):
             return {"text": "拒绝执行危险命令", "status": "failed"}
@@ -32,6 +34,7 @@ def build(workdir: Path) -> Tool:
             "-lc",
             command,
             cwd=str(workdir),
+            start_new_session=True,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env={
@@ -43,21 +46,23 @@ def build(workdir: Path) -> Tool:
         try:
             stdout, stderr = await asyncio.wait_for(
                 proc.communicate(),
-                timeout=BASH_TIMEOUT_S,
+                timeout=timeout_s,
             )
-        except TimeoutError:
-            proc.kill()
-            return {"text": f"命令超时（>{BASH_TIMEOUT_S}s）", "status": "failed"}
+        except (TimeoutError, asyncio.CancelledError) as exc:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            await proc.communicate()
+            if isinstance(exc, asyncio.CancelledError):
+                raise
+            return {"stderr": f"命令超时（>{timeout_s}s）", "stdout": "", "exit_code": -1}
 
-        parts: list[str] = []
-        out = stdout.decode("utf-8", "ignore").strip()
-        err = stderr.decode("utf-8", "ignore").strip()
-        if out:
-            parts.append(out)
-        if err:
-            parts.append(f"[stderr]\n{err}")
-        text = truncate("\n\n".join(parts)) if parts else f"命令完成（exit {proc.returncode}），无输出。"
-        return {"text": text, "status": "ok" if proc.returncode == 0 else "failed"}
+        return {
+            "stdout": truncate_output(stdout.decode("utf-8", "replace")),
+            "stderr": truncate_output(stderr.decode("utf-8", "replace")),
+            "exit_code": proc.returncode,
+        }
 
     return Tool(
         name="bash",

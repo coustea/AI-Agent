@@ -99,6 +99,37 @@ function sendBeaconSession(payload: LearningSessionCreate) {
   }).catch(() => {})
 }
 
+// 构建学习会话多态上报对象
+function buildSessionPayload(
+  context: TrackingContext,
+  startedAt: Date,
+  now: Date,
+  durationSeconds: number,
+): LearningSessionCreate {
+  const module = context.pathId ? 'path' : context.resourceId ? 'resource' : (context.sourcePage.includes('chat') ? 'chat' : 'common')
+  const entityId = context.pathId ? String(context.pathId) : context.resourceId ? String(context.resourceId) : undefined
+  const subEntityId = context.pathNodeId ? String(context.pathNodeId) : (context.nodeId ? String(context.nodeId) : undefined)
+
+  return {
+    source_page: context.sourcePage,
+    module,
+    entity_id: entityId,
+    sub_entity_id: subEntityId,
+    started_at: startedAt.toISOString(),
+    ended_at: now.toISOString(),
+    duration_seconds: durationSeconds,
+    course: context.course,
+    topic: context.topic,
+    client_session_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'sess-' + Math.random().toString(36).slice(2, 11) + '-' + Date.now(),
+    event_metadata: {
+      resource_id: context.resourceId,
+      path_id: context.pathId,
+      path_node_id: context.pathNodeId,
+      node_id: context.nodeId,
+    },
+  }
+}
+
 function onBeforeUnload() {
   if (!activeContext) return
 
@@ -119,22 +150,7 @@ function onBeforeUnload() {
 
   if (durationSeconds < MIN_DURATION_SECONDS) return
 
-  const payload: LearningSessionCreate = {
-    source_page: context.sourcePage,
-    started_at: startedAt.toISOString(),
-    ended_at: now.toISOString(),
-    duration_seconds: durationSeconds,
-    course: context.course,
-    topic: context.topic,
-    client_session_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'sess-' + Math.random().toString(36).slice(2, 11) + '-' + Date.now(),
-    event_metadata: {
-      resource_id: context.resourceId,
-      path_id: context.pathId,
-      path_node_id: context.pathNodeId,
-      node_id: context.nodeId,
-    },
-  }
-
+  const payload = buildSessionPayload(context, startedAt, now, durationSeconds)
   sendBeaconSession(payload)
 }
 
@@ -191,21 +207,7 @@ export function stopTracking() {
     return
   }
 
-  const payload: LearningSessionCreate = {
-    source_page: context.sourcePage,
-    started_at: startedAt.toISOString(),
-    ended_at: now.toISOString(),
-    duration_seconds: durationSeconds,
-    course: context.course,
-    topic: context.topic,
-    client_session_id: typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'sess-' + Math.random().toString(36).slice(2, 11) + '-' + Date.now(),
-    event_metadata: {
-      resource_id: context.resourceId,
-      path_id: context.pathId,
-      path_node_id: context.pathNodeId,
-      node_id: context.nodeId,
-    },
-  }
+  const payload = buildSessionPayload(context, startedAt, now, durationSeconds)
 
   // 静默上报，不阻塞用户流程
   recordLearningSession(payload).catch(() => {})

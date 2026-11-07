@@ -9,7 +9,7 @@ from __future__ import annotations
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.evaluation.event_types import MODULE_VISUALIZER, VISUALIZER_RUN
-from app.evaluation.request import LearningEventCreate
+from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import EvaluationService
 from app.infra.logging import get_logger
 

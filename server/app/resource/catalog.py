@@ -27,7 +27,7 @@ RESOURCE_AGENTS: tuple[ResourceAgentDescriptor, ...] = (
     ResourceAgentDescriptor("quiz", "练习题", "Quiz", "练习习题", "base", "json", 600, "开始生成随堂练习题..."),
     ResourceAgentDescriptor("code", "代码示例", "Code", "代码实操案例", "base", "markdown", 600, "开始生成代码实操案例..."),
     ResourceAgentDescriptor("reading", "拓展阅读", "Reading", "拓展阅读推荐", "base", "json", 600, "开始生成拓展阅读资源..."),
-    ResourceAgentDescriptor("ppt", "PPT文稿", "DataBoard", "PPT文稿生成", "aggregation", "html", 900, "开始生成教学课件..."),
+    ResourceAgentDescriptor("ppt", "PPT文稿", "DataBoard", "PPT文稿生成", "aggregation", "pptx", 1800, "开始生成教学课件..."),
     ResourceAgentDescriptor("cartoon", "动画讲解", "FilmStrip", "知识点动画、配音与字幕同步的 MP4 教学视频", "aggregation", "mp4", 1800, "开始生成动画讲解视频..."),
 )
 

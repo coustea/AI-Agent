@@ -8,16 +8,29 @@ LLM 失败时降级为 extract_fallback_summary_markdown（取前 N 行拼接）
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from sqlmodel import func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.chat.memory.types import extract_content_text
-from app.infra.llm import HumanMessage, LLM, SystemMessage
+from app.infra.llm import HumanMessage, LLM, SystemMessage, load_prompt
 from app.infra.logging import get_logger
 from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock
-from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
+
+_PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "compression.md"
+
+
+def strip_markdown_fence(text: str) -> str:
+    """去除首尾的 markdown 代码块包裹标记。"""
+    s = text.strip()
+    if s.startswith("```"):
+        first_line_end = s.find("\n")
+        if first_line_end != -1 and s.endswith("```"):
+            s = s[first_line_end + 1 : -3].strip()
+    return s
 
 
 # ChatSessionCompressor：将会话旧消息压缩为时序摘要块，保留最近消息与原始历史
@@ -222,14 +235,16 @@ class ChatSessionCompressor:
             for msg in target
         )
 
-        prompt = prompts.get("chat_memory").render("compression", dialogue_text=chat_text[:5000])
+        prompt = load_prompt(_PROMPT_PATH, dialogue_text=chat_text[:5000])
+        if latest_block and latest_block.summary_markdown:
+            prompt += f"\n\n## 上一阶段滚动状态摘要\n{latest_block.summary_markdown}"
         resp = await self.llm.text(
             [
                 SystemMessage(content=prompt),
                 HumanMessage(content="请根据以上对话记录输出会话摘要 Markdown。"),
             ],
         )
-        summary_markdown = str(resp.content or "").strip()
+        summary_markdown = strip_markdown_fence(str(getattr(resp, "content", resp) or "").strip())
         if not summary_markdown:
             raise RuntimeError("LLM 生成的会话摘要为空")
 

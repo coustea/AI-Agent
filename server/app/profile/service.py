@@ -13,10 +13,12 @@ from typing import Any
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.mysql import insert as mysql_insert
+
+from pathlib import Path
 
 from app.infra.database import session_scope
-from app.infra.llm import HumanMessage, LLM
+from app.infra.llm import HumanMessage, LLM, load_prompt
 from app.infra.logging import get_logger
 from app.infra.models import (
     School,
@@ -33,9 +35,10 @@ from app.profile.types import (
     ProfileDimensionsPatch,
     ProfileScoreOutput,
 )
-from app.infra.prompts import prompts
 
 logger = get_logger(__name__)
+
+_PROFILE_PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 
 
 def _user_base_info_dict(user: User) -> dict[str, Any]:
@@ -77,6 +80,87 @@ def sanitize_score_output(raw: ProfileScoreOutput) -> dict[str, Any]:
     }
 
 
+async def _synthesize_jit_dimensions(
+    user_id: int,
+    db: AsyncSession,
+    existing_dims: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """即时装配缺失画像维度，保证前端雷达图与看板在无后台 LLM 预跑时也有真实基线数据呈现。"""
+    user = (await db.exec(select(User).where(User.id == user_id))).first()
+    if not user:
+        return existing_dims
+
+    result = dict(existing_dims)
+
+    # 1. 基础水平映射 (knowledge_level)
+    if "knowledge_level" not in result:
+        level_map = {
+            "beginner": ("初学基础阶段，正在系统建立学科知识体系", 45),
+            "entry": ("入门提升阶段，具备常用概念基础与实践兴趣", 60),
+            "proficient": ("熟练进阶阶段，能独立分析并解决复合技术问题", 80),
+            "master": ("精通阶段，具备深厚理论底蕴与敏锐架构认知", 95),
+        }
+        val, sc = level_map.get(user.foundational_level or "", ("基础掌握阶段，正在推进各知识板块学习", 55))
+        evidence = []
+        if user.foundational_level:
+            evidence.append(f"学员自评基础水平：{user.foundational_level}")
+        if user.major:
+            evidence.append(f"专业学科：{user.major} ({user.grade or '在读'})")
+        if user.programming_languages:
+            evidence.append(f"掌握语言：{'、'.join(user.programming_languages)}")
+        result["knowledge_level"] = {"value": val, "evidence": evidence, "score": sc}
+
+    # 2. 认知风格 (cognitive_style)
+    if "cognitive_style" not in result:
+        style_map = {
+            "theory_first": "偏好概念推导与理论先行，重视系统化逻辑完整性",
+            "practice_first": "实践优先，偏好从动手代码与实操中反推原理",
+            "case_driven": "案例驱动，偏好结合经典业务场景与实战工程理解",
+        }
+        val = style_map.get(user.learning_style or "", "理论与实践并重，偏好结合案例循序渐进")
+        evidence = []
+        if user.learning_style:
+            evidence.append(f"学员偏好风格：{user.learning_style}")
+        if user.content_depth:
+            evidence.append(f"内容深度期望：{user.content_depth}")
+        result["cognitive_style"] = {"value": val, "evidence": evidence, "score": 70}
+
+    # 3. 薄弱知识点 (weak_knowledge_points)
+    if "weak_knowledge_points" not in result:
+        weaks = list(user.weak_points or [])
+        val = f"重点攻坚薄弱项：{'、'.join(weaks)}" if weaks else "当前暂无显著记录的薄弱知识点"
+        evidence = [f"自评待攻关知识点：{w}" for w in weaks]
+        sc = 50 if weaks else 80
+        result["weak_knowledge_points"] = {"value": val, "evidence": evidence, "score": sc}
+
+    # 4. 目标导向 (learning_goal_type)
+    if "learning_goal_type" not in result:
+        val = user.global_learning_goal or "系统化专业能力提升"
+        evidence = [f"设定全局目标：{val}"] if user.global_learning_goal else []
+        result["learning_goal_type"] = {"value": val, "evidence": evidence, "score": 75}
+
+    # 5. 知识缺口模式 (knowledge_gap_pattern)
+    if "knowledge_gap_pattern" not in result:
+        val = "基础概念掌握良好，复杂场景与综合变体需强化" if user.weak_points else "知识结构完整，保持稳步进阶"
+        result["knowledge_gap_pattern"] = {"value": val, "evidence": ["基于初始学情基准分析"], "score": 68}
+
+    # 6. 难题耐受度 (difficulty_tolerance)
+    if "difficulty_tolerance" not in result:
+        sc = 75 if user.content_depth == "systematic_deep" else 65
+        val = "对深度复杂主题具有较好探索意愿" if sc >= 70 else "建议以循序渐进梯级难度推进"
+        result["difficulty_tolerance"] = {"value": val, "evidence": [f"内容深度偏好：{user.content_depth or '适中'}"], "score": sc}
+
+    # 7. 自主纠错能力 (self_correction_ability)
+    if "self_correction_ability" not in result:
+        result["self_correction_ability"] = {
+            "value": "在答题与互动中能结合解析快速纠偏",
+            "evidence": ["日常自适应学习基线"],
+            "score": 72,
+        }
+
+    return result
+
+
 class ProfileService:
     """学习者画像服务 — CRUD、LLM 推理与评分。"""
 
@@ -95,15 +179,14 @@ class ProfileService:
 
         async def _upsert(db: AsyncSession) -> UserProfile:
             now = datetime.now(timezone.utc)
-            stmt = pg_insert(UserProfile).values(
+            # 已存在则不改动任何列（ON DUPLICATE KEY UPDATE user_id = user_id 是空操作）
+            stmt = mysql_insert(UserProfile).values(
                 user_id=user_id,
                 overall_score=0,
                 scored_at=None,
                 created_at=now,
                 updated_at=now,
-            ).on_conflict_do_nothing(
-                constraint="uq_user_profiles_user",
-            )
+            ).on_duplicate_key_update(user_id=user_id)
             await db.exec(stmt)  # type: ignore[arg-type]
             await db.flush()
 
@@ -137,7 +220,7 @@ class ProfileService:
         user_id: int,
         db: AsyncSession | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """获取用户画像维度明细。"""
+        """获取用户画像维度明细；缺失维度由基线学情即时（JIT）装配补全。"""
         logger.info("[ProfileService] get_dimensions — user=%d", user_id)
 
         async def _query(db: AsyncSession) -> dict[str, dict[str, Any]]:
@@ -148,7 +231,7 @@ class ProfileService:
                     )
                 )
             ).all()
-            return {
+            existing = {
                 row.dimension_key: {
                     "value": row.value or "",
                     "evidence": row.evidence or [],
@@ -156,6 +239,7 @@ class ProfileService:
                 }
                 for row in rows
             }
+            return await _synthesize_jit_dimensions(user_id, db, existing)
 
         if db is None:
             async with session_scope() as db:
@@ -426,8 +510,8 @@ class ProfileService:
                 )
 
                 logger.info("[ProfileService] onboarding 调用LLM推理: user_id=%s", user_id)
-                prompt = prompts.get("profile").render(
-                    "onboarding",
+                prompt = load_prompt(
+                    _PROFILE_PROMPTS_DIR / "onboarding.md",
                     onboarding_data=json.dumps(base_info, ensure_ascii=False),
                 )
                 resp = await self.llm.json(
@@ -494,8 +578,8 @@ class ProfileService:
 
                 # 3. 调用 LLM 推理
                 logger.info("[ProfileService] 事件推理调用LLM: user_id=%s", user_id)
-                prompt = prompts.get("profile").render(
-                    "events_inference",
+                prompt = load_prompt(
+                    _PROFILE_PROMPTS_DIR / "events_inference.md",
                     events_md=events_md,
                     profile_text=profile_text,
                 )
@@ -558,8 +642,8 @@ class ProfileService:
                 {"base_info": base_info, "dimensions": dimensions},
                 ensure_ascii=False,
             )
-            prompt = prompts.get("profile").render(
-                "score",
+            prompt = load_prompt(
+                _PROFILE_PROMPTS_DIR / "score.md",
                 profile_text=profile_text,
             )
 

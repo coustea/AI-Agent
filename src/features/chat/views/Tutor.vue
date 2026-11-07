@@ -1,5 +1,5 @@
 <template>
-  <div :class="['tutor-dashboard', `mode-${chatMode}`]">
+  <div class="tutor-dashboard">
 
     <main class="dashboard-main">
       <aside class="session-sidebar" :class="{ collapsed: sessionSidebarCollapsed }">
@@ -10,7 +10,6 @@
             <span class="brand-text">Mentorly</span>
           </div>
           <button
-              v-if="chatMode !== 'digital_human'"
               class="collapse-toggle-btn"
               @click="sessionSidebarCollapsed = !sessionSidebarCollapsed"
               :title="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
@@ -172,49 +171,15 @@
       </aside>
 
       <section class="chat-container">
-
-        <div v-if="chatMode === 'digital_human'" class="digital-human-stage">
-          <DigitalHumanCanvas
-              :is-ready="isAvatarReady"
-              :is-connected="isAvatarConnected"
-              :state="digitalHumanState"
-              :error-message="avatarError || digitalHumanBackendStatus"
-              :audio-enabled="avatarAudioEnabled"
-              :idle-countdown="avatarIdleCountdown"
-              ref="canvasRef"
-              @enable-audio="enableAvatarAudio"
-              @disconnect="disconnectAvatar"
-              @reconnect="handleAvatarReconnect"
-          />
-
-          <div class="digital-human-status-overlay" :class="{ active: isAIThinking || isAvatarSpeaking || isVadListening || isAsrProcessing }">
-            <div class="speech-wave" v-if="isAvatarSpeaking">
-              <span></span><span></span><span></span><span></span><span></span>
-            </div>
-            <div class="thinking-dots" v-else-if="isAIThinking">
-              <span></span><span></span><span></span>
-            </div>
-            <div class="asr-processing-dot" v-else-if="isAsrProcessing"></div>
-            <div class="listening-dot" v-else-if="isVadListening"></div>
-            <div class="status-badge">{{ digitalHumanStatusText }}</div>
-          </div>
-        </div>
-
         <div class="chat-interaction-area">
           <div class="chat-viewport" ref="chatScroll">
-            <div class="standard-welcome" v-if="chatMode === 'standard' && messages.length === 0">
+            <div class="standard-welcome" v-if="messages.length === 0">
               <h2>你好，{{ userName }}。欢迎回到 Mentorly。</h2>
-            </div>
-
-            <div class="welcome-banner" v-if="chatMode === 'digital_human' && messages.length === 0">
-              <div class="welcome-icon"><Cpu /></div>
-              <h3>进入您的专属认知书房</h3>
-              <p class="cognitive-note">在这里，每一次对话都会成为塑形您学习画像的线索。<br>我支持跨媒介文献与视听分析，我们将共同构建您的个性化认知图谱。</p>
             </div>
 
             <!-- 本地附件上传状态。回答前的 agent 状态由后端 SSE activity 事件驱动。 -->
             <div
-              v-if="chatMode === 'standard' && uploadingFile && !streamingMsgId"
+              v-if="uploadingFile && !streamingMsgId"
               class="thinking-indicator-row"
             >
               <div class="thinking-avatar">
@@ -239,9 +204,7 @@
                   msg.role === 'user'
                   || getDisplayContent(msg)
                   || msg.attachments?.length
-                  || msg.agentActivities?.length
-                  || msg.videoPreparing
-                  || msg.video
+                  || msg.run
                 "
                 :class="['message-row', msg.role]"
               >
@@ -302,18 +265,14 @@
                     </a>
                   </div>
 
-                  <AgentActivityCard
-                    v-if="msg.role === 'ai' && !msg.videoOnly && msg.agentActivities?.length && !getDisplayContent(msg)"
-                    :activities="msg.agentActivities"
-                  />
+                  <ChatRunPanel v-if="msg.run" :run="msg.run" />
 
                   <div
-                    v-if="!msg.videoOnly && getDisplayContent(msg) && !msg.failed"
+                    v-if="getDisplayContent(msg)"
                     :class="[
                       'bubble',
                       'markdown-body',
                       msg.role === 'ai' ? 'assistant-answer' : 'user-message-bubble',
-                      { 'digital-human-bubble': chatMode === 'digital_human' && msg.role === 'ai' },
                     ]"
                   >
                     <div v-if="msg.role === 'user'" class="user-plain-text">{{ getDisplayContent(msg) }}</div>
@@ -354,7 +313,7 @@
                   </div>
 
                   <div
-                    v-if="msg.role === 'ai' && !msg.videoOnly && getDisplayContent(msg) && !isStreamingMessage(msg)"
+                    v-if="msg.role === 'ai' && getDisplayContent(msg) && !isStreamingMessage(msg)"
                     class="message-actions"
                   >
                     <button type="button" @click.stop="copyAssistantAnswer(msg)">
@@ -366,11 +325,7 @@
                     </button>
                   </div>
 
-                  <ChatVideoArtifact
-                    v-if="msg.videoPreparing || msg.video"
-                    :video="msg.video"
-                    :preparing="msg.videoPreparing"
-                  />
+
                 </div>
               </div>
             </template>
@@ -453,20 +408,7 @@
                     <span>{{ uploadingFile ? '上传中' : '附件' }}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    class="input-tool-btn"
-                    :class="{ 'is-active-blue': enableWebSearch }"
-                    @click="enableWebSearch = !enableWebSearch"
-                    :aria-pressed="enableWebSearch"
-                  >
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="btn-icon" aria-hidden="true">
-                      <circle cx="12" cy="12" r="9"></circle>
-                      <ellipse cx="12" cy="12" rx="4.5" ry="9"></ellipse>
-                      <line x1="3" y1="12" x2="21" y2="12"></line>
-                    </svg>
-                    <span>联网</span>
-                  </button>
+
 
                   <button
                     type="button"
@@ -496,47 +438,7 @@
                 </div>
 
                 <div class="action-right">
-                  <div v-if="chatMode === 'digital_human'" class="minimal-speech-rate">
-                    <span class="rate-label">语速</span>
-                    <input
-                      type="range"
-                      v-model.number="avatarSpeechRate"
-                      min="0.8"
-                      max="1.5"
-                      step="0.1"
-                      :disabled="isAvatarSpeaking"
-                      @change="handleAvatarSpeechRateChange(avatarSpeechRate)"
-                      class="rate-slider-input"
-                    />
-                    <span class="rate-value">{{ avatarSpeechRate.toFixed(1) }}x</span>
-                  </div>
-
-                  <button
-                      v-if="chatMode === 'digital_human'"
-                      type="button"
-                      class="minimal-icon-btn voice-chat-btn"
-                      :class="{ 'is-active': isVoiceChatting }"
-                      @click="handleVoiceChatToggle"
-                      :aria-label="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
-                      :title="isVoiceChatting ? '结束语音对话' : '开启语音通话'"
-                  >
-                    <div class="voice-bars-icon" aria-hidden="true">
-                      <span class="bar"></span><span class="bar"></span><span class="bar"></span><span class="bar"></span>
-                    </div>
-                  </button>
-
-                  <button
-                    v-if="chatMode === 'digital_human'"
-                    type="button"
-                    class="minimal-icon-btn voice"
-                    :class="{ 'is-recording': isRecording }"
-                    @click="handleVoiceToggle"
-                    :aria-label="isRecording ? '结束连续语音' : '开启连续语音'"
-                    :title="isRecording ? '结束连续语音' : '开启连续语音'"
-                  >
-                    <Microphone class="btn-icon" aria-hidden="true" />
-                  </button>
-
+                  <button v-if="isResponding" type="button" class="btn btn-cancel" @click="stopGeneration">停止生成</button>
                   <button
                     type="submit"
                     class="minimal-send-btn"
@@ -564,58 +466,6 @@
         <input ref="fileInput" type="file" multiple accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.log,.png,.jpg,.jpeg,.gif,.webp" style="display:none" @change="onCombinedFileSelected" />
       </section>
     </main>
-
-    <div
-        class="fab-container"
-        :class="{ 'is-dragging': isDragging, 'is-dimmed': isDimmed, 'stick-right': isStickRight }"
-        :style="{ left: fabPos.x + 'px', top: fabPos.y + 'px' }"
-        @mousedown="startDrag"
-        @touchstart="startDrag"
-        @mouseenter="resetDimTimer"
-    >
-      <div class="fab-button">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
-          <path d="M11 2L13.2 8.8L20 11L13.2 13.2L11 20L8.8 13.2L2 11L8.8 8.8L11 2ZM18.5 15.5L19.5 18.5L22.5 19.5L19.5 20.5L18.5 23.5L17.5 20.5L14.5 19.5L17.5 18.5L18.5 15.5Z"/>
-        </svg>
-      </div>
-
-      <transition name="fab-menu-fade">
-        <div v-if="showFabMenu" class="fab-menu" @mousedown.stop @touchstart.stop>
-          <div
-              class="fab-menu-item"
-              :class="{ active: chatMode === 'standard' }"
-              @click="setChatMode('standard')"
-          >
-            <div class="menu-icon-box">
-              <ChatLineRound class="nav-icon" />
-            </div>
-            <div class="menu-text-content">
-              <div class="menu-title">图文交互</div>
-              <div class="menu-desc">文字、图片多模态交流</div>
-            </div>
-            <div class="check-icon" v-if="chatMode === 'standard'">
-              <CircleCheckFilled class="check-icon-glyph" />
-            </div>
-          </div>
-          <div
-              class="fab-menu-item"
-              :class="{ active: chatMode === 'digital_human' }"
-              @click="setChatMode('digital_human')"
-          >
-            <div class="menu-icon-box">
-              <Avatar class="nav-icon" />
-            </div>
-            <div class="menu-text-content">
-              <div class="menu-title">数字人互动</div>
-              <div class="menu-desc">与数字人进行语音对话</div>
-            </div>
-            <div class="check-icon" v-if="chatMode === 'digital_human'">
-              <CircleCheckFilled class="check-icon-glyph" />
-            </div>
-          </div>
-        </div>
-      </transition>
-    </div>
 
     <!-- 删除对话确认框 -->
     <Teleport to="body">
@@ -655,17 +505,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, computed, watch } from 'vue'
+import { ref, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, computed } from 'vue'
 import {
   PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent
 } from 'reka-ui'
 import {
   PhChatCenteredText as ChatLineRound,
-  PhUser as Avatar,
-  PhCpu as Cpu,
   PhHeadset as Service,
   PhUser as UserFilled,
-  PhMicrophone as Microphone,
   PhFileText as Document,
   PhChat as ChatLineSquare,
   PhTrash as Delete,
@@ -675,18 +522,15 @@ import {
   PhMagnifyingGlass as Search,
   PhClock as Timer,
   PhGraph as DataLine,
-  PhCheckCircle as CircleCheckFilled,
   PhSpinner as Loading
 } from '@phosphor-icons/vue'
 import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
-import AgentActivityCard from '@/features/chat/components/AgentActivityCard.vue'
-import ChatVideoArtifact from '@/features/chat/components/ChatVideoArtifact.vue'
+import ChatRunPanel from '@/features/chat/components/ChatRunPanel.vue'
 
-import { triggerGlobalProfileRefresh } from '@/features/profile/model/useGlobalProfile'
-import { useChatStreamManager } from '@/features/chat/composables/useChatStreamManager'
+import { useChatRun } from '@/features/chat/composables/useChatRun'
 import {
   uploadFile,
   getSessions,
@@ -697,30 +541,18 @@ import {
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
-  ChatVideoArtifact as ChatVideoArtifactData,
 } from '@/features/chat/types/chat'
-import type { ChatEvent } from '@/features/chat/types/chatEvent'
-import { useDigitalHuman } from '@/features/chat/digital-human/model/useDigitalHuman'
-import {
-  selectSessionForMode,
-  type TutorChatMode,
-} from '@/features/chat/model/chatModeSession'
+import { isRunActive, type RunState } from '@/features/chat/types/chatEvent'
 import { consumeTutorEntryIntent } from '@/features/chat/model/tutorEntryIntent'
-import DigitalHumanCanvas from '@/features/chat/digital-human/views/DigitalHumanCanvas.vue'
 import {
   type PendingFile,
   type Attachment,
   type ChatMsg,
-  assignPersistedAssistantMessageId,
-  type AgentActivity,
   getDocumentType,
   getDocumentIconColor,
   formatFileSize,
   formatRelativeTime,
-  finalizeAssistantGeneration,
   getInputToolStateKey,
-  isInsideOpenFence,
-  takeNextStreamUnit,
 } from './tutorUtils'
 
 defineOptions({ name: 'Tutor' })
@@ -729,14 +561,10 @@ const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 const { userName } = useCurrentUser()
 
-// 聊天模式：standard（文本）| digital_human（数字人）
-const chatMode = ref<TutorChatMode>('standard')
 // 用户输入文本
 const userInput = ref('')
 // AI 是否正在思考/生成中
 const isAIThinking = ref(false)
-const digitalHumanBackendStatus = ref('')
-const asrRecoveryStatus = ref('')
 const chatScroll = ref<HTMLElement | null>(null)
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const messageFormRef = ref<HTMLFormElement | null>(null)
@@ -744,10 +572,9 @@ const isExpandedInput = ref(false)
 const isComposing = ref(false)
 
 // 联网搜索开关
-const enableWebSearch = ref(false)
 // 是否需要生成教学图解
 const needTeachingDiagram = ref(false)
-// 勾选后本轮只生成视频，不展示文字或图解回答
+// 本轮请求包含视频生成
 const needVideo = ref(false)
 
 const imgPreviewVisible = ref(false)
@@ -764,316 +591,16 @@ const isDeleteConfirmVisible = ref(false)
 const sessionToDeleteId = ref<string | null>(null)
 const sessionToDeleteTitle = ref('')
 
-const isRecording = ref(false)
-const isVoiceChatting = ref(false)
-const lastAsrText = ref('')
-const hasSpeechDetected = ref(false)
-const lastAsrCommittedText = ref('')
-const asrPreviewMessageId = ref<number | null>(null)
-let lastAsrCommitAt = 0
-
-const clearAsrPreview = () => {
-  if (asrPreviewMessageId.value === null) return
-  const index = messages.value.findIndex(message => message.id === asrPreviewMessageId.value)
-  if (index >= 0) messages.value.splice(index, 1)
-  asrPreviewMessageId.value = null
-}
-
-const updateAsrPreview = (text: string) => {
-  const normalized = text.replace(/\s+/g, ' ').trim()
-  if (!normalized) return
-  lastAsrText.value = normalized
-  const existing = asrPreviewMessageId.value === null
-    ? null
-    : messages.value.find(message => message.id === asrPreviewMessageId.value && message.role === 'user')
-  if (existing) {
-    existing.content = normalized
-  } else {
-    const messageId = Date.now()
-    messages.value.push({ id: messageId, role: 'user', content: normalized, time: now() })
-    asrPreviewMessageId.value = messageId
-  }
-  scrollToBottom()
-}
 
 
-const canvasRef = ref<InstanceType<typeof DigitalHumanCanvas> | null>(null)
-const {
-  isConnected: isAvatarConnected,
-  isAvatarReady,
-  isSpeaking: isAvatarSpeaking,
-  isListening: isVadListening,
-  error: avatarError,
-  digitalHumanState,
-  audioEnabled: avatarAudioEnabled,
-  speechRate: avatarSpeechRate,
-  idleCountdown: avatarIdleCountdown,
-  connect: connectAvatar,
-  disconnect: disconnectAvatar,
-  sendText: sendAvatarText,
-  setSpeechRate: setAvatarSpeechRate,
-  setNeedDiagram: setAvatarNeedDiagram,
-  setExternalActivityBusy: setAvatarExternalActivityBusy,
-  startVad,
-  stopVad,
-  setContinuousVoice,
-  switchSession: switchAvatarSession,
-  enableAudio: enableAvatarAudio,
-  setPlayerContainer,
-} = useDigitalHuman({
-  onConnectionChange: (connected) => {
-    if (connected) return
 
-    // An unexpected WebSocket close must release every voice/turn lock. If an
-    // empty assistant placeholder survives, the composer stays disabled as
-    // "AI 正在回答" and the next microphone session can never start cleanly.
-    isVoiceChatting.value = false
-    isRecording.value = false
-    hasSpeechDetected.value = false
-    digitalHumanBackendStatus.value = ''
-    asrRecoveryStatus.value = ''
-    clearAsrProcessing()
-    clearAsrPreview()
-    clearAvatarThinkingTimeout()
-    isAIThinking.value = false
 
-    if (streamingMsgId.value !== null) {
-      flushPendingStreamText(true)
-      commitStreamTextToMessage(streamingMsgId.value)
-      const index = messages.value.findIndex(message => message.id === streamingMsgId.value)
-      const pendingMessage = index >= 0 ? messages.value[index] : null
-      if (
-        pendingMessage
-        && !pendingMessage.content.trim()
-        && !pendingMessage.video
-      ) {
-        messages.value.splice(index, 1)
-      }
-    }
-    streamingMsgId.value = null
-    streamingMsgRef.value = null
-  },
-  onStatus: (status: any) => {
-    if (status.stage === 'asr_empty') {
-      digitalHumanBackendStatus.value = ''
-      asrRecoveryStatus.value = status.message || '未识别到有效语音，正在重新倾听'
-      clearAsrPreview()
-      clearAsrProcessing()
-      clearAvatarThinkingTimeout()
-      isAIThinking.value = false
-    } else {
-      digitalHumanBackendStatus.value = status.message || ''
-    }
-    // 数字人模式下不显示 agent activity 卡片
-    // 数字人有语音播报，用户通过听就能知道进度，不需要文本模式的复杂步骤卡片
-    // 这些卡片反而会和语音播报不同步，造成视觉干扰
-  },
-  onThinkingStart: () => {
-    // 数字人模式下简化思考动画：只显示状态覆盖层，不创建 AI 消息占位
-    // AI 消息占位在 onAssistantChunk 首次到达时创建
-    asrRecoveryStatus.value = ''
-    isAIThinking.value = true
-    startAvatarThinkingTimeout()
-  },
-  onThinkingEnd: () => {
-    // 后端回答已完成（assistant_complete），立即结束思考动画
-    // 参照文本模式行为：流完成即清除思考状态，不等 avatar_stopped
-    isAIThinking.value = false
-    clearAvatarThinkingTimeout()
-  },
-  onAssistantChunk: (chunk) => {
-    digitalHumanBackendStatus.value = ''
-    asrRecoveryStatus.value = ''
-    clearAsrProcessing()
-    startAvatarThinkingTimeout()
-    if (isVoiceChatting.value && isVadListening.value) {
-      stopVad()
-      isRecording.value = false
-    }
-    if (streamingMsgId.value === null) {
-      const aiMsgId = Date.now() + 1
-      messages.value.push({
-        id: aiMsgId,
-        role: 'ai',
-        content: '',
-        time: now(),
-      })
-      streamingMsgId.value = aiMsgId
-      streamingMsgRef.value = messages.value[messages.value.length - 1] || null
-      // 数字人模式下不设置 isAIThinking
-      // 思考状态完全由 onThinkingStart/onThinkingEnd 控制
-      // avatar_speaking 已经触发 onThinkingEnd，不应再设回 true
-    }
-    if (streamingMsgId.value !== null) {
-      enqueueStreamChunk(streamingMsgId.value, chunk)
-    }
-  },
-  onVideo: (data) => {
-    const assistantMessageId = Number(data?.assistant_message_id)
-    const sessionId = String(data?.session_id || digitalHumanSessionId.value || '')
-    const video = data?.video
-    if (!Number.isSafeInteger(assistantMessageId) || assistantMessageId <= 0 || !sessionId || !video) return
-
-    let aiMsg = streamingMsgId.value !== null
-      ? messages.value.find(message => message.id === streamingMsgId.value && message.role === 'ai')
-      : undefined
-    if (!aiMsg) {
-      aiMsg = {
-        id: assistantMessageId,
-        role: 'ai',
-        content: '',
-        time: now(),
-        videoOnly: true,
-        agentActivities: [],
-      }
-      messages.value.push(aiMsg)
-    }
-    aiMsg.id = assistantMessageId
-    aiMsg.content = ''
-    aiMsg.videoOnly = true
-    aiMsg.agentActivities = []
-    aiMsg.video = video
-    streamingMsgId.value = assistantMessageId
-    streamingMsgRef.value = aiMsg
-    scrollToBottom()
-  },
-  onAssistantComplete: () => {
-    digitalHumanBackendStatus.value = ''
-    clearAvatarThinkingTimeout()
-    clearAsrProcessing()
-    isStreamDone = true
-    flushPendingStreamText(true)
-    if (streamingMsgId.value !== null) {
-      commitStreamTextToMessage(streamingMsgId.value)
-    }
-    isAIThinking.value = false
-    streamingMsgId.value = null
-    streamingMsgRef.value = null
-    triggerGlobalProfileRefresh()
-    // 不再在 assistant_complete 时重启 VAD
-    // 因为此时数字人可能还在说话（TTS 播报中），麦克风会拾取到回声
-    // 连续语音的 VAD 重启由 useDigitalHuman 在 avatar_stopped 后统一调度。
-  },
-  onAsrPartial: (text) => {
-    asrRecoveryStatus.value = ''
-    updateAsrPreview(text)
-  },
-  onAsrResult: (text) => {
-    if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
-      setAvatarNeedDiagram(needTeachingDiagram.value)
-    }
-    const normalized = text.replace(/\s+/g, ' ').trim()
-    lastAsrText.value = normalized
-    asrRecoveryStatus.value = ''
-    // Final ASR text is no longer "processing". Commit the user bubble now;
-    // turn_start will switch the overlay to thinking after the backend's short
-    // transcript render handoff window.
-    clearAsrProcessing()
-    if (!normalized) {
-      clearAsrPreview()
-      return
-    }
-    if (normalized) {
-      const nowTs = Date.now()
-      const isDup = normalized === lastAsrCommittedText.value
-      const isNearDup = normalized.includes(lastAsrCommittedText.value) || lastAsrCommittedText.value.includes(normalized)
-      const committedRecently = nowTs - lastAsrCommitAt < 1400
-      if (isDup || (isNearDup && committedRecently)) {
-        clearAsrPreview()
-        return
-      }
-      lastAsrCommittedText.value = normalized
-      lastAsrCommitAt = nowTs
-      const preview = asrPreviewMessageId.value === null
-        ? null
-        : messages.value.find(message => message.id === asrPreviewMessageId.value && message.role === 'user')
-      if (preview) {
-        preview.content = normalized
-        asrPreviewMessageId.value = null
-      } else {
-        messages.value.push({
-          id: Date.now(),
-          role: 'user',
-          content: normalized,
-          time: now(),
-        })
-      }
-      // Do not create an empty AI row here. It can pull the viewport below the
-      // freshly recognized user text and make that transcript appear missing.
-      // The AI row is created by onAssistantChunk when the complete reply is
-      // actually ready; turn_start exclusively controls the thinking state.
-      scrollToBottom()
-    }
-  },
-  onVadStateChange: (listening) => {
-    isRecording.value = listening
-    if (listening) {
-      asrRecoveryStatus.value = ''
-    } else {
-      hasSpeechDetected.value = false
-      if (chatMode.value === 'digital_human' && isVoiceChatting.value) {
-        startAsrProcessing(8000)
-      } else {
-        lastAsrText.value = ''
-        clearAsrProcessing()
-      }
-    }
-  },
-  onSpeechDetectedChange: (detected) => {
-    hasSpeechDetected.value = detected
-    if (detected) asrRecoveryStatus.value = ''
-  },
-  onError: (msg, context) => {
-    if (context?.source === 'player') {
-      // Player readiness belongs to the video transport, not the active LLM
-      // turn. Keep the current thinking/message state until the turn itself
-      // completes or fails.
-      toast.error({ message: msg, plain: true })
-      return
-    }
-    setAvatarExternalActivityBusy(false)
-    digitalHumanBackendStatus.value = ''
-    asrRecoveryStatus.value = ''
-    clearAvatarThinkingTimeout()
-    clearAsrProcessing()
-    if (streamingMsgId.value !== null) {
-      flushPendingStreamText(true)
-      commitStreamTextToMessage(streamingMsgId.value)
-    }
-    if (isAIThinking.value) {
-      isAIThinking.value = false
-      streamingMsgId.value = null
-      streamingMsgRef.value = null
-    }
-    toast.error({ message: msg, plain: true })
-  },
-  onAvatarReady: () => {
-    nextTick(() => {
-      const container = canvasRef.value?.getContainer()
-      if (container) {
-        setPlayerContainer(container)
-      }
-    })
-  },
-})
-
-// 兜底：当 canvasRef 变为可用时自动设置 player container
-// 解决首次连接时 stream_info 到达时 canvasRef 尚未挂载的问题
-watch(canvasRef, (newInstance) => {
-  if (newInstance && chatMode.value === 'digital_human') {
-    const container = newInstance.getContainer()
-    if (container) {
-      setPlayerContainer(container)
-    }
-  }
-})
 
 const uploadingFile = ref(false)
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFiles = ref<PendingFile[]>([])
 const inputToolStateKey = computed(() => getInputToolStateKey({
   uploadingFile: uploadingFile.value,
-  enableWebSearch: enableWebSearch.value,
   needTeachingDiagram: needTeachingDiagram.value,
   needVideo: needVideo.value,
 }))
@@ -1083,12 +610,7 @@ const inputToolStateKey = computed(() => getInputToolStateKey({
 const sessions = ref<ChatSession[]>([])
 // 当前活跃会话 ID
 const currentSessionId = ref<string | undefined>(undefined)
-const digitalHumanSessionId = ref<string | undefined>(undefined)
-const activeSessionId = computed(() => (
-  chatMode.value === 'digital_human'
-    ? digitalHumanSessionId.value
-    : currentSessionId.value
-))
+const activeSessionId = computed(() => currentSessionId.value)
 const sessionSidebarCollapsed = ref(false)
 const searchPopoverVisible = ref(false)
 const historyPopoverVisible = ref(false)
@@ -1101,11 +623,10 @@ const messages = ref<ChatMsg[]>([])
 // 正在流式输出的消息 ID
 const streamingMsgId = ref<number | null>(null)
 // 正在流式输出的消息引用
-const streamingMsgRef = ref<ChatMsg | null>(null)
 
 /**
  * 当前会话是否正处于回答链路中。
- * 覆盖附件上传、等待首个 token、流式输出和数字人回答阶段。
+ * 覆盖附件上传、等待首个 token、流式输出阶段。
  */
 const isResponding = computed(() => (
   uploadingFile.value
@@ -1118,260 +639,28 @@ const canSendMessage = computed(() => (
   && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
 ))
 
-// 流式消息管理器（全局单例）
-const streamManager = useChatStreamManager()
-// 数字人思考超时定时器
-let avatarThinkingTimeout: ReturnType<typeof setTimeout> | null = null
-const isAvatarThinkingSlow = ref(false)
-const isAsrProcessing = ref(false)
-let asrProcessingTimer: ReturnType<typeof setTimeout> | null = null
-
-const fabPos = ref({ x: 16, y: 0 })
-const isDragging = ref(false)
-const showFabMenu = ref(false)
-const isDimmed = ref(false)
-const isStickRight = computed(() => fabPos.value.x > window.innerWidth / 2)
-
-let dragStartX = 0
-let dragStartY = 0
-let dragInitialX = 0
-let dragInitialY = 0
-let dragDistance = 0
-let dimTimer: number | null = null
-
-type AgentStatusPayload = {
-  activity_id: string
-  kind: AgentActivity['kind']
-  stage?: string
-  status: 'running' | 'done' | 'failed'
-  tool_name?: string
-  title: string
-  summary?: string
-  message?: string
-  detail?: AgentActivity['detail']
-}
-
-const getCurrentAiTextStarted = (aiMsg?: ChatMsg) => Boolean(
-  aiMsg
-  && (
-    aiMsg.content
-    || streamDisplayText.value
-    || pendingRenderQueue.length > pendingRenderQueueStart
-    || streamRenderedChunks.length
-  )
-)
-
-const applyAgentStatus = (aiMsg: ChatMsg | undefined, payload: AgentStatusPayload) => {
-  if (!aiMsg) return
-  const activity: AgentActivity = {
-    activity_id: payload.activity_id,
-    kind: payload.kind,
-    stage: payload.stage,
-    status: payload.status,
-    tool_name: payload.tool_name,
-    title: payload.title,
-    summary: payload.summary,
-    message: payload.message,
-    detail: payload.detail,
-  }
-  const activities = aiMsg.agentActivities || (aiMsg.agentActivities = [])
-  const index = activities.findIndex(item => item.activity_id === activity.activity_id)
-  if (index >= 0) activities.splice(index, 1, activity)
-  else activities.push(activity)
-}
-
-// 将后端 SSE 事件应用到 AI 消息上（活动状态、图解就绪等）
-const applyChatEvent = (aiMsg: ChatMsg | undefined, event: ChatEvent) => {
-  if (!aiMsg) return
-
-  const data = (event.data || {}) as Record<string, unknown>
-
-  if (event.event === 'content.delta') {
-    return
-  }
-
-  if (event.event === 'content.replace') {
-    if (aiMsg.videoOnly) return
-    const content = typeof data.content === 'string' ? data.content : ''
-    if (content) {
-      if (streamingMsgRef.value?.id === aiMsg.id || streamingMsgId.value === aiMsg.id) {
-        streamFinalContent = content
-        return
-      }
-      stopStreamFlushLoop()
-      pendingRenderQueue.length = 0
-      pendingRenderQueueStart = 0
-      pendingRenderOffset = 0
-      pendingRenderChars = 0
-      streamRenderedChunks.length = 0
-      aiMsg.content = content
-      streamDisplayText.value = content
-    }
-    return
-  }
-
-  if (event.event === 'message.completed' || event.event === 'message.failed') {
-    const isFailed = event.event === 'message.failed'
-    const errorText = isFailed
-      ? (typeof data.error === 'string' && data.error.trim()) || event.message || '运行超时或服务异常'
-      : undefined
-    finalizeAssistantGeneration(
-      aiMsg,
-      isFailed ? 'failed' : 'done',
-      errorText,
-    )
-    if (isFailed && !aiMsg.content) {
-      aiMsg.content = errorText || '运行超时或服务异常'
-    }
-    return
-  }
-
-  if (event.event === 'message.started') {
-    if (getCurrentAiTextStarted(aiMsg)) return
-    const title = typeof data.title === 'string' && data.title.trim()
-      ? data.title.trim()
-      : event.message.trim() || '正在思考'
-    applyAgentStatus(aiMsg, {
-      activity_id: typeof data.activity_id === 'string' && data.activity_id.trim()
-        ? data.activity_id.trim()
-        : 'workflow:current',
-      kind: 'workflow',
-      stage: typeof data.stage === 'string' ? data.stage : 'run_started',
-      status: 'running',
-      title,
-      message: typeof data.message === 'string' && data.message.trim()
-        ? data.message.trim()
-        : title,
-      summary: typeof data.summary === 'string' ? data.summary : undefined,
-    })
-    return
-  }
-
-  if (
-    event.event === 'activity.running'
-    || event.event === 'activity.completed'
-    || event.event === 'activity.failed'
-  ) {
-    const toolName = typeof data.tool_name === 'string' ? data.tool_name : undefined
-    const activityId = String(data.activity_id || '').trim()
-    const kind = data.kind === 'agent' || data.kind === 'tool' || data.kind === 'attachment' || data.kind === 'workflow'
-      ? data.kind
-      : 'workflow'
-    const detail = (
-      data.detail && typeof data.detail === 'object'
-        ? data.detail
-        : {}
-    ) as AgentActivity['detail']
-    const title = typeof data.title === 'string' && data.title.trim()
-      ? data.title.trim()
-      : event.message.trim() || '正在处理'
-    if (!activityId) return
-
-    applyAgentStatus(aiMsg, {
-      activity_id: activityId,
-      kind,
-      stage: typeof data.stage === 'string' ? data.stage : undefined,
-      status: event.event === 'activity.completed' ? 'done' : event.event === 'activity.failed' ? 'failed' : 'running',
-      tool_name: toolName || detail?.tool_name,
-      title,
-      summary: typeof data.summary === 'string' && data.summary
-        ? data.summary
-        : detail?.files?.length
-          ? detail.files.join('、')
-          : detail?.input,
-      message: typeof data.message === 'string' && data.message.trim()
-        ? data.message.trim()
-        : event.message,
-      detail,
-    })
-  }
-}
-
-const clearAvatarThinkingTimeout = () => {
-  if (avatarThinkingTimeout) {
-    clearTimeout(avatarThinkingTimeout)
-    avatarThinkingTimeout = null
-  }
-  isAvatarThinkingSlow.value = false
-}
-
-const detachCurrentStreamCallbacks = () => {
-  if (!currentSessionId.value) return
-  const streamState = streamManager.getStreamState(currentSessionId.value)
-  if (streamState?.status === 'streaming') {
-    streamManager.resubscribe(currentSessionId.value, {})
-  }
-}
-
-const pauseForegroundStreaming = () => {
-  detachCurrentStreamCallbacks()
-  stopStreamFlushLoop()
-  if (streamingMsgId.value !== null) {
-    commitStreamTextToMessage(streamingMsgId.value)
-  }
-  streamingMsgRef.value = null
-}
-
-
-const clearAsrProcessing = () => {
-  isAsrProcessing.value = false
-  if (asrProcessingTimer) {
-    clearTimeout(asrProcessingTimer)
-    asrProcessingTimer = null
-  }
-}
-
-const startAsrProcessing = (timeoutMs = 6000) => {
-  isAsrProcessing.value = true
-  if (asrProcessingTimer) clearTimeout(asrProcessingTimer)
-  asrProcessingTimer = setTimeout(() => {
-    isAsrProcessing.value = false
-    asrProcessingTimer = null
-  }, timeoutMs)
-}
-
-const startAvatarThinkingTimeout = () => {
-  clearAvatarThinkingTimeout()
-  avatarThinkingTimeout = setTimeout(() => {
-    if (chatMode.value !== 'digital_human') return
-    if (!isAIThinking.value) return
-    // Long tool/RAG turns can legitimately exceed 30 seconds. This watchdog
-    // must never end the turn or expose the microphone preparation state while
-    // the backend is still producing the current answer.
-    isAvatarThinkingSlow.value = true
-    avatarThinkingTimeout = null
-  }, 30000)
-}
-
-// 流式渲染相关状态
+const chatRun = useChatRun()
 let scrollPending = false
-let streamFlushHandle: ReturnType<typeof window.setTimeout> | null = null
-// 当前显示的流式文本
-const streamDisplayText = ref('')
-const pendingRenderQueue: string[] = []
-let pendingRenderQueueStart = 0
-let pendingRenderOffset = 0
-let pendingRenderChars = 0
-let isStreamDone = false
-const streamRenderedChunks: string[] = []
-let streamFinalContent: string | null = null
 let lastAutoScrollAt = 0
-let lastChunkArrivedAt = 0
-const STREAM_FIRST_PAINT_UNITS = 1
-const STREAM_DEFAULT_UNITS_PER_TICK = 1
-const STREAM_FAST_UNITS_PER_TICK = 2
-const STREAM_BURST_UNITS_PER_TICK = 3
-const STREAM_DONE_UNITS_PER_TICK = 4
-const STREAM_BACKLOG_FAST_THRESHOLD = 120
-const STREAM_BACKLOG_BURST_THRESHOLD = 320
-const STREAM_BASE_DELAY_MS = 14
-const STREAM_MIN_DELAY_MS = 6
-const STREAM_MAX_DELAY_MS = 44
-const DIGITAL_HUMAN_STREAM_BASE_DELAY_MS = 40
-const DIGITAL_HUMAN_STREAM_MIN_DELAY_MS = 22
-const DIGITAL_HUMAN_STREAM_MAX_DELAY_MS = 90
 const STREAM_SCROLL_INTERVAL_MS = 64
 const STREAM_AUTO_SCROLL_BOTTOM_GAP_PX = 96
+
+const applyRun = (messageId: number, state: RunState) => {
+  const message = messages.value.find(item => item.id === messageId)
+  if (!message) return
+  message.run = state
+  message.content = state.content
+  message.failed = state.status === 'failed' || state.status === 'interrupted'
+  message.errorMessage = state.error
+  isAIThinking.value = isRunActive(state)
+  streamingMsgId.value = isRunActive(state) ? messageId : null
+  scrollToBottomThrottled()
+}
+
+const stopGeneration = async () => {
+  try { await chatRun.cancel() }
+  catch (error) { toast.error(getErrorMessage(error, '停止失败')) }
+}
 
 // 搜索框过滤后的会话列表
 const filteredSessions = computed(() => {
@@ -1393,18 +682,9 @@ const hasMoreSessions = computed(() => sessions.value.length > HISTORY_COLLAPSED
 // 判断消息是否处于流式输出中
 const isStreamingMessage = (msg: ChatMsg) => {
   if (msg.id !== streamingMsgId.value) return false
-  // 数字人模式下：只要还在流式输出（streamingMsgId 存在）就算 streaming
-  // 不依赖 isAIThinking，因为数字人说话时 isAIThinking 已经是 false
-  if (chatMode.value === 'digital_human') return true
   return isAIThinking.value
 }
-const getDisplayContent = (msg: ChatMsg) => {
-  if (msg.videoOnly) return ''
-  if (msg.id === streamingMsgId.value && streamDisplayText.value) {
-    return streamDisplayText.value
-  }
-  return msg.content
-}
+const getDisplayContent = (msg: ChatMsg) => msg.content
 
 const getImageAttachments = (attachments?: Attachment[] | null) => (
   (attachments || []).filter(item => item.type === 'image' && Boolean(item.url))
@@ -1425,38 +705,6 @@ const getImageGalleryClass = (attachments?: Attachment[] | null) => {
   return 'is-grid'
 }
 
-const isDigitalHumanPacedStream = () => chatMode.value === 'digital_human'
-
-const getDigitalHumanUnitsPerTick = (streamDone: boolean): number => {
-  const rate = Math.max(0.8, Math.min(1.5, Number(avatarSpeechRate.value) || 1.0))
-  if (streamDone) return rate >= 1.25 ? 3 : 2
-  if (rate <= 0.95) return 1
-  if (rate >= 1.2) return 2
-  return 1
-}
-
-type VoiceAsrStage = 'idle' | 'no_voice' | 'heard_voice' | 'transcribing'
-const voiceAsrStage = computed<VoiceAsrStage>(() => {
-  if (isAIThinking.value || isAvatarSpeaking.value) return 'idle'
-  if (isAsrProcessing.value) return 'transcribing'
-  if (isVadListening.value) {
-    return hasSpeechDetected.value ? 'heard_voice' : 'no_voice'
-  }
-  return 'idle'
-})
-
-const digitalHumanStatusText = computed(() => {
-  if (!isAvatarConnected.value) return '数字人未连接'
-  if (isAvatarSpeaking.value) return '正在播报中...'
-  if (isAIThinking.value && isAvatarThinkingSlow.value) return '正在深入思考，请稍候...'
-  if (isAIThinking.value) return '正在思考中...'
-  if (asrRecoveryStatus.value) return asrRecoveryStatus.value
-  if (voiceAsrStage.value === 'no_voice') return '倾听就绪'
-  if (voiceAsrStage.value === 'heard_voice') return '已检测到语音'
-  if (voiceAsrStage.value === 'transcribing') return '正在转文字...'
-  if (isVoiceChatting.value) return '正在准备语音识别...'
-  return '数字人已就绪'
-})
 
 const handleEnter = (e: KeyboardEvent) => {
   if (isComposing.value || e.isComposing) return
@@ -1535,269 +783,6 @@ const isNearBottom = () => {
   return gap <= STREAM_AUTO_SCROLL_BOTTOM_GAP_PX
 }
 
-const getUnitsPerTick = (backlogChars: number, inCodeBlock: boolean, streamDone: boolean): number => {
-  if (isDigitalHumanPacedStream()) {
-    const pacedUnits = getDigitalHumanUnitsPerTick(streamDone)
-    return inCodeBlock ? pacedUnits + 1 : pacedUnits
-  }
-  if (streamDone) {
-    if (backlogChars >= STREAM_BACKLOG_BURST_THRESHOLD) return STREAM_DONE_UNITS_PER_TICK + 1
-    return STREAM_DONE_UNITS_PER_TICK
-  }
-  if (backlogChars >= STREAM_BACKLOG_BURST_THRESHOLD) {
-    return inCodeBlock ? STREAM_BURST_UNITS_PER_TICK + 1 : STREAM_BURST_UNITS_PER_TICK
-  }
-  if (backlogChars >= STREAM_BACKLOG_FAST_THRESHOLD) {
-    return inCodeBlock ? STREAM_FAST_UNITS_PER_TICK + 1 : STREAM_FAST_UNITS_PER_TICK
-  }
-  return inCodeBlock ? STREAM_DEFAULT_UNITS_PER_TICK + 1 : STREAM_DEFAULT_UNITS_PER_TICK
-}
-
-const getNextStreamDelay = (
-  emittedText: string,
-  backlogChars: number,
-  inCodeBlock: boolean,
-  streamDone: boolean,
-): number => {
-  if (isDigitalHumanPacedStream()) {
-    const rate = Math.max(0.8, Math.min(1.5, Number(avatarSpeechRate.value) || 1.0))
-    let delay = DIGITAL_HUMAN_STREAM_BASE_DELAY_MS - Math.round((rate - 1.0) * 18)
-
-    if (/[。！？.!?]\s*$/.test(emittedText)) {
-      delay += 40
-    } else if (/[,，；;：:]\s*$/.test(emittedText)) {
-      delay += 18
-    } else if (/\n\s*$/.test(emittedText)) {
-      delay += 24
-    } else if (/[A-Za-z0-9_]\s$/.test(emittedText)) {
-      delay += 8
-    }
-
-    if (streamDone) {
-      delay -= 10
-    } else if (backlogChars >= 180) {
-      delay -= 8
-    } else if (backlogChars >= 80) {
-      delay -= 4
-    }
-
-    return Math.max(
-      DIGITAL_HUMAN_STREAM_MIN_DELAY_MS,
-      Math.min(DIGITAL_HUMAN_STREAM_MAX_DELAY_MS, delay),
-    )
-  }
-
-  let delay = inCodeBlock ? 8 : STREAM_BASE_DELAY_MS
-
-  if (/[。！？.!?]\s*$/.test(emittedText)) {
-    delay += 20
-  } else if (/[,，；;：:]\s*$/.test(emittedText)) {
-    delay += 10
-  } else if (/\n\s*$/.test(emittedText)) {
-    delay += 14
-  } else if (/[A-Za-z0-9_]\s$/.test(emittedText)) {
-    delay += 4
-  }
-
-  if (backlogChars >= STREAM_BACKLOG_BURST_THRESHOLD) {
-    delay -= 6
-  } else if (backlogChars >= STREAM_BACKLOG_FAST_THRESHOLD) {
-    delay -= 3
-  }
-
-  if (streamDone) {
-    delay -= 4
-  }
-
-  const idleMs = lastChunkArrivedAt ? Date.now() - lastChunkArrivedAt : 0
-  if (!streamDone && idleMs > 800 && backlogChars < STREAM_BACKLOG_FAST_THRESHOLD) {
-    delay += 6
-  }
-
-  return Math.max(STREAM_MIN_DELAY_MS, Math.min(STREAM_MAX_DELAY_MS, delay))
-}
-
-// 刷新待渲染队列中的文本到显示区域
-const flushPendingStreamText = (forceScroll = false, unitOverride?: number): number | undefined => {
-  if (pendingRenderQueueStart >= pendingRenderQueue.length) return
-  const aiMsg = streamingMsgRef.value
-  if (aiMsg) {
-    let unitsRemaining = typeof unitOverride === 'number'
-      ? unitOverride
-      : getUnitsPerTick(pendingRenderChars, isInsideOpenFence(streamDisplayText.value), isStreamDone)
-    let out = ''
-    let inCodeBlock = isInsideOpenFence(streamDisplayText.value)
-    while (unitsRemaining > 0 && pendingRenderQueueStart < pendingRenderQueue.length) {
-      const part = pendingRenderQueue[pendingRenderQueueStart] || ''
-      const available = part.length - pendingRenderOffset
-      if (available <= 0) {
-        pendingRenderQueueStart += 1
-        pendingRenderOffset = 0
-        continue
-      }
-      const take = Math.min(available, Math.max(1, takeNextStreamUnit(part.slice(pendingRenderOffset), inCodeBlock)))
-      out += part.slice(pendingRenderOffset, pendingRenderOffset + take)
-      pendingRenderOffset += take
-      pendingRenderChars -= take
-      unitsRemaining -= 1
-      inCodeBlock = isInsideOpenFence(streamDisplayText.value + out)
-      if (pendingRenderOffset >= part.length) {
-        pendingRenderQueueStart += 1
-        pendingRenderOffset = 0
-      }
-    }
-    if (!out) return
-    streamRenderedChunks.push(out)
-    streamDisplayText.value += out
-
-    if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-      pendingRenderQueue.length = 0
-      pendingRenderQueueStart = 0
-      pendingRenderOffset = 0
-      pendingRenderChars = 0
-    }
-    scrollToBottomThrottled(forceScroll)
-    return getNextStreamDelay(out, pendingRenderChars, inCodeBlock, isStreamDone)
-  }
-  return STREAM_BASE_DELAY_MS
-}
-
-const scheduleStreamFlush = (forceScroll = false, delayMs = STREAM_BASE_DELAY_MS) => {
-  if (streamFlushHandle != null) return
-  streamFlushHandle = window.setTimeout(() => {
-    streamFlushHandle = null
-    const nextDelay = flushPendingStreamText(forceScroll)
-    if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-      if (isStreamDone && streamingMsgId.value != null) {
-        const doneId = streamingMsgId.value
-        finishStream(doneId)
-      }
-      return
-    }
-    scheduleStreamFlush(false, nextDelay)
-  }, delayMs)
-}
-
-// 将流式文本块加入渲染队列
-const enqueueStreamChunk = (messageId: number, chunk: string) => {
-  if (!chunk) return
-  if (streamingMsgRef.value?.id !== messageId) return
-  lastChunkArrivedAt = Date.now()
-
-  // 数字人字幕只由 useDigitalHuman 的 TTS 时钟驱动。这里作为纯渲染
-  // 终点直接写入消息，不能再进入文本聊天的第二套流式缓冲。
-  if (isDigitalHumanPacedStream()) {
-    const aiMsg = streamingMsgRef.value
-    if (aiMsg) {
-      aiMsg.content += chunk
-      scrollToBottomThrottled(true)
-    }
-    return
-  }
-
-  pendingRenderQueue.push(chunk)
-  pendingRenderChars += chunk.length
-  const shouldPrimeFirstPaint =
-    streamRenderedChunks.length === 0
-    && !streamDisplayText.value
-    && pendingRenderQueueStart === 0
-    && pendingRenderOffset === 0
-    && pendingRenderChars === chunk.length
-  if (shouldPrimeFirstPaint) {
-    flushPendingStreamText(true, STREAM_FIRST_PAINT_UNITS)
-  }
-  if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-    return
-  }
-  scheduleStreamFlush()
-}
-
-const drainPendingStreamText = () => {
-  if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-    return
-  }
-  let out = ''
-  while (pendingRenderQueueStart < pendingRenderQueue.length) {
-    const part = pendingRenderQueue[pendingRenderQueueStart] || ''
-    const available = part.length - pendingRenderOffset
-    if (available <= 0) {
-      pendingRenderQueueStart += 1
-      pendingRenderOffset = 0
-      continue
-    }
-    out += part.slice(pendingRenderOffset)
-    pendingRenderChars -= available
-    pendingRenderQueueStart += 1
-    pendingRenderOffset = 0
-  }
-  if (out) {
-    streamRenderedChunks.push(out)
-    streamDisplayText.value += out
-  }
-  pendingRenderQueue.length = 0
-  pendingRenderQueueStart = 0
-  pendingRenderOffset = 0
-  pendingRenderChars = 0
-}
-
-const finishStream = (messageId: number) => {
-  commitStreamTextToMessage(messageId)
-  isAIThinking.value = false
-  streamingMsgId.value = null
-  streamingMsgRef.value = null
-  triggerGlobalProfileRefresh()
-}
-
-const completeStreamingMessage = (messageId: number) => {
-  isStreamDone = true
-  if (pendingRenderQueueStart >= pendingRenderQueue.length) {
-    finishStream(messageId)
-    return
-  }
-  scheduleStreamFlush(true, STREAM_MIN_DELAY_MS)
-}
-
-// 将流式渲染的文本正式提交到消息中
-const commitStreamTextToMessage = (messageId: number) => {
-  const aiMsg = streamingMsgRef.value && streamingMsgRef.value.id === messageId
-    ? streamingMsgRef.value
-    : messages.value.find(m => m.id === messageId)
-  if (!aiMsg) {
-    pendingRenderQueue.length = 0
-    pendingRenderQueueStart = 0
-    pendingRenderOffset = 0
-    pendingRenderChars = 0
-    streamRenderedChunks.length = 0
-    streamDisplayText.value = ''
-    return
-  }
-  drainPendingStreamText()
-  if (streamFinalContent !== null) {
-    aiMsg.content = streamFinalContent
-  } else if (streamRenderedChunks.length > 0) {
-    aiMsg.content += streamRenderedChunks.join('')
-  } else if (streamDisplayText.value && aiMsg.content !== streamDisplayText.value) {
-    aiMsg.content += streamDisplayText.value
-  }
-  pendingRenderQueue.length = 0
-  pendingRenderQueueStart = 0
-  pendingRenderOffset = 0
-  pendingRenderChars = 0
-  isStreamDone = false
-  streamFinalContent = null
-  lastChunkArrivedAt = 0
-  streamRenderedChunks.length = 0
-  streamDisplayText.value = ''
-  streamingMsgRef.value = null
-}
-
-const stopStreamFlushLoop = () => {
-  if (streamFlushHandle != null) {
-    clearTimeout(streamFlushHandle)
-    streamFlushHandle = null
-  }
-}
-
 const autoResize = () => {
   const el = textareaRef.value
   if (!el) return
@@ -1813,112 +798,7 @@ const autoResize = () => {
   isExpandedInput.value = nextHeight > 40
 }
 
-const getPointerPosition = (e: MouseEvent | TouchEvent) => {
-  if (e instanceof MouseEvent) {
-    return { x: e.clientX, y: e.clientY }
-  }
-  const touch = e.touches[0]
-  return touch ? { x: touch.clientX, y: touch.clientY } : null
-}
 
-const resetDimTimer = () => {
-  isDimmed.value = false
-  if (dimTimer) clearTimeout(dimTimer)
-  dimTimer = window.setTimeout(() => {
-    if (!showFabMenu.value && !isDragging.value) {
-      isDimmed.value = true
-    }
-  }, 3000)
-}
-
-const startDrag = (e: MouseEvent | TouchEvent) => {
-  if (showFabMenu.value) {
-    showFabMenu.value = false
-    return
-  }
-  const pointer = getPointerPosition(e)
-  if (!pointer) return
-
-  isDragging.value = true
-  dragDistance = 0
-  resetDimTimer()
-
-  dragStartX = pointer.x
-  dragStartY = pointer.y
-  dragInitialX = fabPos.value.x
-  dragInitialY = fabPos.value.y
-
-  document.addEventListener('mousemove', onDrag)
-  document.addEventListener('mouseup', endDrag)
-  document.addEventListener('touchmove', onDrag, { passive: false })
-  document.addEventListener('touchend', endDrag)
-}
-
-const onDrag = (e: MouseEvent | TouchEvent) => {
-  if (!isDragging.value) return
-  e.preventDefault()
-  const pointer = getPointerPosition(e)
-  if (!pointer) return
-
-  const dx = pointer.x - dragStartX
-  const dy = pointer.y - dragStartY
-  dragDistance = Math.abs(dx) + Math.abs(dy)
-
-  fabPos.value = {
-    x: dragInitialX + dx,
-    y: dragInitialY + dy
-  }
-}
-
-const endDrag = () => {
-  isDragging.value = false
-  document.removeEventListener('mousemove', onDrag)
-  document.removeEventListener('mouseup', endDrag)
-  document.removeEventListener('touchmove', onDrag)
-  document.removeEventListener('touchend', endDrag)
-
-  if (dragDistance < 5) {
-    showFabMenu.value = !showFabMenu.value
-  }
-
-  snapToEdge()
-  resetDimTimer()
-}
-
-const snapToEdge = () => {
-  const screenW = window.innerWidth
-  const screenH = window.innerHeight
-  const fabSize = 48
-  const margin = 16
-
-  let targetX = fabPos.value.x
-  let targetY = fabPos.value.y
-
-  if (targetX + fabSize / 2 > screenW / 2) {
-    targetX = screenW - fabSize - margin
-  } else {
-    targetX = margin
-  }
-
-  const bottomBoundary = screenH - fabSize - 120
-  if (targetY < margin) targetY = margin
-  if (targetY > bottomBoundary) targetY = bottomBoundary
-
-  fabPos.value = { x: targetX, y: targetY }
-}
-
-const setChatMode = (mode: TutorChatMode) => {
-  chatMode.value = mode
-  showFabMenu.value = false
-  resetDimTimer()
-}
-
-const handleGlobalClick = (e: MouseEvent | TouchEvent) => {
-  const target = e.target as HTMLElement
-  if (showFabMenu.value && !target.closest('.fab-container')) {
-    showFabMenu.value = false
-  }
-}
 
 // 加载会话列表
 const loadSessions = async () => {
@@ -1951,21 +831,10 @@ const refreshSessionTitleWithRetry = async (sessionId: string) => {
 
 // 创建新会话：断开当前流渲染，清空消息
 const newSession = () => {
-  // Detach from the current stream's render loop without aborting the SSE.
-  // The global streamManager keeps the old session's connection alive so
-  // the AI response continues and gets persisted by the backend.
-  stopStreamFlushLoop()
+  chatRun.close()
   streamingMsgId.value = null
-  streamingMsgRef.value = null
   isAIThinking.value = false
-
-  if (chatMode.value === 'digital_human') {
-    digitalHumanSessionId.value = undefined
-    switchAvatarSession()
-    if (isVoiceChatting.value) configureContinuousVoice(true)
-  } else {
-    currentSessionId.value = undefined
-  }
+  currentSessionId.value = undefined
   messages.value = []
   clearPendingFiles()
 }
@@ -1978,14 +847,7 @@ const loadHistoryFromAPI = async (
   try {
     const res = await getChatHistory(sessionId)
     const history = res.data.data || []
-    const visibleHistory = history.filter(msg => (
-      msg.role === 'user'
-      || (
-        msg.role === 'assistant'
-        && (!(msg.tool_calls?.length) || Boolean(msg.activities?.length))
-      )
-    ))
-    const mapped = visibleHistory.map((msg, i) => {
+    const mapped: ChatMsg[] = history.map((msg) => {
       // 从 ContentPart[] 中提取文本和附件
       const contentParts = msg.content || []
       const textContent = contentParts
@@ -2012,82 +874,20 @@ const loadHistoryFromAPI = async (
         }))
       const contentAttachments = [...imageAttachments, ...fileAttachments]
       const attachments = contentAttachments.length > 0 ? contentAttachments : null
-      const rawVideo = msg.video ?? msg.usage_metadata?.video
-      const video = rawVideo && typeof rawVideo === 'object'
-        ? rawVideo as ChatVideoArtifactData
-        : null
-      const videoOnly = msg.usage_metadata?.response_mode === 'video' || Boolean(video)
-
       return {
-        id: msg.id || Date.now() + i,
-        userMessageId: msg.user_message_id || undefined,
-        role: msg.role === 'user' ? 'user' as const : 'ai' as const,
-        content: videoOnly && msg.role === 'assistant' ? '' : textContent,
-        time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '',
+        id: msg.id,
+        role: msg.role === 'user' ? 'user' : 'ai',
+        content: msg.run?.content ?? textContent,
+        time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         attachments,
-        agentActivities: (msg.activities || []) as AgentActivity[],
-        video,
-        videoOnly,
+        runId: msg.run_id,
+        run: msg.run ?? undefined,
+        failed: msg.run?.status === 'failed' || msg.run?.status === 'interrupted',
+        errorMessage: msg.run?.error,
       }
     })
-    // Abandoned/failed streams can leave an assistant row containing only
-    // progress activities. Those activities are no longer live after history
-    // reload, so rendering them would leave a permanent "processing" card.
-    const renderableHistory = mapped.filter(item => (
-      item.role === 'user'
-      || Boolean(item.content.trim())
-      || Boolean(item.attachments?.length)
-      || Boolean(item.video)
-    ))
-
-    // Move video artifacts from user-side messages to the adjacent AI-side message,
-    // matching the live UX where video generation appears under the AI avatar.
-    for (let i = 0; i < renderableHistory.length; i++) {
-      const item = renderableHistory[i]!
-      if (item.role === 'user' && item.video) {
-        // Look for the next AI message to attach the video to
-        let target = -1
-        for (let j = i + 1; j < renderableHistory.length; j++) {
-          if (renderableHistory[j]!.role === 'ai') {
-            target = j
-            break
-          }
-        }
-        if (target >= 0) {
-          renderableHistory[target]!.video = item.video
-        } else {
-          // No AI message follows — insert a synthetic AI message
-          renderableHistory.splice(i + 1, 0, {
-            id: Date.now() + i,
-            userMessageId: undefined,
-            role: 'ai' as const,
-            content: '',
-            time: item.time,
-            attachments: null,
-            agentActivities: [],
-            video: item.video,
-            videoOnly: true,
-          })
-        }
-        item.video = null
-      }
-    }
-
     if (!shouldApply()) return false
-
-    // 防止刷新后历史中相邻重复消息导致双排显示
-    messages.value = renderableHistory.filter((item, idx) => {
-      if (idx === 0) return true
-      const prev = renderableHistory[idx - 1]
-      const currentAttachmentKey = (item.attachments || []).map(att => `${att.type}:${att.url}:${att.name}`).join('|')
-      const previousAttachmentKey = (prev?.attachments || []).map(att => `${att.type}:${att.url}:${att.name}`).join('|')
-      return !(
-        prev
-        && prev.role === item.role
-        && prev.content === item.content
-        && previousAttachmentKey === currentAttachmentKey
-      )
-    })
+    messages.value = mapped
     return true
   } catch (err) {
     if (shouldApply()) {
@@ -2102,131 +902,15 @@ let sessionSwitchToken = 0
 
 const switchSession = async (sessionId: string) => {
   const switchToken = ++sessionSwitchToken
-  const modeAtStart = chatMode.value
-  const isCurrentSwitch = () => (
-    switchToken === sessionSwitchToken
-    && chatMode.value === modeAtStart
-  )
-
-  setAvatarExternalActivityBusy(false)
-  const nextSessionIds = selectSessionForMode(modeAtStart, sessionId, {
-    standard: currentSessionId.value,
-    digitalHuman: digitalHumanSessionId.value,
-  })
-  currentSessionId.value = nextSessionIds.standard
-  digitalHumanSessionId.value = nextSessionIds.digitalHuman
-  if (modeAtStart === 'digital_human') {
-    switchAvatarSession(sessionId)
-    if (isVoiceChatting.value) configureContinuousVoice(true)
-  }
+  chatRun.close()
+  currentSessionId.value = sessionId
   messages.value = []
-
-  // Check global manager for stream state on this session
-  const streamState = streamManager.getStreamState(sessionId)
-
-  if (streamState?.status === 'streaming') {
-    // ── Branch 1: Stream still active ──
-    // Load persisted history (won't include the in-progress AI msg)
-    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
-    if (!isCurrentSwitch()) return
-
-    // Show the accumulated AI response from the stream buffer
-    const { text, events } = streamManager.getBuffer(sessionId)
-    const restoredInProgress = messages.value.find(message => (
-      message.role === 'ai'
-      && !message.content
-      && (!streamState.userMessageId || message.userMessageId === streamState.userMessageId)
-    ))
-    const aiMsgId = restoredInProgress?.id ?? Date.now() + 10000
-    if (restoredInProgress) {
-      restoredInProgress.content = text
-    } else {
-      messages.value.push({
-        id: aiMsgId,
-        userMessageId: streamState.userMessageId,
-        role: 'ai',
-        content: text,
-        time: now(),
-      })
-    }
-    streamingMsgId.value = aiMsgId
-    streamingMsgRef.value = messages.value.find(message => message.id === aiMsgId) ?? null
-    isAIThinking.value = true
-    isStreamDone = false
-    streamFinalContent = null
-    streamRenderedChunks.length = 0
-    streamDisplayText.value = text
-
-    // Process buffered events (diagrams, status, etc.)
-    for (const evt of events) {
-      applyChatEvent(messages.value.find(m => m.id === aiMsgId), evt)
-    }
-
-    // Resubscribe callbacks so new chunks flow to this component
-    streamManager.resubscribe(sessionId, {
-      onChunk: (chunk) => {
-        enqueueStreamChunk(aiMsgId, chunk)
-      },
-      onDone: (data) => {
-        const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        if (aiMsg) finalizeAssistantGeneration(aiMsg, 'done')
-        const persistedMessageId = aiMsg
-          ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
-          : aiMsgId
-        if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
-        completeStreamingMessage(persistedMessageId)
-        void refreshSessionTitleWithRetry(sessionId)
-      },
-      onError: (_err) => {
-        isStreamDone = false
-        flushPendingStreamText(true)
-        stopStreamFlushLoop()
-        commitStreamTextToMessage(aiMsgId)
-        const aiMsg = messages.value.find(m => m.id === aiMsgId)
-        if (aiMsg) {
-          const errText = _err?.message || '连接中断或运行超时，请重试。'
-          finalizeAssistantGeneration(aiMsg, 'failed', errText)
-          if (!aiMsg.content) {
-            aiMsg.content = errText
-          }
-        }
-            isAIThinking.value = false
-        streamingMsgId.value = null
-        streamingMsgRef.value = null
-      },
-      onEvent: (evt) => {
-        applyChatEvent(messages.value.find(m => m.id === aiMsgId), evt)
-        scrollToBottom()
-      },
-    })
-
-    // Kick off the render loop to display any pending text
-    scheduleStreamFlush(true)
-
-  } else if (streamState?.status === 'done') {
-    // ── Branch 2: Stream completed in background ──
-    // Backend has persisted the AI message. Load from API only.
-    streamManager.stopStream(sessionId)
-    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
-
-  } else if (streamState?.status === 'error') {
-    // ── Branch 3: Stream errored in background ──
-    streamManager.stopStream(sessionId)
-    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
-    if (!isCurrentSwitch()) return
-    messages.value.push({
-      id: Date.now() + 99999,
-      role: 'ai',
-      content: `生成失败: ${streamState.error?.message || '未知错误'}`,
-      time: now(),
-    })
-
-  } else {
-    // ── Branch 4: No stream state — normal load ──
-    if (!await loadHistoryFromAPI(sessionId, isCurrentSwitch)) return
-  }
-
-  if (!isCurrentSwitch()) return
+  isAIThinking.value = false
+  streamingMsgId.value = null
+  if (!await loadHistoryFromAPI(sessionId, () => switchToken === sessionSwitchToken)) return
+  if (switchToken !== sessionSwitchToken) return
+  const running = messages.value.find(message => message.run && isRunActive(message.run))
+  if (running?.run) chatRun.connect(running.run, state => applyRun(running.id, state))
   scrollToBottom()
 }
 
@@ -2252,17 +936,12 @@ const confirmArchiveSession = async () => {
 
   try {
     // 只有确认后才清理流状态并调用删除接口。
-    streamManager.stopStream(sessionId)
+    chatRun.close()
     await deleteSession(sessionId)
     sessions.value = sessions.value.filter(session => session.id !== sessionId)
 
     if (activeSessionId.value === sessionId) {
       currentSessionId.value = undefined
-      if (chatMode.value === 'digital_human') {
-        digitalHumanSessionId.value = undefined
-        switchAvatarSession()
-        if (isVoiceChatting.value) configureContinuousVoice(true)
-      }
       messages.value = []
 
       if (sessions.value.length > 0) {
@@ -2326,16 +1005,6 @@ const clearPendingFiles = () => {
   pendingFiles.value = []
 }
 
-const getAvatarCapabilities = () => ({
-  session_id: digitalHumanSessionId.value,
-  enable_search: enableWebSearch.value,
-  need_video: needVideo.value,
-})
-
-const configureContinuousVoice = (enabled: boolean) => {
-  setContinuousVoice(enabled, needTeachingDiagram.value, getAvatarCapabilities())
-}
-
 const handleTeachingDiagramToggle = () => {
   needTeachingDiagram.value = !needTeachingDiagram.value
   if (needTeachingDiagram.value) needVideo.value = false
@@ -2347,13 +1016,12 @@ const handleVideoToggle = () => {
 }
 
 // 确保当前有活跃会话（没有则创建）
-const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standard') => {
-  const sessionRef = mode === 'digital_human' ? digitalHumanSessionId : currentSessionId
-  if (sessionRef.value) return true
+const ensureCurrentSession = async () => {
+  if (currentSessionId.value) return true
   try {
     const res = await createSession()
     const session = res.data.data
-    sessionRef.value = session.id
+    currentSessionId.value = session.id
     sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
     return true
   } catch {
@@ -2362,78 +1030,7 @@ const ensureCurrentSession = async (mode: 'standard' | 'digital_human' = 'standa
   }
 }
 
-const handleVoiceChatToggle = async () => {
-  if (!isVoiceChatting.value) {
-    if (!await ensureCurrentSession('digital_human')) return
-    asrRecoveryStatus.value = ''
-    isVoiceChatting.value = true
-    configureContinuousVoice(true)
-    chatMode.value = 'digital_human'
-    await connectAvatar()
-    nextTick(() => {
-      const container = canvasRef.value?.getContainer()
-      if (container) {
-        setPlayerContainer(container)
-      }
-    })
-    await startVad(needTeachingDiagram.value, getAvatarCapabilities())
-    isRecording.value = isVadListening.value
-    toast.success({ message: '已开启语音通话模式，您可以直接说话', plain: true })
-  } else {
-    configureContinuousVoice(false)
-    stopVad()
-    isRecording.value = false
-    isVoiceChatting.value = false
-    asrRecoveryStatus.value = ''
-    clearAsrProcessing()
-    toast.info({ message: '已关闭语音通话模式', plain: true })
-  }
-}
-
-const handleVoiceToggle = async () => {
-  if (isVadListening.value) {
-    configureContinuousVoice(false)
-    stopVad()
-    isRecording.value = false
-    isVoiceChatting.value = false
-    hasSpeechDetected.value = true
-    startAsrProcessing(8000)
-    return
-  }
-
-  if (!await ensureCurrentSession('digital_human')) return
-  asrRecoveryStatus.value = ''
-  isVoiceChatting.value = true
-  configureContinuousVoice(true)
-  await startVad(needTeachingDiagram.value, getAvatarCapabilities())
-  isRecording.value = isVadListening.value
-  clearAsrProcessing()
-}
-
-// 重新连接数字人（断开后重建 WebSocket）
-const handleAvatarReconnect = async () => {
-  const shouldResumeVoice = isVoiceChatting.value
-  disconnectAvatar()
-  await connectAvatar()
-  setAvatarSpeechRate(avatarSpeechRate.value)
-  nextTick(() => {
-    const container = canvasRef.value?.getContainer()
-    if (container) {
-      setPlayerContainer(container)
-    }
-  })
-  if (shouldResumeVoice) {
-    configureContinuousVoice(true)
-    await startVad(needTeachingDiagram.value, getAvatarCapabilities())
-    isRecording.value = isVadListening.value
-  }
-}
-
-const handleAvatarSpeechRateChange = (val: number) => {
-  setAvatarSpeechRate(val)
-}
-
-// 发送消息：上传附件 → 创建 AI 消息 → 启动 SSE 流 / 数字人消息
+// 发送消息：上传附件 → 创建 AI 消息 → 启动 SSE 流
 const handleSend = async () => {
   const text = userInput.value.trim()
   const currentPending = [...pendingFiles.value]
@@ -2442,26 +1039,18 @@ const handleSend = async () => {
 
   const shouldGenerateTeachingDiagram = needTeachingDiagram.value
   const shouldGenerateVideo = needVideo.value
-  const sessionMode = chatMode.value === 'digital_human' ? 'digital_human' : 'standard'
 
-  if (chatMode.value === 'digital_human' && !isAvatarConnected.value) {
-    toast.warning({ message: '数字人连接已断开，请先点击“重新连接”后再发送', plain: true })
-    return
-  }
+  if (!await ensureCurrentSession()) return
+  const sessionId = currentSessionId.value
+  if (!sessionId) return
 
-  if (!await ensureCurrentSession(sessionMode)) return
-  const activeSessionId = sessionMode === 'digital_human'
-    ? digitalHumanSessionId.value
-    : currentSessionId.value
-  if (!activeSessionId) return
-
-  const session = sessions.value.find(item => item.id === activeSessionId)
+  const session = sessions.value.find(item => item.id === sessionId)
   if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
     const titleSource = text || currentPending.map(file => file.name).join('、') || '附件分析'
     const tempTitle = titleSource.length > 20 ? `${titleSource.slice(0, 20)}...` : titleSource
     session.title = tempTitle
     try {
-      await updateSessionTitle(activeSessionId, tempTitle)
+      await updateSessionTitle(sessionId, tempTitle)
     } catch (err) {
       console.warn('更新会话标题失败:', err)
     }
@@ -2491,7 +1080,6 @@ const handleSend = async () => {
   })
 
   isAIThinking.value = true
-  digitalHumanBackendStatus.value = ''
   scrollToBottom()
 
   const uploadedAttachments: Attachment[] = []
@@ -2511,7 +1099,7 @@ const handleSend = async () => {
         }
 
         if (!pending.file) throw new Error('附件内容不存在')
-        const res = await uploadFile(pending.file, activeSessionId)
+        const res = await uploadFile(pending.file, sessionId)
         const data = res.data.data
         return {
           url: data.url,
@@ -2556,7 +1144,6 @@ const handleSend = async () => {
     uploadingFile.value = false
   }
 
-  const attachmentUrls = uploadedAttachments.map(file => file.url).filter(Boolean)
   const messageAttachments = uploadedAttachments.map(file => ({
     url: file.url,
     file_type: file.type,
@@ -2565,104 +1152,29 @@ const handleSend = async () => {
     mime_type: file.mimeType,
   }))
   const aiMsgId = Date.now() + 1
-  messages.value.push({
-    id: aiMsgId,
-    role: 'ai',
-    content: '',
-    time: now(),
-    agentActivities: shouldGenerateVideo || shouldGenerateTeachingDiagram
-      ? []
-      : [{
-          activity_id: 'workflow:current',
-          kind: 'workflow',
-          stage: 'run_started',
-          status: 'running',
-          title: 'Mentorly 正在理解问题',
-          message: '正在准备回答',
-        }],
-    videoPreparing: shouldGenerateVideo,
-    videoOnly: shouldGenerateVideo,
-  })
+  messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
   streamingMsgId.value = aiMsgId
-  streamingMsgRef.value = messages.value[messages.value.length - 1] || null
-  isStreamDone = false
-  streamFinalContent = null
-  streamRenderedChunks.length = 0
-  streamDisplayText.value = ''
-
-  if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
-    if (shouldGenerateVideo) setAvatarExternalActivityBusy(true)
-    startAvatarThinkingTimeout()
-    sendAvatarText({
-      text: text || '请分析这些附件',
-      need_diagram: shouldGenerateTeachingDiagram,
-      attachments: attachmentUrls.length ? attachmentUrls : undefined,
-      ...getAvatarCapabilities(),
-      need_video: shouldGenerateVideo,
-      speech_rate: avatarSpeechRate.value,
-    })
-    return
-  }
-
-  streamManager.startStream(
-    activeSessionId,
-    {
-      message: text || '请分析这些附件',
-      session_id: activeSessionId,
-      attachments: messageAttachments.length ? messageAttachments : undefined,
-      diagram_mode: shouldGenerateTeachingDiagram ? 'required' : 'auto',
+  try {
+    const created = await chatRun.start({
+      message: text || '请分析这些附件', session_id: sessionId,
+      attachments: messageAttachments, diagram_mode: shouldGenerateTeachingDiagram ? 'required' : 'auto',
       video_mode: shouldGenerateVideo,
-      enable_web_search: enableWebSearch.value,
-    },
-    {
-      onChunk: (chunk) => {
-        if (shouldGenerateVideo) return
-        enqueueStreamChunk(aiMsgId, chunk)
-      },
-      onDone: (data) => {
-        const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        if (aiMsg) {
-          finalizeAssistantGeneration(aiMsg, 'done')
-          if (shouldGenerateVideo) {
-            aiMsg.content = ''
-            aiMsg.videoOnly = true
-            aiMsg.videoPreparing = false
-            const video = data.video
-            if (video && typeof video === 'object') {
-              aiMsg.video = video as ChatVideoArtifactData
-            }
-          }
-        }
-        const persistedMessageId = aiMsg
-          ? assignPersistedAssistantMessageId(aiMsg, data.saved_message_id)
-          : aiMsgId
-        if (streamingMsgId.value === aiMsgId) streamingMsgId.value = persistedMessageId
-        completeStreamingMessage(persistedMessageId)
-        void refreshSessionTitleWithRetry(activeSessionId)
-      },
-      onError: (_err) => {
-        isStreamDone = false
-        flushPendingStreamText(true)
-        stopStreamFlushLoop()
-        commitStreamTextToMessage(aiMsgId)
-        const aiMsg = messages.value.find(message => message.id === aiMsgId)
-        if (aiMsg) {
-          const errText = _err?.message || '连接中断或运行超时，请重试。'
-          finalizeAssistantGeneration(aiMsg, 'failed', errText)
-          aiMsg.videoPreparing = false
-          aiMsg.videoOnly = false
-          if (!aiMsg.content) aiMsg.content = errText
-        }
-            isAIThinking.value = false
-        streamingMsgId.value = null
-        streamingMsgRef.value = null
-      },
-      onEvent: (event) => {
-        applyChatEvent(messages.value.find(message => message.id === aiMsgId), event)
-        scrollToBottom()
-      },
-    },
-  )
+    }, state => {
+      applyRun(aiMsgId, state)
+    })
+    const aiMsg = messages.value.find(message => message.id === aiMsgId)
+    if (aiMsg) aiMsg.runId = created.run_id
+    void refreshSessionTitleWithRetry(sessionId)
+  } catch (error) {
+    const aiMsg = messages.value.find(message => message.id === aiMsgId)
+    if (aiMsg) {
+      aiMsg.failed = true
+      aiMsg.errorMessage = getErrorMessage(error, '创建运行失败')
+      aiMsg.content = aiMsg.errorMessage
+    }
+    isAIThinking.value = false
+    streamingMsgId.value = null
+  }
 }
 
 // 失败或超时消息快捷重试
@@ -2686,91 +1198,9 @@ const handleRetryAssistantMessage = (failedMsg: ChatMsg) => {
   void handleSend()
 }
 
-// 监听聊天模式切换：数字人 ↔ 标准文本
-let chatModeTransitionToken = 0
-
-watch(chatMode, async (newMode) => {
-  const transitionToken = ++chatModeTransitionToken
-  sessionSwitchToken += 1
-
-  if (newMode === 'digital_human') {
-    pauseForegroundStreaming()
-    streamingMsgId.value = null
-    streamingMsgRef.value = null
-    isAIThinking.value = false
-    sessionSidebarCollapsed.value = true
-    digitalHumanSessionId.value = undefined
-    messages.value = []
-    clearPendingFiles()
-    switchAvatarSession()
-    await connectAvatar()
-    if (
-      transitionToken !== chatModeTransitionToken
-      || chatMode.value !== 'digital_human'
-    ) {
-      if (chatMode.value !== 'digital_human') disconnectAvatar()
-      return
-    }
-    setAvatarNeedDiagram(needTeachingDiagram.value)
-    nextTick(() => {
-      const container = canvasRef.value?.getContainer()
-      if (container) {
-        setPlayerContainer(container)
-      }
-    })
-  } else if (newMode === 'standard') {
-    sessionSidebarCollapsed.value = false
-    isVoiceChatting.value = false
-    isRecording.value = false
-    hasSpeechDetected.value = false
-    lastAsrText.value = ''
-    lastAsrCommittedText.value = ''
-    digitalHumanBackendStatus.value = ''
-    asrRecoveryStatus.value = ''
-    configureContinuousVoice(false)
-    stopVad()
-    clearAsrProcessing()
-    clearAsrPreview()
-    clearAvatarThinkingTimeout()
-    stopStreamFlushLoop()
-    streamingMsgId.value = null
-    streamingMsgRef.value = null
-    isAIThinking.value = false
-    setAvatarExternalActivityBusy(false)
-    disconnectAvatar()
-    clearPendingFiles()
-    const standardSessionId = currentSessionId.value
-    if (standardSessionId) {
-      await switchSession(standardSessionId)
-    } else {
-      messages.value = []
-    }
-  }
-})
-
-watch(needTeachingDiagram, (enabled) => {
-  if (chatMode.value === 'digital_human' && isAvatarConnected.value) {
-    setAvatarNeedDiagram(enabled)
-  }
-  if (isVoiceChatting.value) configureContinuousVoice(true)
-})
-
-watch(needVideo, () => {
-  if (isVoiceChatting.value) configureContinuousVoice(true)
-})
-
-watch(enableWebSearch, () => {
-  if (isVoiceChatting.value) configureContinuousVoice(true)
-})
-
 // 组件挂载：加载用户信息、会话列表、恢复上次会话
 onMounted(async () => {
   const shouldStartBlankSession = consumeTutorEntryIntent()
-
-  fabPos.value = { x: 16, y: window.innerHeight - 150 }
-  resetDimTimer()
-  document.addEventListener('mousedown', handleGlobalClick)
-  document.addEventListener('touchstart', handleGlobalClick, { passive: true })
 
   await ensureCurrentUser()
   await loadSessions()
@@ -2782,7 +1212,7 @@ onMounted(async () => {
 
   // If we still have a currentSessionId (from before navigating away),
   // switch back to it. This recovers streams that completed or are still
-  // active in the global manager. Otherwise, pick the first session.
+  // active on the server. Otherwise, pick the first session.
   if (currentSessionId.value) {
     await switchSession(currentSessionId.value)
   } else if (sessions.value.length > 0) {
@@ -2796,9 +1226,6 @@ let tutorWasDeactivated = false
 onActivated(async () => {
   if (!tutorWasDeactivated) return
   tutorWasDeactivated = false
-  resetDimTimer()
-  document.addEventListener('mousedown', handleGlobalClick)
-  document.addEventListener('touchstart', handleGlobalClick, { passive: true })
 
   if (currentSessionId.value) {
     await switchSession(currentSessionId.value)
@@ -2808,34 +1235,13 @@ onActivated(async () => {
 // 组件停用时：暂停流渲染、清理事件监听
 onDeactivated(() => {
   tutorWasDeactivated = true
-  clearAvatarThinkingTimeout()
-  pauseForegroundStreaming()
-  showFabMenu.value = false
-  document.removeEventListener('mousedown', handleGlobalClick)
-  document.removeEventListener('touchstart', handleGlobalClick)
-  if (dimTimer) {
-    clearTimeout(dimTimer)
-    dimTimer = null
-  }
+  chatRun.close()
 })
 
-// 组件卸载前：断开数字人、清理流、释放附件
+// 组件卸载前：清理流、释放附件
 onBeforeUnmount(() => {
-  clearAvatarThinkingTimeout()
-  detachCurrentStreamCallbacks()
-  setAvatarExternalActivityBusy(false)
-  disconnectAvatar()
-  flushPendingStreamText()
-  stopStreamFlushLoop()
-  if (streamingMsgId.value !== null) {
-    commitStreamTextToMessage(streamingMsgId.value)
-  }
-  isStreamDone = false
-  streamingMsgRef.value = null
+  chatRun.close()
   clearPendingFiles()
-  if (dimTimer) clearTimeout(dimTimer)
-  document.removeEventListener('mousedown', handleGlobalClick)
-  document.removeEventListener('touchstart', handleGlobalClick)
 })
 </script>
 
@@ -3447,153 +1853,7 @@ onBeforeUnmount(() => {
   min-width: 0; /* 关键：防止 flex 子项超出 */
 }
 
-.digital-human-stage {
-  width: 45%;
-  min-width: 320px;
-  max-width: 600px;
-  background: var(--color-bg);
-  border-right: 1px solid var(--color-border);
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  overflow: hidden;
-}
 
-.digital-human-canvas-placeholder {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-text-faint);
-}
-
-.digital-human-canvas-placeholder .placeholder-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-  opacity: 0.5;
-}
-
-.digital-human-status-overlay {
-  position: absolute;
-  bottom: 2rem;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(8px);
-  padding: var(--space-3) var(--space-6);
-  border-radius: var(--radius-2xl);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  border: 1px solid var(--color-border);
-  transition: all var(--transition-slow);
-  z-index: 10;
-}
-
-.digital-human-status-overlay.active {
-  border-color: #0EA5E9;
-  box-shadow: 0 4px 20px rgba(14, 165, 233, 0.15);
-}
-
-.speech-wave {
-  display: flex;
-  gap: 3px;
-  height: 16px;
-  align-items: center;
-}
-
-.speech-wave span {
-  width: 3px;
-  height: 8px;
-  background: #0891B2;
-  border-radius: 2px;
-  animation: wave-anim 1s infinite ease-in-out;
-}
-
-.speech-wave span:nth-child(2) {
-  animation-delay: 0.1s;
-}
-
-.speech-wave span:nth-child(3) {
-  animation-delay: 0.2s;
-}
-
-.thinking-dots {
-  display: flex;
-  gap: 4px;
-  height: 12px;
-  align-items: center;
-}
-
-.thinking-dots span {
-  width: 6px;
-  height: 6px;
-  background: #94A3B8;
-  border-radius: 50%;
-  animation: thinking-bounce 1.2s infinite ease-in-out;
-}
-
-.thinking-dots span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-
-.thinking-dots span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes thinking-bounce {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
-}
-
-.listening-dot,
-.asr-processing-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: var(--radius-pill);
-}
-
-.listening-dot {
-  background: #0EA5E9;
-  box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.45);
-  animation: listening-pulse 1.4s infinite;
-}
-
-.asr-processing-dot {
-  background: var(--color-warning);
-  box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.42);
-  animation: processing-pulse 1s infinite;
-}
-
-@keyframes listening-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.45); }
-  70% { box-shadow: 0 0 0 10px rgba(14, 165, 233, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
-}
-
-@keyframes processing-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.42); transform: scale(1); }
-  60% { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0); transform: scale(1.08); }
-  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); transform: scale(1); }
-}
-
-@keyframes wave-anim {
-  0%, 100% {
-    height: 8px;
-  }
-  50% {
-    height: 16px;
-  }
-}
-
-.status-badge {
-  font-size: 0.75rem;
-  color: var(--color-text-muted);
-  font-family: var(--font-sans);
-}
 
 .chat-interaction-area {
   flex: 1;
@@ -3735,81 +1995,7 @@ onBeforeUnmount(() => {
   max-width: 100%;
 }
 
-.mode-digital_human .message-row {
-  max-width: min(820px, 92%);
-}
 
-.mode-digital_human .message-row.ai {
-  align-self: center;
-  width: min(820px, 92%);
-  gap: 0.75rem;
-}
-
-.mode-digital_human .message-row.ai .msg-avatar {
-  display: none;
-}
-
-.mode-digital_human .message-row.ai .bubble-wrapper {
-  width: 100%;
-  align-items: stretch;
-}
-
-.mode-digital_human .message-row.ai .msg-meta {
-  justify-content: center;
-  gap: 10px;
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
-}
-
-.mode-digital_human .message-row.ai .sender {
-  color: var(--color-text-secondary);
-}
-
-.digital-human-bubble {
-  padding: 18px 22px;
-  border-radius: 22px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(248, 250, 252, 0.9)),
-    radial-gradient(circle at top, rgba(56, 189, 248, 0.08), transparent 55%);
-  box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(10px);
-}
-
-.mode-digital_human .digital-human-bubble :deep(.tutor-message-content) {
-  align-items: center;
-}
-
-.mode-digital_human .digital-human-bubble :deep(.stream-markdown) {
-  font-size: 1.08rem;
-  line-height: 1.9;
-  letter-spacing: 0.01em;
-  color: var(--color-text);
-  text-align: left;
-}
-
-.mode-digital_human .digital-human-bubble :deep(.markdown-body p) {
-  margin: 0 0 0.72rem 0;
-}
-
-.mode-digital_human .digital-human-bubble :deep(.markdown-body > :last-child) {
-  margin-bottom: 0;
-}
-
-.mode-digital_human .digital-human-bubble :deep(h1),
-.mode-digital_human .digital-human-bubble :deep(h2),
-.mode-digital_human .digital-human-bubble :deep(h3),
-.mode-digital_human .digital-human-bubble :deep(h4) {
-  text-align: left;
-  color: var(--color-text);
-}
-
-.mode-digital_human .digital-human-bubble :deep(ul),
-.mode-digital_human .digital-human-bubble :deep(ol) {
-  padding-left: 1.25rem;
-}
 
 /* AI 气泡：素白宣纸 */
 .message-row.ai .bubble {
@@ -4181,11 +2367,6 @@ onBeforeUnmount(() => {
   transform: translateY(-1px);
 }
 
-.minimal-icon-btn.voice.is-recording {
-  background: var(--color-danger);
-  color: var(--color-surface);
-}
-
 .minimal-send-btn.can-send {
   background: var(--color-text);
   color: var(--color-surface);
@@ -4195,67 +2376,6 @@ onBeforeUnmount(() => {
 .minimal-send-btn.can-send:hover {
   background: var(--color-text-strong);
   transform: scale(1.05);
-}
-
-/* 语音语速调整 */
-.minimal-speech-rate {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: 8px;
-}
-.minimal-speech-rate .rate-label {
-  font-size: 12px;
-  color: var(--color-text-muted);
-}
-.minimal-speech-rate .rate-value {
-  font-size: 12px;
-  color: var(--color-text-secondary);
-  min-width: 34px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-}
-.minimal-speech-rate .rate-slider-input {
-  width: 60px;
-}
-
-/* Digital human voice chat button */
-.voice-chat-btn.is-active {
-  color: var(--color-text-strong);
-}
-
-.voice-bars-icon {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  height: 14px;
-}
-
-.voice-bars-icon .bar {
-  width: 2px;
-  background-color: currentColor;
-  border-radius: 1px;
-  transition: height var(--transition-base);
-}
-
-.voice-bars-icon .bar:nth-child(1) { height: 8px; }
-.voice-bars-icon .bar:nth-child(2) { height: 14px; }
-.voice-bars-icon .bar:nth-child(3) { height: 10px; }
-.voice-bars-icon .bar:nth-child(4) { height: 6px; }
-
-.voice-chat-btn.is-active .bar {
-  animation: bar-dance 0.8s infinite ease-in-out alternate;
-  background-color: #f43f5e;
-}
-
-.voice-chat-btn.is-active .bar:nth-child(1) { animation-delay: 0.0s; }
-.voice-chat-btn.is-active .bar:nth-child(2) { animation-delay: 0.2s; }
-.voice-chat-btn.is-active .bar:nth-child(3) { animation-delay: 0.1s; }
-.voice-chat-btn.is-active .bar:nth-child(4) { animation-delay: 0.3s; }
-
-@keyframes bar-dance {
-  from { transform: scaleY(0.6); }
-  to { transform: scaleY(1.4); }
 }
 
 .input-footer {
@@ -4458,138 +2578,7 @@ onBeforeUnmount(() => {
   margin-top: -10vh;
 }
 
-.fab-container {
-  position: fixed;
-  z-index: 1000;
-  touch-action: none;
-  transition: all var(--transition-slow) cubic-bezier(0.4, 0, 0.2, 1);
-}
-.fab-container.is-dragging {
-  transition: none !important;
-}
-.fab-container.is-dimmed {
-  opacity: 0.6;
-}
-.fab-container.is-dimmed:hover {
-  opacity: 1;
-}
 
-.fab-button {
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-pill);
-  background: var(--color-text); /* 与整体风格统一 */
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.2);
-  cursor: pointer;
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-.fab-button:hover {
-  transform: scale(1.05);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.3);
-}
-.fab-button:active {
-  transform: scale(0.95);
-}
-
-.fab-menu {
-  position: absolute;
-  bottom: 70px;
-  left: 0;
-  width: 240px;
-  background: var(--color-surface);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 10px 30px rgba(0,0,0,0.08), 0 4px 12px rgba(0,0,0,0.04);
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  transform-origin: bottom left;
-}
-.fab-container.stick-right .fab-menu {
-  left: auto;
-  right: 0;
-  transform-origin: bottom right;
-}
-
-.fab-menu-item {
-  padding: var(--space-3);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all var(--transition-base);
-  position: relative;
-  background: transparent;
-}
-.fab-menu-item:hover {
-  background: var(--color-bg);
-}
-.fab-menu-item.active {
-  background: var(--color-surface-hover);
-}
-
-.menu-icon-box {
-  width: 40px;
-  height: 40px;
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-surface-hover);
-  color: var(--color-text-muted);
-  font-size: 1.3rem;
-  transition: all var(--transition-base);
-  flex-shrink: 0;
-}
-.fab-menu-item.active .menu-icon-box {
-  background: var(--color-border);
-  color: var(--color-text);
-}
-
-.menu-text-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-}
-.menu-title {
-  font-size: 0.95rem;
-  font-weight: var(--weight-semibold);
-  color: var(--color-text-secondary);
-  transition: color var(--transition-base);
-}
-.fab-menu-item.active .menu-title {
-  color: var(--color-text);
-}
-.menu-desc {
-  font-size: 0.75rem;
-  color: var(--color-text-faint);
-}
-
-.check-icon {
-  position: absolute;
-  right: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--color-text);
-  font-size: 1.2rem;
-  display: flex;
-}
-
-.fab-menu-fade-enter-active,
-.fab-menu-fade-leave-active {
-  transition: opacity var(--transition-base), transform var(--transition-base);
-}
-.fab-menu-fade-enter-from,
-.fab-menu-fade-leave-to {
-  opacity: 0;
-  transform: scale(0.95) translateY(10px);
-}
 
 /* 弹出菜单项样式 */
 .action-menu {

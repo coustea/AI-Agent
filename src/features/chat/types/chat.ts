@@ -14,46 +14,14 @@ export type ContentPart =
   | ({ type: "image_url"; image_url: { url: string; detail?: "auto" | "low" | "high" } } & AttachmentContentMeta)
   | ({ type: "file"; file: { file_id?: string; file_data?: string; filename?: string } } & AttachmentContentMeta)
 
-// 聊天消息（含附件、工具调用、活动状态）
 export interface ChatMessageItem {
-  id?: number
-  user_message_id?: number | null
-  role: string
+  id: number
+  role: 'user' | 'assistant' | 'tool'
   content: ContentPart[]
-  tool_calls?: Array<{ id: string; name: string; args?: Record<string, unknown> }> | null
-  tool_call_id?: string | null
-  attachment_analyses: Array<{
-    id: string
-    analysis_type: string
-    status: string
-    content: string
-    error?: string | null
-  }>
-  activities: Array<{
-    activity_id: string
-    kind: 'agent' | 'tool' | 'attachment' | 'workflow'
-    stage?: string | null
-    status: 'running' | 'done' | 'failed'
-    title: string
-    summary?: string
-    message?: string
-    detail?: Record<string, unknown>
-  }>
-  usage_metadata?: Record<string, unknown> | null
-  video?: ChatVideoArtifact | null
-  created_at: string | null
-}
-
-export interface ChatVideoArtifact {
-  task_id: string
-  status: 'queued' | 'running' | 'completed' | 'failed'
-  topic: string
-  title?: string
-  video_url?: string
-  preview_url?: string
-  duration_seconds?: number
-  scene_count?: number
-  error?: string
+  run_id?: string
+  run?: import('./chatEvent').RunState | null
+  attachment_analyses?: unknown[]
+  created_at: string
 }
 
 export interface ChatSession {
@@ -79,11 +47,16 @@ export interface MessageAttachmentInput {
 }
 
 // SSE 流式聊天请求参数
+export interface ChatRunCreated {
+  run_id: string
+  message_id: number
+  session_id: string
+}
+
 export interface StreamChatParams {
   message?: string
   session_id?: string
   attachments?: MessageAttachmentInput[]
   diagram_mode?: 'auto' | 'required'
   video_mode?: boolean
-  enable_web_search?: boolean
 }

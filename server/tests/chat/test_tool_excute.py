@@ -1,273 +1,154 @@
-"""Tool 和 ToolRegistry 单元测试 — 自研工具调用框架。
-
-测试覆盖：
-  - Tool 类：注册、描述 Schema 生成、参数校验
-  - ToolRegistry 类：注册与查询工具、参数校验、执行、并发执行、生命周期事件
-"""
+"""Tool 与 ToolRegistry 单元测试。"""
 
 from __future__ import annotations
 
 import pytest
 from pydantic import BaseModel, Field
 
-from app.shared.tools import Tool, ToolRegistry
+from app.shared.tools.registry import Tool, ToolRegistry, format_tool_output
 
 
 class EchoArgs(BaseModel):
+    """Echo 工具参数。"""
+
     message: str = Field(description="Message to echo.")
     repeat: int = Field(default=1, ge=1, le=5, description="Number of repeats.")
 
 
-class SearchArgs(BaseModel):
-    query: str = Field(description="Search query.")
-    limit: int = Field(default=5, description="Max results.")
-
-
-# ── Tool 类测试 ──
-
-
 class TestTool:
-    def test_tool_name_description_required(self):
-        async def echo_handler(message: str, repeat: int = 1) -> str:
+    def test_holds_name_description_and_handler(self):
+        """Tool 保存模型可见的名称、描述与执行入口。"""
+
+        async def echo(message: str, repeat: int = 1) -> str:
+            """回显消息。"""
             return message * repeat
 
-        tool = Tool(
-            "echo",
-            "Echo a message with optional repeats.",
-            EchoArgs,
-            echo_handler,
-        )
+        tool = Tool("echo", "Echo a message with optional repeats.", EchoArgs, echo)
         assert tool.name == "echo"
         assert tool.description == "Echo a message with optional repeats."
+        assert tool.handler is echo
 
-    def test_tool_empty_name_raises(self):
+    def test_empty_name_raises(self):
+        """名称为空直接报错。"""
+
         async def handler() -> str:
+            """空实现。"""
             return ""
 
         with pytest.raises(ValueError, match="Tool name cannot be empty"):
             Tool("", "desc", EchoArgs, handler)
 
-    def test_tool_empty_description_raises(self):
+    def test_empty_description_raises(self):
+        """描述为空直接报错。"""
+
         async def handler() -> str:
+            """空实现。"""
             return ""
 
         with pytest.raises(ValueError, match="Tool description cannot be empty"):
             Tool("test", "", EchoArgs, handler)
 
-    def test_description_schema_structure(self):
+    def test_openai_schema_structure(self):
+        """schema 由 args_model 生成，含名称、描述与参数定义。"""
+
         async def handler(message: str) -> str:
+            """回显消息。"""
             return message
 
-        tool = Tool("echo", "Echo tool.", EchoArgs, handler)
-        schema = tool.description_schema()
+        schema = Tool("echo", "Echo tool.", EchoArgs, handler).to_openai_schema()
 
         assert schema["type"] == "function"
         assert schema["function"]["name"] == "echo"
         assert schema["function"]["description"] == "Echo tool."
-        assert "properties" in schema["function"]["parameters"]
-        assert "message" in schema["function"]["parameters"]["properties"]
         assert schema["function"]["parameters"]["required"] == ["message"]
 
 
-# ── ToolRegistry 注册测试 ──
-
-
-class TestToolRegistryRegistration:
-    def test_tool_registry_has_no_model_or_model_invocation_responsibility(self):
-        registry = ToolRegistry()
-
-        assert not hasattr(registry, "model")
-        assert not hasattr(registry, "invoke")
-        assert not hasattr(ToolRegistry, "_normalize_response_calls")
-
-    def test_register_single_tool(self):
-        async def handler() -> str:
-            return "ok"
-
-        registry = ToolRegistry()
-        tool = registry.register(
-            Tool("test", "Test tool.", EchoArgs, handler)
-        )
-        assert tool.name == "test"
-        assert registry.get_tool("test") == tool
-
-    def test_register_many_tools(self):
-        async def echo(msg: str) -> str:
-            return msg
-
-        async def search(q: str) -> str:
-            return f"results for {q}"
-
-        tools = [
-            Tool("echo", "Echo tool.", EchoArgs, echo),
-            Tool("search", "Search tool.", SearchArgs, search),
-        ]
-        registry = ToolRegistry(tools=tools)
-        assert registry.get_tool("echo").name == "echo"
-        assert registry.get_tool("search").name == "search"
-
+class TestToolRegistry:
     def test_duplicate_registration_raises(self):
+        """同名工具重复注册直接报错。"""
+
         async def handler() -> str:
+            """空实现。"""
             return ""
 
-        registry = ToolRegistry()
-        registry.register(Tool("test", "Test.", EchoArgs, handler))
         with pytest.raises(ValueError, match="Tool already registered"):
-            registry.register(Tool("test", "Another.", EchoArgs, handler))
+            ToolRegistry([
+                Tool("test", "Test.", EchoArgs, handler),
+                Tool("test", "Another.", EchoArgs, handler),
+            ])
 
-    def test_get_unknown_tool_raises(self):
-        registry = ToolRegistry()
-        with pytest.raises(KeyError, match="Unknown tool"):
-            registry.get_tool("nonexistent")
+    def test_openai_schemas_lists_every_tool(self):
+        """openai_schemas 返回全部工具的 schema。"""
 
-
-# ── ToolRegistry.get_tools_description 测试 ──
-
-
-class TestToolRegistryDescription:
-    def test_get_tools_description_returns_schema_list(self):
         async def echo(msg: str) -> str:
+            """回显消息。"""
             return msg
 
-        registry = ToolRegistry(
-            tools=[Tool("echo", "Echo.", EchoArgs, echo)],
-        )
-        descriptions = registry.get_tools_description()
-        assert len(descriptions) == 1
-        assert descriptions[0]["function"]["name"] == "echo"
-
-
-# ── ToolRegistry.execute 单工具执行测试 ──
+        registry = ToolRegistry([Tool("echo", "Echo.", EchoArgs, echo)])
+        schemas = registry.openai_schemas()
+        assert [item["function"]["name"] for item in schemas] == ["echo"]
 
 
 class TestToolRegistryExecute:
     @pytest.mark.asyncio
-    async def test_execute_validates_args_with_pydantic(self):
-        async def echo(message: str, repeat: int = 1) -> str:
-            return message * repeat
-
-        registry = ToolRegistry(
-            tools=[Tool("echo", "Echo.", EchoArgs, echo)],
-        )
-        result = await registry.execute({
-            "name": "echo",
-            "args": {"message": "hi", "repeat": 3},
-        })
-        assert result == "hihihi"
-
-    @pytest.mark.asyncio
-    async def test_execute_uses_default_args(self):
-        async def echo(message: str, repeat: int = 1) -> str:
-            return message * repeat
-
-        registry = ToolRegistry(
-            tools=[Tool("echo", "Echo.", EchoArgs, echo)],
-        )
-        result = await registry.execute({
-            "name": "echo",
-            "args": {"message": "hi"},
-        })
-        assert result == "hi"
-
-    @pytest.mark.asyncio
-    async def test_execute_rejects_invalid_args(self):
-        async def echo(message: str, repeat: int = 1) -> str:
-            return message * repeat
-
-        registry = ToolRegistry(
-            tools=[Tool("echo", "Echo.", EchoArgs, echo)],
-        )
-        with pytest.raises(Exception):  # Pydantic ValidationError
-            await registry.execute({
-                "name": "echo",
-                "args": {"repeat": 10},  # repeat > 5 violates Field(le=5)
-            })
-
-    @pytest.mark.asyncio
-    async def test_execute_empty_name_raises(self):
-        registry = ToolRegistry()
-        with pytest.raises(ValueError, match="Tool call name cannot be empty"):
-            await registry.execute({"name": "", "args": {}})
-
-    @pytest.mark.asyncio
-    async def test_execute_missing_args_raises(self):
-        async def handler() -> str:
-            return ""
-
-        registry = ToolRegistry(
-            tools=[Tool("test", "Test.", EchoArgs, handler)],
-        )
-        with pytest.raises(ValueError, match="Tool arguments must be an object"):
-            await registry.execute({"name": "test", "args": None})
-
-
-# ── ToolRegistry 事件通知测试 ──
-
-
-class TestToolRegistryEventHandler:
-    @pytest.mark.asyncio
-    async def test_execute_emits_running_then_done(self):
-        events: list[dict] = []
-
-        async def handler(event: dict) -> None:
-            events.append(event)
+    async def test_validates_args_with_pydantic(self):
+        """参数经 args_model 校验后传给 handler。"""
 
         async def echo(message: str, repeat: int = 1) -> str:
+            """回显消息。"""
             return message * repeat
 
-        registry = ToolRegistry(
-            tools=[Tool("echo", "Echo.", EchoArgs, echo)],
-            event_handler=handler,
-        )
-        await registry.execute({"name": "echo", "args": {"message": "hi"}})
-
-        assert len(events) == 2
-        assert events[0]["status"] == "running"
-        assert events[0]["tool_name"] == "echo"
-        assert events[1]["status"] == "done"
-        assert events[1]["tool_name"] == "echo"
+        registry = ToolRegistry([Tool("echo", "Echo.", EchoArgs, echo)])
+        assert await registry.execute("echo", {"message": "hi", "repeat": 3}) == "hihihi"
 
     @pytest.mark.asyncio
-    async def test_execute_emits_running_then_failed_on_exception(self):
-        events: list[dict] = []
-
-        async def handler(event: dict) -> None:
-            events.append(event)
-
-        async def failing(message: str, repeat: int = 1) -> str:
-            raise RuntimeError("tool error")
-
-        registry = ToolRegistry(
-            tools=[Tool("failing", "Failing.", EchoArgs, failing)],
-            event_handler=handler,
-        )
-
-        with pytest.raises(RuntimeError, match="tool error"):
-            await registry.execute({"name": "failing", "args": {"message": "test"}})
-
-        assert len(events) == 2
-        assert events[0]["status"] == "running"
-        assert events[1]["status"] == "failed"
-
-    @pytest.mark.asyncio
-    async def test_event_handler_exception_does_not_affect_execution(self):
-        events: list[dict] = []
-
-        async def bad_handler(event: dict) -> None:
-            events.append(event)
-            if event["status"] == "running":
-                raise RuntimeError("handler error")
+    async def test_accepts_json_string_args(self):
+        """支持 OpenAI 直接给出的 JSON 字符串参数。"""
 
         async def echo(message: str, repeat: int = 1) -> str:
+            """回显消息。"""
             return message * repeat
 
-        registry = ToolRegistry(
-            tools=[Tool("echo", "Echo.", EchoArgs, echo)],
-            event_handler=bad_handler,
-        )
+        registry = ToolRegistry([Tool("echo", "Echo.", EchoArgs, echo)])
+        assert await registry.execute("echo", '{"message": "hi", "repeat": 2}') == "hihi"
 
-        # Should not raise - handler exceptions are caught internally
-        result = await registry.execute({"name": "echo", "args": {"message": "hi"}})
-        assert result == "hi"
-        # Only running was attempted before exception, done should still emit
-        assert "running" in [e["status"] for e in events]
+    @pytest.mark.asyncio
+    async def test_uses_default_args(self):
+        """缺省字段由 pydantic 补齐。"""
+
+        async def echo(message: str, repeat: int = 1) -> str:
+            """回显消息。"""
+            return message * repeat
+
+        registry = ToolRegistry([Tool("echo", "Echo.", EchoArgs, echo)])
+        assert await registry.execute("echo", {"message": "hi"}) == "hi"
+
+    @pytest.mark.asyncio
+    async def test_rejects_invalid_args(self):
+        """参数越界时抛校验错误，不执行 handler。"""
+
+        async def echo(message: str, repeat: int = 1) -> str:
+            """回显消息。"""
+            return message * repeat
+
+        registry = ToolRegistry([Tool("echo", "Echo.", EchoArgs, echo)])
+        with pytest.raises(Exception):
+            await registry.execute("echo", {"message": "hi", "repeat": 10})
+
+    @pytest.mark.asyncio
+    async def test_unknown_tool_raises(self):
+        """未注册的工具名抛 KeyError。"""
+
+        with pytest.raises(KeyError, match="Unknown tool"):
+            await ToolRegistry().execute("nonexistent", {})
+
+
+class TestFormatToolOutput:
+    def test_text_payload_returns_plain_text(self):
+        """带 text 的短结构直接返回文本，失败加 [Error] 前缀。"""
+        assert format_tool_output({"text": "done", "status": "ok"}) == "done"
+        assert format_tool_output({"text": "boom", "status": "failed"}) == "[Error] boom"
+
+    def test_other_structures_serialize_as_json(self):
+        """其余结构序列化为 JSON 文本。"""
+        assert '"exit_code": 0' in format_tool_output({"stdout": "x", "stderr": "", "exit_code": 0})

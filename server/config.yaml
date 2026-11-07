@@ -4,7 +4,7 @@ app:
   port: 9999
 
 database:
-  url: "postgresql+asyncpg://coustea:Aa123456@127.0.0.1:5432/agent"
+  url: "mysql+aiomysql://coustea:Aa123456@127.0.0.1:3306/agent"
   echo: false
   pool_size: 20
   max_overflow: 30
@@ -21,9 +21,9 @@ jwt:
 # 全系统统一定义两个模型：文本模型 (text) 与 视觉模型 (vision)
 models:
   text:
-    base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"
-    api_key: "a878422abe46bb3e7daa03bc71c74539:NGNlNmI4ZDk2YjYyNzUwNmQ5ODQxMzVj"
-    model_name: "astron-code-latest"
+    base_url: "https://maas-api.cn-huabei-1.xf-yun.com/v2/chat/completions"
+    api_key: "ak-b9b6c6935fcc4f06b6a8472af909f383"
+    model_name: "spark-x2.6"
     timeout: 300
     max_retries: 2
   vision:
@@ -39,19 +39,6 @@ spark:
   app_id: "97c2a0c6"
   api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
   api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
-
-# Avatar 数字人（ASR 也使用此配置）
-avatar:
-  app_id: "d6d5f921"
-  api_key: "25aff2481573fc7d6a807616facc2090"
-  api_secret: "YzZlYzg5MjRjZWYwNGM0M2FmNTc4YTEz"
-  url: "wss://avatar.cn-huadong-1.xf-yun.com/v1/interact"
-  anchor_id: "111204004"
-  vcn: "x5_lingxiaoyue_flow"
-  iat_url: "wss://iat-api.xfyun.cn/v2/iat"
-  background_source: "res_key"
-  background_image: "22SLM2teIw+aqR6Xsm2JbH6Ng310kDam2NiCY/RQ9n6s3nYJXloZWW1l64/g32vrn7d2lJQR7m9xD5EHYkVs1zuP4AyAYT6ujNjsPymLI/WxeAzv8DjuimJOQlzH+66+Pc7W/Dug9AuYPnJkluZEQyoPrYAzp5Au+YU4hioS6cTosd4rev2C8fcKvtuWjZXJEFhyZMD8c+ssuXeQE1StdaR11kxFrbyVEVCzQmhikzYwMT7cljAvIlsK/ptuXqi4qHI8xSQ+tfk5s6SQoqA/2PfPxTvC/ZQGruKSUb6y8q7OmlkFRb0dpkvT5TAcRlkkV2oaULluWs4NuYqVuuR2s5k6pPWJlfl2JcuLrqHSbiI="
-  background_encoding: "jpg"
 
 # 路径配置
 paths:
@@ -102,10 +89,3 @@ paths_config:
   quiz_size: 5
   # 通过测验的最低分数
   pass_score: 3
-
-# ASR 语音识别配置
-asr:
-  # 当前网络使用 fake-IP DNS；域名鉴权和 TLS SNI 仍保持不变。
-  direct_ip: "124.172.152.234"
-  # VAD 结束静默时长（毫秒）— 越小响应越快，但可能截断短停顿
-  vad_eos: 1200
