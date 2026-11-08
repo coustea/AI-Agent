@@ -1,12 +1,11 @@
-import { ref, shallowRef } from 'vue'
-import { cancelChatRun, createChatMessage, getChatRun } from '@/features/chat/api/chat'
+import { ref } from 'vue'
+import { cancelChatRun, createChatMessage } from '@/features/chat/api/chat'
 import { getAuthToken } from '@/shared/auth/token'
 import type { StreamChatParams } from '@/features/chat/types/chat'
-import { emptyRun, isRunActive, reduceChatEvent, type ChatEvent, type RunState } from '@/features/chat/types/chatEvent'
+import { emptyRun, isRunActive, type RunConnection, type RunState } from '@/features/chat/types/chatRun'
 
 export function useChatRun() {
-  const state = shallowRef<RunState | null>(null)
-  const reconnecting = ref(false)
+  const connection = ref<RunConnection>('closed')
   let source: EventSource | null = null
   let generation = 0
 
@@ -14,50 +13,38 @@ export function useChatRun() {
     generation++
     source?.close()
     source = null
-    reconnecting.value = false
+    connection.value = 'closed'
   }
 
   function connect(initial: RunState, onChange: (state: RunState) => void) {
     close()
-    state.value = initial
     onChange(initial)
     if (!isRunActive(initial)) return
 
     const epoch = generation
-    const query = new URLSearchParams()
-    const token = getAuthToken()
-    if (token) query.set('token', token)
-    const qs = query.toString()
-    const url = `/api/v1/ai/chat/runs/${initial.run_id}/events${qs ? `?${qs}` : ''}`
+    const query = new URLSearchParams({ token: getAuthToken() || '' })
+    source = new EventSource(`/api/v1/ai/chat/runs/${initial.run_id}/events?${query}`)
+    const events = source
+    connection.value = 'connecting'
 
-    source = new EventSource(url)
-    const connection = source
-
-    connection.onopen = () => {
-      reconnecting.value = false
-    }
-
-    connection.addEventListener('chat.event', (raw: MessageEvent) => {
-      if (epoch !== generation || !state.value) return
-      const event = JSON.parse(raw.data) as ChatEvent
-      state.value = reduceChatEvent(state.value, event)
-      onChange(state.value)
-      if (!isRunActive(state.value)) close()
+    events.addEventListener('run.state', (raw: MessageEvent) => {
+      if (epoch !== generation) return
+      const snapshot = JSON.parse(raw.data) as RunState
+      if (snapshot.run_id !== initial.run_id) return
+      connection.value = 'connected'
+      onChange(snapshot)
+      if (!isRunActive(snapshot)) close()
     })
 
-    connection.onerror = async () => {
-      reconnecting.value = true
-      if (connection.readyState !== EventSource.CLOSED) return
-      try {
-        const response = await getChatRun(initial.run_id)
-        if (epoch === generation) connect(response.data.data, onChange)
-      } catch {
-        if (epoch === generation) reconnecting.value = true
-      }
+    // EventSource 自动重连；收到新快照前继续标记连接异常。
+    events.onerror = () => {
+      if (epoch !== generation) return
+      connection.value = events.readyState === EventSource.CLOSED ? 'closed' : 'reconnecting'
     }
   }
 
   async function start(params: StreamChatParams, onChange: (state: RunState) => void) {
+    close()
     const epoch = generation
     const response = await createChatMessage(params)
     const data = response.data.data
@@ -65,11 +52,9 @@ export function useChatRun() {
     return data
   }
 
-  async function cancel() {
-    if (state.value && isRunActive(state.value)) {
-      await cancelChatRun(state.value.run_id)
-    }
+  async function cancel(runId: string) {
+    await cancelChatRun(runId)
   }
 
-  return { state, reconnecting, start, connect, close, cancel }
+  return { connection, start, connect, close, cancel }
 }

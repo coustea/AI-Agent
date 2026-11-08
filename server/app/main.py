@@ -45,7 +45,7 @@ async def lifespan(app: FastAPI):
     # 执行数据库连接检查，确保连接可用
     await check_all()
     # 把上次进程遗留的进行中运行标记为中断
-    from app.chat.agent import mark_interrupted_runs
+    from app.chat.service import mark_interrupted_runs
 
     interrupted = await mark_interrupted_runs()
     if interrupted:

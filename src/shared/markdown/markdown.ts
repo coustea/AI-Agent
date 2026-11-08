@@ -130,7 +130,9 @@ function readLanguage(code: Element): string {
   const classes = code.properties.className
   if (!Array.isArray(classes)) return 'text'
   const languageClass = classes.find(value => typeof value === 'string' && value.startsWith('language-'))
-  return typeof languageClass === 'string' ? normalizeLanguage(languageClass.slice('language-'.length)) : 'text'
+  if (typeof languageClass !== 'string') return 'text'
+  const language = languageClass.slice('language-'.length).toLowerCase()
+  return language === 'mermaid' || language === 'svg' ? language : normalizeLanguage(language)
 }
 
 function rehypePrepareCodeBlocks(): (tree: Root) => Promise<void> {
@@ -280,7 +282,6 @@ export async function renderMarkdownToHtml(markdown: string, theme: MarkdownThem
       {
         themes: { light: 'github-light', dark: 'github-dark' },
         defaultColor: theme,
-        fallbackLanguage: 'text',
         transformers: [{
           name: 'markdown-code-metadata',
           pre(node: Element) {

@@ -2,187 +2,8 @@
   <div class="tutor-dashboard">
     <main class="dashboard-main">
       <!-- 左侧会话历史导航栏 -->
-      <aside class="session-sidebar" :class="{ collapsed: sessionSidebarCollapsed }">
-        <div class="sidebar-top-header">
-          <div class="sidebar-brand" v-if="!sessionSidebarCollapsed">
-            <span class="brand-seal">
-              <ChatLineRound class="brand-icon" />
-            </span>
-            <span class="brand-text">Mentorly</span>
-          </div>
-          <button
-            class="collapse-toggle-btn"
-            @click="sessionSidebarCollapsed = !sessionSidebarCollapsed"
-            :title="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
-            :aria-label="sessionSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <rect x="3.5" y="4" width="17" height="16" rx="3.5"></rect>
-              <line x1="9" y1="4" x2="9" y2="20"></line>
-            </svg>
-          </button>
-        </div>
-
-        <div class="standard-sidebar-nav">
-          <button
-            type="button"
-            :class="['nav-item', 'new-chat-btn', { active: !activeSessionId }]"
-            @click="newSession"
-            title="新建对话"
-          >
-            <EditPen class="nav-icon" />
-            <span class="nav-text">新建对话</span>
-          </button>
-
-          <PopoverRoot v-model:open="searchPopoverVisible">
-            <PopoverTrigger as="button" type="button" class="nav-item search-item" title="搜索历史对话">
-              <Search class="nav-icon" />
-              <span class="nav-text">搜索对话</span>
-            </PopoverTrigger>
-
-            <PopoverPortal>
-              <PopoverContent
-                class="popover-content-container search-popover-content"
-                side="right"
-                align="start"
-                :side-offset="10"
-              >
-                <div class="popover-search-container">
-                  <div class="search-input-wrapper">
-                    <Search class="search-input-icon" />
-                    <input
-                      v-model="searchKeyword"
-                      type="text"
-                      placeholder="输入关键词搜索对话..."
-                      class="input-control search-input"
-                    />
-                    <button v-if="searchKeyword" type="button" class="search-clear-btn" @click="searchKeyword = ''">×</button>
-                  </div>
-
-                  <div class="popover-session-scroll search-results-scroll" v-show="searchKeyword.trim() !== ''">
-                    <div
-                      v-for="s in filteredSessions"
-                      :key="s.id"
-                      :class="['nav-item', 'session-item', { active: s.id === activeSessionId }]"
-                      @click="switchSession(s.id); searchPopoverVisible = false"
-                    >
-                      <ChatLineSquare class="session-icon" />
-                      <div class="session-info nav-text">
-                        <span class="session-title">{{ s.title || '新对话' }}</span>
-                        <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
-                      </div>
-                    </div>
-
-                    <div v-if="filteredSessions.length === 0" class="session-empty nav-text">
-                      未找到匹配的对话记录
-                    </div>
-                  </div>
-                </div>
-              </PopoverContent>
-            </PopoverPortal>
-          </PopoverRoot>
-
-          <!-- 折叠态下的历史记录弹窗入口 -->
-          <PopoverRoot v-model:open="historyPopoverVisible">
-            <PopoverTrigger
-              v-if="sessionSidebarCollapsed"
-              as="button"
-              type="button"
-              class="nav-item history-collapsed-btn"
-              title="历史记录"
-              aria-label="历史记录"
-            >
-              <Timer class="nav-icon" />
-            </PopoverTrigger>
-
-            <PopoverPortal>
-              <PopoverContent
-                class="popover-content-container history-popover-content"
-                side="right"
-                align="start"
-                :side-offset="10"
-              >
-                <div class="history-popover-header">
-                  <div class="history-popover-heading">
-                    <Timer class="history-popover-icon" aria-hidden="true" />
-                    <div>
-                      <div class="popover-title">历史记录</div>
-                      <div class="history-popover-count">{{ sessions.length }} 个对话</div>
-                    </div>
-                  </div>
-                </div>
-                <div class="popover-session-scroll">
-                  <div
-                    v-for="s in sessions"
-                    :key="s.id"
-                    :class="['nav-item', 'session-item', { active: s.id === activeSessionId }]"
-                    :title="s.title || '新对话'"
-                    :aria-current="s.id === activeSessionId ? 'true' : undefined"
-                    @click="switchSession(s.id); historyPopoverVisible = false"
-                  >
-                    <ChatLineSquare class="session-icon" />
-                    <div class="session-info nav-text">
-                      <span class="session-title-line">
-                        <span class="session-title">{{ s.title || '新对话' }}</span>
-                        <span v-if="s.id === activeSessionId" class="current-session-indicator">当前</span>
-                      </span>
-                      <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
-                    </div>
-                    <button
-                      type="button"
-                      class="btn-link del-btn nav-text"
-                      aria-label="删除对话"
-                      title="删除对话"
-                      @click.stop="historyPopoverVisible = false; archiveSession(s.id)"
-                    >
-                      <Delete class="del-icon" />
-                    </button>
-                  </div>
-                  <div v-if="sessions.length === 0" class="session-empty nav-text">暂无对话记录</div>
-                </div>
-              </PopoverContent>
-            </PopoverPortal>
-          </PopoverRoot>
-        </div>
-
-        <!-- 展开态：按时间分组的历史会话列表 -->
-        <div class="session-list" v-show="!sessionSidebarCollapsed">
-          <template v-if="groupedSessions.length > 0">
-            <div
-              v-for="group in groupedSessions"
-              :key="group.label"
-              class="session-group"
-            >
-              <div class="session-group-label">{{ group.label }}</div>
-              <div
-                v-for="s in group.items"
-                :key="s.id"
-                :class="['nav-item', 'session-item', { active: s.id === activeSessionId }]"
-                :title="s.title || '新对话'"
-                @click="switchSession(s.id)"
-              >
-                <ChatLineSquare class="session-icon" />
-                <div class="session-info nav-text">
-                  <span class="session-title">{{ s.title || '新对话' }}</span>
-                  <span class="session-time">{{ formatRelativeTime(s.updated_at) }}</span>
-                </div>
-                <button
-                  type="button"
-                  class="btn-link del-btn nav-text"
-                  title="删除对话"
-                  aria-label="删除对话"
-                  @click.stop="archiveSession(s.id)"
-                >
-                  <Delete class="del-icon" />
-                </button>
-              </div>
-            </div>
-          </template>
-          <div v-else class="session-empty nav-text">
-            暂无历史对话，开始你的第一次提问吧
-          </div>
-        </div>
-      </aside>
+      <ChatSidebar :sessions="sessions" :active-id="currentSessionId"
+        @create="newSession" @select="switchSession" @archive="archiveSession" />
 
       <!-- 右侧主对话舞台 -->
       <section class="chat-container">
@@ -222,7 +43,7 @@
             <div v-else class="chat-stream-track">
               <!-- 本地附件上传等待状态 -->
               <div
-                v-if="uploadingFile && !streamingMsgId"
+                v-if="uploadingFile"
                 class="thinking-indicator-row"
               >
                 <div class="ai-msg-header">
@@ -236,8 +57,8 @@
                       <i></i><i></i><i></i>
                     </span>
                     <div>
-                      <strong>正在安全上传并解析附件</strong>
-                      <span>上传完成后将自动启动智能体分析链路，请稍候...</span>
+                      <strong>正在上传附件</strong>
+                      <span>上传完成后将提交问题，请稍候。</span>
                     </div>
                   </div>
                 </div>
@@ -248,13 +69,12 @@
                 <article
                   v-if="
                     msg.role === 'user'
-                    || getDisplayContent(msg)
+                    || messageContent(msg)
                     || msg.attachments?.length
                     || msg.run
-                    || msg.failed
+                    || messageError(msg)
                   "
                   :class="['message-turn', msg.role, { 'is-streaming': isStreamingMessage(msg) }]"
-                  @click="handleMessageClick"
                 >
                   <!-- A. 用户提问（右侧凝练胶囊气泡） -->
                   <template v-if="msg.role === 'user'">
@@ -307,17 +127,17 @@
 
                       <!-- 用户文本气泡 -->
                       <div
-                        v-if="getDisplayContent(msg)"
+                        v-if="messageContent(msg)"
                         class="user-capsule-bubble"
                       >
-                        <div class="user-plain-text">{{ getDisplayContent(msg) }}</div>
+                        <div class="user-plain-text">{{ messageContent(msg) }}</div>
                       </div>
 
                       <!-- 用户消息底部元信息与快捷复制 -->
                       <div class="user-turn-meta">
                         <span class="turn-time">{{ msg.time }}</span>
                         <button
-                          v-if="getDisplayContent(msg)"
+                          v-if="messageContent(msg)"
                           type="button"
                           class="turn-action-btn"
                           :class="{ 'is-copied': copiedMsgId === msg.id }"
@@ -348,25 +168,25 @@
                         <span class="turn-time">{{ msg.time }}</span>
                         <span v-if="isStreamingMessage(msg)" class="streaming-live-pill">
                           <i class="live-dot"></i>
-                          正在回答
+                          {{ connection === 'connected' ? msg.run?.phase_label : '等待状态同步' }}
                         </span>
                       </header>
 
                       <div class="ai-canvas-body">
-                        <!-- 1. 思考过程卡片（流光呼吸，思考完成自动折叠为胶囊） -->
-                        <ChatThinkingBlock v-if="msg.run" :run="msg.run" />
+                        <ChatRunStatus
+                          v-if="msg.run"
+                          :run="msg.run"
+                          :connection="msg.run.run_id === currentRun?.run_id ? connection : undefined"
+                        />
 
-                        <!-- 2. 工具调用行动卡片（独立行动凭证，按执行链展示） -->
-                        <ChatToolBlock v-if="msg.run" :run="msg.run" />
-
-                        <!-- 3. 回答正文（开放手稿画布，Append-Only 平滑追加，光标精准跟随） -->
+                        <!-- 回答正文直接读取运行快照 -->
                         <div
-                          v-if="Boolean(getDisplayContent(msg)) || isStreamingMessage(msg)"
+                          v-if="Boolean(messageContent(msg)) || isStreamingMessage(msg)"
                           class="ai-manuscript-content"
                         >
                           <TutorMessageContent
-                            :content="getDisplayContent(msg)"
-                            :is-streaming="isStreamingMessage(msg)"
+                            :content="messageContent(msg)"
+                            :is-streaming="isStreamingMessage(msg) && msg.run?.phase === 'streaming' && connection === 'connected'"
                           />
                         </div>
 
@@ -375,7 +195,7 @@
 
                         <!-- 3. 失败或超时专用错误卡片 -->
                         <div
-                          v-if="msg.failed"
+                          v-if="messageError(msg)"
                           class="assistant-failed-card"
                         >
                           <div class="failed-header">
@@ -384,14 +204,14 @@
                                 <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
                               </svg>
                             </span>
-                            <strong class="failed-title">运行超时 / 生成中断</strong>
+                            <strong class="failed-title">生成失败</strong>
                           </div>
-                          <p class="failed-message">{{ msg.errorMessage || msg.content || '请求处理超时或服务异常，请重试。' }}</p>
+                          <p class="failed-message">{{ messageError(msg) }}</p>
                           <div class="failed-actions">
                             <button
                               type="button"
                               class="failed-retry-btn"
-                              :disabled="isAIThinking"
+                              :disabled="isResponding"
                               @click.stop="handleRetryAssistantMessage(msg)"
                             >
                               <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
@@ -404,7 +224,7 @@
 
                         <!-- 4. AI 回答底部操作栏 -->
                         <footer
-                          v-if="getDisplayContent(msg) && !isStreamingMessage(msg)"
+                          v-if="messageContent(msg) && !isStreamingMessage(msg)"
                           class="ai-msg-toolbar"
                         >
                           <button
@@ -461,157 +281,12 @@
           </transition>
 
           <!-- 底部多模态输入舱 -->
-          <div class="minimal-input-panel">
-            <form
-              ref="messageFormRef"
-              class="minimal-input-wrapper"
-              :class="{
-                'is-expanded': isExpandedInput,
-                'has-attachments': pendingFiles.length > 0,
-                'is-responding': isResponding,
-              }"
-              @submit.prevent="handleSend"
-            >
-              <!-- 待发送附件预览轨 -->
-              <div v-if="pendingFiles.length > 0" class="composer-attachments">
-                <div
-                  v-for="(f, idx) in pendingFiles"
-                  :key="`${f.name}-${idx}`"
-                  class="composer-attachment"
-                  :class="{ 'is-image': f.fileType === 'image', 'is-file': f.fileType !== 'image' }"
-                >
-                  <template v-if="f.fileType === 'image'">
-                    <img
-                      :src="f.localUrl || f.url"
-                      :alt="f.name || '图片预览'"
-                      class="composer-image"
-                    />
-                    <span class="composer-image-name" :title="f.name">{{ f.name }}</span>
-                  </template>
-                  <template v-else>
-                    <span
-                      class="file-icon-box"
-                      :style="{ backgroundColor: getDocumentIconColor(getDocumentType(f.name)) }"
-                    >
-                      <Document class="file-icon" aria-hidden="true" />
-                    </span>
-                    <span class="file-copy">
-                      <strong :title="f.name">{{ f.name }}</strong>
-                      <small>{{ formatFileSize(f.size) || getDocumentType(f.name).toUpperCase() }}</small>
-                    </span>
-                  </template>
-                  <button
-                    type="button"
-                    class="remove-attachment-btn"
-                    @click="removeAttachment(idx)"
-                    aria-label="移除附件"
-                  >
-                    <Close class="close-icon" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-
-              <textarea
-                ref="textareaRef"
-                v-model="userInput"
-                rows="1"
-                aria-label="向 Mentorly 提问"
-                placeholder="输入问题，或粘贴图片/上传文档向 Mentorly 提问..."
-                @compositionstart="isComposing = true"
-                @compositionend="isComposing = false"
-                @keydown.enter="handleEnter"
-                @input="autoResize"
-              ></textarea>
-
-              <div class="minimal-action-bar">
-                <div class="action-left" :key="inputToolStateKey">
-                  <button
-                    type="button"
-                    class="input-tool-btn"
-                    :disabled="uploadingFile"
-                    @click="triggerFileUpload"
-                    :aria-label="uploadingFile ? '正在上传附件' : '上传附件'"
-                    :title="uploadingFile ? '正在上传附件' : '上传图片或文档附件'"
-                  >
-                    <Loading v-if="uploadingFile" class="tool-icon spinner" aria-hidden="true" />
-                    <Paperclip v-else class="tool-icon" aria-hidden="true" />
-                    <span>{{ uploadingFile ? '上传中' : '附件' }}</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    class="input-tool-btn"
-                    :class="{ 'is-active-teal': needTeachingDiagram }"
-                    @click="handleTeachingDiagramToggle"
-                    :aria-pressed="needTeachingDiagram"
-                    title="开启后将为您生成结构化教学图解"
-                  >
-                    <DataLine class="tool-icon" aria-hidden="true" />
-                    <span>图解</span>
-                    <i v-if="needTeachingDiagram" class="active-check" aria-hidden="true">✓</i>
-                  </button>
-
-                  <button
-                    type="button"
-                    class="input-tool-btn"
-                    :class="{ 'is-active-purple': needVideo }"
-                    @click="handleVideoToggle"
-                    :aria-pressed="needVideo"
-                    title="开启后将调用动画智能体生成教学讲解视频"
-                  >
-                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" class="tool-icon" aria-hidden="true">
-                      <rect x="2.5" y="5" width="11" height="10" rx="1.5" />
-                      <path d="m13.5 8 4-2.5v9l-4-2.5z" />
-                    </svg>
-                    <span>视频</span>
-                    <i v-if="needVideo" class="active-check" aria-hidden="true">✓</i>
-                  </button>
-                </div>
-
-                <div class="action-right">
-                  <button
-                    v-if="isResponding"
-                    type="button"
-                    class="stop-gen-btn"
-                    @click="stopGeneration"
-                  >
-                    <span class="stop-square" aria-hidden="true"></span>
-                    <span>停止生成</span>
-                  </button>
-                  <button
-                    type="submit"
-                    class="minimal-send-btn"
-                    :class="{
-                      'can-send': canSendMessage,
-                      'is-responding': isResponding,
-                    }"
-                    :disabled="!canSendMessage"
-                    :aria-label="isResponding ? 'AI 正在回答' : '发送消息'"
-                    :title="isResponding ? 'AI 正在回答，请稍候' : (canSendMessage ? '发送消息 (Enter)' : '请输入内容')"
-                  >
-                    <Loading v-if="isResponding" class="responding-spinner spinner" aria-hidden="true" />
-                    <svg v-else viewBox="0 0 20 20" fill="none" aria-hidden="true" class="send-arrow-svg">
-                      <path d="M10 15.5V4.5M5.2 9.2 10 4.4l4.8 4.8" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            </form>
-            <div class="input-footer">
-              <span>Enter 发送 · Shift + Enter 换行</span>
-              <span>内容由多智能体协同生成，请结合教材核对关键结论</span>
-            </div>
-          </div>
+          <ChatComposer ref="composerRef" v-model:text="userInput" v-model:mode="mode"
+            v-model:files="pendingFiles" :busy="isResponding" :phase="currentRun?.phase"
+            :submit-phase="submitPhase" @submit="handleSend" @cancel="stopGeneration" />
         </div>
 
-        <input
-          ref="fileInput"
-          type="file"
-          multiple
-          accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.txt,.md,.log,.png,.jpg,.jpeg,.gif,.webp"
-          style="display:none"
-          @change="onCombinedFileSelected"
-        />
+
       </section>
     </main>
 
@@ -653,28 +328,18 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onBeforeUnmount, onActivated, onDeactivated, computed } from 'vue'
 import {
-  PopoverRoot, PopoverTrigger, PopoverPortal, PopoverContent
-} from 'reka-ui'
-import {
-  PhChatCenteredText as ChatLineRound,
   PhHeadset as Service,
   PhFileText as Document,
-  PhChat as ChatLineSquare,
   PhTrash as Delete,
   PhX as Close,
-  PhPaperclip as Paperclip,
-  PhPencilSimple as EditPen,
-  PhMagnifyingGlass as Search,
-  PhClock as Timer,
-  PhGraph as DataLine,
-  PhSpinner as Loading
 } from '@phosphor-icons/vue'
 import { toast } from 'vue-sonner'
 import { getErrorMessage } from '@/shared/api/http'
 import { ensureCurrentUser, useCurrentUser } from '@/features/auth/model/currentUser'
+import ChatSidebar from '@/features/chat/components/ChatSidebar.vue'
+import ChatComposer from '@/features/chat/components/ChatComposer.vue'
 import TutorMessageContent from '@/features/chat/components/TutorMessageContent.vue'
-import ChatThinkingBlock from '@/features/chat/components/ChatThinkingBlock.vue'
-import ChatToolBlock from '@/features/chat/components/ChatToolBlock.vue'
+import ChatRunStatus from '@/features/chat/components/ChatRunStatus.vue'
 import ChatArtifactsShowcase from '@/features/chat/components/ChatArtifactsShowcase.vue'
 
 import { useChatRun } from '@/features/chat/composables/useChatRun'
@@ -683,13 +348,12 @@ import {
   getSessions,
   createSession,
   deleteSession,
-  updateSessionTitle,
   getChatHistory,
 } from '@/features/chat/api/chat'
 import type {
   ChatSession,
 } from '@/features/chat/types/chat'
-import { isRunActive, type RunState } from '@/features/chat/types/chatEvent'
+import { isRunActive, type RunState } from '@/features/chat/types/chatRun'
 import { consumeTutorEntryIntent } from '@/features/chat/model/tutorEntryIntent'
 import {
   type PendingFile,
@@ -698,8 +362,6 @@ import {
   getDocumentType,
   getDocumentIconColor,
   formatFileSize,
-  formatRelativeTime,
-  getInputToolStateKey,
 } from './tutorUtils'
 
 defineOptions({ name: 'Tutor' })
@@ -716,19 +378,14 @@ const DEFAULT_SESSION_TITLE = '新对话'
 const SESSION_TITLE_REFRESH_DELAYS = [300, 800, 1500, 3000]
 const { userName } = useCurrentUser()
 
+const composerRef = ref<InstanceType<typeof ChatComposer> | null>(null)
 const userInput = ref('')
-const isAIThinking = ref(false)
 const chatScroll = ref<HTMLElement | null>(null)
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
-const messageFormRef = ref<HTMLFormElement | null>(null)
-const isExpandedInput = ref(false)
-const isComposing = ref(false)
 const showScrollToBottom = ref(false)
 const copiedMsgId = ref<number | null>(null)
 let copiedResetTimer: ReturnType<typeof setTimeout> | null = null
 
-const needTeachingDiagram = ref(false)
-const needVideo = ref(false)
+const mode = ref<'default' | 'diagram' | 'video'>('default')
 
 const greetingText = computed(() => {
   const hour = new Date().getHours()
@@ -771,17 +428,8 @@ const starterPrompts: StarterPrompt[] = [
 
 const applyStarterPrompt = (item: StarterPrompt) => {
   userInput.value = item.prompt
-  if (item.mode === 'diagram') {
-    needTeachingDiagram.value = true
-    needVideo.value = false
-  } else if (item.mode === 'video') {
-    needVideo.value = true
-    needTeachingDiagram.value = false
-  }
-  nextTick(() => {
-    autoResize()
-    textareaRef.value?.focus()
-  })
+  mode.value = item.mode || 'default'
+  nextTick(() => composerRef.value?.focus())
 }
 
 const imgPreviewVisible = ref(false)
@@ -798,75 +446,17 @@ const isDeleteConfirmVisible = ref(false)
 const sessionToDeleteId = ref<string | null>(null)
 const sessionToDeleteTitle = ref('')
 
-const uploadingFile = ref(false)
-const fileInput = ref<HTMLInputElement | null>(null)
+const submitPhase = ref<'idle' | 'uploading' | 'submitting'>('idle')
+const uploadingFile = computed(() => submitPhase.value === 'uploading')
 const pendingFiles = ref<PendingFile[]>([])
-const inputToolStateKey = computed(() => getInputToolStateKey({
-  uploadingFile: uploadingFile.value,
-  needTeachingDiagram: needTeachingDiagram.value,
-  needVideo: needVideo.value,
-}))
-
 // 会话列表与分组
 const sessions = ref<ChatSession[]>([])
 const currentSessionId = ref<string | undefined>(undefined)
-const activeSessionId = computed(() => currentSessionId.value)
-const sessionSidebarCollapsed = ref(false)
-const searchPopoverVisible = ref(false)
-const historyPopoverVisible = ref(false)
-const searchKeyword = ref('')
-
-const groupedSessions = computed(() => {
-  if (!sessions.value.length) return []
-
-  const nowDate = new Date()
-  const todayStart = new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate()).getTime()
-  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000
-  const weekStart = todayStart - 7 * 24 * 60 * 60 * 1000
-
-  const buckets: Record<'today' | 'yesterday' | 'week' | 'older', ChatSession[]> = {
-    today: [],
-    yesterday: [],
-    week: [],
-    older: [],
-  }
-
-  for (const s of sessions.value) {
-    const ts = s.updated_at ? new Date(s.updated_at).getTime() : 0
-    if (ts >= todayStart) {
-      buckets.today.push(s)
-    } else if (ts >= yesterdayStart) {
-      buckets.yesterday.push(s)
-    } else if (ts >= weekStart) {
-      buckets.week.push(s)
-    } else {
-      buckets.older.push(s)
-    }
-  }
-
-  const groups: Array<{ label: string; items: ChatSession[] }> = []
-  if (buckets.today.length) groups.push({ label: '今天', items: buckets.today })
-  if (buckets.yesterday.length) groups.push({ label: '昨天', items: buckets.yesterday })
-  if (buckets.week.length) groups.push({ label: '最近 7 天', items: buckets.week })
-  if (buckets.older.length) groups.push({ label: '更早', items: buckets.older })
-  return groups
-})
-
 const messages = ref<ChatMsg[]>([])
-const streamingMsgId = ref<number | null>(null)
-
-const isResponding = computed(() => (
-  uploadingFile.value
-  || isAIThinking.value
-  || streamingMsgId.value !== null
-))
-
-const canSendMessage = computed(() => (
-  !isResponding.value
-  && Boolean(userInput.value.trim() || pendingFiles.value.length > 0)
-))
-
+const currentRun = computed(() => messages.value.find(message => message.run && isRunActive(message.run))?.run)
+const isResponding = computed(() => submitPhase.value !== 'idle' || Boolean(currentRun.value))
 const chatRun = useChatRun()
+const { connection } = chatRun
 let scrollPending = false
 let lastAutoScrollAt = 0
 const STREAM_SCROLL_INTERVAL_MS = 64
@@ -875,34 +465,24 @@ const STREAM_AUTO_SCROLL_BOTTOM_GAP_PX = 120
 const applyRun = (messageId: number, state: RunState) => {
   const message = messages.value.find(item => item.id === messageId)
   if (!message) return
+  const wasActive = message.run && isRunActive(message.run)
   message.run = state
-  message.content = state.content
-  message.failed = state.status === 'failed' || state.status === 'interrupted'
-  message.errorMessage = state.error
-  isAIThinking.value = isRunActive(state)
-  streamingMsgId.value = isRunActive(state) ? messageId : null
+  if (wasActive && state.status === 'completed' && currentSessionId.value) {
+    void refreshSessionTitleWithRetry(currentSessionId.value)
+  }
   scrollToBottomThrottled()
 }
 
 const stopGeneration = async () => {
-  try { await chatRun.cancel() }
+  try { if (currentRun.value) await chatRun.cancel(currentRun.value.run_id) }
   catch (error) { toast.error(getErrorMessage(error, '停止失败')) }
 }
 
-const filteredSessions = computed(() => {
-  const keyword = searchKeyword.value.trim().toLowerCase()
-  if (!keyword) return []
-  return sessions.value.filter(s => {
-    const title = s.title || '新对话'
-    return title.toLowerCase().includes(keyword)
-  })
-})
-
-const isStreamingMessage = (msg: ChatMsg) => {
-  if (msg.id !== streamingMsgId.value) return false
-  return isAIThinking.value
-}
-const getDisplayContent = (msg: ChatMsg) => msg.content
+const isStreamingMessage = (msg: ChatMsg) => Boolean(msg.run && isRunActive(msg.run))
+const messageContent = (msg: ChatMsg) => msg.run?.content ?? msg.content
+const messageError = (msg: ChatMsg) => msg.localError || (
+  msg.run?.status === 'failed' || msg.run?.status === 'interrupted' ? msg.run.error : ''
+)
 
 const getImageAttachments = (attachments?: Attachment[] | null) => (
   (attachments || []).filter(item => item.type === 'image' && Boolean(item.url))
@@ -923,14 +503,6 @@ const getImageGalleryClass = (attachments?: Attachment[] | null) => {
   return 'is-grid'
 }
 
-const handleEnter = (e: KeyboardEvent) => {
-  if (isComposing.value || e.isComposing) return
-  if (e.shiftKey) return
-
-  e.preventDefault()
-  messageFormRef.value?.requestSubmit()
-}
-
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
 const copyToClipboard = async (text: string): Promise<boolean> => {
@@ -944,7 +516,7 @@ const copyToClipboard = async (text: string): Promise<boolean> => {
 }
 
 const handleCopyMessage = async (msg: ChatMsg) => {
-  const content = getDisplayContent(msg).trim()
+  const content = messageContent(msg).trim()
   if (!content) return
   const ok = await copyToClipboard(content)
   if (!ok) return
@@ -955,23 +527,6 @@ const handleCopyMessage = async (msg: ChatMsg) => {
       copiedMsgId.value = null
     }
   }, 2000)
-}
-
-const handleMessageClick = (e: MouseEvent) => {
-  const target = e.target as HTMLElement
-  if (target && target.classList.contains('copy-code-btn')) {
-    const code = target.dataset.code
-    if (code != null) {
-      void copyToClipboard(code)
-      const originalText = target.innerText
-      target.innerText = '已复制'
-      target.classList.add('copied')
-      setTimeout(() => {
-        target.innerText = originalText
-        target.classList.remove('copied')
-      }, 2000)
-    }
-  }
 }
 
 const handleViewportScroll = () => {
@@ -1025,21 +580,6 @@ const isNearBottom = () => {
   return gap <= STREAM_AUTO_SCROLL_BOTTOM_GAP_PX
 }
 
-const autoResize = () => {
-  const el = textareaRef.value
-  if (!el) return
-
-  const minHeight = 28
-  const maxHeight = 200
-
-  el.style.height = `${minHeight}px`
-  const nextHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight)
-
-  el.style.height = `${nextHeight}px`
-  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden'
-  isExpandedInput.value = nextHeight > 40
-}
-
 const loadSessions = async () => {
   try {
     const res = await getSessions()
@@ -1069,9 +609,9 @@ const refreshSessionTitleWithRetry = async (sessionId: string) => {
 }
 
 const newSession = () => {
+  sessionSwitchToken++
+  submitPhase.value = 'idle'
   chatRun.close()
-  streamingMsgId.value = null
-  isAIThinking.value = false
   currentSessionId.value = undefined
   messages.value = []
   showScrollToBottom.value = false
@@ -1091,36 +631,17 @@ const loadHistoryFromAPI = async (
         .filter((part): part is { type: 'text'; text: string } => part.type === 'text')
         .map(part => part.text)
         .join('')
-      const imageAttachments = contentParts
-        .filter(part => part.type === 'image_url')
-        .map(part => ({
-          url: part.url || part.image_url.url,
-          type: 'image',
-          name: part.original_name || '',
-          size: part.size_bytes,
-          mimeType: part.mime_type || undefined,
-        }))
-      const fileAttachments = contentParts
-        .filter(part => part.type === 'file')
-        .map(part => ({
-          url: part.url || part.file.file_id || part.file.file_data || '',
-          type: 'document',
-          name: part.original_name || part.file.filename || '',
-          size: part.size_bytes,
-          mimeType: part.mime_type || undefined,
-        }))
-      const contentAttachments = [...imageAttachments, ...fileAttachments]
-      const attachments = contentAttachments.length > 0 ? contentAttachments : null
+      const attachments = contentParts
+        .filter(part => part.type !== 'text')
+        .map(part => ({ url: part.url, type: part.file_type, name: part.original_name,
+          size: part.size_bytes, mimeType: part.mime_type }))
       return {
         id: msg.id,
         role: msg.role === 'user' ? 'user' : 'ai',
-        content: msg.run?.content ?? textContent,
+        content: textContent,
         time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         attachments,
-        runId: msg.run_id,
         run: msg.run ?? undefined,
-        failed: msg.run?.status === 'failed' || msg.run?.status === 'interrupted',
-        errorMessage: msg.run?.error,
       }
     })
     if (!shouldApply()) return false
@@ -1135,14 +656,15 @@ const loadHistoryFromAPI = async (
 }
 
 let sessionSwitchToken = 0
+let nextMessageId = Date.now()
 
 const switchSession = async (sessionId: string) => {
   const switchToken = ++sessionSwitchToken
+  submitPhase.value = 'idle'
+  clearPendingFiles()
   chatRun.close()
   currentSessionId.value = sessionId
   messages.value = []
-  isAIThinking.value = false
-  streamingMsgId.value = null
   showScrollToBottom.value = false
   if (!await loadHistoryFromAPI(sessionId, () => switchToken === sessionSwitchToken)) return
   if (switchToken !== sessionSwitchToken) return
@@ -1172,13 +694,12 @@ const confirmArchiveSession = async () => {
   sessionToDeleteId.value = null
 
   try {
-    chatRun.close()
+    if (currentSessionId.value === sessionId) chatRun.close()
     await deleteSession(sessionId)
     sessions.value = sessions.value.filter(session => session.id !== sessionId)
 
-    if (activeSessionId.value === sessionId) {
-      currentSessionId.value = undefined
-      messages.value = []
+    if (currentSessionId.value === sessionId) {
+      newSession()
 
       if (sessions.value.length > 0) {
         await switchSession(sessions.value[0]!.id)
@@ -1191,49 +712,6 @@ const confirmArchiveSession = async () => {
   }
 }
 
-const triggerFileUpload = () => fileInput.value?.click()
-
-const MAX_COMPOSER_FILES = 5
-
-const onCombinedFileSelected = (event: Event) => {
-  const input = event.target as HTMLInputElement
-  const selectedFiles = Array.from(input.files || [])
-  if (!selectedFiles.length) return
-
-  const remaining = Math.max(0, MAX_COMPOSER_FILES - pendingFiles.value.length)
-  if (remaining === 0) {
-    toast.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件`)
-    input.value = ''
-    return
-  }
-
-  if (selectedFiles.length > remaining) {
-    toast.warning(`每次最多添加 ${MAX_COMPOSER_FILES} 个附件，已保留前 ${remaining} 个`)
-  }
-
-  selectedFiles.slice(0, remaining).forEach((file) => {
-    const isImage = file.type.startsWith('image/') || /\.(png|jpg|jpeg|gif|webp)$/i.test(file.name)
-    pendingFiles.value.push({
-      file,
-      fileType: isImage ? 'image' : 'document',
-      name: file.name,
-      localUrl: isImage ? URL.createObjectURL(file) : undefined,
-      size: file.size,
-      mimeType: file.type,
-    })
-  })
-
-  input.value = ''
-}
-
-const removeAttachment = (idx: number) => {
-  const removed = pendingFiles.value[idx]
-  if (removed?.localUrl) {
-    URL.revokeObjectURL(removed.localUrl)
-  }
-  pendingFiles.value.splice(idx, 1)
-}
-
 const clearPendingFiles = () => {
   pendingFiles.value.forEach(file => {
     if (file.localUrl) URL.revokeObjectURL(file.localUrl)
@@ -1241,195 +719,71 @@ const clearPendingFiles = () => {
   pendingFiles.value = []
 }
 
-const handleTeachingDiagramToggle = () => {
-  needTeachingDiagram.value = !needTeachingDiagram.value
-  if (needTeachingDiagram.value) needVideo.value = false
-}
-
-const handleVideoToggle = () => {
-  needVideo.value = !needVideo.value
-  if (needVideo.value) needTeachingDiagram.value = false
-}
-
-const ensureCurrentSession = async () => {
-  if (currentSessionId.value) return true
-  try {
-    const res = await createSession()
-    const session = res.data.data
-    currentSessionId.value = session.id
-    sessions.value.unshift({ id: session.id, title: session.title, updated_at: new Date().toISOString() })
-    return true
-  } catch {
-    toast.error({ message: '创建会话失败，请重试', plain: true })
-    return false
-  }
-}
-
 const handleSend = async () => {
+  if (isResponding.value || (!userInput.value.trim() && !pendingFiles.value.length)) return
   const text = userInput.value.trim()
-  const currentPending = [...pendingFiles.value]
-  const hasFiles = currentPending.length > 0
-  if ((!text && !hasFiles) || isAIThinking.value) return
-
-  const shouldGenerateTeachingDiagram = needTeachingDiagram.value
-  const shouldGenerateVideo = needVideo.value
-
-  if (!await ensureCurrentSession()) return
-  const sessionId = currentSessionId.value
-  if (!sessionId) return
-
-  const session = sessions.value.find(item => item.id === sessionId)
-  if (session && (!session.title || session.title === DEFAULT_SESSION_TITLE)) {
-    const titleSource = text || currentPending.map(file => file.name).join('、') || '附件分析'
-    const tempTitle = titleSource.length > 20 ? `${titleSource.slice(0, 20)}...` : titleSource
-    session.title = tempTitle
-    try {
-      await updateSessionTitle(sessionId, tempTitle)
-    } catch (err) {
-      console.warn('更新会话标题失败:', err)
-    }
-  }
-
-  const userMsgId = Date.now()
-  const optimisticAttachments: Attachment[] = currentPending.map(file => ({
-    url: file.localUrl || file.url || '',
-    type: file.fileType === 'image' ? 'image' : 'document',
-    name: file.name,
-    size: file.size,
-    mimeType: file.mimeType,
-  }))
-
-  messages.value.push({
-    id: userMsgId,
-    role: 'user',
-    content: text,
-    time: now(),
-    attachments: optimisticAttachments.length ? optimisticAttachments : null,
-  })
-
-  userInput.value = ''
-  isExpandedInput.value = false
-  nextTick(() => {
-    if (textareaRef.value) textareaRef.value.style.height = '28px'
-  })
-
-  isAIThinking.value = true
-  scrollToBottom()
-
-  const uploadedAttachments: Attachment[] = []
-  uploadingFile.value = hasFiles
-
+  const files = [...pendingFiles.value]
+  const requestedMode = mode.value
+  const token = sessionSwitchToken
+  submitPhase.value = 'submitting'
+  const aiMsg: ChatMsg = { id: ++nextMessageId, role: 'ai', content: '', time: now() }
   try {
-    const uploaded = await Promise.all(
-      currentPending.map(async (pending) => {
-        if (pending.url) {
-          return {
-            url: pending.url,
-            fileType: pending.fileType,
-            name: pending.name,
-            size: pending.size,
-            mimeType: pending.mimeType,
-          }
-        }
-
-        if (!pending.file) throw new Error('附件内容不存在')
-        const res = await uploadFile(pending.file, sessionId)
-        const data = res.data.data
-        return {
-          url: data.url,
-          fileType: pending.fileType === 'image' || data.file_type === 'image' ? 'image' : 'document',
-          name: data.original_name || pending.name,
-          size: data.size_bytes || pending.size,
-          mimeType: data.mime_type || pending.mimeType,
-        }
-      }),
-    )
-
-    uploaded.forEach(item => {
-      uploadedAttachments.push({
-        url: item.url,
-        type: item.fileType,
-        name: item.name,
-        size: item.size,
-        mimeType: item.mimeType,
-      })
-    })
-
-    const userMsg = messages.value.find(message => message.id === userMsgId)
-    if (userMsg) {
-      userMsg.attachments = uploadedAttachments.length ? uploadedAttachments : null
+    if (!currentSessionId.value) {
+      const { data } = await createSession()
+      sessions.value.unshift({ ...data.data, updated_at: new Date().toISOString() })
+      if (token !== sessionSwitchToken) return
+      currentSessionId.value = data.data.id
     }
-
-    pendingFiles.value.forEach(file => {
-      if (file.localUrl) URL.revokeObjectURL(file.localUrl)
-    })
-    pendingFiles.value = []
+    const sessionId = currentSessionId.value
+    const userMsg: ChatMsg = {
+      id: ++nextMessageId, role: 'user', content: text, time: now(),
+      attachments: files.map(file => ({ url: file.localUrl || file.url || '',
+        type: file.fileType, name: file.name, size: file.size, mimeType: file.mimeType })),
+    }
+    messages.value.push(userMsg, aiMsg)
+    userInput.value = ''
+    scrollToBottom()
+    submitPhase.value = files.length ? 'uploading' : 'submitting'
+    const attachments = await Promise.all(files.map(async file => {
+      if (file.url) return { url: file.url, file_type: file.fileType, original_name: file.name,
+        size_bytes: file.size, mime_type: file.mimeType }
+      if (!file.file) throw new Error('附件内容不存在')
+      return (await uploadFile(file.file, sessionId)).data.data
+    }))
+    if (token !== sessionSwitchToken) return
+    const displayed = messages.value.find(message => message.id === userMsg.id)!
+    displayed.attachments = attachments.map(file => ({ url: file.url, type: file.file_type,
+      name: file.original_name, size: file.size_bytes, mimeType: file.mime_type }))
+    clearPendingFiles()
+    submitPhase.value = 'submitting'
+    await chatRun.start({
+      question: text, session_id: sessionId, attachments,
+      diagram_mode: requestedMode === 'diagram' ? 'required' : 'auto',
+      video_mode: requestedMode === 'video',
+    }, state => applyRun(aiMsg.id, state))
   } catch (error) {
-    uploadingFile.value = false
-    isAIThinking.value = false
-    messages.value.push({
-      id: Date.now() + 99,
-      role: 'ai',
-      content: `附件上传失败：${getErrorMessage(error, '请检查文件后重试。')}`,
-      time: now(),
-      failed: true,
-      errorMessage: getErrorMessage(error, '附件上传失败，请检查文件后重试。'),
-    })
-    return
+    if (token !== sessionSwitchToken) return
+    const message = messages.value.find(item => item.id === aiMsg.id)
+    const detail = getErrorMessage(error, '发送失败，请重试')
+    if (message) message.localError = detail
+    else toast.error(detail)
   } finally {
-    uploadingFile.value = false
-  }
-
-  const messageAttachments = uploadedAttachments.map(file => ({
-    url: file.url,
-    file_type: file.type,
-    original_name: file.name,
-    size_bytes: file.size,
-    mime_type: file.mimeType,
-  }))
-  const aiMsgId = Date.now() + 1
-  messages.value.push({ id: aiMsgId, role: 'ai', content: '', time: now() })
-  streamingMsgId.value = aiMsgId
-  try {
-    const created = await chatRun.start({
-      message: text || '请分析这些附件', session_id: sessionId,
-      attachments: messageAttachments, diagram_mode: shouldGenerateTeachingDiagram ? 'required' : 'auto',
-      video_mode: shouldGenerateVideo,
-    }, state => {
-      applyRun(aiMsgId, state)
-    })
-    const aiMsg = messages.value.find(message => message.id === aiMsgId)
-    if (aiMsg) aiMsg.runId = created.run_id
-    void refreshSessionTitleWithRetry(sessionId)
-  } catch (error) {
-    const aiMsg = messages.value.find(message => message.id === aiMsgId)
-    if (aiMsg) {
-      aiMsg.failed = true
-      aiMsg.errorMessage = getErrorMessage(error, '创建运行失败')
-      aiMsg.content = aiMsg.errorMessage
-    }
-    isAIThinking.value = false
-    streamingMsgId.value = null
+    if (token === sessionSwitchToken) submitPhase.value = 'idle'
   }
 }
 
-const handleRetryAssistantMessage = (targetMsg: ChatMsg) => {
-  if (isAIThinking.value) return
-  const msgIdx = messages.value.findIndex(m => m.id === targetMsg.id)
-  let retryText = ''
-  if (msgIdx > 0) {
-    const prevUserMsg = messages.value.slice(0, msgIdx).reverse().find(m => m.role === 'user')
-    if (prevUserMsg) {
-      retryText = prevUserMsg.content
-      messages.value = messages.value.filter(m => m.id !== targetMsg.id && m.id !== prevUserMsg.id)
-    }
+const handleRetryAssistantMessage = (target: ChatMsg) => {
+  if (isResponding.value) return
+  const index = messages.value.findIndex(message => message.id === target.id)
+  const previous = messages.value.slice(0, index).reverse().find(message => message.role === 'user')
+  if (!previous) return
+  userInput.value = previous.content
+  // 上传失败时保留原始 File；已上传的附件直接复用 URL。
+  if (!pendingFiles.value.length) {
+    pendingFiles.value = (previous.attachments || []).map(file => ({
+      url: file.url, fileType: file.type, name: file.name, size: file.size, mimeType: file.mimeType,
+    }))
   }
-  if (!retryText) {
-    messages.value = messages.value.filter(m => m.id !== targetMsg.id)
-    toast.error('未找到可重试的提问内容')
-    return
-  }
-  userInput.value = retryText
   void handleSend()
 }
 
@@ -1464,10 +818,13 @@ onActivated(async () => {
 
 onDeactivated(() => {
   tutorWasDeactivated = true
+  sessionSwitchToken++
+  submitPhase.value = 'idle'
   chatRun.close()
 })
 
 onBeforeUnmount(() => {
+  sessionSwitchToken++
   chatRun.close()
   clearPendingFiles()
   if (copiedResetTimer) clearTimeout(copiedResetTimer)
@@ -1475,8 +832,12 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+@keyframes thinking-ring-turn {
+  to { transform: rotate(360deg); }
+}
+
 /* ============================================================
-   1. 整体页面骨架与左侧会话导航栏 (Glacier Teal Studio)
+   1. 整体页面骨架
    ============================================================ */
 .tutor-dashboard {
   display: flex;
@@ -1494,397 +855,6 @@ onBeforeUnmount(() => {
   flex: 1;
   min-height: 0;
   overflow: hidden;
-}
-
-.session-sidebar {
-  position: relative;
-  width: 256px;
-  background: var(--color-bg);
-  border-right: 1px solid var(--color-border-light);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-}
-
-.sidebar-top-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 12px 10px 16px;
-  height: 58px;
-  box-sizing: border-box;
-  flex-shrink: 0;
-}
-
-.sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--color-text-strong);
-  font-weight: 700;
-  font-size: 0.98rem;
-  letter-spacing: -0.01em;
-}
-
-.brand-seal {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: var(--color-primary-soft);
-  border: 1px solid var(--color-primary-border);
-  color: var(--color-primary-text);
-}
-
-.brand-icon {
-  width: 17px;
-  height: 17px;
-}
-
-.collapse-toggle-btn {
-  background: transparent;
-  border: none;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  transition: background-color 150ms ease, color 150ms ease;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-}
-
-.collapse-toggle-btn:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-strong);
-}
-
-.collapse-toggle-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
-.standard-sidebar-nav {
-  padding: 4px 12px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.nav-item {
-  width: 100%;
-  height: auto;
-  min-height: 38px;
-  background: transparent;
-  border: 1px solid transparent;
-  box-shadow: none;
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 10px;
-  padding: 8px 12px;
-  border-radius: 9px;
-  cursor: pointer;
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: all 150ms ease;
-  color: var(--color-text-secondary);
-  text-align: left;
-}
-
-.nav-item:hover {
-  background: var(--color-surface-hover);
-  color: var(--color-text-strong);
-}
-
-.nav-item.new-chat-btn {
-  background: var(--color-surface);
-  border-color: var(--color-border);
-  color: var(--color-text-strong);
-  font-weight: 600;
-  box-shadow: var(--shadow-xs);
-}
-
-.nav-item.new-chat-btn:hover {
-  border-color: var(--color-primary);
-  background: var(--color-surface-hover);
-}
-
-.nav-icon {
-  width: 17px;
-  height: 17px;
-  flex-shrink: 0;
-  color: var(--color-primary-text);
-}
-
-/* 会话分组列表 */
-.session-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 4px 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.session-group {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.session-group-label {
-  padding: 4px 10px 4px;
-  font-size: 11px;
-  font-weight: 650;
-  color: var(--color-text-faint);
-  letter-spacing: 0.02em;
-  user-select: none;
-}
-
-.session-item {
-  min-height: 44px;
-  padding: 7px 10px;
-  border-radius: 9px;
-  color: var(--color-text-secondary);
-}
-
-.session-item:hover {
-  background: var(--color-surface);
-  border-color: var(--color-border-light);
-  color: var(--color-text-strong);
-}
-
-.session-item.active {
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary-border);
-  color: var(--color-primary-text);
-  font-weight: 600;
-}
-
-.session-icon {
-  width: 16px;
-  height: 16px;
-  color: var(--color-text-faint);
-  flex-shrink: 0;
-  transition: color 150ms ease;
-}
-
-.session-item.active .session-icon {
-  color: var(--color-primary-text);
-}
-
-.session-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  overflow: hidden;
-  min-width: 0;
-}
-
-.session-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.84rem;
-  line-height: 1.35;
-}
-
-.session-time {
-  font-size: 0.68rem;
-  color: var(--color-text-faint);
-  white-space: nowrap;
-}
-
-.session-item.active .session-time {
-  color: var(--color-text-secondary);
-}
-
-.del-btn {
-  opacity: 0;
-  width: 26px;
-  height: 26px;
-  min-height: 26px;
-  padding: 0;
-  border-radius: 6px;
-  color: var(--color-text-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: opacity 140ms ease, background-color 140ms ease, color 140ms ease;
-}
-
-.session-item:hover .del-btn,
-.del-btn:focus-visible {
-  opacity: 1;
-}
-
-.del-btn:hover {
-  background: var(--color-danger-soft);
-  color: var(--color-danger);
-}
-
-.del-icon {
-  width: 14px;
-  height: 14px;
-}
-
-.session-empty {
-  font-size: 0.8rem;
-  color: var(--color-text-faint);
-  text-align: center;
-  padding: 28px 12px;
-  line-height: 1.5;
-}
-
-/* 侧边栏折叠态 */
-.session-sidebar.collapsed {
-  width: 64px;
-}
-
-.session-sidebar.collapsed .nav-text,
-.session-sidebar.collapsed .session-info {
-  display: none;
-}
-
-.session-sidebar.collapsed .sidebar-top-header,
-.session-sidebar.collapsed .standard-sidebar-nav {
-  padding-left: 0;
-  padding-right: 0;
-  align-items: center;
-}
-
-.session-sidebar.collapsed .collapse-toggle-btn,
-.session-sidebar.collapsed .nav-item {
-  width: 40px !important;
-  height: 40px !important;
-  min-width: 40px !important;
-  min-height: 40px !important;
-  padding: 0;
-  justify-content: center;
-  border-radius: 10px;
-}
-
-/* 侧边栏弹出层 (Search & History Popover) */
-:global(.search-popover-content),
-:global(.history-popover-content) {
-  width: min(320px, calc(100vw - 88px));
-  max-height: min(500px, calc(100vh - 32px));
-  padding: 12px;
-  overflow: hidden;
-  box-sizing: border-box;
-  background-color: var(--color-surface);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  box-shadow: var(--shadow-md);
-  outline: none;
-  z-index: 1200;
-}
-
-.popover-search-container {
-  display: flex;
-  flex-direction: column;
-}
-
-.search-input-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 10px;
-  height: 36px;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 8px;
-}
-
-.search-input-icon {
-  width: 15px;
-  height: 15px;
-  color: var(--color-text-muted);
-  flex-shrink: 0;
-}
-
-.search-input {
-  flex: 1;
-  border: none;
-  background: transparent;
-  outline: none;
-  font-size: 0.84rem;
-  color: var(--color-text);
-}
-
-.search-clear-btn {
-  width: 20px;
-  height: 20px;
-  min-height: 20px;
-  padding: 0;
-  background: transparent;
-  color: var(--color-text-muted);
-}
-
-.popover-session-scroll {
-  max-height: 360px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 8px;
-}
-
-.history-popover-header {
-  display: flex;
-  align-items: center;
-  padding: 2px 4px 10px;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.history-popover-heading {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.history-popover-icon {
-  width: 30px;
-  height: 30px;
-  padding: 6px;
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
-  border-radius: 8px;
-}
-
-.popover-title {
-  color: var(--color-text-strong);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-.history-popover-count {
-  color: var(--color-text-faint);
-  font-size: 0.72rem;
-}
-
-.session-title-line {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.current-session-indicator {
-  padding: 1px 5px;
-  border-radius: 4px;
-  background: var(--color-primary-soft);
-  color: var(--color-primary-text);
-  font-size: 0.65rem;
-  font-weight: 650;
 }
 
 /* ============================================================
@@ -2608,297 +1578,6 @@ onBeforeUnmount(() => {
   transform: translateX(-50%) translateY(8px);
 }
 
-.minimal-input-panel {
-  position: relative;
-  z-index: 5;
-  padding: 10px clamp(16px, 4vw, 48px) 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: linear-gradient(to top, var(--color-surface) 78%, rgba(252, 255, 255, 0));
-}
-
-.minimal-input-wrapper {
-  width: 100%;
-  max-width: 820px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px 10px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
-  box-shadow:
-    0 2px 6px rgba(23, 59, 66, 0.03),
-    0 10px 28px rgba(23, 59, 66, 0.06);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
-}
-
-.minimal-input-wrapper:hover {
-  border-color: var(--color-border-hover);
-}
-
-.minimal-input-wrapper:focus-within {
-  border-color: var(--color-primary);
-  box-shadow:
-    0 0 0 3px rgba(70, 184, 180, 0.14),
-    0 12px 32px rgba(23, 59, 66, 0.08);
-}
-
-.minimal-input-wrapper.is-responding {
-  background: var(--color-bg);
-}
-
-.minimal-input-wrapper textarea {
-  width: 100%;
-  min-height: 28px;
-  max-height: 200px;
-  padding: 2px 4px;
-  border: none;
-  background: transparent;
-  resize: none;
-  outline: none;
-  font-family: inherit;
-  font-size: 0.96rem;
-  line-height: 1.58;
-  color: var(--color-text-strong);
-}
-
-.minimal-input-wrapper textarea::placeholder {
-  color: var(--color-text-faint);
-}
-
-.composer-attachments {
-  display: flex;
-  gap: 8px;
-  width: 100%;
-  padding: 0 2px 10px;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--color-border-light);
-}
-
-.composer-attachment {
-  position: relative;
-  flex: 0 0 auto;
-  overflow: hidden;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-}
-
-.composer-attachment.is-image {
-  width: 112px;
-  height: 78px;
-}
-
-.composer-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.composer-image-name {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  overflow: hidden;
-  padding: 14px 6px 4px;
-  color: #ffffff;
-  background: linear-gradient(transparent, rgba(23, 59, 66, 0.78));
-  font-size: 9.5px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.composer-attachment.is-file {
-  display: grid;
-  grid-template-columns: 32px minmax(0, 1fr);
-  align-items: center;
-  gap: 9px;
-  width: 220px;
-  min-height: 58px;
-  padding: 8px 30px 8px 9px;
-}
-
-.remove-attachment-btn {
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  display: grid;
-  place-items: center;
-  width: 20px;
-  height: 20px;
-  min-height: 20px;
-  padding: 0;
-  color: #ffffff;
-  background: rgba(23, 59, 66, 0.65);
-  border: none;
-  border-radius: 50%;
-  cursor: pointer;
-}
-
-.composer-attachment.is-file .remove-attachment-btn {
-  color: var(--color-text-muted);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-}
-
-.minimal-action-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  min-height: 34px;
-}
-
-.action-left,
-.action-right {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.input-tool-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  height: 30px;
-  min-height: 30px;
-  padding: 0 11px;
-  color: var(--color-text-secondary);
-  background: var(--color-bg);
-  border: 1px solid var(--color-border-light);
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 550;
-  transition: all 150ms ease;
-}
-
-.input-tool-btn:hover:not(:disabled) {
-  color: var(--color-text-strong);
-  background: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-}
-
-.input-tool-btn.is-active-teal {
-  color: var(--color-primary-text);
-  background: var(--color-primary-soft);
-  border-color: var(--color-primary);
-  font-weight: 650;
-}
-
-.input-tool-btn.is-active-purple {
-  color: #6d28d9;
-  background: var(--cat-eval-soft);
-  border-color: #c4b5fd;
-  font-weight: 650;
-}
-
-.tool-icon {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-}
-
-.active-check {
-  font-style: normal;
-  font-size: 10.5px;
-  margin-left: 1px;
-}
-
-.stop-gen-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 32px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: var(--color-danger-soft);
-  border: 1px solid #f8b4c0;
-  color: var(--color-danger);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.stop-gen-btn:hover {
-  background: #ffe4e9;
-}
-
-.stop-square {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  background: currentColor;
-}
-
-.minimal-send-btn {
-  width: 34px;
-  height: 34px;
-  min-height: 34px;
-  padding: 0;
-  border-radius: 50%;
-  background: var(--color-border-light);
-  color: var(--color-text-faint);
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: default;
-  transition: all 160ms ease;
-}
-
-.minimal-send-btn.can-send {
-  background: var(--color-text-strong);
-  color: var(--color-surface);
-  cursor: pointer;
-}
-
-.minimal-send-btn.can-send:hover {
-  background: var(--color-primary-text);
-  transform: translateY(-1px);
-}
-
-.send-arrow-svg {
-  width: 16px;
-  height: 16px;
-}
-
-.responding-spinner {
-  width: 16px;
-  height: 16px;
-  animation: tutor-response-spin 0.8s linear infinite;
-}
-
-@keyframes tutor-response-spin {
-  to { transform: rotate(360deg); }
-}
-
-@keyframes thinking-ring-turn {
-  to { transform: rotate(360deg); }
-}
-
-.input-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px 14px;
-  width: 100%;
-  max-width: 820px;
-  margin-top: 7px;
-  color: var(--color-text-faint);
-  font-size: 11px;
-}
-
-.input-footer span + span::before {
-  margin-right: 14px;
-  color: var(--color-border);
-  content: "·";
-}
-
 /* ============================================================
    5. 弹窗与灯箱 (Delete Confirm & Image Lightbox)
    ============================================================ */
@@ -3017,21 +1696,13 @@ onBeforeUnmount(() => {
     padding-left: 0;
   }
 
-  .minimal-input-panel {
-    padding: 8px 12px 10px;
-  }
-
-  .input-footer span:last-child {
-    display: none;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .message-turn,
   .live-dot,
   .pill-live-dot,
-  .thinking-core::before,
-  .responding-spinner {
+  .thinking-core::before {
     animation: none;
   }
 }

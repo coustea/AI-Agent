@@ -33,6 +33,15 @@ describe('renderMarkdownToHtml', () => {
     expect(html).toContain('$5')
   })
 
+  it.each(['mermaid', 'svg'])('preserves %s blocks for diagram rendering', async language => {
+    const source = language === 'mermaid' ? 'flowchart LR\n A --> B' : '<svg><text>diagram</text></svg>'
+    const html = await renderMarkdownToHtml(`\`\`\`${language}\n${source}\n\`\`\``, 'light')
+    const container = document.createElement('div')
+    container.innerHTML = html
+    expect(container.querySelector(`pre > code.language-${language}`)?.textContent?.trim()).toBe(source)
+    expect(container.querySelector('.code-block-wrapper')).toBeNull()
+  })
+
   it('never parses code contents as math or raw HTML', async () => {
     const html = await renderMarkdownToHtml(
       '```html\n<script>alert("$x$")</script>\n```',

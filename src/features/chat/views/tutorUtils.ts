@@ -1,4 +1,4 @@
-import type { RunState } from '@/features/chat/types/chatEvent'
+import type { RunState } from '@/features/chat/types/chatRun'
 
 export interface PendingFile {
   file?: File
@@ -18,47 +18,15 @@ export interface Attachment {
   mimeType?: string
 }
 
-// 知识库来源条目
-export interface KnowledgeSource {
-  source: string       // 来源类型（如 "knowledge_base"）
-  title: string        // 书名/章节标题
-  heading?: string     // 章节/位置
-  summary: string      // 内容摘要
-  url?: string         // URL（如果有）
-  score?: number       // 相关性分数
-}
-
 export interface ChatMsg {
   id: number
-  runId?: string
   role: 'user' | 'ai'
   content: string
   time: string
   attachments?: Attachment[] | null
   run?: RunState
-  sources?: KnowledgeSource[]  // 知识库来源
-  failed?: boolean
-  errorMessage?: string
+  localError?: string
 }
-
-// 根据文件名获取文档类型分类
-export interface InputToolState {
-  uploadingFile: boolean
-  needTeachingDiagram: boolean
-  needVideo?: boolean
-}
-
-export const getInputToolStateKey = ({
-  uploadingFile,
-  needTeachingDiagram,
-  needVideo = false,
-}: InputToolState): string => (
-  [
-    uploadingFile ? 'uploading' : 'idle',
-    needTeachingDiagram ? 'diagram-on' : 'diagram-off',
-    needVideo ? 'video-on' : 'video-off',
-  ].join(':')
-)
 
 export const getDocumentType = (filename: string) => {
   const ext = filename.split('.').pop()?.toLowerCase() || ''

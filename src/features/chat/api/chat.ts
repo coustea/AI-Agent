@@ -7,7 +7,6 @@ import type {
   UploadResult,
   StreamChatParams,
 } from '@/features/chat/types/chat' // 导入聊天 DTO 类型
-import type { RunState } from '@/features/chat/types/chatEvent'
 
 // ==========================================
 // 聊天历史 API
@@ -41,11 +40,6 @@ export function deleteSession(sessionId: string) {
   return http.delete<ApiResponse>(`/ai/chat/sessions/${sessionId}`)
 }
 
-// 更新会话标题
-export function updateSessionTitle(sessionId: string, title: string) {
-  return http.patch<ApiResponse>(`/ai/chat/sessions/${sessionId}`, { title })
-}
-
 // ==========================================
 // 文件上传 API
 // ==========================================
@@ -67,37 +61,9 @@ export function uploadFile(file: File, sessionId: string) {
 
 // 创建聊天消息，启动 SSE 流式回答
 export function createChatMessage(params: StreamChatParams) {
-  const formData = new FormData()
-  if (params.message) {
-    formData.append('user_input', params.message) // 用户输入文本
-  }
-  if (params.session_id) {
-    formData.append('session_id', params.session_id) // 会话 ID
-  }
-  if (params.attachments && params.attachments.length > 0) {
-    formData.append('attachments', JSON.stringify(params.attachments))
-  }
-  if (params.diagram_mode) {
-    formData.append('diagram_mode', params.diagram_mode)
-  }
-  if (params.video_mode != null) {
-    formData.append('video_mode', String(Boolean(params.video_mode)))
-  }
-
-  return http.post<ApiResponse<ChatRunCreated>>(
-    '/ai/chat/messages',
-    formData,
-    {
-      headers: { 'Content-Type': 'multipart/form-data' }, // FormData 编码
-    },
-  )
+  return http.post<ApiResponse<ChatRunCreated>>('/ai/chat/messages', params)
 }
 
-
-// 读取一次运行的完整快照（刷新页面后恢复渲染）
-export function getChatRun(runId: string) {
-  return http.get<ApiResponse<RunState>>(`/ai/chat/runs/${runId}`)
-}
 
 // 请求取消一次运行
 export function cancelChatRun(runId: string) {

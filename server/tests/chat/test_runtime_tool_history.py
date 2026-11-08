@@ -1,40 +1,30 @@
 from __future__ import annotations
 
-import os
-import sys
-from pathlib import Path
-
-os.environ.setdefault("OPENAI_API_KEY", "test-key")
-os.environ.setdefault("SPARK_MAX_API_PASSWORD", "test-key")
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
 from app.infra.llm import AIMessage, HumanMessage, ToolMessage
 
-from app.chat.context import normalize_tool_calls, prune_tool_messages
+from app.chat.context import convert_stored_message, prune_tool_messages
+from app.infra.models import ChatMessage
 
 
-def testnormalize_tool_calls_restores_tool_transcript():
-    tool_calls = [{"id": "call-search-1", "name": "tavily_search", "args": {"query": "TCP"}, "type": "tool_call"}]
-    normalized = normalize_tool_calls(tool_calls)
-
-    assert len(normalized) == 1
-    assert normalized[0]["id"] == "call-search-1"
-    assert normalized[0]["name"] == "tavily_search"
-    assert normalized[0]["args"] == {"query": "TCP"}
-    assert normalized[0]["type"] == "tool_call"
-
-
-def testnormalize_tool_calls_handles_none_and_empty():
-    assert normalize_tool_calls(None) == []
-    assert normalize_tool_calls([]) == []
+def test_stored_tool_calls_restore_transcript() -> None:
+    """持久化的工具调用应恢复为完整模型消息。"""
+    message = convert_stored_message(ChatMessage(
+        session_id="s1", role="assistant", content=[],
+        tool_calls=[{"id": "call-1", "name": "grep", "args": {"pattern": "TCP"}}],
+    ))
+    assert message is not None
+    assert message.tool_calls[0].id == "call-1"
+    assert message.tool_calls[0].name == "grep"
+    assert message.tool_calls[0].args == {"pattern": "TCP"}
 
 
-def testnormalize_tool_calls_skips_non_dict():
-    result = normalize_tool_calls(["not a dict", 42])
-    assert result == []
+def test_empty_assistant_is_omitted() -> None:
+    """无文本且无工具调用的消息不进入模型上下文。"""
+    assert convert_stored_message(ChatMessage(session_id="s1", role="assistant", content=[])) is None
 
 
-def test_prune_tool_messages_retention_and_truncation():
+def test_prune_tool_messages_retention_and_truncation() -> None:
+    """旧工具输出裁剪后保留调用标识和近期原文。"""
     long_content = "X" * 500
     short_content = "Short output"
 
@@ -66,7 +56,8 @@ def test_prune_tool_messages_retention_and_truncation():
     assert pruned[8].content == long_content
 
 
-def test_prune_tool_messages_keep_all_when_within_turn_limit():
+def test_prune_tool_messages_keep_all_when_within_turn_limit() -> None:
+    """短会话的工具输出保持原文。"""
     long_content = "Y" * 600
     messages = [
         HumanMessage("Turn 1"),

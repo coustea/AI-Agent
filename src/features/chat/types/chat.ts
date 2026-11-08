@@ -1,25 +1,15 @@
 // Chat 业务类型定义
 
-import type { RunState } from './chatEvent'
-
-interface AttachmentContentMeta {
-  url?: string
-  file_type?: string
-  original_name?: string
-  mime_type?: string | null
-  size_bytes?: number
-}
+import type { RunState } from './chatRun'
 
 export type ContentPart =
   | { type: 'text'; text: string }
-  | ({ type: 'image_url'; image_url: { url: string; detail?: 'auto' | 'low' | 'high' } } & AttachmentContentMeta)
-  | ({ type: 'file'; file: { file_id?: string; file_data?: string; filename?: string } } & AttachmentContentMeta)
+  | ({ type: 'image_url' | 'file' } & UploadResult)
 
 export interface ChatMessageItem {
   id: number
   role: 'user' | 'assistant'
   content: ContentPart[]
-  run_id?: string
   run?: RunState | null
   created_at: string
 }
@@ -38,14 +28,6 @@ export interface UploadResult {
   mime_type?: string
 }
 
-export interface MessageAttachmentInput {
-  url: string
-  file_type: string
-  original_name: string
-  size_bytes?: number
-  mime_type?: string
-}
-
 export interface ChatRunCreated {
   run_id: string
   message_id: number
@@ -53,9 +35,9 @@ export interface ChatRunCreated {
 }
 
 export interface StreamChatParams {
-  message?: string
+  question?: string
   session_id?: string
-  attachments?: MessageAttachmentInput[]
+  attachments?: UploadResult[]
   diagram_mode?: 'auto' | 'required'
   video_mode?: boolean
 }

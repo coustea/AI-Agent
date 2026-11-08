@@ -1,0 +1,77 @@
+# 复制本文件为 config.yaml 后填写自己的凭据。
+# config.yaml 已被 .gitignore 忽略，请勿提交真实密钥。
+
+app:
+  host: "127.0.0.1"
+  port: 9999
+
+database:
+  url: "mysql+aiomysql://USER:PASSWORD@127.0.0.1:3306/agent"
+  echo: false
+  pool_size: 20
+  max_overflow: 30
+  pool_recycle: 1800
+  pool_timeout: 30
+
+jwt:
+  secret_key: "CHANGE_ME_TO_A_RANDOM_STRING_AT_LEAST_32_CHARS"
+  algorithm: "HS256"
+  expire_days: 7
+
+# 全系统统一定义两个模型：文本模型 (text) 与视觉模型 (vision)
+models:
+  text:
+    base_url: "https://your-llm-endpoint/v1"
+    api_key: "YOUR_API_KEY"
+    model_name: "your-text-model"
+    timeout: 300
+    max_retries: 2
+  vision:
+    base_url: "https://your-vision-endpoint/v1"
+    api_key: "YOUR_API_KEY"
+    model_name: "your-vision-model"
+    timeout: 300
+    max_retries: 2
+
+# 预留配置：当前版本未调用讯飞星火能力，如后续启用再填写
+spark:
+  app_id: ""
+  api_key: ""
+  api_secret: ""
+
+paths:
+  workplace: "./storage/workplace"
+  logs: "./storage/logs"
+  knowledge: "./storage/knowledge"
+
+knowledge:
+  enabled: false
+  embed_model: "bge-m3:latest"
+  embed_base_url: "http://127.0.0.1:11434/v1"
+  embed_api_key: "YOUR_EMBED_API_KEY"
+  top_k: 4
+  max_context_chars: 6000
+
+memory:
+  compress_keep_recent_messages: 4
+  compress_min_messages: 16
+  compress_min_tokens: 4000
+  summary_context_blocks: 3
+  update_min_messages: 12
+  update_min_tokens: 6000
+  ltm_min_confidence: 0.75
+
+chat:
+  max_file_content_chars: 15000
+  max_upload_files: 12
+  image_extensions:
+    - png
+    - jpg
+    - jpeg
+    - gif
+    - webp
+  history_limit: 20
+
+paths_config:
+  quiz_size: 5
+  pass_score: 3

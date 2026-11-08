@@ -5,7 +5,7 @@ import {
   type ChatArtifact,
   type RunState,
   type SourceItem,
-} from '@/features/chat/types/chatEvent'
+} from '@/features/chat/types/chatRun'
 
 const props = defineProps<{
   run: RunState

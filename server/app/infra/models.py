@@ -223,7 +223,6 @@ class ChatRun(SQLModel, table=True):
     """一次对话运行 — 承载 RunState 的完整可持久化快照（含阶段、步骤时间线、产物与引用来源）。"""
     __tablename__ = "chat_runs"
     __table_args__ = (
-        Index("ix_chat_runs_session_id", "session_id"),
         CheckConstraint(
             "status IN ('queued', 'running', 'completed', 'failed', 'cancelled', 'interrupted')",
             name="ck_chat_runs_status",

@@ -1,389 +1,430 @@
-# AI 学习平台
+# Mentorly · 多智能体个性化学习平台
 
-> 多智能体个性化学习资源平台 — 智能辅导对话、多模态资源生成、学习路径规划、学习者画像、算法可视化
+Mentorly 是一个面向个性化学习场景的全栈 AI 学习平台。前端基于 **Vue 3 + TypeScript + Vite 7** 构建单页应用，后端基于 **FastAPI + SQLModel (SQLAlchemy Async) + MySQL** 提供异步 API，围绕 **AI 辅导对话、多模态资源生成、学习路径规划、题库与错题本、7 维学习者画像、学习评估** 构建完整学习闭环。
 
-## 项目简介
+> **编排说明**：系统采用自研轻量 Agent 运行时——`TutorAgent` 使用基于 `learn-claude-code` 思想的无状态 ReAct / 工具循环与 `RunHooks` 快照状态机；多模态资源生成使用自研 `asyncio` 四阶段 DAG 编排；学习路径规划使用两阶段工作流，**不依赖 LangGraph**。LangChain 仅用于 RAG 离线文档加载与文本切分。
 
-本项目是一个面向教育场景的全栈 AI 学习平台，通过多智能体协作提供个性化的学习体验。系统支持 AI 辅导对话、自动生成多模态学习资源（教程、思维导图、题目、代码示例、PPT 课件、动画讲解等）、智能规划学习路径、进行算法可视化，并基于学习行为构建学习者画像实现因材施教。
+---
 
-### 核心特性
+## 目录
 
-- **智能辅导对话** - 基于三层记忆架构（会话摘要、长期记忆、学习画像）的个性化对话，支持 Markdown 渲染、公式排版及 Mermaid 图表展示。
-- **多智能体资源生成** - 一键生成教程、思维导图、习题、代码示例、拓展阅读材料、PPT 演示课件、动画讲解等。
-- **学习路径规划** - 自动规划课程级学习路径，节点内通过「教程 → 测验 → 辅助资源」形成学习闭环。
-- **算法可视化** - 提供官方算法模板与自定义 Python 代码插装执行，生成追踪 Trace 并支持单步动画播放与交互。
-- **学习者画像** - 基于对话、学习事件、题目表现及学习时长沉淀 8 维度动态学习画像。
-- **题库与错题本** - 提供系统题库管理、答题自动评分，并将错题自动归集到错题本，提供针对性巩固练习。
+- [核心能力](#核心能力)
+- [系统架构](#系统架构)
+- [技术栈](#技术栈)
+- [目录结构](#目录结构)
+- [快速开始](#快速开始)
+- [配置说明](#配置说明)
+- [核心链路](#核心链路)
+- [Agent 运行时](#agent-运行时)
+- [API 概览](#api-概览)
+- [数据模型](#数据模型)
+- [部署说明](#部署说明)
+- [常见问题](#常见问题)
+- [项目说明](#项目说明)
 
-### 技术栈
+---
 
-**前端**
-- **核心框架**：Vue 3.5 + TypeScript 5.9 + Vue Router 4.6
-- **构建工具**：Vite 7.2 + Tailwind CSS 4.3 + `@tailwindcss/vite`
-- **UI 组件库**：shadcn-vue + PrimeVue 4.5.5 + Radix Vue (Reka UI)
-- **可视化与画板**：ECharts 6.0 + markmap + D3.js + GSAP 3.15（动画）
-- **编辑器**：Monaco Editor（代码编辑与对比）
-- **数据传输**：Axios + SSE 流式通信
-- **文档渲染**：remark + rehype + KaTeX + Shiki
+## 核心能力
 
-**后端**
-- **核心框架**：FastAPI + SQLModel (SQLAlchemy Async)
-- **多智能体编排**：LangGraph + LangChain
-- **数据存储**：MySQL + `aiomysql` (异步驱动)
-- **大模型接入**：OpenAI 兼容 API（主模型：Astron-code-latest 等；视觉模型：GLM-4.6v-flash 等）
-- **向量检索库**：ChromaDB + BM25 + bge-m3（双路混合检索与 RRF 融合）
-- **动画渲染**：HyperFrames 0.7 + Playwright（动画与 PPT 网页快照渲染生成 MP4）
-- **语音技术**：Edge-TTS + 讯飞星火语音合成/识别 (ASR/TTS)
+- **AI 辅导对话 (`chat`)**：基于 `RunState` 全量快照的 SSE 实时流式输出，支持多模态附件（图片视觉理解与 PDF/Word/Excel/CSV/Markdown 文档解析）、知识库检索、强制 Mermaid 图解模式（`diagram_mode`）、PPT 课件生成与教学视频生成（`video_mode`），并实时展示推理与工具调用步骤时间线（含子智能体内部进度）。
+- **三层记忆与个性化档案 (`memory` & `profile`)**：融合会话未压缩近期历史、滚动会话摘要块（`ChatSessionSummaryBlock`）、7 类跨会话长期记忆（`ChatLongTermMemory`）、7 维学习者画像以及个性化教学指令档案（`AGENT.md`）与生效辅导策略。
+- **多模态资源生成 (`resource`)**：单次任务通过四阶段 DAG（`Planning → Base Agents → Aggregation Agents → Finalize`）协同生成课程讲解、思维导图、随堂练习题、代码实操、拓展阅读、可编辑 PPTX 课件与带中文配音字幕的 MP4 动画视频。
+- **学习路径规划 (`path`)**：通过 `research → strategist` 两阶段生成课程级阶段与节点（含自动修复与兜底路径），节点内形成「主教程生成 → 5 题闯关测验 → 按需衍生思维导图/代码/PPT/阅读/视频辅助资源」的学习闭环。
+- **题库与错题本 (`quiz`)**：覆盖 408 核心科目（数据结构与算法、计算机组成原理、计算机网络、操作系统），支持单选、多选、判断、填空与主观分析题；客观题与精确填空规则判分，主观题支持单题/批量并发 LLM 审阅；答错题目自动归集至错题本并累计错误次数。
+- **7 维学习者画像 (`profile`)**：知识层 3 维（知识基础、易错点偏好、知识缺口模式）+ 认知层 4 维（认知风格、学习目标导向、难度耐受度、自纠能力水平），支持 Onboarding 基线采集、事件驱动画像更新与首页能力雷达图。
+- **学习评估与看板 (`evaluation`)**：统一采集跨模块学习行为事件（`LearningEvent`）、页面活跃会话时长（`LearningSession`）与每日首次登录活跃（`UserDailyActivity`），按周期生成学习评估报告（`LearningAssessment`）并反哺当前生效辅导策略。
+- **混合检索知识库 (`rag`)**：ChromaDB 向量检索 + BM25（`jieba` + `rank-bm25`）关键词检索并行召回，经倒数排名融合（RRF）输出结构化引用来源。
+- **课件与视频生产 (`shared/ppt` & `shared/cartoon`)**：`PPTAgent` 基于 PptxGenJS + LibreOffice + Poppler + 视觉模型逐页审查生产可编辑 `.pptx`；`CartoonAgent` 基于 HyperFrames CLI + Edge TTS + 关键帧视觉审查 + `ffprobe` 校验生产 1080p `.mp4` 教学视频。
+
+---
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    U["浏览器 / Vue 3 SPA"] -->|"REST + SSE (run.state)"| API["FastAPI 后端"]
+
+    API --> AUTH["auth / 认证与用户"]
+    API --> CHAT["chat / TutorAgent"]
+    API --> RES["resource / 四阶段 DAG"]
+    API --> PATH["path / 路径规划与节点学习"]
+    API --> QUIZ["quiz / 题库与错题本"]
+    API --> PROFILE["profile / 7 维画像与看板"]
+    API --> EVAL["evaluation / 行为采集与评估"]
+
+    CHAT --> DB[("MySQL 8.0+")]
+    RES --> DB
+    PATH --> DB
+    QUIZ --> DB
+    PROFILE --> DB
+    EVAL --> DB
+
+    CHAT --> LLM["OpenAI 兼容 LLM (Text / Vision)"]
+    RES --> LLM
+    PATH --> LLM
+    QUIZ --> LLM
+    PROFILE --> LLM
+    EVAL --> LLM
+
+    CHAT --> RAG["RAG 混合检索器"]
+    PATH --> RAG
+    RAG --> VEC[("ChromaDB")]
+    RAG --> BM25[("BM25 索引")]
+
+    CHAT --> PPT["PPTAgent (PptxGenJS)"]
+    CHAT --> VIDEO["CartoonAgent (HyperFrames + Edge TTS)"]
+    RES --> PPT
+    RES --> VIDEO
+    PATH --> PPT
+    PATH --> VIDEO
+    PPT --> FS[("本地存储 workplace")]
+    VIDEO --> FS
+```
+
+- **前端**：Vue 3 SPA，开发环境通过 Vite 将 `/api` 与 `/static` 代理到后端 `127.0.0.1:9999`；Markdown 渲染在独立 Web Worker 中完成语法高亮与公式排版。
+- **后端**：FastAPI 单服务，按领域模块化组织（`api.py` → `service.py` → `schemas.py`）；启动时自动建表、清理上次进程遗留的未完成聊天运行，并检查 RAG 索引健康状态。
+- **数据与存储**：MySQL 存储全部业务与运行快照数据；ChromaDB + BM25 存储知识库索引；用户上传附件、头像、生成的 PPTX/PDF/预览图与 MP4/WebVTT 字幕存储在本地 `storage/workplace` 目录并通过 `/static` 挂载访问。
+
+---
+
+## 技术栈
+
+| 分类 | 选型 |
+|------|------|
+| **前端核心** | Vue 3.5 (`<script setup lang="ts">`) · TypeScript 5.9 · Vite 7 · Vue Router 4 · Tailwind CSS 4 · PrimeVue 4 · Reka UI |
+| **前端渲染与可视化** | Unified / Remark / Rehype (Web Worker) · KaTeX · Shiki · Mermaid 12 · markmap · ECharts 6 · D3 · GSAP · Monaco Editor |
+| **后端核心** | Python ≥ 3.13 · FastAPI · SQLModel · SQLAlchemy 2.0 Async · `aiomysql` · Pydantic v2 · Loguru |
+| **鉴权与安全** | PyJWT（HS256）· Passlib / bcrypt · 全局 `JWTMiddleware` + 路由级依赖注入 |
+| **Agent 运行时** | 自研无状态 ReAct 循环 (`run_tutor_agent`) · `RunHooks` 快照状态机 · `ToolRegistry` · 沙箱工具集 · 无状态子智能体 |
+| **知识库 (RAG)** | ChromaDB · BM25（`jieba` + `rank-bm25`）· RRF 倒数排名融合 · OpenAI 兼容 Embedding（默认 `bge-m3`） |
+| **课件与视频** | PptxGenJS · LibreOffice (`soffice`) · Poppler (`pdftoppm`) · HyperFrames CLI · Edge TTS · FFmpeg / `ffprobe` |
+| **数据库** | MySQL 8.0+（`server/docker-compose.yml` 提供 MySQL 8.4 容器） |
+| **测试与工程化** | `pytest` · `pytest-asyncio` · Vitest · `vue-tsc` · `uv` · `npm` |
 
 ---
 
 ## 目录结构
 
-- [src/](src/) - 前端源码目录
-  - [src/app/](src/app/) - 应用入口、布局 (MainLayout) 与路由配置
-  - [src/features/](src/features/) - 业务域功能模块
-    - [auth/](src/features/auth/) - 认证（登录/注册/引导弹窗）
-    - [chat/](src/features/chat/) - 智能辅导对话组件
-    - [dashboard/](src/features/dashboard/) - 首页仪表盘与概览
-    - [resource/](src/features/resource/) - 独立资源生成域
-    - [learning-path/](src/features/learning-path/) - 学习路径规划与节点工作空间
-    - [profile/](src/features/profile/) - 学习者画像雷达图及偏好设置
-    - [question-bank/](src/features/question-bank/) - 题库答题练习
-    - [evaluation/](src/features/evaluation/) - 学习数据上报与事件 API 封装
-    - [learning-assessment/](src/features/learning-assessment/) - 学习评估与历史看板视图
-  - [src/shared/](src/shared/) - 共享模块（API 封装、通用 UI 组件、Markdown 渲染、数据模型等）
-- [server/](server/) - 后端源码目录
-  - [server/app/](server/app/) - API 逻辑代码
-    - [auth/](server/app/auth/) - 用户认证与令牌白名单
-    - [chat/](server/app/chat/) - 辅导对话与三层记忆管理
-    - [resource/](server/app/resource/) - 独立资源生成（多智能体规划并行工作流）
-    - [path/](server/app/path/) - 学习路径规划、节点管理及仪表盘聚合
-    - [profile/](server/app/profile/) - 学习者画像多维属性服务
-    - [evaluation/](server/app/evaluation/) - 学习事件采集、时长计算与学习评估生成
-    - [quiz/](server/app/quiz/) - 题库管理、提交判分与错题本
-    - [rag/](server/app/rag/) - ChromaDB 向量索引与混合检索
-    - [shared/](server/app/shared/) - 课件 (PPT) 与动画 (Cartoon) 渲染管线、通用子 Agent 工具、ASR/TTS 桥接
-    - [infra/](server/app/infra/) - 基础设施（数据库连接、SQLModel 定义、配置加载、日志处理）
-    - [main.py](server/app/main.py) - 后端主程序入口
-    - [routes.py](server/app/routes.py) - 业务路由集中注册中心
-  - [server/tests/](server/tests/) - 后端 pytest 单元测试目录
-  - [server/config.yaml](server/config.yaml) - 后端运行时配置文件
-  - [server/pyproject.toml](server/pyproject.toml) - Python 依赖定义
-
----
-
-## 环境要求
-
-### 必需环境
-
-| 依赖 | 版本要求 | 用途 |
-|------|---------|------|
-| **Python** | ≥ 3.13 | 后端服务运行时 |
-| **uv** | 最新版 | Python 包依赖及虚拟环境管理器 |
-| **Node.js** | ≥ 22 | 前端构建与 HyperFrames 动画渲染 CLI |
-| **npm** | 与 Node.js 匹配 | 前端包依赖管理 |
-| **MySQL** | ≥ 8.0.13 | 关系型数据库（存储用户、对话、路径、画像等数据） |
-| **Playwright** | 适配系统版本 | HyperFrames 引擎与 PPT 网页快照渲染底层浏览器依赖 |
-| **FFmpeg + FFprobe** | ≥ 4.0 | 视频/动画编码、音频拼接及格式转换 |
-
-### 可选环境
-
-| 依赖 | 用途 | 配置位置 |
-|------|------|----------|
-| **Ollama + bge-m3** | 用于混合检索（RAG）向量嵌入服务 | `config.yaml` -> `knowledge` |
-| **NVIDIA GPU + NVENC** | GPU 硬件加速动画视频编码（无则自动回退至 CPU 软件编码） | 系统自动检测 |
-
+```text
+.
+├── src/                              # Vue 3 + TypeScript 前端源码
+│   ├── app/                          # 应用入口 (main.ts)、主布局 (MainLayout.vue)、路由与守卫、学习行为追踪插件
+│   ├── components/ui/                # 通用基础 UI 原语 (button / dialog / select / toggle 等)
+│   ├── features/                     # 业务域模块
+│   │   ├── auth/                     # 登录、注册、Onboarding 首次引导弹窗
+│   │   ├── chat/                     # AI 辅导对话 (Tutor.vue, useChatRun.ts, ChatRunStatus, ChatComposer 等)
+│   │   ├── dashboard/                # 首页仪表盘视图與聚合接口
+│   │   ├── resource/                 # 多模态资源生成向导、实时进度、资源详情与历史
+│   │   ├── learning-path/            # 学习路径创建、阶段总览、节点学习工作区、路径历史
+│   │   ├── question-bank/            # 题库筛选练习、AI 主观题批改、答题历史、错题本
+│   │   ├── profile/                  # 7 维学习者画像、能力雷达、个人资料编辑
+│   │   ├── evaluation/               # 学习事件与会话时长上报模型
+│   │   └── learning-assessment/      # 学习评估报告与看板可视化页面
+│   ├── shared/                       # 跨模块共享基础设施 (Axios 封装、Token 管理、Web Worker Markdown 管线、多模态产物渲染器)
+│   └── README.md                     # 前端模块说明文档
+├── server/                           # FastAPI 后端工程
+│   ├── app/
+│   │   ├── auth/                     # 用户注册、登录、JWT 校验、个人资料与头像上传
+│   │   ├── chat/                     # TutorAgent 循环、RunHooks 快照流、上下文组装、三层记忆、沙箱与业务工具
+│   │   ├── resource/                 # 多模态资源生成四阶段 DAG 编排器、7 类 Agent 实现与确定性校验器
+│   │   ├── path/                     # 学习路径两阶段规划、节点教程/测验/辅助资源工作流与 SSE 事件流
+│   │   ├── profile/                  # 7 维学习者画像服务、Onboarding 落库、AGENT.md 生成与仪表盘推荐
+│   │   ├── quiz/                     # 题库分页检索、客观题判分、主观题单题/批量 LLM 审阅、错题本管理
+│   │   ├── evaluation/               # 学习事件/会话记录、事实聚合、周期评估报告生成与辅导策略更新
+│   │   ├── rag/                      # 多格式文档加载、语义切分、ChromaDB + BM25 索引构建与混合检索
+│   │   ├── shared/                   # 跨模块 Agent 基础设施：ToolRegistry、沙箱工具、SkillLoader、PPTAgent、CartoonAgent
+│   │   ├── infra/                    # 数据库连接池、统一 SQLModel 表定义 (models.py)、LLM 客户端封装、日志与种子数据
+│   │   ├── middleware/               # 全局 JWT 认证中间件
+│   │   ├── config.py                 # YAML 配置加载与路径常量
+│   │   ├── exceptions.py             # 全局异常处理
+│   │   ├── response.py               # HttpResponse 统一响应信封
+│   │   ├── routes.py                 # 路由集中挂载
+│   │   └── main.py                   # FastAPI 应用创建与生命周期管理
+│   ├── skills/                       # Agent 技能目录 (pptx, hyperframes, hyperframes-cli, hyperframes-registry, media-use)
+│   ├── tests/                        # 后端单元测试与集成测试 (镜像 app/ 目录结构)
+│   ├── config.example.yaml           # 配置文件模板（复制为 config.yaml 使用）
+│   ├── docker-compose.yml            # 本地开发 MySQL 8.4 容器编排
+│   ├── pyproject.toml                # Python 依赖与 pytest 配置
+│   └── README.md                     # 后端模块说明文档
+├── public/                           # 静态公共资源
+├── package.json                      # 前端与 HyperFrames CLI 依赖
+└── vite.config.ts                    # Vite 构建、分包与开发代理配置
+```
 
 ---
 
 ## 快速开始
 
-### 1. 克隆项目
+### 环境要求
+
+| 依赖 | 版本要求 | 用途 |
+|------|----------|------|
+| Python | ≥ 3.13 | 后端运行时 |
+| uv | 最新版 | Python 依赖管理与虚拟环境运行 |
+| MySQL | ≥ 8.0 | 业务数据库（`docker compose` 默认提供 8.4） |
+| Node.js | ≥ 22 | 前端构建、PptxGenJS 脚本执行与 HyperFrames CLI |
+| FFmpeg / `ffprobe` | ≥ 4.0 | 教学视频编码合成与音视频流校验 |
+| LibreOffice (`soffice`) + Poppler (`pdftoppm`) | 最新版 | PPTX 转 PDF 与 PNG 逐页视觉审查预览 |
+| 中文字体 | 如 Noto Sans CJK / Hiragino Sans GB | 课件与动画视频中文渲染 |
+| Ollama + `bge-m3` | 可选 | 本地知识库向量嵌入服务（也可配置云端兼容接口） |
+
+### 1. 启动 MySQL
+
+可使用 `server/docker-compose.yml` 一键启动开发用 MySQL：
 
 ```bash
-git clone <repository-url>
-cd software
+cd server
+docker compose up -d mysql
 ```
 
-### 2. 安装前端依赖
+或使用本地已有 MySQL 手动创建数据库：
 
-```bash
-npm install
+```sql
+CREATE DATABASE agent CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;
 ```
 
-### 3. 安装后端依赖
+> 服务启动时 `init_db()` 会通过 `SQLModel.metadata.create_all` 自动创建缺失表。注意 `create_all` 不会自动修改已有表的列结构，开发期若变更了列类型或约束，请重建数据库后重启服务。
+
+### 2. 配置并启动后端
 
 ```bash
 cd server
 uv sync
-```
-
-### 4. 初始化数据库
-
-```bash
-# 1. 确保 MySQL 服务已启动
-# 2. 创建名称为 agent 的数据库（排序规则保持大小写敏感）
-mysql -u root -p -e "CREATE DATABASE agent CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;"
-# 3. 启动后端服务时，系统会自动执行 init_db() 建表与种子数据检查，无需手动执行 SQL
-```
-
-### 5. 配置运行时参数
-
-编辑后端 [server/config.yaml](server/config.yaml) 文件，配置必要的密钥及服务地址。系统统一定义两类模型配置（文本模型 `text` 与视觉模型 `vision`）：
-
-```yaml
-# 应用配置
-app:
-  host: "127.0.0.1"
-  port: 9999
-
-# 数据库连接
-database:
-  url: "mysql+aiomysql://用户名:密码@127.0.0.1:3306/agent"
-
-# JWT 认证配置（需保证 secret_key 至少 32 位）
-jwt:
-  secret_key: "your-secret-key-at-least-32-characters-long"
-  algorithm: "HS256"
-
-# LLM 大模型配置（统一管理文本与多模态视觉模型）
-models:
-  text:
-    base_url: "https://maas-coding-api.cn-huabei-1.xf-yun.com/v2"  # 文本模型 API 地址
-    api_key: "your-api-key"
-    model_name: "astron-code-latest"
-    timeout: 300
-    max_retries: 2
-  vision:
-    base_url: "https://open.bigmodel.cn/api/paas/v4/"  # 视觉模型 API 地址
-    api_key: "your-api-key"
-    model_name: "glm-4.6v-flash"
-    timeout: 300
-    max_retries: 2
-```
-
-### 6. 启动服务
-
-**启动后端服务**（在 `server/` 目录中）
-
-```bash
+cp config.example.yaml config.yaml
+# 编辑 config.yaml，填写 database.url、jwt.secret_key、models.text（及可选的 models.vision）
 uv run fastapi dev app/main.py --port 9999
 ```
 
-后端 API Swagger 文档地址：`http://localhost:9999/docs`
+- 交互式 API 文档（Swagger UI）：<http://127.0.0.1:9999/docs>
+- 生产环境启动命令：
+  ```bash
+  uv run uvicorn app.main:app --host 0.0.0.0 --port 9999
+  ```
 
-**启动前端服务**（在项目根目录中）
+### 3. 安装并启动前端
+
+在仓库根目录下执行：
 
 ```bash
+npm install
 npm run dev
 ```
 
-前端界面访问地址：`http://localhost:5173`
+浏览器访问 <http://localhost:5173>。Vite 默认将 `/api` 与 `/static` 代理至 `http://127.0.0.1:9999`，可通过环境变量覆盖：
 
----
-
-## 核心业务流程
-
-平台内部包含三条隔离的核心业务链路，分别由其独立数据模型及 API 支撑：
-
-### 1. 智能辅导对话（chat 域）
-
-智能对话建立在**短期历史、压缩摘要块、长期记忆**三层上下文之上。
-
-```
-用户提问 → 组装多层上下文 (历史/摘要块/长期记忆/RAG源) → 触发画像加载
-        → TutorAgent (流式 ReAct 循环：思考/工具决策 → 动态调用工具/图表生成)
-        → SSE 流式输出 (agent_status / tool_call / activity / text_delta)
-        → 存储对话与产物 → 判定并异步触发会话压缩与长期记忆更新
+```bash
+VITE_API_PROXY_TARGET=http://127.0.0.1:9999 npm run dev
 ```
 
-- **核心端点**：`POST /api/v1/ai/chat/messages`
-- **关键机制**：直接流式 ReAct 循环、实时工具执行状态与活动卡片、联网搜索、知识库检索 (RAG)、Mermaid/SVG 教学图生成、消息附件（文档与图片）异步视觉分析、视频与 PPT 产物标签 (`<artifact>`) 自动解析。
+### 4. 构建 RAG 知识库索引（可选）
 
-### 2. 独立资源生成（resource 域）
-
-用户直接向 AI 发起多模态资源生成请求（例如直接生成主题 PPT、动画讲解等），不依赖学习路径上下文。
-
-```
-POST /api/v1/ai/resources → 创建 Resource 任务 → 异步触发 DAG 多智能体编排
-                          → 大纲 Planning → 并行调用 Content/Mindmap/Quiz/PPT/Cartoon Worker
-                          → 上游教程素材无缝向后传递 (Handoffs) → 独立无状态 Subagent 执行
-                          → SSE 进度实时推送 → 生成 GeneratedResourceItem 产物
-```
-
-- **生成类型**：教程、思维导图、选择题与判断题、示例代码、阅读材料、PPT 演示课件、动画讲解。
-- **关联表**：`generated_resources` / `generated_resource_items` / `generated_resource_agent_runs`。
-- **前端页面**：`/resource-generator`、`/ai/resources/history`、`/resource-detail/:id`。
-
-### 3. 学习路径规划（path 域）
-
-根据用户给定的学习目标及已掌握的知识点，智能规划阶段式学习路径，进行渐进式闭环学习。
-
-```
-POST /api/v1/ai/path-plan → 生成 LearningPath (含多阶段及关联 PathNode)
-                          → 激活路径 → 前端工作空间渲染首个 available 节点
-                          → 点击开始学习 → 异步生成 Tutorial 教程大纲与正文
-                          → 触发 5 道测验题 (Quiz) 生成 → 答题提交并自动评分
-                          → 判定节点状态更新 (completed / completed_with_gaps)
-                          → （可选）生成思维导图/代码/PPT/动画等节点辅助资源
-```
-
-- **节点状态流转**：`locked` (未解锁) → `available` (可学习) → `in_progress` (学习中) → `completed` (已完成) 或 `completed_with_gaps` (有薄弱点已完成)。
-- **核心表**：`learning_paths`、`path_nodes`、`path_node_tutorials`、`path_node_questions`、`path_node_resources`。
-- **前端页面**：`/path-planner`、`/path-planner/overview/:id`、`/path-planner/node/:nodeId`。
-
-> [!IMPORTANT]
-> **设计边界**：独立资源（`resource` 域）与路径节点资源（`path` 域）虽共用生成 Agent 底层，但其 API 接口、数据表实体及前端展示页均严格独立隔离，数据互不交叉。
-
----
-
-## 前端页面路由
-
-路由配置在 [src/app/router/routes.ts](src/app/router/routes.ts) 中，已登录页面外层挂载在 `MainLayout` 中：
-
-| 页面路由 | 页面组件 | 是否需要登录 | 功能描述 |
-|----------|----------|:------------:|----------|
-| `/login` | `Login.vue` | 否 | 用户登录页 |
-| `/register` | `Register.vue` | 否 | 用户注册页 |
-| `/onboarding` | `OnboardingDialog.vue` | 否 | 首次登录问卷引导弹窗 |
-| `/dashboard` | `Home.vue` | **是** | 个人首页，包含推荐、画像雷达、快捷动作 |
-| `/tutor` | `Tutor.vue` | **是** | 智能辅导对话与多模态交互 |
-| `/resource-generator` | `ResourceGenerator.vue` | **是** | 独立资源规划生成界面 |
-| `/resource-detail/:id` | `ResourceResult.vue` | **是** | 独立资源生成进度及总览 |
-| `/resource-detail/:id/:type` | `ResourceItemDetail.vue` | **是** | 独立资源具体项（PPT课件/动画等）详情展示 |
-| `/ai/resources/history` | `ResourceHistory.vue` | **是** | 独立多模态资源生成历史记录 |
-| `/path-planner` | `PathPlanCreate.vue` | **是** | 创建/规划新的个性化学习路径 |
-| `/path-planner/overview/:id?`| `PathPlanOverview.vue` | **是** | 单条学习路径节点及概览看板 |
-| `/path-planner/node/:nodeId` | `PathNodeStudy.vue` | **是** | 路径节点工作空间（学习教程、答题测试、生成补充资源） |
-| `/path-planner/history` | `PathPlanHistory.vue` | **是** | 学习路径规划历史记录列表 |
-| `/question-bank` | `QuestionBank.vue` | **是** | 学科题库测试与错题本回顾 |
-| `/profile` | `Profile.vue` | **是** | 学习者个人中心及画像大盘 |
-| `/assessment` | `LearningAssessment.vue` | **是** | 周期性学习评估报告与历史查看 |
-
----
-
-## 后端 API 路由
-
-路由注册在 [server/app/routes.py](server/app/routes.py)，所有接口均返回格式一致的信封：`{code, message, data}`。
-
-| API 请求路径前缀 | 关联领域 | 端点主要功能 |
-|------------------|:--------:|--------------|
-| `/api/v1/users` | auth | 注册 (`POST `)、登录 (`POST /auth`)、登出 (`POST /auth/logout`)、获取当前用户信息 (`GET /me`)、更新资料 (`PATCH /me`)、上传用户头像 (`POST /me/avatar`)。 |
-| `/api/v1/ai/chat` | chat | 创建/删除会话 (`POST/DELETE /chat/sessions`)、SSE 流式对话 (`POST /chat/messages`)、上传文件/图片分析 (`POST /chat/upload`)、会话关联视频生成 (`POST /chat/videos`)。 |
-| `/api/v1/ai/resources` | resource | 触发生成 (`POST /resources`)、获取资源详情 (`GET /resources/{id}`)、轮询状态与进度事件流 (`GET /resources/{id}/{status|events}`)、最近生成列表 (`GET /dashboard/recent-resources`)。 |
-| `/api/v1/ai/path-plan` | path | 创建路径规划 (`POST /path-plan`)、继续学习仪表盘 (`GET /dashboard/continue-learning`)、路径历史 (`GET /path-plan/history`)、节点工作空间 (`GET /path-plan/nodes/{id}/workspace`)、生成教程 (`POST /path-plan/nodes/{id}/tutorial`)、触发测验题 (`POST /path-plan/nodes/{id}/questions`)、提交测试评分 (`POST /path-plan/nodes/{id}/quiz-submit`)、生成节点辅助资源 (`POST /path-plan/nodes/{id}/resources/{type}`)、上报学习事件与评估 (`POST /path-plan/{id}/events` 与 `GET /path-plan/{id}/evaluation`)。 |
-| `/api/v1/ai/profile` | profile | 获取个人画像指标与历史证据 (`GET /profile`)、更新设置 (`PATCH /profile`)、获取 Onboarding 设置及快速动作 (`GET/PATCH /profile/onboarding` & `GET /dashboard/quick-actions`)、获取推荐课程及画像雷达数据 (`GET /dashboard/recommendation` & `GET /dashboard/profile-radar`)。 |
-| `/api/v1/ai/quiz` | quiz | 获取随机练习题目 (`GET /quiz`)、提交答题选项 (`POST /quiz/submit`)、获取个人答题统计指标与历史 (`GET /quiz/stats` & `GET /quiz/history`)、复习回顾 (`POST /quiz/review`)。 |
-| `/api/v1/ai/wrong` | quiz | 获取错题列表 (`GET /wrong`)、随机抽题练习 (`GET /wrong/random`)、移除/彻底删除错题 (`DELETE /wrong/{id}`)、归档已掌握错题 (`POST /wrong/{id}/archive`)。 |
-| `/api/v1/ai/evaluation` | evaluation | 手动上报学习事件 (`POST /evaluation/events`)、离开页面上报时长会话 (`POST /evaluation/sessions`)、触发/获取学习评估报告 (`POST/GET /evaluation/assessments/*`)、个人中心多图表数据聚合 (`GET /evaluation/dashboard`)。 |
-
----
-
-## 记忆与画像架构
-
-平台的个性化智能诊断与辅导策略建立在三层记忆架构之上：
-
-| 记忆层级 | 物理表 | 触发与处理机制 | 画像/记忆作用 |
-|----------|--------|----------------|--------------|
-| **1. 消息摘要分块** | `chat_session_summary_blocks` | 触发时机：当单会话的消息数量或已用 Token 超过预设阈值。在后台增量摘要，并与原有摘要合并更新。 | 提炼近期多次会话的概要，压缩上下文，避免超长 Token 消耗大模型窗口。 |
-| **2. 长期事实提取** | `chat_long_term_memories` | 触发时机：当单会话以结束或交互轮次足够时。系统使用大模型从近期对话的上下文事实中过滤非易逝性事实（如“喜欢图形化说明”、“擅长 Python 链表”）。 | 提供用户个人非易逝性的背景描述及长周期学习事实，直接作为 Tutor 交互先验。 |
-| **3. 动态学习画像** | `user_profiles` <br> `user_profile_dimensions` | 触发时机：用户在平台中的对话交互、视频观看、题库测试、路径流转等动作会产生学习事件上报，由画像逻辑定时重算多维度数值与证据事实。 | 维护 Goal（目标）、Preference（偏好）、Style（风格）、Proficiency（熟练度）等 8 维度画像，驱动个性化出题与生成策略。 |
-
----
-
-## 向量检索知识库 (RAG)
-
-向量检索采用 **ChromaDB (向量检索) + BM25 (Jieba 分词的关键词检索)** 的双路检索架构，最后通过倒数排名融合 (RRF) 汇总输出 Top-K 的文档片段作为 AI Tutor 的辅助知识源。
-
-### 启用知识库
-
-1. **安装本地向量服务 (Ollama)** 并拉取 `bge-m3` 模型（如无需本地向量检索，可将 embedding 接口替换为 OpenAI 兼容的云端 API）：
-   ```bash
-   curl -fsSL https://ollama.com/install.sh | sh
-   ollama pull bge-m3
-   ollama serve
-   ```
-2. 在 [server/config.yaml](server/config.yaml) 中启用并配置知识库配置组：
-   ```yaml
-   knowledge:
-     enabled: true
-     embed_model: "bge-m3:latest"
-     embed_base_url: "http://127.0.0.1:11434/v1"
-     embed_api_key: "ollama"
-     top_k: 4
-     max_context_chars: 6000
-   ```
-3. 导入或者把你的源文档放置于 `server/app/rag/data/source/` 目录中，在 [server/](server/) 目录下执行脚本进行离线索引构建：
-   ```bash
-   uv run python -m app.rag.indexing.build
-   ```
-
----
-
-## 动画与课件渲染系统
-
-对于生成的 PPT 与动画讲解，系统基于网页前端技术栈实现了脱离 GUI 界面的无头浏览器快照与渲染管线。
-
-### 1. 网页 PPT 演示生成
-PPTAgent 使用 PptxGenJS 工具循环生成可编辑的 `deck.pptx`，加载 `server/skills/pptx` 官方技能。通过 LibreOffice → PDF → PNG 进行逐页视觉审查，前端显示图片预览并提供 PPTX/PDF 下载。部署依赖和技能来源见 `server/skills/README.md`。
-
-### 2. HyperFrames 动画讲解生成
-动画智能体（`CartoonAgent`）将学习大纲拆分为若干分镜，为每个分镜生成语音播报脚本：
-- **音频合成**：调用 Edge-TTS 或讯飞星火语音合成 API 将脚本合成为 `.mp3` 音频文件。
-- **动画合成**：系统将分镜字幕、场景元素样式及动画时间序列导出为 HyperFrames 动作指令集。
-- **后台渲染**：调用 Puppeteer 无头浏览器加载渲染页面，Playwright 执行 HyperFrames 播放并在后台利用 FFmpeg 实时编码录制为带有声音及字幕的高清 `.mp4` 视频文件。
-- **环境降级**：引擎启动时会自动检测 CPU 核心数、内存及 GPU 环境。若物理系统内存不足（如 ≤8GB），将自动降级为单线程 CPU 渲染，若检测到 NVIDIA GPU + NVENC 编码器，则会自动使用 GPU 硬件加速以缩短渲染时长。
-
----
-
-## 调试与单元测试
-
-### 后端测试
-
-后端采用 `pytest` + `pytest-asyncio` 进行覆盖测试。测试代码结构与 `app/` 模块结构一一映射。
+将自有课程资料放入 `server/app/rag/data/source/`（支持 `.md` / `.txt` / `.pdf`），并在 `server/config.yaml` 中将 `knowledge.enabled` 设为 `true` 后执行：
 
 ```bash
 cd server
-
-# 运行所有单元测试
-uv run pytest
-
-# 运行指定模块测试
-uv run pytest tests/chat -q
-
-# 遇到第一个失败的用例立刻停止
-uv run pytest -x
+uv run python -m app.rag.build
+uv run python -m app.rag.build --check-only   # 仅检查现有索引健康状态
 ```
 
-### 前端测试与构建验证
-
-前端采用 `vitest` 进行组件与数据逻辑测试，使用 `vue-tsc` 执行全量类型检查。
+### 5. 运行测试与类型检查
 
 ```bash
-# 运行前端全部单元测试
-npm run test:run
+# 后端测试
+cd server
+uv run pytest
+uv run pytest tests/chat -q
 
-# 执行前端全量类型检查与生产构建
+# 前端单测与生产构建校验（含 vue-tsc 类型检查）
+npm run test:run
 npm run build
 ```
 
-> [!NOTE]
-> 数据库测试会在测试启动时自动创建临时 SQLite 表或模拟 Session，不污染物理运行数据库。
+---
+
+## 配置说明
+
+后端唯一权威配置源为 `server/config.yaml`（不使用 `.env`）。完整配置模板参见 [server/config.example.yaml](file:///Users/apple/Code/Python/software/server/config.example.yaml)。
+
+| 配置键 | 必填 | 默认值 / 说明 |
+|--------|:----:|---------------|
+| `app.host` / `app.port` | 否 | 默认 `"127.0.0.1"` / `9999` |
+| `database.url` | **是** | MySQL 异步连接串，必须以 `mysql+aiomysql://` 开头 |
+| `database.pool_size` / `max_overflow` / `pool_recycle` | 否 | 连接池参数，默认 `20` / `30` / `1800` |
+| `jwt.secret_key` | **是** | JWT 签名密钥（建议 ≥ 32 位随机字符） |
+| `jwt.algorithm` / `jwt.expire_days` | 否 | 默认 `"HS256"` / `7` 天 |
+| `models.text` | **是** | 文本主模型配置：`base_url`、`api_key`、`model_name`、`timeout`（默认 300s）、`max_retries` |
+| `models.vision` | 否 | 视觉模型配置：用于 `view_image` 图片理解及 PPT/视频逐帧视觉审查 |
+| `paths.workplace` / `logs` / `knowledge` | 否 | 本地工作区、日志与知识库持久化目录（默认位于 `./storage/*`） |
+| `knowledge.enabled` | 否 | 是否启用 RAG 知识库检索，默认 `false` |
+| `knowledge.embed_model` / `embed_base_url` / `embed_api_key` | 否 | 向量嵌入模型配置，默认使用 `bge-m3:latest` |
+| `knowledge.top_k` / `max_context_chars` | 否 | 混合检索返回条数与上下文字符上限，默认 `4` / `6000` |
+| `memory.compress_min_messages` / `compress_min_tokens` | 否 | 触发会话摘要压缩的消息数 / Token 阈值，默认 `16` / `4000` |
+| `memory.compress_keep_recent_messages` / `summary_context_blocks` | 否 | 压缩时保留的近期消息数（默认 `4`）与加载进上下文的摘要块数（默认 `3`） |
+| `memory.update_min_messages` / `update_min_tokens` / `ltm_min_confidence` | 否 | 长期记忆更新阈值（默认 `12` 条 / `6000` Token）与最低写入置信度（`0.75`） |
+| `chat.max_upload_files` / `max_file_content_chars` / `history_limit` | 否 | 单轮最大附件数（`12`）、文档解析最大字符数（`15000`）、上下文历史加载条数（`20`） |
+| `paths_config.quiz_size` / `pass_score` | 否 | 学习路径节点测验题数（默认 `5`）与通过分数线（默认 `3`） |
 
 ---
 
-## 常见故障排查
+## 核心链路
 
-| 问题现象 | 排查步骤及方向 |
-|----------|----------------|
-| **后台服务启动报错 `aiomysql` 错误** | 确认 MySQL 处于运行状态，并在 [server/config.yaml](server/config.yaml) 中核对 `database.url` 的用户名、密码及端口号。表结构在启动时按 [app/infra/models.py](server/app/infra/models.py) 自动创建，无需手工导入。 |
-| **前端请求接口提示 500 / 跨域** | 检查 Vite 本地服务器的代理端口。`vite.config.ts` 中的 proxy 默认会将 `/api` 代理至 `http://127.0.0.1:9999`。若后端启动了其他端口，请修改 `VITE_API_PROXY_TARGET` 环境变量。 |
-| **聊天或资源生成进度假死/无反应** | 大模型调用超时导致。请检查国内大模型代理服务的网络联通性，并在 `config.yaml` 对应大模型下调大 `timeout` 限制或增加 `max_retries` 重试。 |
-| **视频/动画生成卡在 `rendering` 状态** | 确认系统里已全局安装了 `ffmpeg` 及 `ffprobe` 工具，且版本不低于 4.0；确认已在 `server` 目录执行过 `npm ci` 完整下载了 HyperFrames 和无头浏览器依赖。各个操作系统的详细动画渲染配置步骤请参阅 `server/README.md`。 |
-| **大模型回答无法生成公式与图表** | 检查大模型输出流的格式。TutorAgent 依赖 Prompt 约束生成标准的 LaTeX (`$...$` 与 `$$...$$`) 及 Mermaid 代码块。可在 `server/app/infra/prompts/` 下微调提示词规范。 |
+### 1. AI 辅导对话 (`server/app/chat/`)
+
+重构后的 `chat` 模块遵循线性、无冗余后台任务嵌套的设计：
+
+```text
+POST /api/v1/ai/chat/messages (ChatRequest)
+  → 构造统一契约 AgentInput（注入 user_id, username, run_id）
+  → prepare_chat_run：
+      1. 校验上传附件归属与本地文件存在性 (_validate_attachments)
+      2. 行锁获取或创建 ChatSession，检查/恢复异常中断的遗留运行
+      3. 落库用户 ChatMessage、更新会话 Token 水位、创建 queued 状态的 ChatRun
+      4. 在进程内注册 RunHooks 状态容器 (_active_runs[run_id])
+  → BackgroundTasks 启动 execute_chat_run(inp)：
+      1. preparing 阶段：build_turn_messages 并行加载未压缩历史、滚动摘要、生效辅导策略与 AGENT.md，
+         注入当前日期、附件清单、强制视频 (video_mode) 或强制 Mermaid 图解 (diagram_mode) 指令
+      2. 装配工具：build_tutor_tools 构建 13 个工具并绑定子智能体进度回调 hooks.on_subagent_progress
+      3. 执行循环：run_tutor_agent 驱动无状态 ReAct 循环（最多 8 步模型调用 / 6 轮工具调用），
+         流式文本与工具执行状态实时更新至 RunHooks 并唤醒 SSE 订阅队列
+      4. saving 阶段：save_run_result 在单个数据库事务中一次性写入本轮新增的 assistant/tool 消息链、
+         更新会话记忆水位并持久化 ChatRun 终态快照，随后向 SSE 订阅者发布最终快照
+      5. 后置任务：若运行 completed，通过 asyncio.gather 并发执行会话摘要压缩 (compress_session)、
+         长期记忆增量更新 (update_long_term_memory)、学习事件记录 (record_dialogue_event) 与首轮标题生成
+```
+
+- **快照流式协议 (`event: run.state`)**：`GET /api/v1/ai/chat/runs/{run_id}/events` 不推送碎片化的增量事件，而是每次状态变更时推送完整 `RunState` 快照（通过容量为 1 的通知队列 + `0.1s` 节流合并，最高约 10 次/秒，空闲 25 秒心跳）。前端刷新或断线重连后直接挂载最新快照即可无缝恢复。
+- **随时取消**：`POST /api/v1/ai/chat/runs/{run_id}/cancel` 直接取消运行中的 `asyncio.Task`（进入 `saving` 阶段后保护事务不被打断）。
+
+### 2. 多模态资源生成 (`server/app/resource/`)
+
+```text
+POST /api/v1/ai/resources
+  → 冻结请求快照 (request_snapshot_json) 并创建 GeneratedResource 任务记录
+  → Stage 1 [Planning]：PlanningAgent 生成结构化 ResourcePlan 并校验任务分配一致性
+  → Stage 2 [Base Agents]：按全局并发信号量 (Semaphore=3) 并行运行已选基础 Agent，
+      经过确定性结构校验 (validate_agent_result) 后落库，并提取 DownstreamContext 交接素材
+  → Stage 3 [Aggregation Agents]：并行运行已选聚合 Agent (ppt / cartoon)，消费上游 handoffs 素材
+  → Stage 4 [Finalize]：汇总任务终态 (completed / partial / failed) 并持久化广播完成事件
+```
+
+| Agent ID | 名称 | 类型 | 产物格式 | 超时时间 | 说明 |
+|----------|------|------|----------|----------|------|
+| `content` | 课程内容 | `base` | `markdown` | 600s | 体系化课程精讲文档 |
+| `mindmap` | 思维导图 | `base` | `markdown` | 600s | 知识结构思维导图（前端 markmap 渲染） |
+| `quiz` | 练习题 | `base` | `json` | 600s | 按预设确定性蓝图（题型/难度槽位）生成的随堂习题 |
+| `code` | 代码示例 | `base` | `markdown` | 600s | 可运行代码实操案例与注释说明 |
+| `reading` | 拓展阅读 | `base` | `json` | 600s | 分层次的延伸阅读与资料推荐 |
+| `ppt` | PPT 文稿 | `aggregation` | `pptx` | 1800s | 消费基础 Agent 素材，调用 `PPTAgent` 生成可编辑课件 |
+| `cartoon` | 动画讲解 | `aggregation` | `mp4` | 1800s | 消费基础 Agent 素材，调用 `CartoonAgent` 生成配音字幕视频 |
+
+- 单次生成请求至少启用 **3 个 Agent**；若启用 `ppt` 或 `cartoon` 等聚合 Agent，则至少需要搭配 1 个基础 Agent 提供上游素材。
+- 所有进度事件先写入 `generated_resource_run_events` 表分配递增 `sequence` 序号，再推送至内存队列；SSE 端点支持 `after_sequence` 与 `Last-Event-ID` 断线续传。
+
+### 3. 学习路径规划与节点学习 (`server/app/path/`)
+
+```text
+POST /api/v1/ai/path-plan
+  → PathPlannerAgent 两阶段规划 (research → strategist) + repair_plan 结构对齐修复（异常时降级至 build_fallback_plan）
+  → 生成阶段与 PathNode（初始首节点 available，其余 locked）
+  → 节点学习工作流 (run_learn_workflow)：
+      1. start 阶段：调用 RAG 知识库与画像，生成节点主教程 (PathNodeTutorial) 并标记节点为 in_progress
+      2. questions 阶段：基于当前教程生成 5 道单选题 (PathNodeQuestion)
+      3. quiz 阶段：提交作答并自动判分（答错题自动同步至错题本 WrongQuestion）；
+         得分 ≥ 3/5 标记节点 completed（否则 completed_with_gaps），自动解锁后续节点并更新路径总进度
+      4. 节点辅助资源：按需异步生成绑定该节点的 mindmap / code / ppt / reading / cartoon 资源 (PathNodeResource)
+```
+
+> **架构隔离约束**：独立资源生成（`generated_resources`）与学习路径节点资源（`path_node_resources`）复用底层生成能力，但拥有各自独立的 API 路由、持久化表结构与前端详情视图，互不混用。
+
+### 4. 题库、画像与学习评估
+
+- **题库与错题本 (`server/app/quiz/`)**：支持按科目、题型、难度、关键词分页检索题目；`POST /quiz/review` 与 `POST /quiz/review/batch` 提供主观题单题与并发池批量 AI 批改（填空题精确匹配时规则短路免调模型）；`POST /quiz/submit` 记录答题历史并自动维护错题本。
+- **7 维学习者画像 (`server/app/profile/`)**：聚合用户基础学情（学校、专业、年级、目标、选修课程）与 7 个能力维度（文字描述 + 支撑证据 + 0–100 得分），生成每用户专属的 `AGENT.md` 教学档案，并为首页提供冷启动感知的下一步学习推荐、能力雷达图与动态加权快捷入口。
+- **学习评估 (`server/app/evaluation/`)**：汇总统计窗口（默认 7 天）内的活跃天数、每日学习时长、模块分布、练习正确率与路径完成率，异步调用 LLM 产出评估报告并更新 `UserProfile.guidance_strategy`（结论、推荐单次时长、辅导风格、重点主题），在下一轮 AI 辅导对话中自动生效。
 
 ---
 
-## License
+## Agent 运行时
 
-本项目遵循 [MIT](LICENSE) 许可协议。
+| 模块路径 | 核心职责 |
+|----------|----------|
+| [`server/app/chat/schemas.py`](file:///Users/apple/Code/Python/software/server/app/chat/schemas.py) | 定义 `ChatRequest`、`AgentInput`、`RunState`、`RunStep`、`SubStep`、`RunArtifact`、`SourceItem` 与 `encode_chat_sse` |
+| [`server/app/chat/service.py`](file:///Users/apple/Code/Python/software/server/app/chat/service.py) | 负责 `prepare_chat_run`、`execute_chat_run`、`save_run_result`（单事务落库）、运行取消与会话/历史查询 |
+| [`server/app/chat/context.py`](file:///Users/apple/Code/Python/software/server/app/chat/context.py) | 历史消息加载、孤立 `tool_calls` 配对清洗、早期长工具输出裁剪，以及并行注入摘要/辅导策略/`AGENT.md` |
+| [`server/app/chat/agent.py`](file:///Users/apple/Code/Python/software/server/app/chat/agent.py) | `run_tutor_agent`：纯净的无状态模型流式调用与工具执行循环，返回 `AgentResult(answer, new_messages)` |
+| [`server/app/chat/hooks.py`](file:///Users/apple/Code/Python/software/server/app/chat/hooks.py) | `RunHooks`：记录真实运行阶段、耗时、工具参数/输出预览、引用来源与产物，通过单槽位通知队列驱动 SSE |
+| [`server/app/chat/memory.py`](file:///Users/apple/Code/Python/software/server/app/chat/memory.py) | 基于水位线的会话滚动摘要压缩（`compress_session`）与基于稳定信号/阈值的 7 类长期记忆更新（`update_long_term_memory`） |
+| [`server/app/chat/tools.py`](file:///Users/apple/Code/Python/software/server/app/chat/tools.py) | 装配 TutorAgent 的 13 个工具，并将 PPT / 视频子智能体的内部进度桥接到 `RunHooks.on_subagent_progress` |
+| [`server/app/chat/files.py`](file:///Users/apple/Code/Python/software/server/app/chat/files.py) | 聊天上传文件安全校验、沙箱路径解析及多格式文档（PDF/Docx/Excel/CSV/文本）内容提取 |
+| [`server/app/shared/tools/`](file:///Users/apple/Code/Python/software/server/app/shared/tools/__init__.py) | `Tool` / `ToolRegistry`、工作区越界防护 (`sandbox.py`)、`SkillLoader` (`skills.py`)、无状态子智能体 (`subagent.py`) 与 7 个内置沙箱工具 (`builtin/`) |
+| [`server/app/shared/ppt/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/ppt/agent.py) | `PPTAgent`：最多 60 步工具循环，PptxGenJS 编写 → LibreOffice/pdftoppm 渲染 → 视觉模型逐页审查修复（最多 3 轮） |
+| [`server/app/shared/cartoon/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/cartoon/agent.py) | `CartoonAgent`：最多 50 步工具循环，Edge TTS 合成中文旁白 → HyperFrames CLI 关键帧截图审查 → 渲染 1080p MP4 并经 `ffprobe` 核验 |
+
+**TutorAgent 可用工具（共 13 个）**
+
+- **沙箱工作区工具（7 个）**：`bash`、`read`、`write`、`edit`、`glob`、`grep`、`view_image`
+- **教学业务工具（6 个）**：`read_document`、`get_learner_profile`、`get_long_term_memory`、`search_knowledge_base`、`generate_ppt_deck`、`generate_teaching_video`
+
+---
+
+## API 概览
+
+所有业务接口统一返回 `HttpResponse` 信封格式：`{ "code": 200, "message": "...", "data": ... }`。
+
+| 路由前缀 | 所属模块 | 核心端点 |
+|----------|----------|----------|
+| `/api/v1/users` | `auth` | `POST ""`（注册）、`POST /auth`（登录）、`POST /auth/logout`、`GET /auth/status`、`GET/PATCH /me`、`POST /me/avatar` |
+| `/api/v1/ai/chat` | `chat` | `POST /messages`、`POST /upload`、`GET /runs/{run_id}`、`GET /runs/{run_id}/events`（SSE）、`POST /runs/{run_id}/cancel`、`GET/POST/PATCH/DELETE /sessions`、`GET /history` |
+| `/api/v1/ai/resources` | `resource` | `POST ""`（创建生成任务）、`GET ""`（列表）、`GET /{id}`（详情）、`GET /{id}/status`、`GET /{id}/events`（SSE） |
+| `/api/v1/ai/path-plan` | `path` | `POST ""`（创建路径）、`GET /{id}/runs/{run_id}/events`（SSE）、`GET /latest`、`GET /history`、`GET /{id}`、`GET /nodes/{id}/workspace`、`POST /nodes/{id}/start-learning`、`POST /nodes/{id}/tutorial`、`GET/POST /nodes/{id}/questions`、`POST /nodes/{id}/quiz-submit`、`POST /nodes/{id}/resources/{type}`、`POST /{id}/events`、`GET /{id}/evaluation` |
+| `/api/v1/ai/profile` | `profile` | `GET/PATCH /profile`、`GET/PATCH /profile/onboarding`、`GET /schools/search` |
+| `/api/v1/ai/quiz` & `/wrong` | `quiz` | `GET /quiz`、`POST /quiz/review`、`POST /quiz/review/batch`、`GET /quiz/history`、`POST /quiz/submit`、`GET /wrong`、`POST /wrong/{id}/archive`、`DELETE /wrong/{id}` |
+| `/api/v1/ai/evaluation` | `evaluation` | `POST /events`、`POST /sessions`、`POST /assessments`、`GET /assessments/latest`、`GET /assessments`、`GET /assessments/{id}`、`GET /dashboard`、`GET /assessments/{id}/dashboard` |
+| `/api/v1/ai/dashboard` | `path` / `profile` / `resource` | `GET /continue-learning`、`GET /recent-resources`、`GET /recommendation`、`GET /profile-radar`、`GET /quick-actions` |
+
+---
+
+## 数据模型
+
+数据库共注册 **26 张表**，集中定义于 [`server/app/infra/models.py`](file:///Users/apple/Code/Python/software/server/app/infra/models.py)：
+
+| 业务域 | 数据表 |
+|--------|--------|
+| **用户与基础数据** | `users`、`user_daily_activities`、`schools` |
+| **AI 辅导与用量** | `chat_sessions`、`chat_messages`、`chat_runs`、`llm_usage` |
+| **会话摘要与长期记忆** | `chat_session_summary_blocks`、`chat_long_term_memories` |
+| **学习者画像** | `user_profiles`、`user_profile_dimensions` |
+| **多模态资源生成** | `generated_resources`、`generated_resource_items`、`generated_resource_agent_runs`、`generated_resource_run_events` |
+| **学习路径与节点工作区** | `learning_paths`、`path_nodes`、`path_node_tutorials`、`path_node_questions`、`path_node_resources` |
+| **题库与错题本** | `quiz_questions`、`quiz_answer_history`、`wrong_questions` |
+| **学习评估与行为事件** | `learning_events`、`learning_sessions`、`learning_assessments` |
+
+---
+
+## 部署说明
+
+1. **前端构建与托管**：执行 `npm run build` 生成 `dist/` 静态产物，由 Nginx 托管，并将 `/api` 与 `/static` 反向代理至后端 FastAPI 服务。
+2. **SSE 反向代理配置**：Nginx 代理 `/api/v1/ai/chat/runs/`、`/api/v1/ai/resources/` 与 `/api/v1/ai/path-plan/` 的 SSE 端点时，需配置 `proxy_buffering off;`、`proxy_cache off;` 与充足的 `proxy_read_timeout`（建议 `3600s`）。
+3. **进程模型说明**：当前聊天运行态注册表（`_active_runs`）与路径规划事件通道保存在单进程内存中。生产部署建议使用单 Worker（`uvicorn app.main:app --workers 1`），若需多 Worker 水平扩展，需将进程内通知机制替换为 Redis Pub/Sub。
+4. **系统级渲染工具链**：如需在生产环境启用 PPT 与教学视频生成，部署宿主机或容器镜像需安装 Node.js ≥ 22、LibreOffice (`soffice`)、Poppler (`pdftoppm`)、FFmpeg / `ffprobe` 及中文字体，并确保仓库根目录已执行 `npm ci`（供 `node_modules/.bin/hyperframes` 与 `pptxgenjs` 调用）。详见 [server/skills/README.md](file:///Users/apple/Code/Python/software/server/skills/README.md)。
+
+---
+
+## 常见问题
+
+| 现象 | 排查与解决方向 |
+|------|----------------|
+| 启动报错 `database.url` 为空 | 检查 `server/config.yaml` 是否存在且已配置 `mysql+aiomysql://` 连接串 |
+| 数据库报错列不存在或表结构不匹配 | `SQLModel.metadata.create_all` 不会自动迁移旧表；开发环境下请删除并重建 `agent` 数据库后重启后端 |
+| 知识库检索未生效 | 确认 `config.yaml` 中 `knowledge.enabled: true`，嵌入服务可访问，并已执行 `uv run python -m app.rag.build` |
+| PPT 生成失败或中文乱码 | 确认 `soffice`、`pdftoppm` 及中文字体已安装并在 `PATH` 中；macOS Headless 环境可参考 `server/skills/README.md` 字体说明 |
+| 教学视频生成失败 | 确认根目录已运行 `npm ci` 安装 `hyperframes`，且 Node.js ≥ 22、`ffmpeg`、`ffprobe` 可用 |
+| `pytest` 报 `httpx.InvalidURL: Invalid port ':1]'` | 本机环境变量 `NO_PROXY` / `no_proxy` 含 `[::1]` 等格式时触发，执行 `unset NO_PROXY no_proxy` 后重跑测试 |
+
+---
+
+## 项目说明
+
+- **前端详细文档**：[src/README.md](file:///Users/apple/Code/Python/software/src/README.md)
+- **后端详细文档**：[server/README.md](file:///Users/apple/Code/Python/software/server/README.md)
+- **Agent 技能与多媒体运行时说明**：[server/skills/README.md](file:///Users/apple/Code/Python/software/server/skills/README.md)

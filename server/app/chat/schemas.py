@@ -1,20 +1,24 @@
-"""Chat 模块统一数据契约 —— 涵盖运行状态、步骤时间线、SSE 事件与历史消息 DTO。"""
+"""Chat 模块统一数据契约 —— 涵盖 AgentInput、运行状态、步骤时间线、SSE 事件与历史消息 DTO。"""
 
 from __future__ import annotations
 
 import time
 from typing import Any, Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
 DiagramMode = Literal["auto", "required"]
 
-RunStatus = Literal["queued", "running", "completed", "failed", "cancelled", "interrupted"]
+TerminalStatus = Literal["completed", "failed", "cancelled", "interrupted"]
+RunStatus = Literal["queued", "running"] | TerminalStatus
 
 RunPhase = Literal[
     "queued",
     "preparing",
-    "thinking",
+    "waiting_model",
+    "saving",
+    "cancelling",
     "tool_calling",
     "streaming",
     "completed",
@@ -23,29 +27,47 @@ RunPhase = Literal[
     "interrupted",
 ]
 
-StepKind = Literal[
-    "thinking",
-    "knowledge",
-    "memory",
-    "vision",
-    "document",
-    "code",
-    "subagent",
-    "tool",
-]
-
 StepStatus = Literal["running", "completed", "failed", "cancelled"]
 
-RunEventName = Literal[
-    "run.snapshot",
-    "phase.changed",
-    "step.upsert",
-    "text.delta",
-    "artifact.created",
-    "run.finished",
-]
-
 TERMINAL_STATUSES: frozenset[str] = frozenset({"completed", "failed", "cancelled", "interrupted"})
+
+
+class AttachmentInput(BaseModel):
+    """用户随消息上传的单个附件描述。"""
+
+    url: str
+    file_type: str = "document"
+    original_name: str = ""
+    mime_type: str | None = None
+    size_bytes: int = Field(default=0, ge=0)
+
+
+class ChatRequest(BaseModel):
+    """前端提交的单轮聊天请求，不包含身份与运行登记字段。"""
+
+    question: str = ""
+    session_id: str = Field(default_factory=lambda: str(uuid4()))
+    attachments: list[AttachmentInput] = Field(default_factory=list)
+    diagram_mode: DiagramMode = "auto"
+    video_mode: bool = False
+
+
+class AgentInput(ChatRequest):
+    """单轮对话的请求与登记信息，用于服务编排和上下文准备。"""
+
+    user_id: int
+    username: str
+    run_id: str = Field(default_factory=lambda: str(uuid4()))
+    user_message_id: int = 0
+    is_first_turn: bool = False
+
+    @property
+    def effective_question(self) -> str:
+        """返回非空的用户提问文本（仅传附件时自动补齐默认引导语）。"""
+        text = self.question.strip()
+        if text:
+            return text
+        return "请分析我上传的附件，并解答其中的问题。"
 
 
 class SourceItem(BaseModel):
@@ -64,7 +86,6 @@ class SubStep(BaseModel):
 
     id: str
     title: str
-    status: StepStatus = "running"
     timestamp: float = Field(default_factory=time.time)
 
 
@@ -72,7 +93,6 @@ class RunStep(BaseModel):
     """Agent 运行过程中的单个透明可观测步骤（推理、工具调用、子智能体执行）。"""
 
     step_id: str
-    kind: StepKind = "tool"
     title: str
     subtitle: str = ""
     status: StepStatus = "running"
@@ -82,7 +102,6 @@ class RunStep(BaseModel):
     error: str = ""
     started_at: float = Field(default_factory=time.time)
     elapsed_ms: int = 0
-    progress: int | None = None
     sub_steps: list[SubStep] = Field(default_factory=list)
 
 
@@ -101,7 +120,6 @@ class RunState(BaseModel):
     """一次 Agent 运行的完整实时快照，同时服务 SSE 首帧同步与历史回放。"""
 
     run_id: str
-    sequence: int = 0
     status: RunStatus = "queued"
     phase: RunPhase = "queued"
     phase_label: str = "等待处理"
@@ -113,29 +131,9 @@ class RunState(BaseModel):
     sources: list[SourceItem] = Field(default_factory=list)
 
 
-class RunEvent(BaseModel):
-    """通过 SSE 推送给前端的单条事件帧。"""
-
-    run_id: str
-    sequence: int
-    event: RunEventName
-    data: dict[str, Any] = Field(default_factory=dict)
-    timestamp: float = Field(default_factory=time.time)
-
-
-def encode_chat_sse(event: RunEvent) -> str:
-    """将 RunEvent 编码为标准 SSE 帧文本（事件名固定为 chat.event）。"""
-    return f"id: {event.sequence}\nevent: chat.event\ndata: {event.model_dump_json()}\n\n"
-
-
-class UploadResponse(BaseModel):
-    """文件上传成功后的元数据响应。"""
-
-    url: str = Field(..., description="文件静态访问 URL")
-    file_type: str = Field(default="document", description="image / document")
-    original_name: str = Field(default="", description="原始文件名")
-    size_bytes: int = Field(default=0, ge=0, description="文件字节大小")
-    mime_type: str | None = Field(default=None, description="MIME 类型")
+def encode_chat_sse(state: RunState) -> str:
+    """将完整运行快照编码为唯一的 run.state SSE 帧。"""
+    return f"event: run.state\ndata: {state.model_dump_json()}\n\n"
 
 
 class ChatMessageItem(BaseModel):
@@ -144,26 +142,5 @@ class ChatMessageItem(BaseModel):
     id: int
     role: Literal["user", "assistant"]
     content: list[dict[str, Any]] = Field(default_factory=list)
-    run_id: str | None = None
     run: dict[str, Any] | None = None
     created_at: Any = None
-
-
-__all__ = [
-    "ChatMessageItem",
-    "DiagramMode",
-    "RunArtifact",
-    "RunEvent",
-    "RunEventName",
-    "RunPhase",
-    "RunState",
-    "RunStatus",
-    "RunStep",
-    "SourceItem",
-    "StepKind",
-    "StepStatus",
-    "SubStep",
-    "TERMINAL_STATUSES",
-    "UploadResponse",
-    "encode_chat_sse",
-]

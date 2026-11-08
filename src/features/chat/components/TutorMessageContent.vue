@@ -234,35 +234,6 @@ const props = defineProps<{
   white-space: nowrap;
 }
 
-.stream-markdown :deep(.code-block-copy-btn) {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex: 0 0 auto;
-  height: 26px;
-  padding: 0 9px;
-  color: var(--color-text-secondary);
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.72rem;
-  font-weight: 500;
-  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
-}
-
-.stream-markdown :deep(.code-block-copy-btn:hover) {
-  color: var(--color-text-strong);
-  background: var(--color-surface-hover);
-  border-color: var(--color-border-hover);
-}
-
-.stream-markdown :deep(.code-block-copy-btn.copied) {
-  color: var(--color-success);
-  border-color: var(--color-primary-border);
-  background: var(--color-success-soft);
-}
-
 .stream-markdown :deep(.code-block-wrapper pre) {
   margin: 0;
   padding: 14px 16px;

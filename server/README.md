@@ -1,343 +1,136 @@
-# AI 学习平台 · 后端服务
+# Mentorly 后端服务 (`server/`)
 
-基于 **FastAPI + LangGraph** 的多智能体个性化学习平台后端，提供 AI 辅导对话、多模态学习资源生成、学习路径规划、题库等能力。后端通过三层记忆与学习者画像驱动个性化教学，并将多智能体编排复用于独立资源生成与路径节点学习两条独立的业务链路。
+Mentorly 后端基于 **Python 3.13+ · FastAPI · SQLModel (SQLAlchemy 2.0 Async) · MySQL (`aiomysql`)** 构建，提供用户认证、AI 辅导对话、多模态资源生成、学习路径规划、题库与错题本、7 维学习者画像、学习评估与混合检索知识库（RAG）服务。
 
----
+> **架构设计原则**：
+> 1. **自研轻量 Agent 运行时**：`TutorAgent` 采用无跨轮状态的 ReAct 循环 (`run_tutor_agent`) + `RunHooks` 内存快照状态机；资源生成采用四阶段 `asyncio` DAG 编排；学习路径采用两阶段自定义工作流，**不依赖 LangGraph**（LangChain 仅用于 RAG 离线文档切分）。
+> 2. **清晰分层与单事务持久化**：每个业务模块遵循 `api.py`（HTTP/SSE 路由）→ `service.py`（业务编排与事务落库）→ `schemas.py`（Pydantic 契约）。
+> 3. **领域边界隔离**：`resource`（独立资源生成）与 `path`（学习路径节点资源）复用 `shared` 中的底层 Agent 与工具基础设施，但拥有完全独立的数据表、API 与生命周期管理。
 
-## 目录
-
-- [核心能力](#核心能力)
-- [技术栈](#技术栈)
-- [系统架构](#系统架构)
-- [快速开始](#快速开始)
-- [配置](#配置)
-- [API 参考](#api-参考)
-- [动画与课件渲染系统](#动画与课件渲染系统)
-  - [环境准备](#环境准备首次渲染前必做)
-  - [HyperFrames 动画讲解](#hyperframes-动画讲解)
-  - [TTS 语音合成](#tts-语音合成)
-- [记忆与画像](#记忆与画像)
-- [RAG 知识库](#rag-知识库)
-- [测试](#测试)
-- [项目结构](#项目结构)
-- [开发约定](#开发约定)
-- [故障排查](#故障排查)
+完整项目概览与前端说明请参见 [根目录 README](../README.md) 与 [前端 README](../src/README.md)。
 
 ---
-
-## 核心能力
-
-- **AI 辅导对话** — SSE 流式输出，融合三层上下文（会话摘要 / 长期记忆 / 学习画像）实现因材施教；支持附件分析、联网搜索与教学图生成。
-- **多智能体资源生成** — 一键生成教程、思维导图、题目、代码示例、阅读材料、PPT 课件、动画讲解等多模态资源。
-- **学习路径规划** — 课程级路径编排，节点内形成「教程 → 测验 → 辅助资源」的学习闭环，节点资源按需单智能体生成。
-- **算法可视化** — 后端基于 Python 抽象语法树（AST）分析与代码插装，支持官方与自定义算法模板运行，生成包含作用域、变量状态、输出及调用栈的可视化 Trace 数据。
-- **题库与错题本** — 编程题与客观题管理，答题事件自动归集错题。
-- **动态学习评估** — 聚合用户学习时长与测验得分等事实，通过 LLM 异步生成周期性评估报告并更新辅导建议策略。
-- **GPU 加速动画渲染** — 检测到 NVIDIA GPU + NVENC 时自动启用 GPU 渲染（Ubuntu Linux 优先，无则自动回退至 CPU 软件渲染）。
 
 ## 技术栈
 
-| 分类 | 选型 |
-|------|------|
-| **Web 框架** | FastAPI · SQLModel · SQLAlchemy (async) |
-| **多智能体编排** | LangGraph · LangChain |
-| **数据库** | MySQL · aiomysql |
-| **LLM 接入** | OpenAI 兼容 API（主模型：Astron-code-latest 等；视觉模型：GLM-4.6v-flash 等） |
-| **动画与课件渲染** | HyperFrames 0.7 · Playwright · FFmpeg (NVENC) |
-| **语音技术** | Microsoft Edge-TTS · 讯飞星火 TTS / ASR |
-| **向量检索** | ChromaDB + BM25 (jieba) · RRF 融合 · bge-m3 (Ollama / OpenAI 兼容 API) |
-| **包管理** | uv |
+| 类别 | 技术选型 |
+|------|----------|
+| **Web 框架与 ORM** | FastAPI · SQLModel · SQLAlchemy 2.0 Async · Pydantic v2 |
+| **数据库与驱动** | MySQL 8.0+ · `aiomysql`（测试环境支持 `aiosqlite`） |
+| **鉴权与安全** | PyJWT（HS256）· Passlib (`bcrypt`) · 全局 `JWTMiddleware` |
+| **大模型接入** | OpenAI Async SDK（统一封装 `LLM`：支持文本模型 `text` 与视觉模型 `vision`） |
+| **Agent 核心** | `run_tutor_agent` · `RunHooks` · `ToolRegistry` · `SkillLoader` · 无状态子智能体 (`run_subagent`) |
+| **RAG 知识库** | ChromaDB · BM25（`jieba` + `rank-bm25`）· RRF 融合 · `bge-m3` Embedding |
+| **课件与视频生产** | PptxGenJS · LibreOffice (`soffice`) · Poppler (`pdftoppm`) · HyperFrames CLI · Edge TTS · FFmpeg / `ffprobe` |
+| **测试工具** | `pytest` · `pytest-asyncio` |
 
-## 系统架构
+---
 
-### 领域模块
+## 目录结构
 
-后端按业务领域拆分，每个领域遵循统一的分层结构：`api.py`（路由）→ `service.py`（业务逻辑编排）→ `schemas.py`（数据契约/DTO）。
-
-| 领域 | 职责 |
-|------|------|
-| [auth/](app/auth/) | 注册 / 登录 / 登出，JWT 校验 + `ActiveToken` 白名单，用户头像上传 |
-| [chat/](app/chat/) | SSE 辅导对话、附件分析、会话与三层记忆集成、对话视频生成 |
-| [resource/](app/resource/) | 独立多智能体资源生成（规划、大纲 Planning → 并行生成 Worker → 审查 Review） |
-| [path/](app/path/) | 学习路径规划生成、阶段与节点状态流转、节点工作空间及可继续学习仪表盘聚合 |
-| [profile/](app/profile/) | 学习者画像动态推断（`UserProfile` / `UserProfileDimension`），Onboarding 首入问卷，推荐列表 |
-| [evaluation/](app/evaluation/) | 学习事件采集、时长会话统计与异步学习评估生成 |
-| [quiz/](app/quiz/) | 题库练习、随机测试、答题历史、错题本归集与归档 |
-| [infra/](app/infra/) | 基础设施层（ChromaDB/MySQL、SQLModel 表映射、配置文件、日志处理、通用 Prompt） |
-| [shared/](app/shared/) | 跨领域共享渲染组件（动画 HTML 播放、PPT 演示大纲、研究代理、音效与 TTS） |
-
-应用启动流程集中在 [app/main.py](app/main.py)：`create_app()` 配置 CORS 与全局异常处理，`lifespan()` 预热 Prompt 模板、初始化数据库并执行知识库（RAG）健康检查，[app/routes.py](app/routes.py) 统一挂载全部 HTTP 路由。
-
-### 三条核心运行链路
-
-**1. 辅导对话链路（个性化主链路）**
-`POST /api/v1/ai/chat/messages` → 创建对话 → 持久化用户消息与附件 → 组装多层上下文（历史 / 摘要块 / 长期记忆 / RAG 源）→ `TutorAgent`（LangGraph StateGraph：分类识别 → 路由工具 → 生成回复）→ SSE 流式回传 → 持久化回复 → 触发压缩与长期记忆抽取。
-
-**2. 独立资源生成链路**
-`POST /api/v1/ai/resources` → 持久化 `GeneratedResource` 任务 → 后台 LangGraph 父工作流（Planning → 并行 Worker → Review）→ 持久化 `GeneratedResourceItem` 产物 → 通过 SSE 实时推送生成状态和进度。
-
-**3. 学习路径链路**
-`POST /api/v1/ai/path-plan` → 后台生成阶段与节点 → `GET .../nodes/{id}/workspace` 驱动节点工作空间 → 节点学习流程（教程 Tutorial 生成 → Quiz 测验测试 → 辅助资源按需生成）→ 学习事件反馈画像与评估。
-
-> **关键设计边界**：独立资源（`generated_resources`）与路径节点资源（`path_node_resources`）**共用 Agent 实现，但其持久化模型、API 接口与展示详情页各自独立**。两者不可合并记录或混用接口。
-
-## 快速开始
-
-本节以 **Ubuntu 22.04 / 24.04** 或 **macOS** 平台为例进行说明。
-
-### 环境要求
-
-按用途分为「必需」「视频/动画渲染必需」「可选」三档：
-
-| 依赖 | 版本 | 档位 | 用途 |
-|------|------|------|------|
-| **Python** | ≥ 3.13 | 必需 | 后端服务运行时 |
-| **uv** | 最新 | 必需 | Python 虚拟环境与依赖包管理 |
-| **MySQL** | ≥ 8.0.13 | 必需 | 主数据库 |
-| **Python 构建工具链** | — | 必需 | 编译 `faiss-cpu` / `greenlet` 等 C 扩展 |
-| **FFmpeg / FFprobe** | ≥ 4.0 | 视频功能必需 | 动画音频拼接、视频编码及合并 |
-| **Node.js** | ≥ 22 | 视频功能必需 | 运行 HyperFrames 动画生成 CLI（Playwright 驱动） |
-| **Playwright / Chromium**| — | 视频功能必需 | 渲染动画帧及 PPT 生成快照 |
-| **Ollama + bge-m3** | — | 可选 | 本地向量检索（`knowledge.enabled: true` 时启用） |
-| **NVIDIA 驱动 + NVENC** | — | 可选 | GPU 硬件加速动画编码（无则自动回退至 CPU 软件编码） |
-
-### 1. 安装系统依赖
-
-**Ubuntu (apt):**
-```bash
-sudo apt update
-sudo apt install -y build-essential python3-dev libpq-dev libffi-dev libssl-dev pkg-config curl git ffmpeg
+```text
+server/
+├── app/
+│   ├── auth/                 # 用户注册、登录、JWT 鉴权、个人资料更新、头像上传
+│   ├── chat/                 # AI 辅导对话模块
+│   │   ├── api.py            # HTTP 与 SSE 路由 (/api/v1/ai/chat/*)
+│   │   ├── service.py        # prepare_chat_run / execute_chat_run / save_run_result / 会话与历史管理
+│   │   ├── context.py        # 历史加载、孤立 tool_calls 清洗、长输出裁剪、摘要/策略/AGENT.md 动态注入
+│   │   ├── agent.py          # run_tutor_agent 无状态 ReAct 循环，返回 AgentResult(answer, new_messages)
+│   │   ├── hooks.py          # RunHooks 状态容器与单槽位 SSE 通知队列、工具调用中文描述映射
+│   │   ├── memory.py         # 会话滚动摘要压缩 (compress_session) 与 7 类长期记忆更新 (update_long_term_memory)
+│   │   ├── tools.py          # 13 个 TutorAgent 工具装配与 PPT/视频子智能体进度回调绑定
+│   │   ├── files.py          # 上传附件存储、路径越界防护与 PDF/Docx/Excel/CSV/文本解析
+│   │   ├── schemas.py        # ChatRequest / AgentInput / RunState / RunStep / encode_chat_sse 等契约
+│   │   └── prompts/          # tutor_agent.md / compression.md / ltm_update.md
+│   ├── resource/             # 独立多模态资源生成模块
+│   │   ├── api.py            # 资源任务创建、状态查询、断点续传 SSE、资源列表与详情
+│   │   ├── orchestrator.py   # 四阶段 DAG 编排 (Planning → Base 并行 → Aggregation 并行 → Finalize)
+│   │   ├── catalog.py        # 7 类资源 Agent 静态元数据目录 (content/mindmap/quiz/code/reading/ppt/cartoon)
+│   │   ├── validator.py      # 产物结构确定性校验与上游核心素材提取 (extract_core_content)
+│   │   ├── event.py          # 数据库序号持久化的 ResourceEvents SSE 广播通道
+│   │   ├── service.py        # 资源任务、AgentRun 与事件持久化服务
+│   │   ├── schemas.py        # ResourceGenerationRequest / ResourcePlan / Quiz 确定性蓝图等契约
+│   │   └── agents/           # planning 及 7 类资源生成 Agent 实现
+│   ├── path/                 # 学习路径规划与节点学习模块
+│   │   ├── api.py            # 路径创建、规划 SSE、节点工作区、教程/测验/节点资源接口
+│   │   ├── workflows.py      # PathPlannerAgent (research → strategist) 与 NodeLearningAgent 节点学习工作流
+│   │   ├── service.py        # 路径、节点、教程、测验与节点辅助资源编排服务
+│   │   ├── ppt.py / cartoon.py # 路径节点级 PPT 与教学视频生成适配
+│   │   └── event.py          # PathEvents 实时进度通道
+│   ├── profile/              # 7 维学习者画像模块 (Onboarding、维度推理评分、AGENT.md 生成、首页推荐与雷达图)
+│   ├── quiz/                 # 408 题库检索、客观题提交判分、主观题单题/批量 AI 审阅、错题本管理
+│   ├── evaluation/           # 学习行为事件、页面会话时长、7 天窗口事实聚合、评估报告与辅导策略更新
+│   ├── rag/                  # 离线索引构建 (build.py)、语义切分、ChromaDB + BM25 双路混合检索与 RAG 工具
+│   ├── shared/               # 跨模块 Agent 共享底座
+│   │   ├── tools/            # ToolRegistry、sandbox 路径防护、SkillLoader、subagent 及 7 个 builtin 工具
+│   │   ├── ppt/              # PPTAgent (PptxGenJS + LibreOffice + 逐页视觉审查)
+│   │   └── cartoon/          # CartoonAgent (HyperFrames CLI + Edge TTS + 关键帧视觉审查 + ffprobe 校验)
+│   ├── infra/                # 数据库连接 (database.py)、26 张表定义 (models.py)、LLM 客户端 (llm.py)、日志与种子数据
+│   ├── middleware/           # JWTMiddleware
+│   ├── config.py             # config.yaml 解析与路径辅助函数
+│   ├── exceptions.py         # 全局异常处理器
+│   ├── response.py           # HttpResponse 统一 JSON 响应封装
+│   ├── routes.py             # 路由集中注册
+│   └── main.py               # FastAPI 应用入口与 lifespan 生命周期
+├── skills/                   # Agent 技能包 (pptx / hyperframes / hyperframes-cli / hyperframes-registry / media-use)
+├── tests/                    # pytest 测试套件 (按业务模块划分)
+├── config.example.yaml       # 配置文件模板
+├── docker-compose.yml        # 本地开发 MySQL 8.4 容器配置
+└── pyproject.toml            # 项目依赖与 pytest 配置
 ```
 
-**macOS (brew):**
-```bash
-brew install ffmpeg pkg-config
-```
+---
 
-**Windows (winget):**
-```powershell
-winget install Gyan.FFmpeg
-```
-
-### 2. 安装 Python 3.13 与 uv
-
-**Ubuntu:**
-```bash
-sudo add-apt-repository -y ppa:deadsnakes/ppa
-sudo apt install -y python3.13 python3.13-venv python3.13-dev
-
-# 安装 uv
-curl -LsSf https://astral.sh/uv/install.sh | sh
-source "$HOME/.local/bin/env"
-```
-
-**macOS:**
-```bash
-brew install python@3.13 uv
-```
-
-### 3. 安装 Node.js 22 (动画渲染必需)
-
-HyperFrames CLI 要求 Node.js ≥ 22。
-
-**Ubuntu:**
-```bash
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-```
-
-**macOS:**
-```bash
-brew install node@22
-```
-
-**Windows (winget):**
-```powershell
-winget install OpenJS.NodeJS.LTS
-```
-
-### 4. 安装项目依赖并预备渲染环境
+## 快速启动
 
 ```bash
 cd server
 
-# 1. 安装 Python 依赖
+# 1. 同步 Python 依赖（需 Python >= 3.13）
 uv sync
 
-# 2. 安装 Playwright 所需无头浏览器依赖
-uv run playwright install chromium
+# 2. 复制并编辑配置文件
+cp config.example.yaml config.yaml
+# 必填项：database.url、jwt.secret_key、models.text
 
-# 3. 安装项目本地 Node 依赖 (HyperFrames)
-npm ci
-# (注：如果缺少依赖可执行 npm install --save-exact hyperframes@0.7.58)
+# 3. 启动 MySQL（可选用内置 docker compose）
+docker compose up -d mysql
 
-# 4. 下载 HyperFrames 渲染内核并验证
-npx --no-install hyperframes browser ensure
-npx --no-install hyperframes doctor
-```
-
-### 5. 初始化数据库
-
-```bash
-# 创建角色与数据库（需与 config.yaml -> database.url 一致）
-# 以下使用默认示例用户 "coustea" / 密码 "Aa123456"
-mysql -u root -p -e "CREATE USER 'coustea'@'%' IDENTIFIED BY 'Aa123456';"
-mysql -u root -p -e "CREATE DATABASE agent CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;"
-mysql -u root -p -e "GRANT ALL PRIVILEGES ON agent.* TO 'coustea'@'%';"
-
-# 导入建表及索引结构
-# 表结构无需手工导入：服务启动时按 app/infra/models.py 自动创建
-```
-
-### 6. 配置 `config.yaml`
-
-编辑 [config.yaml](config.yaml)，填入数据库连接、LLM API 密钥以及其他的可选星火/搜索密钥。（详见下节 [配置](#配置)）。
-
-### 7. 启动开发服务
-
-```bash
+# 4. 启动开发服务器（端口 9999）
 uv run fastapi dev app/main.py --port 9999
 ```
 
-访问交互式 API 调试文档：<http://localhost:9999/docs>
-
-### 8. 启用动画 GPU 硬件加速 (可选，针对 Linux + NVIDIA)
-
-在 Linux 环境下，如果机器配备了 NVIDIA GPU，系统能够基于 NVENC 编码器加速动画的渲染出帧：
-
-```bash
-# 确认驱动正常
-nvidia-smi
-
-# 确认 FFmpeg 已包含 h264_nvenc 硬件编码器
-ffmpeg -hide_banner -encoders | grep h264_nvenc
-```
+- Swagger UI 文档：<http://127.0.0.1:9999/docs>
+- 生产环境启动：
+  ```bash
+  uv run uvicorn app.main:app --host 0.0.0.0 --port 9999
+  ```
 
 ---
 
-## RAG 知识库
+## 数据库与会话约定
 
-知识库采用 **ChromaDB（向量）+ BM25（关键词）混合检索 + RRF 融合**，默认以 `bge-m3` 模型作为嵌入端点。
-
-### 目录结构
-
-[app/rag/](app/rag/)
-- `data/`
-  - `source/` ← 源文档（按课程子目录存放只读文档）
-  - `index/` ← 构建产物（ChromaDB 向量数据 + BM25 序列化数据 + 索引描述 manifest）
-- [load.py](app/rag/load.py) - 文档加载器（支持 `.md` / `.txt` / `.pdf`）
-- [metadata.py](app/rag/metadata.py) - 文档元数据（标题、章节名、英文目录映射中文课程名）
-- [splitter.py](app/rag/splitter.py) - 语义块切割
-- [embeddings.py](app/rag/embeddings.py) - 向量化客户端与超时熔断器
-- [retriever.py](app/rag/retriever.py) - 双路混合检索与 RRF 归一化融合
-- [build.py](app/rag/build.py) - 知识库一键离线索引构建脚本
-
-### 手动构建索引
-
-保证向量服务（如本地 Ollama 运行且有拉取模型，或者配置了有效的云端 API）在线后，在 [server/](.) 目录下执行命令：
-
-```bash
-# 标准构建
-uv run python -m app.rag.indexing.build
-
-# GPU 环境可加大并发批量
-uv run python -m app.rag.indexing.build --batch-size 64
-
-# 仅检查现有索引的健康状态
-uv run python -m app.rag.indexing.build --check-only
-```
-
-### 启动时自动检查
-
-应用启动时（`app/main.py` lifespan）会自动进行索引的健康检查与预热加载：
-- **索引完整可用**：正常载入。
-- **发现嵌入模型不匹配**：若配置文件中的模型与已存 manifest 里的模型不一致，**会自动触发后台线程异步重建**。
-- **未启用知识库**：通过配置参数 `knowledge.enabled: false` 显式跳过。
+- **唯一权威模型**：所有 26 张 SQLModel 表定义在 [`app/infra/models.py`](file:///Users/apple/Code/Python/software/server/app/infra/models.py)，并注册在 `REGISTERED_MODELS` 元组中。
+- **自动建表说明**：应用启动时 `init_db()` 执行 `SQLModel.metadata.create_all` 创建缺失表，但**不会修改已有表结构**。开发期调整字段后需重建数据库。
+- **会话使用模式**：
+  - 路由请求级依赖注入使用 `Depends(get_session)`（`expire_on_commit=False`）。
+  - 后台任务与独立事务块使用 `async with session_scope() as db:`（自动提交/回滚）。
+  - 认证依赖（`get_current_user` / `get_current_user_entity`）直接复用请求级 `AsyncSession`。
 
 ---
 
-## 配置说明
-
-所有运行时配置集中在 [config.yaml](config.yaml) 文件。核心配置结构如下：
-
-| 配置键路径 | 是否必填 | 配置内容描述说明 |
-|------------|:--------:|------------------|
-| `app.host` / `app.port` | 否 | 服务监听地址与端口（默认 `127.0.0.1:9999`） |
-| `database.url` | **是** | MySQL 异步连接字符串，需以 `mysql+aiomysql://` 开头 |
-| `jwt.secret_key` | **是** | JWT 签名密钥（需防泄漏，长度至少 32 字符） |
-| `models.text` | **是** | 系统核心文本大语言模型连接参数（含 `base_url`, `api_key`, `model_name`） |
-| `models.vision` | 否 | 用于上传图片消息识别及附件分析的视觉模型参数，不填则无法使用视觉理解 |
-| `spark` | 否 | 讯飞星火 Web API 基础凭证（用于语音识别 ASR 与语音合成 TTS） |
-| `search` | 否 | 联网搜索引擎 API 密钥（支持 `tavily_key` 或 `spark_key`） |
-| `knowledge` | 否 | 知识库检索配置参数，包括 `embed_model` 名字及 `embed_base_url` 向量服务器等 |
-| `memory` | 否 | 三层记忆微调参数，包括会话压缩的 Token/消息临界阈值 |
-
----
-
-## API 参考
-
-所有响应统一使用 `HttpResponse` 信封：`{ "code": 200, "message": "...", "data": {} }`。
-
-| 请求 API 路径前缀 | 业务领域模块 | 接口主要能力 |
-|-------------------|:------------:|--------------|
-| `/api/v1/users` | auth | 注册、登录、登出、获取与更新当前登录用户信息、上传头像。 |
-| `/api/v1/ai/chat` | chat | 对话会话（Session）增删改查、SSE 辅导流式对话、素材附件上传与视频生成。 |
-| `/api/v1/ai/resources` | resource | 独立多智能体资源生成任务创建、获取状态/历史、资源大纲详情及最近推荐列表。 |
-| `/api/v1/ai/path-plan` | path | 生成学习路径、获取节点工作空间与教程内容、节点习题测试及评分提交、获取评估详情。 |
-| `/api/v1/ai/profile` | profile | 画像信息（8维度指标）与推断事实检索、Onboarding 数据补全、首页画像推荐。 |
-| `/api/v1/ai/quiz` | quiz | 题库练习生成、评分判定、个人刷题历史、练习推荐。 |
-| `/api/v1/ai/wrong` | quiz | 错题本列表、错题温习抽题测试、归档错题、删除错题。 |
-| `/api/v1/ai/evaluation` | evaluation | 手动记录学习事件与会话时长、生成周期性评估报告及辅导策略。 |
-
----
-
-## 动画与课件渲染系统
-
-后端包含一条完整的基于 HTML 快照的视频渲染管线，检测到 NVIDIA GPU 时自动启用 NVENC 硬件编码进行 GPU 加速。
-
-### 1. PPT 演示生成
-PPTAgent 使用 PptxGenJS 工具循环生成可编辑的 `deck.pptx`，加载 `server/skills/pptx` 官方技能。通过 LibreOffice → PDF → PNG 进行逐页视觉审查，前端显示图片预览并提供 PPTX/PDF 下载。部署依赖和技能来源见 `server/skills/README.md`。
-
-### 2. HyperFrames 动画讲解
-动画讲解智能体（`CartoonAgent`）将学习大纲转化为分镜及解说词，再借助 TTS 和 HyperFrames 合成导出高清 `.mp4` 视频：
-- **核心组件**：[app/shared/cartoon/agent.py](app/shared/cartoon/agent.py)（Agent 执行循环与分镜规划）、[app/shared/cartoon/renderer.py](app/shared/cartoon/renderer.py)（调起 Playwright 浏览器加载页面并运行 HyperFrames 播放渲染）。
-- **工具与校验**：[app/shared/cartoon/tool.py](app/shared/cartoon/tool.py) 与 [app/shared/cartoon/validator.py](app/shared/cartoon/validator.py) 保证分镜规范与元素时序。
-- **渲染器**：调用 `node_modules/.bin/hyperframes` 将渲染帧用 FFmpeg 录制合并为带有字幕及配音的高清视频。
-- **降级保护**：启动时检测系统可用内存。如果物理机内存受限（≤8GB），渲染器会自动降级为单 Worker 模式以防止系统溢出宕机；检测到 GPU 会自动执行硬件编码加速。
-
-### 3. TTS 语音合成
-
-TTS 支持两种后端接入，具有不同的应用领域：
-- **讯飞星火 TTS**：由 `spark` 配置组（`app_id`、`api_key`、`api_secret`）授权访问，生成自然的教学讲解语音。
-- **Microsoft Edge-TTS**：免费后端，需要网络联通。当系统未配置 `spark` 凭证或服务离线时自动回退作为兜底方案。
-
----
-
-## 单元测试
-
-后端单元测试使用 `pytest` 进行覆盖测试。
+## 测试
 
 ```bash
 cd server
 
-# 运行所有可用单元测试
+# 运行全部测试
 uv run pytest
 
-# 仅运行 chat 模块相关的测试
+# 遇到首个失败即停止
+uv run pytest -x
+
+# 运行指定模块测试（如 chat 模块）
 uv run pytest tests/chat -q
-
-# 运行指定测试文件
-uv run pytest tests/resource/test_ppt_agent_pipeline.py -q
 ```
-
----
-
-## 常见问题与排查方向
-
-| 问题现象 | 排查方向 |
-|----------|----------|
-| **后端提示 `active_tokens` 或数据库字段不存在** | 表结构在启动时由 [app/infra/models.py](app/infra/models.py) 自动创建，但 `create_all` 不会修改已有表。字段变更后需重建数据库：`mysql -u root -p -e "DROP DATABASE agent; CREATE DATABASE agent CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_as_cs;"` 后重启服务。 |
-| **画像推荐接口返回 500** | 确认已提交了 `onboarding` 首入设置，系统需要画像数据建立推荐先验；检查对应 `UserProfile` 在数据库中是否存在。 |
-| **动画渲染失败或报无头浏览器缺失** | 确认已在 `server/` 下运行过 `uv run playwright install chromium` 安装 Playwright 对应的 Chromium 底层渲染包。 |
-| **本地 Ollama 无法提供检索服务** | 检查 Ollama 服务监听的端口号。默认为 `11434`。如果 `config.yaml` 写的向量服务器地址不一致，请手动微调。 |
-| **大模型响应失败或接口报 401** | 检查 `config.yaml` 中 `models.main` 配置的接口地址和 API 密钥拼写是否错误。目前 Astron 等大模型在部分国内云端可能需要代理。 |

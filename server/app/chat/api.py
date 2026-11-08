@@ -4,41 +4,34 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
-import json
 from typing import Any
-from uuid import uuid4
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Query, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select
 
 from app.auth.schemas import UserClaims
 from app.auth.security import get_current_user
-from app.chat.agent import (
+from app.chat.files import save_upload
+from app.chat.schemas import (
     TERMINAL_STATUSES,
-    get_active_stream,
-    has_active_run,
-    request_cancel_run,
-    reserve_run,
-    row_to_run_state,
+    AgentInput,
+    ChatRequest,
+    encode_chat_sse,
 )
-from app.chat.schemas import DiagramMode, RunEvent, encode_chat_sse
 from app.chat.service import (
+    RunAlreadyActive,
     archive_session,
+    cancel_run,
     create_session,
-    create_user_message,
-    default_session_id,
+    execute_chat_run,
+    get_active_run,
     get_history,
-    get_or_create_session,
+    get_run_state,
     list_sessions,
-    save_upload,
-    start_chat_run,
+    prepare_chat_run,
     update_session_title,
 )
-from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import ChatRun as ChatRunRow
 from app.response import HttpResponse
 
 logger = get_logger(__name__)
@@ -55,80 +48,31 @@ SSE_HEADERS = {
 @router.post("/chat/messages")
 async def create_mentor_chat_message(
     background_tasks: BackgroundTasks,
-    user_input: str = Form(default=""),
-    session_id: str | None = Form(default=None),
-    attachments: str | None = Form(default=None),
-    diagram_mode: DiagramMode = Form(default="auto"),
-    video_mode: bool = Form(default=False),
+    payload: ChatRequest,
     current_user: UserClaims = Depends(get_current_user),
 ) -> JSONResponse:
-    """接收用户提问与附件，登记运行记录并异步启动 Tutor Agent 循环。"""
+    """接收前端提交的 AgentInput，落库运行记录并异步启动 Agent 循环。"""
     try:
-        parsed_attachments = json.loads(attachments) if attachments else []
-    except json.JSONDecodeError:
-        return HttpResponse.error(code=400, message="附件参数格式错误")
-    if not isinstance(parsed_attachments, list) or not all(
-        isinstance(item, dict) for item in parsed_attachments
-    ):
-        return HttpResponse.error(code=400, message="附件参数格式错误")
-
-    effective_session = session_id or default_session_id()
-    effective_message = (user_input or "").strip()
-
-    if not effective_message and not parsed_attachments:
-        return HttpResponse.error(code=400, message="请输入问题或上传附件")
-    if not effective_message and parsed_attachments:
-        effective_message = "请分析我上传的附件，并解答其中的问题。"
-
-    if await has_active_run(current_user.id, effective_session):
-        return HttpResponse.error(code=409, message="当前回答尚未完成，请稍候")
-
-    try:
-        await get_or_create_session(user_id=current_user.id, session_id=effective_session)
+        if not payload.question.strip() and not payload.attachments:
+            raise ValueError("请输入问题或上传附件")
+        agent_input = AgentInput(**payload.model_dump(), user_id=current_user.id, username=current_user.username)
+        await prepare_chat_run(agent_input)
+    except RunAlreadyActive as exc:
+        return HttpResponse.error(code=409, message=str(exc))
     except PermissionError as exc:
         return HttpResponse.error(code=403, message=str(exc))
-
-    try:
-        user_message = await create_user_message(
-            user_id=current_user.id,
-            username=current_user.username,
-            session_id=effective_session,
-            text=effective_message,
-            attachments=parsed_attachments,
-        )
     except (ValueError, FileNotFoundError) as exc:
         return HttpResponse.error(code=400, message=str(exc))
     except Exception as exc:
         logger.exception("[ChatAPI] 保存用户消息失败")
         return HttpResponse.error(code=500, message=f"保存用户消息失败: {exc}")
 
-    if user_message.id is None:
-        return HttpResponse.error(code=500, message="保存用户消息失败")
-
-    run_id = str(uuid4())
-    await reserve_run(
-        run_id=run_id,
-        user_id=current_user.id,
-        session_id=effective_session,
-        user_message_id=user_message.id,
-    )
-    background_tasks.add_task(
-        start_chat_run,
-        run_id=run_id,
-        user_id=current_user.id,
-        username=current_user.username,
-        session_id=effective_session,
-        user_message_id=user_message.id,
-        user_input=effective_message,
-        attachments=[str(item.get("url") or "") for item in parsed_attachments],
-        diagram_mode=diagram_mode,
-        video_mode=video_mode,
-    )
+    background_tasks.add_task(execute_chat_run, agent_input)
     return HttpResponse.success(
         data={
-            "run_id": run_id,
-            "message_id": user_message.id,
-            "session_id": effective_session,
+            "run_id": agent_input.run_id,
+            "message_id": agent_input.user_message_id,
+            "session_id": agent_input.session_id,
         },
         status_code=202,
     )
@@ -145,7 +89,8 @@ async def upload_file(
         return HttpResponse.error(code=400, message="文件名不能为空")
     content = await file.read()
     try:
-        saved = await save_upload(
+        saved = await asyncio.to_thread(
+            save_upload,
             filename=file.filename,
             content=content,
             username=current_user.username,
@@ -160,124 +105,61 @@ async def upload_file(
 async def get_chat_run(
     run_id: str,
     current_user: UserClaims = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
 ) -> JSONResponse:
     """读取指定运行的完整状态快照（支持页面刷新恢复）。"""
-    run = (
-        await session.exec(
-            select(ChatRunRow).where(
-                ChatRunRow.id == run_id,
-                ChatRunRow.user_id == current_user.id,
-            )
-        )
-    ).first()
-    if run is None:
+    state = await get_run_state(current_user.id, run_id)
+    if state is None:
         return HttpResponse.error(code=404, message="运行不存在或无权限")
-    state = row_to_run_state(run)
     return HttpResponse.success(data=state.model_dump())
 
 
-@router.get("/chat/runs/{run_id}/events")
+@router.get("/chat/runs/{run_id}/events", response_model=None)
 async def stream_chat_run_events(
     run_id: str,
     current_user: UserClaims = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> Any:
-    """订阅运行的实时 SSE 事件流：首帧推送 run.snapshot 完整快照，后续推送增量阶段与步骤更新。"""
-    run = (
-        await session.exec(
-            select(ChatRunRow).where(
-                ChatRunRow.id == run_id,
-                ChatRunRow.user_id == current_user.id,
-            )
-        )
-    ).first()
-    if run is None:
+) -> JSONResponse | StreamingResponse:
+    """发送最新运行快照，合并高频更新，并在终态或断开时释放订阅。"""
+    state = await get_run_state(current_user.id, run_id)
+    if state is None:
         return HttpResponse.error(code=404, message="运行不存在或无权限")
+    hooks = get_active_run(run_id)
 
-    active_stream = get_active_stream(run_id)
-    if active_stream is None:
-        state = row_to_run_state(run)
-
-        async def _completed_stream() -> AsyncGenerator[str, None]:
-            """对已结束运行直接推送快照与终态帧后关闭流。"""
-            snap = RunEvent(
-                run_id=run_id,
-                sequence=state.sequence,
-                event="run.snapshot",
-                data=state.model_dump(),
-            )
-            yield encode_chat_sse(snap)
-            done = RunEvent(
-                run_id=run_id,
-                sequence=state.sequence + 1,
-                event="run.finished",
-                data=state.model_dump(),
-            )
-            yield encode_chat_sse(done)
-
-        return StreamingResponse(
-            _completed_stream(),
-            media_type="text/event-stream",
-            headers=SSE_HEADERS,
-        )
-
-    queue, snapshot = await active_stream.subscribe()
-
-    async def _live_stream() -> AsyncGenerator[str, None]:
-        """先发送首帧快照，再实时推送后续队列事件直至终态。"""
+    async def events() -> AsyncGenerator[str, None]:
+        """订阅后先读取快照，再按通知推送；重连无需回放旧事件。"""
+        queue = hooks.subscribe() if hooks is not None else None
         try:
-            yield encode_chat_sse(snapshot)
-            if str(snapshot.data.get("status") or "") in TERMINAL_STATUSES:
-                return
+            current = hooks.snapshot() if hooks is not None else state
             while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=25.0)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-                    continue
-                yield encode_chat_sse(event)
-                if event.event == "run.finished":
+                yield encode_chat_sse(current)
+                if current.status in TERMINAL_STATUSES or queue is None:
                     return
+                try:
+                    await asyncio.wait_for(queue.get(), timeout=25)
+                except TimeoutError:
+                    yield ": heartbeat\n\n"
+                else:
+                    # 每秒最多约 10 次快照；队列只保存一个更新通知。
+                    await asyncio.sleep(0.1)
+                    if not queue.empty():
+                        queue.get_nowait()
+                current = hooks.snapshot()
         finally:
-            await active_stream.unsubscribe(queue)
+            if hooks is not None and queue is not None:
+                hooks.unsubscribe(queue)
 
-    return StreamingResponse(
-        _live_stream(),
-        media_type="text/event-stream",
-        headers=SSE_HEADERS,
-    )
+    return StreamingResponse(events(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
 @router.post("/chat/runs/{run_id}/cancel")
 async def cancel_chat_run(
     run_id: str,
     current_user: UserClaims = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
 ) -> JSONResponse:
-    """请求停止指定运行，使 Agent 循环在下一个检查点优雅退出。"""
-    run = (
-        await session.exec(
-            select(ChatRunRow).where(
-                ChatRunRow.id == run_id,
-                ChatRunRow.user_id == current_user.id,
-            )
-        )
-    ).first()
-    if run is None:
+    """请求取消指定运行及其正在执行的模型或工具任务。"""
+    status = await cancel_run(current_user.id, run_id)
+    if status is None:
         return HttpResponse.error(code=404, message="运行不存在或无权限")
-    if run.status not in {"queued", "running"}:
-        return HttpResponse.success(data={"run_id": run_id, "status": run.status})
-    if request_cancel_run(run_id):
-        return HttpResponse.success(data={"run_id": run_id, "status": "cancelling"})
-
-    run.status = "cancelled"
-    run.phase = "cancelled"
-    run.phase_label = "已停止生成"
-    run.error = "用户停止生成"
-    session.add(run)
-    await session.commit()
-    return HttpResponse.success(data={"run_id": run_id, "status": "cancelled"})
+    return HttpResponse.success(data={"run_id": run_id, "status": status})
 
 
 @router.get("/chat/sessions")
