@@ -41,24 +41,10 @@ def test_resource_generation_request_accepts_unified_payload() -> None:
     assert request.enabled_agent_ids() == ["content", "mindmap", "quiz", "ppt"]
 
 
-def test_resource_generation_request_normalizes_legacy_fields() -> None:
-    """验证向后平滑兼容 legacy 字段名称并自动映射到统一核心属性。"""
-    request = ResourceGenerationRequest.model_validate(
-        {
-            "learning_need": "复习 TCP 三次握手",
-            "selected_agents": [
-                {"agent_id": "content", "enabled": True},
-                {"agent_id": "quiz", "enabled": True},
-                {"agent_id": "diagram", "enabled": False},
-            ],
-            "learning_scenario": "daily_review",
-        }
-    )
-
-    assert request.topic == "复习 TCP 三次握手"
-    assert request.learning_need == "复习 TCP 三次握手"
-    assert request.enabled_agent_ids() == ["content", "quiz"]
-    assert request.target_resources == ["content", "quiz"]
+def test_resource_generation_request_requires_topic() -> None:
+    """验证统一请求模型强制要求 topic 字段且拒绝缺失情况。"""
+    with pytest.raises(ValidationError):
+        ResourceGenerationRequest.model_validate({})
 
 
 def test_resource_generation_request_default_values() -> None:

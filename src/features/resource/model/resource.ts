@@ -1,4 +1,4 @@
-// src/features/resource/model/resource.ts — 资源生成统一数据契约模型
+// src/features/resource/model/resource.ts — 教学资源生成数据契约模型
 
 export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code' | 'ppt' | 'cartoon'
 
@@ -8,54 +8,62 @@ export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice'
 
 export type ResourceLifecycleStatus = 'pending' | 'generating' | 'completed' | 'partial' | 'failed'
 
-export type ResourceAgentRunStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped' | 'interrupted'
-
 export type ResourceContentFormat = 'markdown' | 'json' | 'pptx' | 'mp4'
 
 export type ResourceContent = Record<string, unknown> | unknown[] | string | null
-
-// 单项子任务节点（与后端 TaskNode 对齐）
-export interface TaskNode {
-  task_id: string
-  title: string
-  resource_type: string
-  task_type: 'text' | 'tool'
-  tool_name?: string | null
-  dependencies: string[]
-  subagent_role: string
-  task_prompt?: string
-  status: ResourceAgentRunStatus
-  progress: number
-  message: string
-  elapsed_ms?: number | null
-  error?: string | null
-}
-
-// 规划任务图（与后端 ExecutionPlan 对齐）
-export interface ExecutionPlan {
-  topic: string
-  learning_goal: string
-  difficulty: DifficultyLevel
-  overview?: string
-  tasks: TaskNode[]
-}
 
 // 统一资源生成请求体
 export interface ResourceGenerationRequest {
   topic: string
   learning_goal?: string
+  learning_need?: string
   target_resources: ResourceAgentId[]
   difficulty: DifficultyLevel
   preferences?: Record<string, unknown>
-  // 兼容别名
-  learning_need?: string
-  selected_agents?: { agent_id: ResourceAgentId; enabled: boolean }[]
-  agent_configs?: Record<string, unknown>
+  agent_configs?: Record<string, Record<string, unknown>>
+}
+
+// 子智能体生成的单项教学产物
+export interface ResourceArtifact {
+  id: string
+  kind: ResourceAgentId
+  title: string
+  file_type: string
+  url?: string | null
+  preview_urls?: string[]
+  content?: unknown
+  summary?: string
+  metadata?: Record<string, unknown>
+}
+
+// 主 Agent 调度的子智能体步骤
+export interface ResourceStep {
+  id: string
+  tool_name: string
+  title: string
+  status: 'pending' | 'running' | 'completed' | 'failed'
+  progress: number
+  message: string
+  elapsed_ms?: number
+}
+
+// 全生命周期统一状态快照 (对齐 chat.RunState)
+export interface ResourceRunState {
+  run_id: string
+  resource_id: number
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled'
+  phase: 'queued' | 'preparing' | 'planning' | 'generating' | 'saving' | 'completed' | 'failed' | 'cancelled'
+  phase_label: string
+  thought_text: string
+  steps: ResourceStep[]
+  artifacts: ResourceArtifact[]
+  total_elapsed_ms: number
+  error?: string
 }
 
 // 单项产物明细
 export interface GeneratedResourceItem {
-  id: string
+  id: string | number
   type: ResourceAgentId
   title: string
   format: ResourceContentFormat
@@ -64,59 +72,27 @@ export interface GeneratedResourceItem {
   created_at: string | null
 }
 
-// 任务快照
-export interface ResourceAgentSnapshot {
-  agent_id: string
-  status: ResourceAgentRunStatus
-  message: string
-  progress: number
-  phase?: string
-  elapsed_ms?: number | null
-  artifact_id?: string | null
-  timestamp?: number | null
-}
-
-// 任务轮询状态
-export interface ResourceTaskStatus {
-  resource_id: number
-  topic: string
-  learning_need?: string
-  status: ResourceLifecycleStatus
-  tasks?: TaskNode[]
-  selected_agents: ResourceAgentId[]
-  agent_snapshots: Record<string, ResourceAgentSnapshot>
-  current_message: string
-  overall_progress?: number
-  resources: GeneratedResourceItem[]
-  plan?: ExecutionPlan | Record<string, unknown> | null
-  updated_at: string | null
-}
-
-// 产物总包
+// 最终资源总包
 export interface GeneratedResourceBundle {
-  id: string
+  id: string | number
   title: string
   topic?: string
-  learning_need: string
+  learning_need?: string
   learning_goal?: string
-  selected_agents: ResourceAgentId[]
-  plan: ExecutionPlan | Record<string, unknown> | null
-  resources: GeneratedResourceItem[]
-  status: ResourceLifecycleStatus
+  status: string
   created_at: string
-  updated_at: string
-  metadata: {
-    failed_agents?: ResourceAgentId[]
-    [key: string]: unknown
-  }
+  items: GeneratedResourceItem[]
+  resources: GeneratedResourceItem[]
 }
 
 // 历史列表项
 export interface GeneratedResourceHistoryItem {
   id: number
-  learning_need: string
-  status: ResourceLifecycleStatus
-  resource_types: ResourceAgentId[]
-  created_at: string | null
-  updated_at: string | null
+  topic: string
+  learning_need?: string
+  learning_goal?: string
+  status: string
+  created_at: string
+  resource_count: number
+  resource_types: string[]
 }

@@ -1,39 +1,37 @@
-// 封装带 JWT 拦截的 axios 实例与统一响应信封类型
+// src/features/resource/api/resource.ts — 资源生成模块 API 封装
 import http from '@/shared/api/http'
 import type { ApiResponse } from '@/shared/api/http'
-// 引入资源生成请求体类型与任务状态类型，保持前后端字段对齐
 import type {
   ResourceGenerationRequest,
+  ResourceRunState,
   GeneratedResourceBundle,
   GeneratedResourceHistoryItem,
-  ResourceLifecycleStatus,
-  ResourceTaskStatus,
 } from '@/features/resource/model/resource'
 
-// ==========================================
-// 资源生成 API
-// ==========================================
-
-// 发起资源生成任务 POST /ai/resources，请求体为 ResourceGenerationRequest
+// 启动教学资源生成主 Agent 循环 POST /ai/resource/generate
 export function startResourceGeneration(params: ResourceGenerationRequest) {
-  return http.post<ApiResponse<{ resource_id: number; status: ResourceLifecycleStatus }>>('/ai/resources', params)
+  return http.post<ApiResponse<{ run_id: string; resource_id: number }>>('/ai/resource/generate', params)
 }
 
-// 轮询资源生成任务状态 GET /ai/resources/:resourceId/status
-export function pollResourceStatus(resourceId: number) {
-  return http.get<ApiResponse<ResourceTaskStatus>>(`/ai/resources/${resourceId}/status`)
+// 获取运行状态快照 GET /ai/resource/runs/:runId
+export function getResourceRunSnapshot(runId: string) {
+  return http.get<ApiResponse<ResourceRunState>>(`/ai/resource/runs/${runId}`)
 }
 
-// 获取资源生成任务的完整产物包 GET /ai/resources/:resourceId（超时 30s 以应对大产物）
+// 取消正在进行的生成任务 POST /ai/resource/runs/:runId/cancel
+export function cancelResourceRun(runId: string) {
+  return http.post<ApiResponse<{ run_id: string; status: string }>>(`/ai/resource/runs/${runId}/cancel`)
+}
+
+// 获取完整产物包 GET /ai/resource/bundles/:resourceId
 export function getResourceBundle(resourceId: number) {
-  return http.get<ApiResponse<GeneratedResourceBundle>>(`/ai/resources/${resourceId}`, { timeout: 30000 })
+  return http.get<ApiResponse<GeneratedResourceBundle>>(`/ai/resource/bundles/${resourceId}`, { timeout: 30000 })
 }
 
-// 分页获取独立资源生成历史
+// 获取历史生成列表 GET /ai/resources
 export function getGeneratedResources(page = 1, limit = 20) {
   const offset = (page - 1) * limit
   return http.get<ApiResponse<{ items: GeneratedResourceHistoryItem[]; total: number }>>('/ai/resources', {
     params: { limit, offset },
   })
 }
-

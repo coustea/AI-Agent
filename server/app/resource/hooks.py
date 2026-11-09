@@ -1,216 +1,214 @@
-"""Resource 模块多智能体执行 Harness 钩子 (app.resource.hooks)。
+"""Resource 模块运行观察钩子 (app.resource.hooks)。
 
-遵循 learn-claude-code 的 Hooks 架构思想：
-“挂在循环上，不写进循环里”。
-封装 SSE 实时推送与数据库状态持久化等副作用，确保智能体主循环与执行逻辑保持纯粹。
+对齐 chat.RunHooks 架构：负责维护快照状态机与多模态产物收集，
+并通过极轻量的订阅队列唤醒 SSE 推送，主循环不耦合任何外部副作用。
 """
 
 from __future__ import annotations
 
-import logging
+import asyncio
+import time
 from typing import Any
 
-from app.infra.database import session_scope
-from app.resource.event import ResourceEvents
+from app.infra.llm import ToolCall
+from app.infra.logging import get_logger
 from app.resource.schemas import (
-    AgentResult,
-    ExecutionPlan,
-    ResourceLifecycleStatus,
-    TaskNode,
+    ResourceArtifact,
+    ResourceRunPhase,
+    ResourceRunState,
+    ResourceStep,
+    TerminalStatus,
 )
-from app.resource.service import ResourceService
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class ResourceHarnessHooks:
-    """资源生成 Plan-and-Execute Harness 生命周期钩子集合。"""
+def _extract_resource_artifact(call_id: str, tool_name: str, raw: Any) -> ResourceArtifact | None:
+    """从工具返回值中提取标准化的 ResourceArtifact 产物模型。"""
+    if not isinstance(raw, dict):
+        return None
 
-    def __init__(self, events: ResourceEvents) -> None:
-        """初始化 Harness 钩子并绑定事件广播器。"""
-        self._events = events
+    status = raw.get("status")
+    if status not in ("ok", "success") and not raw.get("pptx_url") and not raw.get("video_url"):
+        # 工具未能成功生成有效产物
+        return None
 
-    async def on_plan_started(self, *, resource_id: int) -> None:
-        """规划开始钩子：广播 planning 阶段开启事件。"""
-        try:
-            await self._events.send(
-                "planning",
-                "running",
-                "PlanAgent 正在构建教学拓扑图...",
-                10,
-                data={"phase": "planning"},
-            )
-        except Exception as exc:
-            logger.warning("on_plan_started 事件发送异常: %s", exc)
+    # 根据工具名称推导 kind 与类型
+    if tool_name in ("generate_ppt_deck", "ppt"):
+        kind = "ppt"
+        file_type = "pptx"
+        url = raw.get("pptx_url") or raw.get("file_url")
+        preview_urls = raw.get("preview_urls") or []
+        content = None
+    elif tool_name in ("generate_teaching_video", "cartoon"):
+        kind = "cartoon"
+        file_type = "mp4"
+        url = raw.get("video_url") or raw.get("file_url")
+        preview_urls = []
+        content = None
+    elif tool_name == "generate_quiz":
+        kind = "quiz"
+        file_type = "json"
+        url = None
+        preview_urls = []
+        content = raw.get("content")
+    elif tool_name == "generate_reading":
+        kind = "reading"
+        file_type = "json"
+        url = None
+        preview_urls = []
+        content = raw.get("content")
+    elif tool_name == "generate_mindmap":
+        kind = "mindmap"
+        file_type = "markdown"
+        url = None
+        preview_urls = []
+        content = raw.get("content")
+    elif tool_name == "generate_code":
+        kind = "code"
+        file_type = "markdown"
+        url = None
+        preview_urls = []
+        content = raw.get("content")
+    else:
+        kind = "content"
+        file_type = "markdown"
+        url = None
+        preview_urls = []
+        content = raw.get("content")
 
-    async def on_plan_completed(
-        self,
-        *,
-        resource_id: int,
-        plan: ExecutionPlan,
-        elapsed_ms: int,
-    ) -> None:
-        """教学大纲规划完成钩子：持久化大纲并向客户端广播事件。"""
-        try:
-            async with session_scope() as session:
-                service = ResourceService(session)
-                plan_event = await service.publish_planning_result(
-                    resource_id=resource_id,
-                    plan_json=plan.model_dump(mode="json"),
-                    elapsed_ms=elapsed_ms,
-                )
-            await self._events.publish_committed(plan_event)
-        except Exception as exc:
-            logger.warning("on_plan_completed 钩子持久化异常: %s", exc)
+    title = str(raw.get("title") or f"{kind} 教学资源")
+    summary = str(raw.get("summary") or "")
 
-    async def on_task_started(
-        self,
-        *,
-        resource_id: int,
-        task: TaskNode,
-    ) -> None:
-        """子任务启动钩子：广播任务开始及对应执行角色/工具信息。"""
-        try:
-            msg = f"{task.subagent_role} 启动任务: {task.title}"
-            await self._events.send(
-                task.task_id,
-                "running",
-                msg,
-                5,
-                data={
-                    "phase": "started",
-                    "task_type": task.task_type,
-                    "tool_name": task.tool_name,
-                    "subagent_role": task.subagent_role,
-                },
-            )
-        except Exception as exc:
-            logger.warning("Task[%s] on_task_started 事件发送失败: %s", task.task_id, exc)
+    return ResourceArtifact(
+        id=f"art-{kind}-{call_id}",
+        kind=kind,
+        title=title,
+        file_type=file_type,
+        url=url,
+        preview_urls=preview_urls,
+        content=content,
+        summary=summary,
+        metadata={k: v for k, v in raw.items() if isinstance(v, (str, int, float, bool, list, dict))},
+    )
 
-    async def on_task_progress(
-        self,
-        *,
-        resource_id: int,
-        task: TaskNode,
-        message: str,
-        progress: int,
-    ) -> None:
-        """任务进度推进钩子：向前端广播细粒度执行与工具调用日志。"""
-        try:
-            await self._events.send(
-                task.task_id,
-                "running",
-                message,
-                progress,
-                data={
-                    "phase": "working",
-                    "task_type": task.task_type,
-                    "tool_name": task.tool_name,
-                },
-            )
-        except Exception as exc:
-            logger.debug("Task[%s] on_task_progress 事件忽略: %s", task.task_id, exc)
 
-    async def on_task_completed(
-        self,
-        *,
-        user_id: int,
-        resource_id: int,
-        task: TaskNode,
-        result: AgentResult,
-        elapsed_ms: int,
-    ) -> None:
-        """任务成功完成钩子：原子持久化生成产物并广播完成事件。"""
-        try:
-            async with session_scope() as session:
-                service = ResourceService(session)
-                _, completed_event = await service.publish_agent_result(
-                    resource_id=resource_id,
-                    user_id=user_id,
-                    agent_id=task.task_id,
-                    result=result,
-                    elapsed_ms=elapsed_ms,
-                )
-            await self._events.publish_committed(completed_event)
-        except Exception as exc:
-            logger.error("Task[%s] on_task_completed 持久化或广播失败: %s", task.task_id, exc)
+class ResourceRunHooks:
+    """Resource 主 Agent 运行状态容器与观察钩子。"""
 
-    async def on_task_failed(
-        self,
-        *,
-        resource_id: int,
-        task: TaskNode,
-        error_message: str,
-        elapsed_ms: int,
-    ) -> None:
-        """任务执行失败钩子：记录错误并上报失败状态。"""
-        logger.error(
-            "Task[%s] 执行失败: error=%s elapsed_ms=%d",
-            task.task_id,
-            error_message,
-            elapsed_ms,
+    def __init__(self, run_id: str, resource_id: int) -> None:
+        """初始化运行快照容器、计时器与订阅者集合。"""
+        self.state = ResourceRunState(run_id=run_id, resource_id=resource_id)
+        self.task: asyncio.Task[None] | None = None
+        self.cancel_requested = False
+        self.started_at = time.monotonic()
+        self._subscribers: set[asyncio.Queue[None]] = set()
+        self._current_steps: dict[str, ResourceStep] = {}
+
+    def snapshot(self) -> ResourceRunState:
+        """复制当前状态快照，计算最新累计耗时。"""
+        copied = self.state.model_copy(deep=True)
+        if copied.status in {"queued", "running"}:
+            copied.total_elapsed_ms = int((time.monotonic() - self.started_at) * 1000)
+        return copied
+
+    def subscribe(self) -> asyncio.Queue[None]:
+        """注册容量为 1 的通知队列；当产生新快照时通知调用方。"""
+        queue: asyncio.Queue[None] = asyncio.Queue(maxsize=1)
+        self._subscribers.add(queue)
+        return queue
+
+    def unsubscribe(self, queue: asyncio.Queue[None]) -> None:
+        """注销断开的订阅者队列。"""
+        self._subscribers.discard(queue)
+
+    def publish(self) -> None:
+        """非阻塞唤醒所有处于等待中的快照订阅者。"""
+        for queue in self._subscribers:
+            if not queue.full():
+                queue.put_nowait(None)
+
+    def set_phase(self, phase: ResourceRunPhase, label: str) -> None:
+        """更新当前执行阶段并通知订阅者。"""
+        self.state.status = "running"
+        self.state.phase = phase
+        self.state.phase_label = label
+        self.publish()
+
+    def on_text(self, delta: str) -> None:
+        """流式追加主 Agent 规划思考文本。"""
+        self.state.thought_text += delta
+        self.publish()
+
+    def on_tool_start(self, call: ToolCall) -> None:
+        """子智能体工具调用开始钩子。"""
+        tool_name = call.name
+        title_map = {
+            "generate_lecture_content": "核心概念讲义编写",
+            "generate_mindmap": "思维导图与知识架构绘制",
+            "generate_quiz": "随堂测验与实践试题编制",
+            "generate_code": "工程代码案例研发",
+            "generate_reading": "文献材料与学术资料策展",
+            "generate_ppt_deck": "演示课件视觉设计制作",
+            "generate_teaching_video": "教学动画与分镜视频生成",
+        }
+        step_title = title_map.get(tool_name, f"执行 {tool_name}")
+        step = ResourceStep(
+            id=call.id,
+            tool_name=tool_name,
+            title=step_title,
+            status="running",
+            progress=10,
+            message="正在初始化子智能体任务...",
+            elapsed_ms=0,
         )
-        try:
-            await self._events.send(
-                task.task_id,
-                "failed",
-                error_message[:300],
-                0,
-                data={"phase": "failed", "elapsed_ms": elapsed_ms},
-            )
-        except Exception as exc:
-            logger.warning("Task[%s] on_task_failed 事件发送失败: %s", task.task_id, exc)
+        self._current_steps[call.id] = step
+        self.state.steps.append(step)
+        self.state.phase = "generating"
+        self.state.phase_label = f"子智能体正在推进: {step_title}"
+        self.publish()
 
-    async def on_task_skipped(
-        self,
-        *,
-        resource_id: int,
-        task: TaskNode,
-        reason: str,
-    ) -> None:
-        """任务跳过钩子（前置依赖失败时触发）。"""
-        logger.warning("Task[%s] 跳过执行: %s", task.task_id, reason)
-        try:
-            await self._events.send(
-                task.task_id,
-                "failed",
-                f"前置依赖未满足: {reason}",
-                0,
-                data={"phase": "skipped"},
-            )
-        except Exception as exc:
-            logger.warning("Task[%s] on_task_skipped 事件发送失败: %s", task.task_id, exc)
+    def on_subagent_progress(self, tool_name: str, message: str, progress: int = 50) -> None:
+        """子智能体内部进度推进通知（如 PPT 逐页渲染或动画音频合成）。"""
+        for step in self._current_steps.values():
+            if step.tool_name == tool_name and step.status == "running":
+                step.message = message
+                step.progress = max(step.progress, progress)
+                break
+        self.publish()
 
-    async def on_execution_finished(
-        self,
-        *,
-        user_id: int,
-        resource_id: int,
-        expected_task_ids: set[str],
-        successful_task_ids: set[str],
-        failed_task_ids: set[str],
-    ) -> ResourceLifecycleStatus:
-        """执行终态判定钩子：更新任务总状态并广播最终完成事件。"""
-        async with session_scope() as session:
-            service = ResourceService(session)
-            final_status = await service.finalize_generation(
-                user_id=user_id,
-                resource_id=resource_id,
-                expected_agent_ids=expected_task_ids,
-                successful_agents=successful_task_ids,
-                failed_agents=failed_task_ids,
-            )
+    def on_tool_end(self, call: ToolCall, raw: Any, output_text: str) -> None:
+        """子智能体工具调用完成钩子。"""
+        step = self._current_steps.get(call.id)
+        if step is not None:
+            step.status = "completed"
+            step.progress = 100
+            step.message = "子智能体产物已交付"
 
-        if final_status in (ResourceLifecycleStatus.COMPLETED, ResourceLifecycleStatus.PARTIAL):
-            async with session_scope() as session:
-                service = ResourceService(session)
-                completed_event = await service.publish_generation_status(
-                    resource_id=resource_id,
-                    status=final_status,
-                    message="资源包全部生成完成",
-                )
-            await self._events.publish_committed(completed_event)
-        else:
-            await self._events.send("global", "failed", "资源生成未产生有效成果")
+        artifact = _extract_resource_artifact(call.id, call.name, raw)
+        if artifact is not None:
+            # 去重或追加产物
+            self.state.artifacts = [
+                a for a in self.state.artifacts if a.kind != artifact.kind
+            ]
+            self.state.artifacts.append(artifact)
+            logger.info("已捕获教学资源产物: kind=%s title=%s", artifact.kind, artifact.title)
 
-        return final_status
+        self.publish()
+
+    def on_tool_failed(self, call: ToolCall, error: str) -> None:
+        """子智能体执行失败钩子。"""
+        step = self._current_steps.get(call.id)
+        if step is not None:
+            step.status = "failed"
+            step.message = f"执行失败: {error}"
+        self.publish()
+
+    def result_state(self, status: TerminalStatus, error: str = "") -> ResourceRunState:
+        """设置终态并生成最终交付快照。"""
+        self.state.status = status
+        self.state.phase = "completed" if status == "completed" else "failed"
+        self.state.phase_label = "资源制作完成" if status == "completed" else "生成失败"
+        self.state.error = error
+        self.state.total_elapsed_ms = int((time.monotonic() - self.started_at) * 1000)
+        return self.snapshot()

@@ -1,295 +1,207 @@
-"""
-Resource HTTP routes.
+"""Resource 模块 HTTP 与 SSE 路由端点 (app.resource.api)。
 
-API 端点：
-- POST /resources - 创建后台资源生成任务
-- GET /resources/{id}/status - 查询任务执行状态
-- GET /resources/{id}/events - SSE 推送任务事件
-- GET /resources - 查询资源列表
-- GET /resources/{id} - 查询资源详情
+对齐 chat.api 架构模式：统一提供快照轮询、SSE 状态推送与取消控制。
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from typing import Any
+from collections.abc import AsyncGenerator
 
-from fastapi import APIRouter, Depends, Header, Query, Response
-from fastapi.responses import StreamingResponse
-from sqlmodel import col, select
-from sqlmodel.ext.asyncio.session import AsyncSession
+from fastapi import APIRouter, BackgroundTasks, Query
+from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.auth.schemas import UserClaims
-from app.auth.security import get_current_user
-from app.infra.database import get_session
+from app.auth.security import UserClaims, get_current_user
 from app.infra.logging import get_logger
-from app.profile.context import ProfileScope, load_learner_context
-from app.resource.schemas import ResourceGenerationRequest
-from app.resource.service import ResourceService
-from app.resource.harness import run_multi_agent_generation
-from app.response import HttpResponse
-from app.resource.event import (
-    RESOURCE_TERMINAL_EVENTS,
-    ResourceEvents,
+from app.resource.schemas import (
+    TERMINAL_STATUSES,
+    ResourceGenerationRequest,
     encode_resource_sse,
-    _to_event,
 )
+from app.resource.service import (
+    ResourceService,
+    cancel_run,
+    delete_resource_record,
+    execute_resource_run,
+    get_active_run,
+    get_resource_bundle,
+    get_run_state,
+    list_resource_history,
+    prepare_resource_run,
+)
+from app.response import HttpResponse
 
-
-router = APIRouter()
 logger = get_logger(__name__)
 
-@router.post("/resources")
-async def create_resource_task(
-    req: ResourceGenerationRequest,
-    session: AsyncSession = Depends(get_session),
-) -> Response:
-    """启动独立资源生成后台任务。"""
-    current_user = get_current_user()
-    logger.info(
-        "[ResourceAPI] 收到后台生成请求: user_id=%s selected_agents=%s",
-        current_user.id,
-        req.enabled_agent_ids(),
-    )
-    learner_ctx = await load_learner_context(
-        session,
-        user_id=current_user.id,
-        scope=ProfileScope.RESOURCE,
-        topic=req.topic or req.learning_need or "",
-    )
-    profile_markdown = learner_ctx.to_prompt_text(ProfileScope.RESOURCE)
-    service = ResourceService(session)
-    result = await service.create_task(
-        user_id=current_user.id,
-        request=req,
-        profile_markdown=profile_markdown,
-        username=current_user.username,
-    )
-    resource_id = result["resource_id"]
+router = APIRouter()
 
-    # 启动后台生成（fire-and-forget，不阻塞 Event Loop）
-    asyncio.create_task(
-        run_multi_agent_generation(
-            user_id=current_user.id,
-            resource_id=resource_id,
-        )
+SSE_HEADERS = {
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
+
+@router.get("/resources")
+async def list_resources_endpoint(
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> JSONResponse:
+    """按用户分页查询资源列表。"""
+    user = get_current_user()
+    service = ResourceService()
+    items = await service.list_resources(user.id, limit, offset)
+    total = await service.count_resources(user.id)
+    summary = await service.list_resource_type_summary([r.id for r in items if r.id is not None])
+
+    serialized_items = []
+    for r in items:
+        data = r.model_dump()
+        r_id = r.id or 0
+        data["resource_types"] = summary.get(r_id, [])
+        data["resource_count"] = len(summary.get(r_id, []))
+        data["topic"] = getattr(r, "learning_need", "")
+        serialized_items.append(data)
+
+    return HttpResponse.success(
+        data={
+            "items": serialized_items,
+            "total": total,
+            "type_summary": summary,
+        }
     )
 
-    # 立即返回 resource_id，实际生成在后台进行
-    logger.info(
-        "[ResourceAPI] 后台生成任务已创建: user_id=%s resource_id=%s",
-        current_user.id, resource_id,
-    )
-    return HttpResponse.success(data={"resource_id": resource_id, "status": "pending"}, status_code=201)
+
+@router.get("/resources/{resource_id}")
+async def get_resource_detail_endpoint(resource_id: int) -> JSONResponse:
+    """获取指定资源详情。"""
+    user = get_current_user()
+    service = ResourceService()
+    bundle = await service.get_resource_bundle(user.id, resource_id)
+    if bundle is None:
+        return HttpResponse.error(code=404, message="资源不存在或无权限")
+    return HttpResponse.success(data=bundle.model_dump())
 
 
 @router.get("/resources/{resource_id}/status")
-async def get_generation_status(
-    resource_id: int,
-    session: AsyncSession = Depends(get_session),
-) -> Response:
-    """查询后台生成任务的状态。"""
-    current_user = get_current_user()
-    logger.debug("[ResourceAPI] 查询生成状态: user_id=%s resource_id=%s", current_user.id, resource_id)
-    service = ResourceService(session)
-    status_data = await service.get_generation_status(
-        user_id=current_user.id,
-        resource_id=resource_id,
-    )
-    # 资源不存在或无权限时返回 404
+async def get_resource_status_endpoint(resource_id: int) -> JSONResponse:
+    """获取指定资源生成状态。"""
+    user = get_current_user()
+    service = ResourceService()
+    status_data = await service.get_generation_status(user_id=user.id, resource_id=resource_id)
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
     return HttpResponse.success(data=status_data)
 
 
-@router.get("/resources/{resource_id}/events")
-async def get_resource_events(
-    resource_id: int,
-    after_sequence: int = Query(default=0, ge=0),
-    last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
-    session: AsyncSession = Depends(get_session),
-) -> Response:
-    """SSE 推送任务事件。"""
-    current_user = get_current_user()
-    logger.debug("[ResourceAPI] SSE订阅: user_id=%s resource_id=%s after=%s", current_user.id, resource_id, after_sequence)
-    # 验证资源所有权
-    service = ResourceService(session)
-    resource = await service.get_resource(
-        current_user.id,
-        resource_id,
-    )
-    # 资源不存在或无权限时拒绝订阅
-    if resource is None:
-        return HttpResponse.error(code=404, message="资源不存在或无权限")
+@router.post("/resource/generate")
+async def start_resource_generation(
+    payload: ResourceGenerationRequest,
+    background_tasks: BackgroundTasks,
+) -> JSONResponse:
+    """接收统一资源生成请求，入库主记录并异步启动主 Agent 循环。"""
+    user = get_current_user()
+    try:
+        if not payload.topic.strip():
+            return HttpResponse.error(code=400, message="学习主题不能为空")
 
-    resume_sequence = after_sequence
-    # 若客户端携带 Last-Event-ID，则从该序号之后续传
-    if last_event_id and last_event_id.isdigit():
-        resume_sequence = max(resume_sequence, int(last_event_id))
+        run_id, resource_id = await prepare_resource_run(payload, user)
+        background_tasks.add_task(execute_resource_run, run_id, payload, user)
 
-    async def event_generator() -> AsyncIterator[str]:
-        """异步生成 SSE 事件流并在遇到终态事件或超时时退出。"""
-        events = ResourceEvents(user_id=current_user.id, resource_id=resource_id)
-        queue: asyncio.Queue | None = None
-        delivered_sequence = resume_sequence
+        return HttpResponse.success(
+            data={"run_id": run_id, "resource_id": resource_id},
+            status_code=202,
+        )
+    except Exception as exc:
+        logger.exception("启动资源生成失败: %s", exc)
+        return HttpResponse.error(code=500, message=f"启动生成失败: {exc}")
+
+
+@router.get("/resource/runs/{run_id}")
+async def get_resource_run_snapshot(run_id: str) -> JSONResponse:
+    """读取指定运行的当前全量状态快照（支持切页/刷新恢复）。"""
+    user = get_current_user()
+    state = await get_run_state(user.id, run_id)
+    if state is None:
+        return HttpResponse.error(code=404, message="运行记录不存在或无权限")
+    return HttpResponse.success(data=state.model_dump())
+
+
+@router.get("/resource/runs/{run_id}/events", response_model=None)
+async def stream_resource_run_events(
+    run_id: str,
+    user: UserClaims | None = None,
+) -> JSONResponse | StreamingResponse:
+    """基于订阅机制的 SSE 实时快照推流端点。"""
+    user_claims = user or get_current_user()
+    state = await get_run_state(user_claims.id, run_id)
+    if state is None:
+        return HttpResponse.error(code=404, message="运行记录不存在或无权限")
+
+    hooks = get_active_run(run_id)
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        """订阅通知队列，当产生新状态时推送全量快照。"""
+        queue = hooks.subscribe() if hooks is not None else None
         try:
-            # 先订阅再读取数据库，避免历史读取与实时订阅之间遗漏事件。
-            queue = await events.subscribe()
-            replay = await service.list_run_events(
-                resource_id=resource_id,
-                after_sequence=resume_sequence,
-            )
-            for row in replay:
-                event = _to_event(row)
-                delivered_sequence = event.sequence
-                yield encode_resource_sse(event)
-                if event.event in RESOURCE_TERMINAL_EVENTS:
-                    return
+            current = hooks.snapshot() if hooks is not None else state
             while True:
+                yield encode_resource_sse(current)
+                if current.status in TERMINAL_STATUSES or queue is None:
+                    return
+
                 try:
-                    event = await asyncio.wait_for(queue.get(), timeout=30.0)
-                    if event.sequence <= delivered_sequence:
-                        continue
-                    delivered_sequence = event.sequence
-                    yield encode_resource_sse(event)
-                    if event.event in RESOURCE_TERMINAL_EVENTS:
-                        break
-                except asyncio.TimeoutError:
-                    # 超时无新事件，发送心跳保持连接
+                    await asyncio.wait_for(queue.get(), timeout=25)
+                except TimeoutError:
                     yield ": heartbeat\n\n"
-        except Exception as e:
-            logger.error("SSE 事件生成器错误: %s", e)
+                else:
+                    await asyncio.sleep(0.08)
+                    if not queue.empty():
+                        queue.get_nowait()
+                current = hooks.snapshot()
         finally:
-            if queue is not None:
-                await events.unsubscribe(queue)
+            if hooks is not None and queue is not None:
+                hooks.unsubscribe(queue)
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=SSE_HEADERS)
 
 
-@router.get("/resources")
-async def list_resources(
+@router.post("/resource/runs/{run_id}/cancel")
+async def cancel_resource_generation(run_id: str) -> JSONResponse:
+    """取消当前正在运行的教学资源生成任务。"""
+    user = get_current_user()
+    status = await cancel_run(user.id, run_id)
+    if status is None:
+        return HttpResponse.error(code=404, message="运行不存在或已结束")
+    return HttpResponse.success(data={"run_id": run_id, "status": status})
+
+
+@router.get("/resource/bundles/{resource_id}")
+async def get_bundle_by_id(resource_id: int) -> JSONResponse:
+    """获取生成完成的完整教学资源包 DTO。"""
+    user = get_current_user()
+    bundle = await get_resource_bundle(user.id, resource_id)
+    if bundle is None:
+        return HttpResponse.error(code=404, message="教学资源包不存在或无权限")
+    return HttpResponse.success(data=bundle.model_dump())
+
+
+@router.get("/resource/history")
+async def list_history(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    session: AsyncSession = Depends(get_session),
-) -> Response:
-    """查询资源列表。"""
-    current_user = get_current_user()
-    logger.debug("[ResourceAPI] 查询资源列表: user_id=%s limit=%d offset=%d", current_user.id, limit, offset)
-    service = ResourceService(session)
-    resources = await service.list_resources(
-        current_user.id,
-        limit,
-        offset,
-    )
-    total = await service.count_resources(current_user.id)
-    # 汇总每个资源的 agent_type，便于前端分类展示
-    type_summary = await service.list_resource_type_summary(
-        user_id=current_user.id,
-        resource_ids=[value.id for value in resources if value.id is not None],
-    )
-
-    items: list[dict[str, Any]] = []
-    for value in resources:
-        items.append(
-            {
-                "id": value.id,
-                "learning_need": value.learning_need,
-                "status": value.status,
-                "resource_types": type_summary.get(value.id or 0, []),
-                "created_at": value.created_at,
-                "updated_at": value.updated_at,
-            }
-        )
-    return HttpResponse.success(data={"items": items, "total": total})
+) -> JSONResponse:
+    """获取用户的教学资源生成历史记录列表。"""
+    user = get_current_user()
+    items = await list_resource_history(user.id, limit=limit, offset=offset)
+    return HttpResponse.success(data=[item.model_dump() for item in items])
 
 
-@router.get("/resources/{resource_id}")
-async def get_resource(
-    resource_id: int,
-    session: AsyncSession = Depends(get_session),
-) -> Response:
-    """查询资源详情。"""
-    current_user = get_current_user()
-    logger.debug("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
-    service = ResourceService(session)
-    bundle = await service.get_resource_bundle(
-        current_user.id,
-        resource_id,
-    )
-    if bundle is None:
-        return HttpResponse.error(code=404, message="资源不存在")
-    return HttpResponse.success(data=bundle.model_dump(mode="json"))
-
-
-# ---------------------------------------------------------------------------
-# 仪表盘端点
-# ---------------------------------------------------------------------------
-
-
-def _text(value: Any, fallback: str = "") -> str:
-    """安全提取文本值，空值时返回默认值。"""
-    if value is None:
-        return fallback
-    if isinstance(value, str):
-        return value.strip() or fallback
-    return str(value)
-
-
-def _status_label(value: str) -> str:
-    """将状态值转换为中文标签。"""
-    return {
-        "pending": "等待中",
-        "generating": "生成中",
-        "processing": "处理中",
-        "completed": "已完成",
-        "failed": "失败",
-    }.get(value, value or "待更新")
-
-
-def _resource_title(resource: Any) -> str:
-    """获取资源标题。"""
-    if not resource:
-        return ""
-    return _text(resource.learning_need, "最近生成的资源")
-
-
-@router.get("/dashboard/recent-resources")
-async def get_recent_resources(
-    session: AsyncSession = Depends(get_session),
-) -> Response:
-    """获取最近生成的学习资源列表。"""
-    current_user = get_current_user()
-    """获取最近生成的学习资源列表。"""
-    from app.infra.models import GeneratedResource, GeneratedResourceItem
-
-    recent_resources = list((await session.exec(
-        select(GeneratedResource)
-        .where(GeneratedResource.user_id == current_user.id)
-        .order_by(col(GeneratedResource.updated_at).desc())
-        .limit(5)
-    )).all())
-
-    result: list[dict[str, Any]] = []
-    for r in recent_resources[:4]:
-        first_item = (await session.exec(
-            select(GeneratedResourceItem)
-            .where(GeneratedResourceItem.resource_id == r.id)
-            .limit(1)
-        )).first()
-        result.append({
-            "id": r.id,
-            "title": _resource_title(r),
-            "type": first_item.agent_type if first_item else _status_label(r.status),
-            "agent": first_item.agent_type or "资源生成智能体" if first_item else "资源生成智能体",
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-        })
-    return HttpResponse.success(data=result)
+@router.delete("/resource/{resource_id}")
+async def delete_resource(resource_id: int) -> JSONResponse:
+    """删除指定的教学资源记录。"""
+    user = get_current_user()
+    success = await delete_resource_record(user.id, resource_id)
+    if not success:
+        return HttpResponse.error(code=404, message="资源记录不存在或无权限")
+    return HttpResponse.success(data={"deleted": True})
