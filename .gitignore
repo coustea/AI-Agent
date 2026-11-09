@@ -73,6 +73,7 @@ docs/
 openspec/
 
 # AI assistant generated directories
+skills/
 .codex/
 .omo/
 .sisyphus/
