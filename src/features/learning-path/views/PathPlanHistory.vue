@@ -331,7 +331,9 @@
                 <span
                     class="fill-indicator"
                     :style="{
-                    width: `${progressWidth(item)}%`,
+                    width: '100%',
+                    transform: `scaleX(${progressWidth(item) / 100})`,
+                    transformOrigin: 'left',
                   }"
                 ></span>
               </div>
@@ -1519,7 +1521,8 @@ onMounted(loadHistory)
           #159a94,
           #5bbcb7
       );
-  transition: width 300ms ease;
+  transform-origin: left;
+  transition: transform 300ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .progress-track-bar.is-generating

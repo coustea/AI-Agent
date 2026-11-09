@@ -217,8 +217,8 @@ const hasComplexity = computed(() => {
 .code-markdown-shell :deep(ul),
 .code-markdown-shell :deep(ol) { padding-left: 1.35em; margin: 0.85em 0; }
 .code-markdown-shell :deep(blockquote) {
-  margin: 1em 0; padding: 10px 14px; border-left: 3px solid var(--color-primary);
-  background: var(--color-primary-soft); border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  margin: 1em 0; padding: 12px 16px; border: 1px solid var(--color-primary-border);
+  background: var(--color-primary-soft); border-radius: var(--radius-md);
 }
 .markdown-resource.is-code :deep(.code-block-wrapper) {
   margin: 1.2em 0; border: 1px solid var(--code-border); border-radius: var(--radius-md);

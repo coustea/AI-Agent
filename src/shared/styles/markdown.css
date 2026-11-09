@@ -373,7 +373,9 @@
 
 /* Mermaid 渲染失败：保留源码并标红提示 */
 .markdown-renderer pre[data-mermaid-error='true'] {
-  border-left: 3px solid #dc2626;
+  border: 1px solid rgba(220, 38, 38, 0.35);
+  background: rgba(254, 242, 242, 0.6);
+  border-radius: var(--radius-md);
 }
 
 .markdown-renderer pre[data-mermaid-error='true']::after {

@@ -2,7 +2,6 @@
   <main class="assessment-page">
     <header class="page-header">
       <div class="header-copy">
-        <span class="eyebrow">LEARNING REVIEW</span>
         <h1>学习评估</h1>
         <p>用学习趋势、模块投入和阶段结论，帮助你快速判断下一步该学什么。</p>
       </div>

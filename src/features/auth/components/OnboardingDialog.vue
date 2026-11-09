@@ -7,7 +7,7 @@
       <header class="conversation-header">
         <div class="header-main">
           <div class="header-copy">
-            <span class="header-eyebrow">学习画像初始化</span>
+            <h1 class="header-title">学习画像初始化</h1>
           </div>
 
           <button class="skip-btn" type="button" @click="handleCompleteLater">
@@ -199,7 +199,7 @@
               <strong>{{ profileProgress }}%</strong>
             </div>
             <div class="progress-line" aria-hidden="true">
-              <i :style="{ width: `${profileProgress}%` }"></i>
+              <i :style="{ width: '100%', transform: `scaleX(${profileProgress / 100})`, transformOrigin: 'left' }"></i>
             </div>
           </div>
 
@@ -1351,22 +1351,15 @@ const handleCompleteLater = async () => {
   min-width: 0;
 }
 
-.header-eyebrow {
+.header-title {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   color: var(--color-primary-text, #0f766e);
-  font-size: 12px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-
-.header-eyebrow::before {
-  content: '';
-  width: 22px;
-  height: 3px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0;
 }
 
 .conversation-header h1 {
@@ -1742,7 +1735,7 @@ const handleCompleteLater = async () => {
   height: 7px;
   border-radius: 999px;
   background: var(--color-primary, #14b8a6);
-  animation: typing-bounce 1s infinite ease-in-out;
+  animation: typing-pulse 1.2s infinite ease-in-out;
 }
 
 .typing-dot:nth-child(2) {
@@ -1985,8 +1978,9 @@ const handleCompleteLater = async () => {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-primary, #14b8a6), var(--color-action, #0ea5e9));
-  transition: width 0.25s ease;
+  background: var(--color-primary, #14b8a6);
+  transform-origin: left;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .info-block {
@@ -2082,16 +2076,15 @@ const handleCompleteLater = async () => {
   transform: translateY(8px);
 }
 
-@keyframes typing-bounce {
+@keyframes typing-pulse {
   0%,
-  80%,
   100% {
-    transform: translateY(0);
-    opacity: 0.45;
+    transform: scale(0.85);
+    opacity: 0.35;
   }
 
-  40% {
-    transform: translateY(-4px);
+  50% {
+    transform: scale(1.1);
     opacity: 1;
   }
 }

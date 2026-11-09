@@ -68,10 +68,6 @@
         </div>
 
         <div class="generate-copy">
-          <span class="generate-kicker">
-            NODE TUTORIAL
-          </span>
-
           <h1>正在生成节点教程</h1>
 
           <p>
@@ -632,10 +628,6 @@
           >
             <nav class="quiz-nav">
               <div class="quiz-nav-left">
-                <span class="agent-eyebrow">
-                  KNOWLEDGE CHECK
-                </span>
-
                 <strong>
                   第 {{ quizRound.round_no }} 轮诊断
                 </strong>
@@ -754,10 +746,6 @@
               >
                 <div class="report-top">
                   <div class="report-score">
-                    <span class="agent-eyebrow">
-                      SCORE
-                    </span>
-
                     <strong>
                       {{ quizResult.score }}
                       <small>/ 5</small>

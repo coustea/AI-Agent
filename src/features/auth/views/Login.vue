@@ -7,7 +7,6 @@
       </div>
 
       <div class="visual-copy">
-        <span class="eyebrow">你的智能学习工作台</span>
         <h1>让每一次学习<br>都有清晰的下一步</h1>
         <p>从学习画像到路径规划，再到多智能体资源生成，把零散的努力组织成持续进步。</p>
       </div>

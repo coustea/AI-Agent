@@ -3,10 +3,6 @@
     <div class="planner-unified-container">
       <header class="workspace-brand-header">
         <div class="header-headline-group">
-          <span class="agent-eyebrow">
-            PATH PLANNER AI ENGINE
-          </span>
-
           <h1>创建学习路径</h1>
 
           <p class="cognitive-subtext">

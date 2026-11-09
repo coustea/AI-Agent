@@ -1,5 +1,5 @@
 
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+/* Native system typography stack: zero network latency, retina-crisp rendering */
 
 @import "tailwindcss";
 
@@ -68,7 +68,7 @@
   --cat-rose-glow: rgba(244, 63, 94, 0.06);
 
   /* ---- Typography ---- */
-  --font-sans: 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-body: var(--font-sans);
   --font-mono: 'JetBrains Mono', 'SFMono-Regular', Consolas, Monaco, monospace;
   --font-ui: var(--font-sans);
@@ -564,13 +564,7 @@ button:focus-visible, .btn:focus-visible {
 }
 
 .eyebrow {
-  display: block;
-  margin-bottom: var(--space-1_5);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-extrabold);
-  color: var(--color-primary);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  display: none;
 }
 
 /* Stat Item — metric display */
@@ -817,16 +811,9 @@ button:focus-visible, .btn:focus-visible {
    Academic Copywriting & Agent Workspace Custom Typographic Styles
    ============================================================ */
 
-/* Eyebrow label for agents or sub-tasks */
+/* Eyebrow label for agents or sub-tasks (deprecated AI scaffold - hidden) */
 .agent-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--color-primary);
-  opacity: 0.85;
-  margin-bottom: 4px;
-  display: block;
+  display: none;
 }
 
 /* Socratic/Cognitive insight notes in serif/italic-like typeface */
@@ -840,7 +827,7 @@ button:focus-visible, .btn:focus-visible {
 }
 
 @theme inline {
-  --font-sans: 'Geist', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -950,7 +937,7 @@ button:focus-visible, .btn:focus-visible {
   flex-direction: column;
   padding: var(--space-6);
   position: relative;
-  animation: scaleIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation: scaleIn 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .custom-modal-content.note-preview-modal {
@@ -1053,14 +1040,14 @@ button:focus-visible, .btn:focus-visible {
   color: #1e293b !important;
 }
 
-/* Elegant Solid Blockquotes */
+/* Elegant Solid Blockquotes — Clean 1px border card */
 .markdown-body blockquote {
-  border-left: 4px solid var(--color-primary) !important;
+  border: 1px solid var(--color-primary-border) !important;
   background: var(--color-primary-soft) !important;
   padding: 14px 20px !important;
   margin: 1.5em 0 !important;
   color: var(--color-text-secondary) !important;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0 !important;
+  border-radius: var(--radius-md) !important;
   font-style: normal !important;
 }
 

@@ -344,8 +344,9 @@
 
                       <div class="mix-track">
                         <i
-                            :style="{
-                            width: `${item.percent}%`,
+                          :style="{
+                            width: '100%',
+                            transform: `scaleX(${Math.max(0, Math.min(100, item.percent)) / 100})`,
                             background: item.gradient,
                           }"
                         ></i>
@@ -3396,7 +3397,8 @@ onBeforeUnmount(() => {
   display: block;
   height: 100%;
   border-radius: inherit;
-  transition: width 350ms ease;
+  transform-origin: left;
+  transition: transform 350ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .scenario-body {

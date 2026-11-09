@@ -4,7 +4,6 @@
     <header class="workflow-summary">
       <div class="summary-main">
         <div class="summary-title">
-          <span class="summary-eyebrow">MULTI-AGENT WORKFLOW</span>
           <h2>资源生成工作流</h2>
           <p>{{ dagHeroMessage }}</p>
         </div>
@@ -66,7 +65,6 @@
       <section class="workflow-workbench">
         <header class="workbench-header">
           <div>
-            <span class="panel-eyebrow">实时协同视图</span>
             <h3>多智能体调用链</h3>
             <p>展示任务拆分、并行执行、结果回传、上下文交接与多模态资源生成过程。</p>
           </div>

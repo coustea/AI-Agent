@@ -1455,7 +1455,8 @@ function formatExamReferenceAnswer(question: ExamQuestion) {
   height: 100%;
   border-radius: inherit;
   background: var(--analysis-accent);
-  transition: width 0.4s ease;
+  transform-origin: left;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .analysis-score-card em {

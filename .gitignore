@@ -32,6 +32,7 @@ Thumbs.db
 .agent/
 .agents/
 .gemini/
+.impeccable/
 
 # Local env files
 *.local

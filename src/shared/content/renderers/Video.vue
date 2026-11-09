@@ -21,7 +21,7 @@
 
     <div v-if="artifact" class="video-meta">
       <div>
-        <p class="eyebrow">教学动画视频</p>
+        <span class="video-type-badge">教学动画视频</span>
         <h3>{{ artifact.title }}</h3>
         <p>{{ metadataLabel }}</p>
       </div>

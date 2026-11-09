@@ -7,7 +7,6 @@
       </div>
 
       <div class="visual-copy">
-        <span class="eyebrow">从你的目标开始</span>
         <h1>建立一份会成长的<br>个人学习档案</h1>
         <p>系统会根据学习行为持续调整画像，让路径、资源和辅导真正贴合你的进度。</p>
       </div>

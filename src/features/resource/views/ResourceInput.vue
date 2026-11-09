@@ -146,17 +146,15 @@ function fillExample(t: string) {
   100% { opacity: 1; transform: translateY(0); }
 }
 .hero-title {
-  font-size: 2.8rem;
+  font-size: 2.5rem;
   font-weight: 800;
-  color: var(--color-text);
+  color: var(--color-text-strong);
   letter-spacing: -0.03em;
   margin: 0 0 12px 0;
-  background: linear-gradient(135deg, var(--color-text-strong), var(--cat-resource));
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  line-height: 1.2;
 }
 .hero-subtitle {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   color: var(--color-text-muted);
   font-weight: 500;
   margin: 0;
@@ -164,31 +162,25 @@ function fillExample(t: string) {
 
 .omni-spotlight-wrapper {
   width: 100%;
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  border-radius: 20px;
-  box-shadow:
-    0 4px 6px -1px rgba(0, 0, 0, 0.05),
-    0 10px 15px -3px rgba(0, 0, 0, 0.03),
-    0 25px 50px -12px rgba(0, 0, 0, 0.05);
-  padding: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all var(--transition-base);
   position: relative;
-  animation: scaleUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  animation: scaleUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
 }
 @keyframes scaleUp {
-  0% { opacity: 0; transform: scale(0.95); }
+  0% { opacity: 0; transform: scale(0.98); }
   100% { opacity: 1; transform: scale(1); }
 }
 .omni-spotlight-wrapper.is-focused, .omni-spotlight-wrapper.has-content {
-  border-color: rgba(59, 130, 246, 0.4);
-  box-shadow:
-    0 8px 30px rgba(59, 130, 246, 0.08),
-    0 0 0 4px rgba(59, 130, 246, 0.1);
-  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(70, 184, 180, 0.15), var(--shadow-md);
+  transform: translateY(-1px);
 }
 .omni-textarea {
   border: none;
