@@ -46,7 +46,7 @@ async def test_ppt_loop_reinjects_error_on_verify_failure(
 ) -> None:
     """测试课件生成核验失败时将错误原因回灌给模型，超出重试次数抛出 PPTGenerationError。"""
     async def fake_create(**kwargs: any) -> SimpleNamespace:
-        msg = SimpleNamespace(tool_calls=None, model_dump=lambda **kw: {"role": "assistant", "content": "done"})
+        msg = SimpleNamespace(tool_calls=None, content="done", model_dump=lambda **kw: {"role": "assistant", "content": "done"})
         return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create)))
@@ -70,7 +70,7 @@ async def test_ppt_loop_success_returns_artifact(
 ) -> None:
     """测试课件模型循环与物理核验成功时返回完整 PPTArtifact。"""
     async def fake_create(**kwargs: any) -> SimpleNamespace:
-        msg = SimpleNamespace(tool_calls=None, model_dump=lambda **kw: {"role": "assistant", "content": "done"})
+        msg = SimpleNamespace(tool_calls=None, content="done", model_dump=lambda **kw: {"role": "assistant", "content": "done"})
         return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
 
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create)))

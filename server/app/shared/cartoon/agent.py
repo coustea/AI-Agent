@@ -11,6 +11,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.infra.llm import get_llm_client
+from app.infra.logging import get_logger
 from app.shared.cartoon.schemas import (
     CartoonArtifact,
     CartoonBrief,
@@ -22,6 +23,8 @@ from app.shared.tools.registry import ToolRegistry, format_tool_output
 from app.shared.tools.skills import build_load_skill_tool, get_skill_loader
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
+
+logger = get_logger(__name__)
 
 SKILLS = ("hyperframes", "hyperframes-cli", "hyperframes-registry", "media-use")
 
@@ -93,6 +96,7 @@ CLI 的 --help 是当前版本参数的依据。用本地 CLI 路径执行技能
         progress: ProgressCallback | None = None,
     ) -> CartoonArtifact:
         """在指定输出目录下生成完整动画视频产物包。"""
+        logger.info("[CartoonAgent] 开始生成视频: title=%s output_dir=%s", brief.title, output_dir)
         try:
             async with asyncio.timeout(1800):
                 workdir = output_dir.resolve() / uuid4().hex
@@ -102,10 +106,23 @@ CLI 的 --help 是当前版本参数的依据。用本地 CLI 路径执行技能
                     build_load_skill_tool(self.loader, only=SKILLS),
                     build_speech_tool(workdir, voice=brief.configuration.voice, pace=brief.configuration.pace),
                 ])
-                return await self._run(brief, workdir, registry, progress)
-        except CartoonGenerationError:
+                artifact = await self._run(brief, workdir, registry, progress)
+                logger.info(
+                    "[CartoonAgent] 视频生成完成: title=%s duration=%.1fs scenes=%d video=%s",
+                    getattr(artifact, "title", ""),
+                    getattr(artifact, "duration_seconds", 0.0),
+                    getattr(artifact, "scene_count", 0),
+                    getattr(artifact, "video_path", ""),
+                )
+                return artifact
+        except CartoonGenerationError as exc:
+            logger.error("[CartoonAgent] 视频生成失败 (stage=%s): title=%s error=%s", exc.stage, brief.title, exc)
             raise
+        except TimeoutError:
+            logger.error("[CartoonAgent] 视频生成超时 (>1800s): title=%s", brief.title)
+            raise CartoonGenerationError("视频生成超时 (>1800s)", stage="generate")
         except Exception as exc:
+            logger.exception("[CartoonAgent] 视频生成异常: title=%s", brief.title)
             raise CartoonGenerationError(f"视频制作失败：{exc}", stage="generate") from exc
 
     async def _run(
@@ -135,9 +152,15 @@ CLI 的 --help 是当前版本参数的依据。用本地 CLI 路径执行技能
             )
             msg = response.choices[0].message
             messages.append(msg.model_dump(exclude_none=True))
+            tool_calls = getattr(msg, "tool_calls", None) or []
+            content_str = getattr(msg, "content", None) or ""
+            logger.info(
+                "[CartoonAgent] 第 %d/%d 轮: tool_calls=%d text_len=%d",
+                step + 1, max_total_steps, len(tool_calls), len(content_str),
+            )
 
-            if msg.tool_calls:
-                for call in msg.tool_calls:
+            if tool_calls:
+                for call in tool_calls:
                     if progress:
                         await progress(
                             _describe_video_step(call.function.name, call.function.arguments),
@@ -146,8 +169,13 @@ CLI 的 --help 是当前版本参数的依据。用本地 CLI 路径执行技能
                     try:
                         raw_res = await registry.execute(call.function.name, call.function.arguments)
                         result = format_tool_output(raw_res)
+                        logger.info(
+                            "[CartoonAgent] 工具 %s 执行成功 (输出 %d 字符)",
+                            call.function.name, len(result),
+                        )
                     except Exception as exc:
                         result = f"Error: {exc}"
+                        logger.warning("[CartoonAgent] 工具 %s 执行失败: %s", call.function.name, exc)
                     messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
                 continue
 
@@ -162,6 +190,9 @@ CLI 的 --help 是当前版本参数的依据。用本地 CLI 路径执行技能
                 return artifact
             except (ValueError, OSError, KeyError, TypeError) as exc:
                 revisions += 1
+                logger.warning(
+                    "[CartoonAgent] 物理核验未通过 (第 %d/%d 次修复): %s", revisions, max_revisions, exc,
+                )
                 if revisions > max_revisions:
                     raise CartoonGenerationError(f"视频交付核验未通过，已达最大修复次数：{exc}", stage="verify") from exc
                 messages.append({
@@ -193,6 +224,10 @@ CLI 的 --help 是当前版本参数的依据。用本地 CLI 路径执行技能
             "bash", {"command": "ffprobe -v error -show_streams -show_format -of json video.mp4"}
         )
         if result.get("exit_code") != 0:
+            logger.error(
+                "[CartoonAgent] ffprobe 失败 (exit=%s)\nstderr: %s",
+                result.get("exit_code"), result.get("stderr"),
+            )
             raise ValueError(f"视频读取失败：{result.get('stderr') or result}")
 
         probe = json.loads(result["stdout"])

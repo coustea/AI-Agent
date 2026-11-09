@@ -3,9 +3,12 @@ from typing import Any
 from uuid import uuid4
 from pydantic import BaseModel, Field
 from app.config import user_resource_ppt_dir
+from app.infra.logging import get_logger
 from app.shared.ppt.agent import PPTAgent, ProgressCallback
 from app.shared.ppt.schemas import PPTBrief
 from app.shared.tools.registry import Tool
+
+logger = get_logger(__name__)
 
 
 class GeneratePPTArgs(BaseModel):
@@ -25,8 +28,10 @@ def build_ppt_tool(
     async def generate(topic: str, learning_goal: str, source_points: list[str]) -> dict[str, Any]:
         """根据主题与要点在目标目录生成 PPT 课件产物。"""
         target = user_resource_ppt_dir(username, f"chat_{session_id}" if session_id else uuid4().hex)
+        logger.info("[PPTTool] 收到课件生成请求: topic=%s user=%s target=%s", topic, username, target)
         brief = PPTBrief(title=topic, context=learning_goal + "\n" + "\n".join(source_points))
         artifact = await PPTAgent().generate(brief, target, progress=progress)
+        logger.info("[PPTTool] 课件交付: title=%s slides=%d", getattr(artifact, "title", ""), getattr(artifact, "slide_count", 0))
         return {"status": "ok", "title": artifact.title, **artifact.metadata()}
 
     return Tool(

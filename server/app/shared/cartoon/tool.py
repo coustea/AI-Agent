@@ -9,9 +9,12 @@ from uuid import uuid4
 from pydantic import BaseModel, Field
 
 from app.config import user_resource_cartoon_dir
+from app.infra.logging import get_logger
 from app.shared.cartoon.agent import CartoonAgent, ProgressCallback
 from app.shared.cartoon.schemas import CartoonBrief, CartoonGenerationConfig
 from app.shared.tools.registry import Tool
+
+logger = get_logger(__name__)
 
 
 class GenerateVideoToolArgs(BaseModel):
@@ -43,6 +46,10 @@ def build_cartoon_tool(
         res_key = resource_id or (f"chat_{session_id}" if session_id else uuid4().hex[:12])
         target_dir = output_dir or user_resource_cartoon_dir(username, res_key)
         voice_val = "coach" if voice == "coach" else "teacher"
+        logger.info(
+            "[CartoonTool] 收到视频生成请求: topic=%s user=%s voice=%s target=%s",
+            topic, username, voice_val, target_dir,
+        )
         brief = CartoonBrief(
             title=topic,
             learning_need=learning_goal,
@@ -50,6 +57,10 @@ def build_cartoon_tool(
             configuration=CartoonGenerationConfig(voice=voice_val),
         )
         artifact = await CartoonAgent().generate(brief, target_dir, progress=progress)
+        logger.info(
+            "[CartoonTool] 视频交付: title=%s duration=%.1fs scenes=%d",
+            artifact.title, artifact.duration_seconds, artifact.scene_count,
+        )
         return {
             "status": "ok",
             "title": artifact.title,
