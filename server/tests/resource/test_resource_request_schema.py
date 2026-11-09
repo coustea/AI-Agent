@@ -36,6 +36,8 @@ def test_resource_generation_request_accepts_unified_payload() -> None:
     assert request.learning_goal == "深入理解连接建立、报文标志位及状态机演化"
     assert request.target_resources == ["content", "mindmap", "quiz", "ppt"]
     assert request.difficulty == "intermediate"
+    assert request.preferences.programming_language == "python"
+    assert request.preferences.voice == "teacher"
     assert request.preferences["programming_language"] == "python"
     assert request.enabled_agent_ids() == ["content", "mindmap", "quiz", "ppt"]
 

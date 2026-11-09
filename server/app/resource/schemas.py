@@ -14,7 +14,18 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 # ── 1. 基础类型与生成请求 ──────────────────────────────────────────────────
 
 
+ResourceAgentId = Literal[
+    "content",
+    "mindmap",
+    "quiz",
+    "code",
+    "reading",
+    "ppt",
+    "cartoon",
+]
 DifficultyLevel = Literal["beginner", "intermediate", "advanced"]
+ProgrammingLanguage = Literal["python", "cpp", "typescript", "go", "java"]
+CartoonVoice = Literal["teacher", "coach"]
 ResourceRunPhase = Literal[
     "queued",
     "preparing",
@@ -29,27 +40,74 @@ TerminalStatus = Literal["completed", "failed", "cancelled"]
 TERMINAL_STATUSES: set[str] = {"completed", "failed", "cancelled"}
 
 
+class ResourcePreferences(BaseModel):
+    """多智能体生成偏好配置数据类型（与前端配置项严格对齐）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    programming_language: ProgrammingLanguage = Field(
+        default="python",
+        description="实操代码编程语言（支持 python, cpp, typescript, go, java）",
+    )
+    voice: CartoonVoice = Field(
+        default="teacher",
+        description="教学动画旁白音色（teacher 学术讲师, coach 实战教练）",
+    )
+
+    def __getitem__(self, item: str) -> Any:
+        """支持字典下标访问以兼容字典式解构。"""
+        return getattr(self, item)
+
+    def __contains__(self, item: str) -> bool:
+        """检查偏好字段是否存在。"""
+        return hasattr(self, item)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """安全读取偏好配置项。"""
+        return getattr(self, key, default)
+
+    def __eq__(self, other: Any) -> bool:
+        """支持与字典进行相等性比较。"""
+        if isinstance(other, dict):
+            return self.model_dump(exclude_defaults=True) == other or self.model_dump() == other
+        return super().__eq__(other)
+
+
 class ResourceGenerationRequest(BaseModel):
-    """统一资源生成请求（前后端交互核心契约）。"""
+    """统一多智能体资源生成请求数据契约。"""
+
+    model_config = ConfigDict(extra="ignore")
 
     topic: str = Field(min_length=1, description="学习主题或核心概念")
-    learning_goal: str = Field(default="", max_length=500, description="具体学习目标或掌握深度期望")
-    target_resources: list[str] = Field(
+    learning_goal: str = Field(default="", max_length=500, description="具体学习目标或掌握深度期望（可选）")
+    target_resources: list[ResourceAgentId] = Field(
         default_factory=lambda: ["content", "mindmap", "quiz"],
         description="期望交付的资源清单：content, mindmap, quiz, code, reading, ppt, cartoon",
     )
     difficulty: DifficultyLevel = Field(
         default="intermediate",
-        description="学习难度阶段：beginner(初学入门)、intermediate(进阶掌握)、advanced(精通探究)",
+        description="认知难度阶梯：beginner(初学入门)、intermediate(进阶实战)、advanced(深度探究)",
     )
-    preferences: dict[str, Any] = Field(
-        default_factory=dict,
-        description="全局偏好字典（例如 programming_language='python', voice='teacher' 等）",
+    preferences: ResourcePreferences = Field(
+        default_factory=ResourcePreferences,
+        description="多智能体专研偏好配置（实操代码语言与动画音色）",
     )
+
+    @field_validator("preferences", mode="before")
+    @classmethod
+    def _coerce_preferences(cls, v: Any) -> ResourcePreferences:
+        """将输入字典或空值规范化为强类型 ResourcePreferences 对象。"""
+        if v is None:
+            return ResourcePreferences()
+        if isinstance(v, dict):
+            return ResourcePreferences.model_validate(v)
+        if isinstance(v, ResourcePreferences):
+            return v
+        return ResourcePreferences()
 
     def enabled_agent_ids(self) -> list[str]:
         """获取已启用的资源目标列表。"""
-        return self.target_resources
+        return [str(r) for r in self.target_resources]
 
 
 # ── 2. 产物与快照状态模型 ──────────────────────────────────────────────────

@@ -14,13 +14,10 @@ class CartoonModel(BaseModel):
 
 
 class CartoonGenerationConfig(CartoonModel):
-    """前端与调用方传入的教学视频偏好配置。"""
+    """教学视频生成偏好配置数据类型。"""
 
-    lesson_depth: Literal["focused", "standard", "deep"] = "standard"
-    visual_density: Literal["moderate", "rich", "intensive"] = "rich"
-    pace: Literal["fast", "balanced", "calm"] = "balanced"
     voice: Literal["teacher", "coach"] = "teacher"
-    target_duration_seconds: int = 120
+    pace: Literal["fast", "balanced", "calm"] = "balanced"
 
 
 class CartoonBrief(CartoonModel):

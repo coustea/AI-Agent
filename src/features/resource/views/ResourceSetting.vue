@@ -184,7 +184,13 @@ import {
   PresentationIcon as PresentationIcon,
   FilmIcon as VideoIcon,
 } from '@lucide/vue'
-import type { ResourceAgentId, DifficultyLevel } from '../model/resource'
+import type {
+  ResourceAgentId,
+  DifficultyLevel,
+  ProgrammingLanguage,
+  CartoonVoice,
+  ResourcePreferences,
+} from '../model/resource'
 
 const props = defineProps<{
   naturalInput: string
@@ -197,7 +203,7 @@ const emit = defineEmits<{
     learningGoal: string
     targetResources: ResourceAgentId[]
     difficulty: DifficultyLevel
-    preferences: Record<string, unknown>
+    preferences: ResourcePreferences
   }): void
 }>()
 
@@ -211,8 +217,8 @@ const selectedResources = ref<ResourceAgentId[]>([
   'ppt',
 ])
 
-const programmingLanguage = ref('python')
-const cartoonVoice = ref('teacher')
+const programmingLanguage = ref<ProgrammingLanguage>('python')
+const cartoonVoice = ref<CartoonVoice>('teacher')
 
 const difficultyOptions = [
   { value: 'beginner' as const, label: '初学入门', desc: '注重直观比喻与基础理论推导' },

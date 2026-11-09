@@ -28,13 +28,8 @@ class PathCartoonAdapter:
                 metadata={"agent_id": "cartoon"},
             )
 
-        granularity_depth = {"coarse": "focused", "standard": "standard", "fine": "deep"}
-        granularity_density = {"coarse": "moderate", "standard": "rich", "fine": "intensive"}
         pace_map = {"slow": "calm", "normal": "balanced", "fast": "fast"}
-
         config = CartoonGenerationConfig(
-            lesson_depth=granularity_depth.get(request.preferences.granularity, "standard"),  # type: ignore[arg-type]
-            visual_density=granularity_density.get(request.preferences.granularity, "rich"),  # type: ignore[arg-type]
             pace=pace_map.get(request.preferences.pace, "balanced"),  # type: ignore[arg-type]
         )
 

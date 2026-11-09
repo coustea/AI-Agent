@@ -18,6 +18,8 @@ import type {
   GeneratedResourceItem,
   ResourceContentFormat,
   ResourceContent,
+  DifficultyLevel,
+  ResourcePreferences,
 } from '@/features/resource/model/resource'
 import {
   PPT_AGENT_ID,
@@ -430,8 +432,8 @@ export function useGeneration() {
     topic?: string
     learningGoal?: string
     targetResources?: ResourceAgentId[]
-    difficulty?: import('../model/resource').DifficultyLevel
-    preferences?: Record<string, unknown>
+    difficulty?: DifficultyLevel
+    preferences?: ResourcePreferences
   }) {
     currentPhase.value = 'generating'
     resetGenerationState()

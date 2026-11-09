@@ -4,7 +4,14 @@ export type ResourceAgentId = 'content' | 'mindmap' | 'quiz' | 'reading' | 'code
 
 export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
 
-export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
+export type ProgrammingLanguage = 'python' | 'cpp' | 'typescript' | 'go' | 'java'
+
+export type CartoonVoice = 'teacher' | 'coach'
+
+export interface ResourcePreferences {
+  programming_language?: ProgrammingLanguage
+  voice?: CartoonVoice
+}
 
 export type ResourceContentFormat = 'markdown' | 'json' | 'pptx' | 'mp4'
 
@@ -16,7 +23,7 @@ export interface ResourceGenerationRequest {
   learning_goal?: string
   target_resources: ResourceAgentId[]
   difficulty: DifficultyLevel
-  preferences?: Record<string, unknown>
+  preferences?: ResourcePreferences
 }
 
 // 子智能体生成的单项教学产物

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.infra.llm import LLM
 from app.infra.logging import get_logger
-from app.resource.schemas import QuizPayload, ReadingPayload
+from app.resource.schemas import DifficultyLevel, ProgrammingLanguage, QuizPayload, ReadingPayload
 from app.shared.cartoon.tool import build_cartoon_tool
 from app.shared.ppt.tool import build_ppt_tool
 from app.shared.tools.registry import Tool
@@ -63,36 +63,32 @@ class GenerateLectureContentArgs(BaseModel):
 
 
 class GenerateMindmapArgs(BaseModel):
-    """思维导图生成工具参数。"""
+    """思维导图生成工具参数（已移除旧版冗余 structure_style）。"""
 
     topic: str = Field(description="核心学习主题")
     learning_goal: str = Field(default="", description="知识框架目标")
-    structure_style: str = Field(default="knowledge_tree", description="导图结构类型")
 
 
 class GenerateQuizArgs(BaseModel):
-    """随堂测验生成工具参数。"""
+    """随堂测验生成工具参数（已移除冗余题目数配置，由测评智能体自主把控）。"""
 
     topic: str = Field(description="核心学习主题")
     learning_goal: str = Field(default="", description="考察目标")
-    difficulty: str = Field(default="intermediate", description="试卷难度：beginner, intermediate, advanced")
-    question_count: int = Field(default=5, ge=3, le=10, description="题目数量")
+    difficulty: DifficultyLevel = Field(default="intermediate", description="试卷难度：beginner, intermediate, advanced")
 
 
 class GenerateCodeArgs(BaseModel):
-    """实战代码示例生成工具参数。"""
+    """实战代码示例生成工具参数（仅对齐用户选定的实操语言，移除冗余 focus 模式）。"""
 
     topic: str = Field(description="核心学习主题")
-    language: str = Field(default="python", description="编程语言")
-    focus: str = Field(default="practical", description="代码重点：syntax, practical, architecture")
+    language: ProgrammingLanguage = Field(default="python", description="编程语言（python, cpp, typescript, go, java）")
 
 
 class GenerateReadingArgs(BaseModel):
-    """拓展阅读推荐生成工具参数。"""
+    """拓展阅读推荐生成工具参数（仅对齐难度要求，移除冗余篇数选择）。"""
 
     topic: str = Field(description="核心学习主题")
-    difficulty: str = Field(default="intermediate", description="文献难度要求")
-    count: int = Field(default=3, ge=1, le=8, description="推荐篇数")
+    difficulty: DifficultyLevel = Field(default="intermediate", description="文献难度要求：beginner, intermediate, advanced")
 
 
 # ── 工具构造工厂 ────────────────────────────────────────────────────────────
@@ -134,7 +130,7 @@ def build_resource_tools(
             "summary": f"针对 {topic} 的深度讲义已完成撰写，共约 {len(content)} 字",
         }
 
-    async def _mindmap(topic: str, learning_goal: str = "", structure_style: str = "knowledge_tree") -> dict[str, Any]:
+    async def _mindmap(topic: str, learning_goal: str = "") -> dict[str, Any]:
         """思维导图绘制 SubAgent 工具实现。"""
         if on_progress:
             await on_progress("generate_mindmap", "知识架构师 SubAgent 正在构建思维导图...", 30)
@@ -160,13 +156,13 @@ def build_resource_tools(
             "summary": f"{topic} 知识结构导图已绘制完成",
         }
 
-    async def _quiz(topic: str, learning_goal: str = "", difficulty: str = "intermediate", question_count: int = 5) -> dict[str, Any]:
+    async def _quiz(topic: str, learning_goal: str = "", difficulty: DifficultyLevel = "intermediate") -> dict[str, Any]:
         """随堂测评编制 SubAgent 工具实现。"""
         if on_progress:
             await on_progress("generate_quiz", "测评专家 SubAgent 正在命制测验试题...", 30)
 
         prompt = f"""你是一位命题出题专家。
-请为学习主题【{topic}】（难度：{difficulty}）设计 {question_count} 道随堂测验题（包含单选、多选、判断题）。
+请为学习主题【{topic}】（难度：{difficulty}）设计 5 道随堂测验题（包含单选、多选、判断题）。
 
 【核心目标】: {learning_goal}
 
@@ -208,7 +204,7 @@ def build_resource_tools(
             "summary": f"编制了 {len(payload.questions)} 道针对性自测题",
         }
 
-    async def _code(topic: str, language: str = "python", focus: str = "practical") -> dict[str, Any]:
+    async def _code(topic: str, language: ProgrammingLanguage = "python") -> dict[str, Any]:
         """实战代码编写 SubAgent 工具实现。"""
         if on_progress:
             await on_progress("generate_code", "研发专家 SubAgent 正在编写工程代码与测试用例...", 30)
@@ -225,19 +221,19 @@ def build_resource_tools(
         return {
             "status": "ok",
             "kind": "code",
-            "title": f"{topic} {language.upper()} 工程实战代码",
+            "title": f"{topic} {str(language).upper()} 工程实战代码",
             "file_type": "markdown",
             "content": content,
             "summary": f"完成 {topic} 的 {language} 实战案例编写",
         }
 
-    async def _reading(topic: str, difficulty: str = "intermediate", count: int = 3) -> dict[str, Any]:
+    async def _reading(topic: str, difficulty: DifficultyLevel = "intermediate") -> dict[str, Any]:
         """拓展阅读策展 SubAgent 工具实现。"""
         if on_progress:
             await on_progress("generate_reading", "学术文献策展 SubAgent 正在整理推荐阅读...", 30)
 
         prompt = f"""你是一位技术与学术文献策展人。
-请为学习主题【{topic}】推荐 {count} 篇经典高质量的拓展文献与技术文档。
+请为学习主题【{topic}】（难度：{difficulty}）推荐 3-5 篇经典高质量的拓展文献与技术文档。
 
 请严格按 JSON 格式输出：
 {{

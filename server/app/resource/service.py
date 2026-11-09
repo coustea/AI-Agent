@@ -159,12 +159,19 @@ async def execute_resource_run(
                 "4. 当全部目标资源产出完毕后，输出一份温暖、精炼的导学建议与总结，完成交付。"
             )
 
+            pref_items: list[str] = []
+            if "code" in request.target_resources:
+                pref_items.append(f"代码实操语言: {request.preferences.programming_language}")
+            if "cartoon" in request.target_resources:
+                pref_items.append(f"动画视频音色: {request.preferences.voice}")
+            pref_str = "，".join(pref_items) if pref_items else "标准学术规范"
+
             user_instruction = (
                 f"【学习主题】: {request.topic}\n"
                 f"【学习目标】: {request.learning_goal or f'全面系统掌握 {request.topic} 的核心要义'}\n"
-                f"【难度阶段】: {request.difficulty}\n"
+                f"【认知难度】: {request.difficulty}\n"
                 f"【目标交付清单】: {targets_str}\n"
-                f"{f'【偏好设置】: {request.preferences}' if request.preferences else ''}\n\n"
+                f"【偏好设定】: {pref_str}\n\n"
                 "请开始统筹规划并调度子智能体生成全部所需的教学资源。"
             )
 
