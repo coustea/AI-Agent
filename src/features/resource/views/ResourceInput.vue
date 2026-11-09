@@ -43,24 +43,24 @@
 
       <div class="omni-inspiration-grid">
         <div class="inspiration-card" @click="fillExample('计算机网络专业，学习《计算机网络》课程，TCP/IP协议栈掌握不牢，需要课程讲解文档、思维导图和练习题')">
-          <div class="ins-icon" style="background: var(--cat-resource-soft); color: var(--cat-resource);"><StarFilledIcon class='w-4 h-4 inline-block align-middle' /></div>
+          <div class="ins-icon" style="background: var(--color-primary-soft); color: var(--color-primary-text);"><StarFilledIcon class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
             <h4>计算机网络</h4>
             <p>TCP/IP协议栈知识薄弱，多智能体协作生成讲解文档、思维导图与练习题</p>
           </div>
         </div>
         <div class="inspiration-card" @click="fillExample('计算机科学专业，学习《操作系统》课程，进程同步与死锁理解困难，需要底层原理讲解、代码实操和动画视频')">
-          <div class="ins-icon" style="background: #F0FDF4; color: #22C55E;"><CpuIcon class='w-4 h-4 inline-block align-middle' /></div>
+          <div class="ins-icon" style="background: #ecfdf5; color: #059669;"><CpuIcon class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
             <h4>操作系统</h4>
             <p>进程同步与死锁理解困难，多模态资料全方位辅助学习</p>
           </div>
         </div>
         <div class="inspiration-card" @click="fillExample('软件工程专业，学习《数据结构》课程，二叉树与图论是知识短板，考研冲刺需要讲解文档、思维导图、练习题和拓展阅读')">
-          <div class="ins-icon" style="background: #FEF2F2; color: #EF4444;"><OdometerIcon class='w-4 h-4 inline-block align-middle' /></div>
+          <div class="ins-icon" style="background: #fffbeb; color: #d97706;"><OdometerIcon class='w-4 h-4 inline-block align-middle' /></div>
           <div class="ins-content">
             <h4>数据结构</h4>
-            <p>二叉树与图论知识短板，5+智能体协作生成针对性考研资料</p>
+            <p>二叉树与图论知识短板，多智能体协作生成针对性考研资料</p>
           </div>
         </div>
       </div>
@@ -234,13 +234,13 @@ function fillExample(t: string) {
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn {
-  background: var(--cat-resource);
-  color: var(--color-surface);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+  background: var(--color-primary);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(70, 184, 180, 0.3);
 }
 .omni-spotlight-wrapper.has-content .omni-submit-btn:hover {
   transform: translateY(-2px) scale(1.05);
-  background: var(--color-info);
+  background: var(--color-primary-hover);
 }
 
 .omni-inspiration-grid {

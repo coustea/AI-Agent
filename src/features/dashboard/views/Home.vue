@@ -1,7 +1,7 @@
 <template>
   <main class="home-page min-h-screen font-sans antialiased pb-16">
     <div class="home-shell max-w-7xl mx-auto px-6 py-8">
-      <!-- 顶部工作台状态栏 -->
+      <!-- 顶部工作台环境状态栏 -->
       <header class="workbench-header mb-8">
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-6 border-b border-[var(--color-border-light)]">
           <div>
@@ -29,10 +29,11 @@
       </header>
 
       <div v-if="dataLoaded" class="dashboard-content space-y-8">
-        <!-- 核心第一屏：学习断点聚焦 + 能力画像诊断 -->
+        <!-- 核心第一屏：学习断点聚焦 / 研学起航舱 + 能力画像诊断 -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
-          <!-- 左侧 2 栏：当前学习断点直达 (Active Learning Anchor) -->
+          <!-- 左侧 2 栏：当前学习断点直达 (Active) / 学科起航舱 (Cold Start) -->
           <div class="lg:col-span-2 workbench-card p-6 flex flex-col justify-between">
+            <!-- 状态 A: 存在活跃学习路径 -->
             <div v-if="primaryActivePath" class="space-y-5">
               <div class="flex items-center justify-between">
                 <div class="inline-flex items-center gap-2">
@@ -54,7 +55,7 @@
 
                 <div class="inline-flex items-center gap-2.5 px-3 py-2 rounded-md bg-[var(--color-bg)] border border-[var(--color-border-light)] text-xs text-[var(--color-text)]">
                   <Target class="w-4 h-4 text-[var(--color-primary)] shrink-0" />
-                  <span class="text-[var(--color-text-secondary)]">攻坚节点：</span>
+                  <span class="text-[var(--color-text-secondary)]">当前攻坚节点：</span>
                   <strong class="font-semibold text-[var(--color-text-strong)]">{{ primaryActivePath.currentNodeTitle }}</strong>
                 </div>
               </div>
@@ -100,31 +101,61 @@
               </div>
             </div>
 
-            <!-- 冷启动/暂无活跃路径时的智能引导卡片 -->
+            <!-- 状态 B: 冷启动 / 暂无活跃路径时的“408 核心学科研学起航舱” -->
             <div v-else class="space-y-5 flex-1 flex flex-col justify-between">
               <div class="space-y-3">
-                <div class="inline-flex items-center gap-2">
-                  <Sparkles class="w-4 h-4 text-[var(--color-primary)]" />
-                  <span class="text-xs font-bold text-[var(--color-primary-text)] tracking-wider uppercase font-mono">
-                    推荐研学起点
+                <div class="flex items-center justify-between">
+                  <div class="inline-flex items-center gap-2">
+                    <Sparkles class="w-4 h-4 text-[var(--color-primary)]" />
+                    <span class="text-xs font-bold text-[var(--color-primary-text)] tracking-wider uppercase font-mono">
+                      学科研学起航舱
+                    </span>
+                  </div>
+                  <span class="text-[11px] font-mono text-[var(--color-text-faint)]">
+                    多智能体协作已就绪
                   </span>
                 </div>
 
-                <h2 class="text-xl sm:text-2xl font-bold text-[var(--color-text-strong)] tracking-tight">
-                  {{ recommendationData?.recommendation?.title || '开始您的系统化研学路径' }}
-                </h2>
-
-                <p class="text-xs sm:text-sm text-[var(--color-text-secondary)] leading-relaxed max-w-xl">
-                  {{ recommendationData?.recommendation?.text || '设定目标学科与掌握深度，多智能体规划引擎将为您自动解构知识图谱并生成阶段性自测。' }}
-                </p>
+                <div>
+                  <h2 class="text-xl font-bold text-[var(--color-text-strong)] tracking-tight">
+                    {{ recommendationData?.recommendation?.title || '规划系统化学科学习路径' }}
+                  </h2>
+                  <p class="text-xs text-[var(--color-text-secondary)] mt-1 leading-relaxed">
+                    {{ recommendationData?.recommendation?.text || '多智能体将根据学科考纲与认知水位，自主解构知识图谱、规划进阶阶段并生成随堂自测。' }}
+                  </p>
+                </div>
               </div>
 
-              <div class="pt-4 flex flex-wrap items-center gap-3">
+              <!-- 408 核心学科快捷起航卡片（彻底消除空白，提供即时学术探索价值） -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 my-2">
+                <div
+                  v-for="sub in coreSubjectPresets"
+                  :key="sub.name"
+                  class="subject-preset-card p-3 rounded-md border border-[var(--color-border-light)] bg-[var(--color-bg)] hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)] transition-all cursor-pointer group"
+                  @click="goTo(`/path-planner?topic=${encodeURIComponent(sub.name)}`)"
+                >
+                  <div class="flex items-center justify-between mb-1.5">
+                    <span class="text-base">{{ sub.icon }}</span>
+                    <span class="text-[10px] font-mono text-[var(--color-text-faint)] group-hover:text-[var(--color-primary-text)]">
+                      规划 →
+                    </span>
+                  </div>
+                  <strong class="block text-xs font-bold text-[var(--color-text-strong)] group-hover:text-[var(--color-primary-text)]">
+                    {{ sub.name }}
+                  </strong>
+                  <span class="block text-[10px] text-[var(--color-text-secondary)] truncate mt-0.5">
+                    {{ sub.focus }}
+                  </span>
+                </div>
+              </div>
+
+              <!-- 底部操作入口 -->
+              <div class="pt-2 flex flex-wrap items-center gap-3">
                 <Button
                   class="bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white font-semibold text-xs rounded-md px-5 py-2.5 shadow-sm transition-all cursor-pointer"
                   @click="goTo(recommendationData?.recommendation?.path || '/path-planner')"
                 >
-                  {{ recommendationData?.recommendation?.action || '规划新学习路径' }}
+                  {{ recommendationData?.recommendation?.action || '开启个性化路径规划' }}
                 </Button>
 
                 <Button
@@ -132,7 +163,15 @@
                   class="text-xs font-medium text-[var(--color-text)] hover:text-[var(--color-primary-text)] hover:bg-[var(--color-primary-soft)] border-[var(--color-border)] rounded-md px-4 py-2.5 transition-colors cursor-pointer"
                   @click="goTo('/resource-generator')"
                 >
-                  生成多模态资源
+                  生成多模态教学资源
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  class="text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-primary-text)] hover:bg-transparent px-3 py-2.5 transition-colors cursor-pointer ml-auto"
+                  @click="goTo('/tutor')"
+                >
+                  向 AI 导师提问 →
                 </Button>
               </div>
             </div>
@@ -186,13 +225,10 @@
 
             <div class="diagnostic-advice pt-3 border-t border-[var(--color-border-light)]">
               <div class="text-[10px] font-bold text-[var(--color-primary-text)] uppercase tracking-wider mb-1">
-                导学诊断建议
+                导学自适应建议
               </div>
               <p class="text-xs text-[var(--color-text-secondary)] leading-relaxed text-left">
-                {{
-                  profileRadarData?.radar?.note ||
-                  `综合画像分 ${profileScore}，重点薄弱方向：${weakAreaText || '保持当前学习节奏'}`
-                }}
+                {{ formattedDiagnosticNote }}
               </p>
             </div>
           </div>
@@ -202,11 +238,10 @@
         <section class="quick-entry-section" aria-label="核心学术工具">
           <div class="quick-entry-grid">
             <button
-              v-for="action in quickActions"
+              v-for="action in curatedQuickActions"
               :key="action.label"
               type="button"
               class="quick-entry-item"
-              :style="getQuickActionStyle(action.icon)"
               @click="goTo(action.path)"
             >
               <span class="quick-entry-icon" aria-hidden="true">
@@ -304,13 +339,13 @@
                   v-else
                   class="h-48 border border-dashed border-[var(--color-border)] rounded-md flex flex-col items-center justify-center text-[var(--color-text-secondary)] text-xs space-y-3"
                 >
-                  <p>暂无活跃路径记录</p>
+                  <p>暂无活跃路径 · 规划后在此实时跟踪攻坚进度</p>
                   <Button
                     size="sm"
                     class="rounded-md text-xs font-medium bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white cursor-pointer border-none"
                     @click="goTo('/path-planner')"
                   >
-                    开始规划
+                    开始规划第一条路径
                   </Button>
                 </div>
               </div>
@@ -399,13 +434,13 @@
                   v-else
                   class="h-48 border border-dashed border-[var(--color-border)] rounded-md flex flex-col items-center justify-center text-[var(--color-text-secondary)] text-xs space-y-3"
                 >
-                  <p>暂无资源生成记录</p>
+                  <p>暂无独立资源生成记录 · 多智能体生成产物将在此汇聚</p>
                   <Button
                     size="sm"
                     class="rounded-md text-xs font-medium bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white cursor-pointer border-none"
                     @click="goTo('/resource-generator')"
                   >
-                    一键生成资源
+                    一键生成多模态资源
                   </Button>
                 </div>
               </div>
@@ -480,7 +515,6 @@ import {
   type ProfileRadarData,
   type ContinueLearningData,
   type QuickActionsData,
-  type HomeActionItem,
   type RecentResourceItem,
 } from '@/features/dashboard/api/home'
 
@@ -536,6 +570,14 @@ const recentResourcesData = ref<RecentResourceItem[]>([])
 const loading = ref(true)
 const dataLoaded = ref(false)
 
+// 408 核心学科快捷起航卡片（消除冷启动空白，提供即时学术探索）
+const coreSubjectPresets = [
+  { name: '计算机网络', icon: '🌐', focus: 'TCP/IP 协议栈 · 拥塞控制' },
+  { name: '操作系统', icon: '⚡', focus: '进程同步 · 虚拟分页寻址' },
+  { name: '数据结构', icon: '🌲', focus: '平衡树 · 图论最短路径' },
+  { name: '组成原理', icon: '💻', focus: '指令流水线 · Cache 一致性' },
+]
+
 const currentDateFormatted = computed(() => {
   return new Intl.DateTimeFormat('zh-CN', {
     year: 'numeric',
@@ -573,64 +615,41 @@ const getIconComponent = (iconName: string) => {
   }
 }
 
-const getQuickActionStyle = (iconName: string) => {
-  const styles: Record<string, {
-    '--qe-color': string
-    '--qe-bg': string
-    '--qe-border': string
-    '--qe-hover': string
-  }> = {
-    chat: {
-      '--qe-color': '#1D4ED8',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': '#1E40AF',
+// 经过专业设计的清晰学术工具列表（杜绝后端返回负向未完成提示和文字溢出截断）
+const curatedQuickActions = computed(() => {
+  return [
+    {
+      label: '智能辅导',
+      description: '苏格拉底式启发答疑与深层推导',
+      path: '/tutor',
+      icon: 'chat',
     },
-    resource: {
-      '--qe-color': '#4338CA',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': '#3730A3',
+    {
+      label: '资源引擎',
+      description: '课件、代码、导图与随堂练习生成',
+      path: '/resource-generator',
+      icon: 'resource',
     },
-    path: {
-      '--qe-color': '#0F766E',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': '#115E59',
+    {
+      label: '路径规划',
+      description: '知识图谱解构与攻坚阶梯路线',
+      path: '/path-planner',
+      icon: 'path',
     },
-    practice: {
-      '--qe-color': '#B45309',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': '#92400E',
+    {
+      label: '学习题库',
+      description: '408 经典真题自测与错题智能收录',
+      path: '/quiz-bank',
+      icon: 'practice',
     },
-    monitor: {
-      '--qe-color': '#BE123C',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': '#9F1239',
+    {
+      label: '学情评估',
+      description: '8 维能力评估与自适应学习建议',
+      path: '/learning-assessment',
+      icon: 'assessment',
     },
-    assessment: {
-      '--qe-color': '#7E22CE',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': '#6B21A8',
-    },
-    reading: {
-      '--qe-color': '#0369A1',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': '#075985',
-    },
-    default: {
-      '--qe-color': 'var(--color-primary-text)',
-      '--qe-bg': 'var(--color-surface)',
-      '--qe-border': 'var(--color-border-light)',
-      '--qe-hover': 'var(--color-primary-text)',
-    },
-  }
-  return styles[iconName] || styles.default
-}
+  ]
+})
 
 const clampPercent = (value: unknown, fallback = 0) => {
   const numberValue = Number(value)
@@ -769,11 +788,11 @@ const radarOption = computed(() => {
               color: 'rgba(70, 184, 180, 0.22)',
             },
             lineStyle: {
-              color: '#0d9488',
-              width: 1.8,
+              color: '#46B8B4',
+              width: 2,
             },
             itemStyle: {
-              color: '#0d9488',
+              color: '#46B8B4',
               borderColor: '#FCFFFF',
               borderWidth: 2,
             },
@@ -834,6 +853,16 @@ const weakAreas = computed(() => {
 
 const weakAreaText = computed(() => {
   return weakAreas.value.join(' / ')
+})
+
+const formattedDiagnosticNote = computed(() => {
+  if (weakAreaText.value) {
+    return `综合指数 ${profileScore.value} 分。薄弱攻坚方向：${weakAreaText.value}。建议针对薄弱知识点规划专项路径或生成针对性练习。`
+  }
+  if (profileScore.value >= 70) {
+    return `综合指数 ${profileScore.value} 分，学情掌握良好。建议在当前学科基础上开启深度探究或进行全真模拟自测。`
+  }
+  return '尚未沉淀足够作答信号。建议先开启首条路径或做一组 408 随堂练习，以提升认知模型置信度。'
 })
 
 const recentResources = computed(() => {
@@ -910,11 +939,6 @@ watch(recentResources, () => {
 
 watch(activePaths, () => {
   pathPage.value = 1
-})
-
-const quickActions = computed<HomeActionItem[]>(() => {
-  const actions = quickActionsData.value?.actions || []
-  return actions.slice(0, 6)
 })
 
 const loadAllData = async () => {
@@ -1015,6 +1039,15 @@ onActivated(() => {
   height: 100%;
 }
 
+/* 核心学科快捷起航卡片 */
+.subject-preset-card {
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.subject-preset-card:hover {
+  transform: translateY(-1px);
+}
+
 /* 核心学术工具矩阵 */
 .quick-entry-section {
   background: var(--color-surface);
@@ -1025,7 +1058,7 @@ onActivated(() => {
 
 .quick-entry-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   width: 100%;
   align-items: stretch;
 }
@@ -1035,10 +1068,10 @@ onActivated(() => {
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr) 14px;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   min-width: 0;
   min-height: 64px;
-  padding: 10px 14px;
+  padding: 12px 16px;
   border: 0;
   border-right: 1px solid var(--color-border-light);
   background: transparent;
@@ -1060,14 +1093,14 @@ onActivated(() => {
 
 .quick-entry-icon {
   display: inline-flex;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--color-border-light);
   border-radius: var(--radius-sm);
   background: var(--color-bg);
-  color: var(--qe-color);
+  color: var(--color-primary-text);
   transition: border-color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
@@ -1095,16 +1128,14 @@ onActivated(() => {
 }
 
 .quick-entry-description {
-  display: -webkit-box;
+  display: block;
   overflow: hidden;
   margin-top: 2px;
   color: var(--color-text-secondary);
   font-size: 11px;
   line-height: 1.4;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .quick-entry-arrow {

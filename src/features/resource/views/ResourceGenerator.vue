@@ -113,10 +113,9 @@ onBeforeUnmount(() => { dispose() })
 
 <style scoped>
 .elegant-generator-layout {
-  --color-primary: var(--cat-resource);
   min-height: calc(100vh - 64px);
   position: relative;
-  background: #f4f7fb;
+  background: var(--color-bg, #f2f8f7);
   overflow-x: hidden;
   font-family: var(--font-sans);
 }
@@ -124,12 +123,12 @@ onBeforeUnmount(() => { dispose() })
 .floating-history-btn {
   position: absolute; top: 24px; right: 24px; z-index: 50;
   height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 14px;
-  background: #fff; border: 1px solid #d9e1ec; border-radius: 8px;
-  color: var(--color-primary); font-weight: 600; font-size: 0.9rem;
-  box-shadow: 0 2px 8px rgba(23, 32, 51, 0.05); text-decoration: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  background: var(--color-surface, #fcffff); border: 1px solid var(--color-border, #c8e4e3); border-radius: var(--radius-sm, 6px);
+  color: var(--color-primary-text, #205f67); font-weight: 600; font-size: 13px;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.05)); text-decoration: none;
+  transition: all var(--duration-fast, 180ms) ease;
 }
-.floating-history-btn:hover { border-color: #a5b4fc; box-shadow: 0 4px 12px rgba(23, 32, 51, 0.08); }
+.floating-history-btn:hover { border-color: var(--color-primary, #46b8b4); background: var(--color-primary-soft, #d8f1f0); }
 .phase-view-container { position: relative; width: 100%; min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 .redirecting-shell { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #64748b; font-size: 14px; }
 .redirecting-spinner { width: 28px; height: 28px; border: 3px solid #e2e8f0; border-top-color: var(--color-primary, #6366f1); border-radius: 50%; animation: spin 0.7s linear infinite; }
