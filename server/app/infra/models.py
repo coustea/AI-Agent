@@ -80,7 +80,7 @@ class User(SQLModel, table=True):
     weak_points: list[str] | None = Field(default=None, sa_column=Column(JSON))
 
     # ── 跨会话长期记忆（权威单文本来源）──
-    long_term_memory: str = Field(default="", sa_column=Column(Text, server_default=""))
+    long_term_memory: str = Field(default="", sa_column=Column(Text))
 
     # ── 自适应导学策略与评估触发水位 ──
     guidance_strategy: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON))
@@ -142,7 +142,7 @@ class ChatSession(SQLModel, table=True):
     is_archived: bool = Field(default=False)
 
     # 滚动压缩摘要及水位
-    summary_markdown: str = Field(default="", sa_column=Column(Text, server_default=""))
+    summary_markdown: str = Field(default="", sa_column=Column(Text))
     last_summarized_message_id: int = Field(default=0)
     summary_token_count: int = Field(default=0)
 
@@ -265,7 +265,7 @@ class GeneratedResource(SQLModel, table=True):
     user_id: int = Field(index=True)
     topic: str = Field(sa_column=Column(String(255), nullable=False))
     status: str = Field(default="pending", max_length=50)
-    summary: str = Field(default="", sa_column=Column(Text, server_default=""))
+    summary: str = Field(default="", sa_column=Column(Text))
 
     request_snapshot_json: dict[str, Any] = Field(
         default_factory=dict,
