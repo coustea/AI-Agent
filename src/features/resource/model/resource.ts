@@ -16,7 +16,6 @@ export type ResourceContent = Record<string, unknown> | unknown[] | string | nul
 export interface ResourceGenerationRequest {
   topic: string
   learning_goal?: string
-  learning_need?: string
   target_resources: ResourceAgentId[]
   difficulty: DifficultyLevel
   preferences?: Record<string, unknown>
@@ -77,7 +76,6 @@ export interface GeneratedResourceBundle {
   id: string | number
   title: string
   topic?: string
-  learning_need?: string
   learning_goal?: string
   status: string
   created_at: string
@@ -89,7 +87,6 @@ export interface GeneratedResourceBundle {
 export interface GeneratedResourceHistoryItem {
   id: number
   topic: string
-  learning_need?: string
   learning_goal?: string
   status: string
   created_at: string

@@ -2,6 +2,7 @@
 
 对齐 chat.service 架构模式：负责准备环境、调度主 Agent 执行循环、
 管理活跃运行快照，并在终态时持久化资源条目与埋点数据。
+所有操作均为无状态模块函数，无任何兼容类包装。
 """
 
 from __future__ import annotations
@@ -86,12 +87,14 @@ async def prepare_resource_run(
 ) -> tuple[str, int]:
     """在数据库中入库生成主记录，初始化运行钩子并返回 (run_id, resource_id)。"""
     run_id = f"res-run-{uuid4().hex[:12]}"
+    snapshot = request.model_dump(mode="json")
+    snapshot["run_id"] = run_id
 
     async with session_scope() as session:
         record = GeneratedResource(
             user_id=user.id,
             learning_need=request.topic,
-            request_snapshot_json=request.model_dump(mode="json"),
+            request_snapshot_json=snapshot,
             status="pending",
             created_at=now_utc(),
             updated_at=now_utc(),
@@ -118,7 +121,6 @@ async def save_resource_artifacts(
         return
 
     async with session_scope() as session:
-        # 清理旧同类型项，防止唯一约束冲突
         for artifact in artifacts:
             existing = await session.exec(
                 select(ItemModel).where(
@@ -129,7 +131,6 @@ async def save_resource_artifacts(
             for row in existing.all():
                 await session.delete(row)
 
-            # 分流存储 json 或 text
             content_json = None
             content_text = None
             if artifact.file_type == "json" and isinstance(artifact.content, (dict, list)):
@@ -142,10 +143,6 @@ async def save_resource_artifacts(
             meta = dict(artifact.metadata)
             if artifact.url:
                 meta["url"] = artifact.url
-                if artifact.kind == "ppt":
-                    meta["pptx_url"] = artifact.url
-                elif artifact.kind in ("cartoon", "video"):
-                    meta["video_url"] = artifact.url
             if artifact.preview_urls:
                 meta["preview_urls"] = artifact.preview_urls
 
@@ -265,7 +262,7 @@ async def execute_resource_run(
         logger.exception("持久化资源终态失败 resource_id=%d: %s", resource_id, exc)
         status, error = "failed", f"持久化失败: {exc}"
     finally:
-        final_state = hooks.result_state(status, error)
+        hooks.result_state(status, error)
         hooks.publish()
         hooks.task = None
         if saved:
@@ -273,23 +270,22 @@ async def execute_resource_run(
 
 
 async def get_run_state(user_id: int, run_id: str) -> ResourceRunState | None:
-    """读取指定运行的状态快照，支持从内存活跃快照或数据库恢复。"""
+    """读取指定运行的状态快照，优先读取内存活跃快照，结束后从数据库恢复。"""
     active = _active_runs.get(run_id)
     if active is not None:
         return active.snapshot()
 
-    # 从数据库恢复
+    # 从数据库精确查询属于该用户的指定运行
     async with session_scope() as session:
-        # 通过 run_id 找不到时，尝试匹配 resource_id (如果是纯数字)
         resource_row: GeneratedResource | None = None
         if run_id.isdigit():
             resource_row = await session.get(GeneratedResource, int(run_id))
         else:
-            # 查最近更新记录
-            result = await session.exec(
-                select(GeneratedResource).where(GeneratedResource.user_id == user_id).order_by(desc(GeneratedResource.id)).limit(1)
+            stmt = select(GeneratedResource).where(
+                GeneratedResource.user_id == user_id,
+                func.json_unquote(func.json_extract(GeneratedResource.request_snapshot_json, "$.run_id")) == run_id,
             )
-            resource_row = result.first()
+            resource_row = (await session.exec(stmt)).first()
 
         if resource_row is None or resource_row.user_id != user_id:
             return None
@@ -308,18 +304,19 @@ async def get_run_state(user_id: int, run_id: str) -> ResourceRunState | None:
                     title=item.title,
                     file_type="json" if item.content_json else ("pptx" if item.agent_type == "ppt" else ("mp4" if item.agent_type == "cartoon" else "markdown")),
                     content=item.content_json or item.content_text,
-                    url=item.metadata_json.get("url") or item.metadata_json.get("pptx_url") or item.metadata_json.get("video_url"),
+                    url=item.metadata_json.get("url"),
                     preview_urls=item.metadata_json.get("preview_urls") or [],
                     metadata=item.metadata_json,
                 )
             )
 
+        state_status = "completed" if resource_row.status == "completed" else "failed"
         return ResourceRunState(
             run_id=run_id,
             resource_id=resource_row.id or 0,
-            status="completed" if resource_row.status == "completed" else "failed",
-            phase="completed" if resource_row.status == "completed" else "failed",
-            phase_label="已完成" if resource_row.status == "completed" else "已终止",
+            status=state_status,
+            phase=state_status,
+            phase_label="已完成" if state_status == "completed" else "已终止",
             artifacts=artifacts,
         )
 
@@ -374,6 +371,67 @@ async def get_resource_bundle(user_id: int, resource_id: int) -> GeneratedResour
         )
 
 
+async def list_resources(
+    user_id: int,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """按用户分页查询独立教学资源列表及聚合类型统计。"""
+    async with session_scope() as session:
+        stmt = (
+            select(GeneratedResource)
+            .where(GeneratedResource.user_id == user_id)
+            .order_by(desc(GeneratedResource.id))
+            .limit(limit)
+            .offset(offset)
+        )
+        items = list((await session.exec(stmt)).all())
+
+        count_stmt = select(func.count(GeneratedResource.id)).where(GeneratedResource.user_id == user_id)
+        total = (await session.exec(count_stmt)).one() or 0
+
+        res_ids = [r.id for r in items if r.id is not None]
+        summary: dict[int, list[str]] = {}
+        if res_ids:
+            item_stmt = select(ItemModel.resource_id, ItemModel.agent_type).where(
+                col(ItemModel.resource_id).in_(res_ids)
+            )
+            rows = (await session.exec(item_stmt)).all()
+            for r_id, agent_type in rows:
+                summary.setdefault(r_id, []).append(agent_type)
+
+        serialized_items = []
+        for r in items:
+            data = r.model_dump()
+            r_id = r.id or 0
+            types = summary.get(r_id, [])
+            data["resource_types"] = types
+            data["resource_count"] = len(types)
+            data["topic"] = r.learning_need
+            serialized_items.append(data)
+
+        return {
+            "items": serialized_items,
+            "total": total,
+            "type_summary": summary,
+        }
+
+
+async def get_resource_status(user_id: int, resource_id: int) -> dict[str, Any] | None:
+    """获取指定资源生成任务的实时状态字典。"""
+    async with session_scope() as session:
+        record = await session.get(GeneratedResource, resource_id)
+        if record is None or record.user_id != user_id:
+            return None
+        return {
+            "resource_id": record.id,
+            "status": record.status,
+            "topic": record.learning_need,
+            "created_at": record.created_at,
+            "updated_at": record.updated_at,
+        }
+
+
 async def list_resource_history(
     user_id: int,
     limit: int = 20,
@@ -417,78 +475,3 @@ async def delete_resource_record(user_id: int, resource_id: int) -> bool:
             return False
         await session.delete(resource)
         return True
-
-
-# 兼容类导出（供旧依赖或单例使用）
-class ResourceService:
-    """包装实例服务，保持与已有注入机制的一致性。"""
-
-    def __init__(self, session: AsyncSession | None = None) -> None:
-        """初始化服务包装实例。"""
-        self.session = session
-
-    async def get_resource(self, user_id: int, resource_id: int) -> GeneratedResource | None:
-        """获取资源主体记录。"""
-        async with session_scope() as session:
-            record = await session.get(GeneratedResource, resource_id)
-            if record and record.user_id == user_id:
-                return record
-            return None
-
-    async def list_resources(self, user_id: int, limit: int = 20, offset: int = 0) -> list[GeneratedResource]:
-        """按用户分页查询资源主表记录。"""
-        async with session_scope() as session:
-            stmt = (
-                select(GeneratedResource)
-                .where(GeneratedResource.user_id == user_id)
-                .order_by(desc(GeneratedResource.id))
-                .limit(limit)
-                .offset(offset)
-            )
-            return list((await session.exec(stmt)).all())
-
-    async def count_resources(self, user_id: int) -> int:
-        """获取指定用户的资源总数。"""
-        async with session_scope() as session:
-            stmt = select(func.count(GeneratedResource.id)).where(GeneratedResource.user_id == user_id)
-            return (await session.exec(stmt)).one() or 0
-
-    async def list_resource_type_summary(self, resource_ids: list[int] | Any) -> dict[int, list[str]]:
-        """获取指定资源列表包含的资源类型汇总。"""
-        if not resource_ids:
-            return {}
-        async with session_scope() as session:
-            stmt = select(ItemModel.resource_id, ItemModel.agent_type).where(
-                col(ItemModel.resource_id).in_(list(resource_ids))
-            )
-            rows = (await session.exec(stmt)).all()
-            summary: dict[int, list[str]] = {}
-            for res_id, agent_type in rows:
-                summary.setdefault(res_id, []).append(agent_type)
-            return summary
-
-    async def get_resource_bundle(self, user_id: int, resource_id: int) -> GeneratedResourceBundleDTO | None:
-        """获取完整产物包。"""
-        return await get_resource_bundle(user_id, resource_id)
-
-    async def get_generation_status(self, *, user_id: int, resource_id: int) -> dict[str, Any] | None:
-        """获取任务生成实时状态字典。"""
-        async with session_scope() as session:
-            record = await session.get(GeneratedResource, resource_id)
-            if record is None or record.user_id != user_id:
-                return None
-            return {
-                "resource_id": record.id,
-                "status": record.status,
-                "topic": record.learning_need,
-                "created_at": record.created_at,
-                "updated_at": record.updated_at,
-            }
-
-    async def list_history(self, user_id: int, limit: int = 20, offset: int = 0) -> list[ResourceHistoryItemDTO]:
-        """获取历史记录。"""
-        return await list_resource_history(user_id, limit, offset)
-
-    async def delete_resource(self, user_id: int, resource_id: int) -> bool:
-        """删除资源。"""
-        return await delete_resource_record(user_id, resource_id)

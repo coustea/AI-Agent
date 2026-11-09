@@ -186,7 +186,7 @@
               ]"
                 tabindex="0"
                 role="button"
-                :aria-label="`${item.learning_need || '资源生成任务'}，${getStatusText(item.status)}`"
+                :aria-label="`${item.topic || '资源生成任务'}，${getStatusText(item.status)}`"
                 @click="goToDetail(item.id)"
                 @keydown.enter="goToDetail(item.id)"
                 @keydown.space.prevent="goToDetail(item.id)"
@@ -221,7 +221,7 @@
 
                     <h3>
                       {{
-                        item.learning_need ||
+                        item.topic ||
                         "未提供学习需求"
                       }}
                     </h3>

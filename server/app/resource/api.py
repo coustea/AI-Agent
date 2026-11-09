@@ -1,6 +1,6 @@
 """Resource 模块 HTTP 与 SSE 路由端点 (app.resource.api)。
 
-对齐 chat.api 架构模式：统一提供快照轮询、SSE 状态推送与取消控制。
+对齐 chat.api 架构模式：纯函数式调用服务层，统一提供快照轮询、SSE 状态推送与取消控制。
 """
 
 from __future__ import annotations
@@ -19,14 +19,15 @@ from app.resource.schemas import (
     encode_resource_sse,
 )
 from app.resource.service import (
-    ResourceService,
     cancel_run,
     delete_resource_record,
     execute_resource_run,
     get_active_run,
     get_resource_bundle,
+    get_resource_status,
     get_run_state,
     list_resource_history,
+    list_resources,
     prepare_resource_run,
 )
 from app.response import HttpResponse
@@ -47,37 +48,17 @@ async def list_resources_endpoint(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ) -> JSONResponse:
-    """按用户分页查询资源列表。"""
+    """按用户分页查询独立教学资源列表。"""
     user = get_current_user()
-    service = ResourceService()
-    items = await service.list_resources(user.id, limit, offset)
-    total = await service.count_resources(user.id)
-    summary = await service.list_resource_type_summary([r.id for r in items if r.id is not None])
-
-    serialized_items = []
-    for r in items:
-        data = r.model_dump()
-        r_id = r.id or 0
-        data["resource_types"] = summary.get(r_id, [])
-        data["resource_count"] = len(summary.get(r_id, []))
-        data["topic"] = getattr(r, "learning_need", "")
-        serialized_items.append(data)
-
-    return HttpResponse.success(
-        data={
-            "items": serialized_items,
-            "total": total,
-            "type_summary": summary,
-        }
-    )
+    data = await list_resources(user.id, limit=limit, offset=offset)
+    return HttpResponse.success(data=data)
 
 
 @router.get("/resources/{resource_id}")
 async def get_resource_detail_endpoint(resource_id: int) -> JSONResponse:
     """获取指定资源详情。"""
     user = get_current_user()
-    service = ResourceService()
-    bundle = await service.get_resource_bundle(user.id, resource_id)
+    bundle = await get_resource_bundle(user.id, resource_id)
     if bundle is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
     return HttpResponse.success(data=bundle.model_dump())
@@ -87,8 +68,7 @@ async def get_resource_detail_endpoint(resource_id: int) -> JSONResponse:
 async def get_resource_status_endpoint(resource_id: int) -> JSONResponse:
     """获取指定资源生成状态。"""
     user = get_current_user()
-    service = ResourceService()
-    status_data = await service.get_generation_status(user_id=user.id, resource_id=resource_id)
+    status_data = await get_resource_status(user.id, resource_id)
     if status_data is None:
         return HttpResponse.error(code=404, message="资源不存在或无权限")
     return HttpResponse.success(data=status_data)

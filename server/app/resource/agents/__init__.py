@@ -35,7 +35,7 @@ class PathAgentAdapter:
         )
 
     async def generate_resource(self, input: Any, **kwargs: Any) -> Any:
-        """资源生成兼容入口。"""
+        """统一执行单项资源生成任务。"""
         from app.resource.schemas import AgentResult
 
         if hasattr(input, "learning_need") or hasattr(input, "teaching_plan"):

@@ -341,7 +341,7 @@ export function useGeneration() {
       const bundle = resp.data?.data
       if (bundle) {
         finalBundle.value = bundle
-        generatedResources.value = bundle.resources || bundle.items || []
+        generatedResources.value = bundle.resources || []
       }
     } catch (err) {
       console.warn('获取资源包失败:', err)
@@ -529,9 +529,9 @@ export function useGeneration() {
     try {
       const bundleResp = await getResourceBundle(resourceId)
       const bundle = bundleResp.data?.data
-      if (bundle && (bundle.items?.length || bundle.resources?.length)) {
+      if (bundle && bundle.resources?.length) {
         finalBundle.value = bundle
-        generatedResources.value = bundle.resources || bundle.items
+        generatedResources.value = bundle.resources
         isGenerating.value = false
         currentPhase.value = 'result'
         return

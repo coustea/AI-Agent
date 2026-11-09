@@ -184,8 +184,7 @@ class ReadingPayload(BaseModel):
 
     title: str = Field(default="", description="阅读标题")
     summary: str = Field(default="", description="阅读摘要")
-    recommendations: list[ReadingResource] = Field(default_factory=list, description="推荐阅读列表")
-    resources: list[ReadingResource] = Field(default_factory=list, description="兼容 resources 字段")
+    resources: list[ReadingResource] = Field(default_factory=list, description="推荐阅读列表")
 
     @model_validator(mode="before")
     @classmethod
@@ -193,8 +192,7 @@ class ReadingPayload(BaseModel):
         """规范化阅读材料字段。"""
         if isinstance(d, dict):
             res = d.get("resources") or d.get("recommendations") or []
-            d.setdefault("resources", res)
-            d.setdefault("recommendations", res)
+            d["resources"] = res
         return d
 
 
