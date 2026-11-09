@@ -15,7 +15,6 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': fileURLToPath(new URL('./src', import.meta.url)),
-        '@ppt-manifest': fileURLToPath(new URL('./server/app/resource/templates/ppt_manifest.json', import.meta.url)),
       },
     },
     server: {

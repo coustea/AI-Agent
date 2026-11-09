@@ -35,11 +35,6 @@ models:
 
 
 # 星火 WebSocket API（Vision 用，TTS 也回退到此配置）
-spark:
-  app_id: "97c2a0c6"
-  api_key: "5cf1d35fd6233ccdc47449f1a72980b1"
-  api_secret: "ZDE0OTY1NTRmMGJkMDY1Mzg1ODIxYWEz"
-
 # 路径配置
 paths:
   workplace: "static"
@@ -60,17 +55,8 @@ memory:
 
 # Chat 附件与保护机制
 chat:
-  # 单个文件最大读取字符数，超过则截断
-  max_file_content_chars: 15000
   # 单次上传最大文件数量
   max_upload_files: 12
-  # 支持的图片扩展名
-  image_extensions:
-    - png
-    - jpg
-    - jpeg
-    - gif
-    - webp
   # 构建对话上下文时拉取的历史消息条数
   history_limit: 20
 

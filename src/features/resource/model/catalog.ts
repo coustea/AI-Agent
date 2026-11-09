@@ -1,4 +1,4 @@
-import type { LearningScenario, ResourceAgentId, ResourceGenerationRequest } from './resource'
+import type { ResourceAgentId } from './resource'
 import { getArtifactLabel } from '@/shared/content/kind'
 import {
   PhCpu as Cpu,
@@ -46,55 +46,6 @@ export const agentMetaList = [
 
 export const getAgentMeta = (id: string) =>
   agentMetaList.find(a => a.id === id) || { name: id, icon: Document, colorClass: 'text-blue' }
-
-export type AnyAgentConfigs = ResourceGenerationRequest['agent_configs']
-
-export const SCENARIO_DEFAULTS: Record<string, Partial<AnyAgentConfigs>> = {
-  exam_prep: {
-    content: { structure: 'exam_points', depth_level: 'standard', focus_mode: 'weak_points', include_examples: true },
-    quiz: { difficulty_mode: 'exam', question_count: 5, emphasis: 'analysis', question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'exam_map', max_depth: 3, leaf_detail: 'annotated', show_relations: true },
-    code: { programming_language: 'python', output_style: 'challenge', focus: 'application', include_tests: true },
-    reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { narrative_style: 'review', density: 'detailed', emphasis: ['core_concepts', 'pitfalls'] },
-    cartoon: { lesson_depth: 'deep', visual_density: 'intensive', pace: 'balanced', voice: 'teacher' },
-  },
-  daily_review: {
-    content: { structure: 'progressive', depth_level: 'quick', focus_mode: 'weak_points', include_examples: true },
-    quiz: { difficulty_mode: 'adaptive', question_count: 5, emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
-    code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
-    reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { narrative_style: 'review', density: 'concise', emphasis: ['core_concepts', 'pitfalls'] },
-    cartoon: { lesson_depth: 'standard', visual_density: 'moderate', pace: 'balanced', voice: 'teacher' },
-  },
-  project_practice: {
-    content: { structure: 'case_driven', depth_level: 'deep', focus_mode: 'full_coverage', include_examples: true },
-    quiz: { difficulty_mode: 'adaptive', question_count: 5, emphasis: 'application', question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'keyword', show_relations: false },
-    code: { programming_language: 'python', output_style: 'reference', focus: 'application', include_tests: true },
-    reading: { coverage: 'broad', language_preference: 'chinese', max_items: 5, focus: 'engineering' },
-    ppt: { narrative_style: 'case_driven', density: 'detailed', emphasis: ['core_concepts', 'cases', 'derivation'] },
-    cartoon: { lesson_depth: 'deep', visual_density: 'intensive', pace: 'fast', voice: 'coach' },
-  },
-  self_study: {
-    content: { structure: 'progressive', depth_level: 'deep', focus_mode: 'key_concepts', include_examples: true },
-    quiz: { difficulty_mode: 'basic', question_count: 5, emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
-    mindmap: { map_type: 'knowledge_tree', max_depth: 4, leaf_detail: 'brief_note', show_relations: true },
-    code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
-    reading: { coverage: 'extended', language_preference: 'chinese', max_items: 3, focus: 'textbook' },
-    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts', 'pitfalls'] },
-    cartoon: { lesson_depth: 'standard', visual_density: 'rich', pace: 'balanced', voice: 'teacher' },
-  },
-}
-
-export const scenarioOptions: Array<{ icon: string; name: string; value: LearningScenario }> = [
-  { icon: '备', name: '考试备考', value: 'exam_prep' },
-  { icon: '学', name: '日常学习', value: 'daily_review' },
-  { icon: '践', name: '项目实践', value: 'project_practice' },
-  { icon: '预', name: '预习自学', value: 'self_study' },
-  { icon: '径', name: '路径学习', value: 'path_learning' },
-]
 
 export const getResourceTypeLabel = (type: string) => {
   const label = getArtifactLabel(type)

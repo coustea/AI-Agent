@@ -20,7 +20,6 @@ from app.infra.models import (
     LearningEvent,
     LearningSession,
     User,
-    UserProfile,
     WrongQuestion,
 )
 
@@ -109,7 +108,7 @@ class LearnerContext:
                 lines.append(f"【重点攻克薄弱项】{'、'.join(all_weak[:8])}")
 
         else:  # SUMMARY
-            lines.append(f"# 学习者实时学情档案")
+            lines.append("# 学习者实时学情档案")
             lines.append(f"- 学员背景：{identity_str}")
             lines.append(f"- 基础水平：{level} | 认知偏好：{style} | 期望深度：{depth}")
             if goal:
@@ -234,16 +233,8 @@ async def load_learner_context(
         except Exception as e:
             logger.warning("[JIT LearnerContext] 查询专项主题失败: %s", e)
 
-    # 5. 读取宏观导学策略（来自正式评估报告沉淀）
-    guidance_strategy: dict[str, Any] | None = None
-    try:
-        profile_row = (
-            await session.exec(select(UserProfile).where(UserProfile.user_id == user_id))
-        ).first()
-        if profile_row and profile_row.guidance_strategy:
-            guidance_strategy = profile_row.guidance_strategy
-    except Exception as e:
-        logger.warning("[JIT LearnerContext] 查询导学策略失败: %s", e)
+    # 5. 读取宏观导学策略（来自正式评估报告沉淀在 User 上）
+    guidance_strategy: dict[str, Any] | None = user.guidance_strategy if user and user.guidance_strategy else None
 
     return LearnerContext(
         user_id=user_id,

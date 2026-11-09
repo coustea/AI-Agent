@@ -85,19 +85,13 @@ JWT_ALGO = get("jwt.algorithm", "HS256")
 # JWT 过期天数
 JWT_EXPIRE = get("jwt.expire_days", 7)
 
-# ============ 路径配置 ============
-# 工作目录名称（存储用户工作数据）
-WORKPLACE_DIR_NAME = get("paths.workplace", "workplace")
-# 日志目录名称
-LOGS_DIR_NAME = get("paths.logs", "logs")
-
 # ============ 路径对象 ============
 # 项目根目录：server/
 SERVER_DIR = Path(__file__).resolve().parents[1]
 # 工作数据目录：server/static/（静态文件根目录）
-WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
+WORKPLACE_DIR = SERVER_DIR / get("paths.workplace", "workplace")
 # 日志输出目录：server/logs/
-LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
+LOGS_DIR = SERVER_DIR / get("paths.logs", "logs")
 
 
 # ============ 用户路径构建函数 ============
@@ -130,11 +124,6 @@ def user_chat_dir(username: str, session_id: str) -> Path:
 def user_chat_uploads_dir(username: str, session_id: str) -> Path:
     """获取用户聊天附件目录：static/{username}/chat/{session_id}/uploads/"""
     return user_chat_dir(username, session_id) / "uploads"
-
-
-def user_chat_video_dir(username: str, session_id: str, message_id: int) -> Path:
-    """获取一条聊天视频任务的独立发布目录。"""
-    return user_chat_dir(username, session_id) / "videos" / str(message_id)
 
 
 # 获取用户资源目录
@@ -222,15 +211,6 @@ def chat_upload_url(username: str, session_id: str, filename: str) -> str:
     return f"/static/{username}/chat/{session_id}/uploads/{filename}"
 
 
-# ============ 星火 Spark WebSocket 配置 ============
-# 星火大模型应用 ID
-SPARK_APP_ID = get("spark.app_id", "")
-# 星火大模型 API 密钥
-SPARK_API_KEY = get("spark.api_key", "")
-# 星火大模型 API 密钥签名
-SPARK_API_SECRET = get("spark.api_secret", "")
-
-
 # ============ 聊天附件与保护机制 ============
 # 单次请求最大上传文件数
 MAX_UPLOAD_FILES_PER_REQUEST = get("chat.max_upload_files", 12)
@@ -251,8 +231,6 @@ UPDATE_MIN_TOKENS = get("memory.update_min_tokens", 6000)
 LTM_MIN_CONFIDENCE = get("memory.ltm_min_confidence", 0.75)
 
 # ============ Chat 扩展配置 ============
-# 支持的图片扩展名集合
-IMAGE_EXTENSIONS: set[str] = set(get("chat.image_extensions", ["png", "jpg", "jpeg", "gif", "webp"]))
 # 构建对话上下文时拉取的历史消息条数
 CHAT_HISTORY_LIMIT: int = get("chat.history_limit", 20)
 

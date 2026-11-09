@@ -8,25 +8,20 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 
+from app.auth.schemas import UserClaims
+from app.auth.security import create_token
 from app.main import app
-from app.auth.security import get_current_user
-from app.infra.models import User
 
 # Setup test client
 client = TestClient(app)
 
-# Create a mock user
-mock_user = User(id=1, username="test_user", email="test@example.com")
 
 @pytest.fixture
-def authenticated_client(monkeypatch):
-    # Override authentication dependency to return mock user
-    async def mock_get_current_user():
-        return mock_user
-
-    app.dependency_overrides[get_current_user] = mock_get_current_user
+def authenticated_client():
+    """返回注入了真实 JWT 的客户端，走完整鉴权链路。"""
+    client.headers["Authorization"] = f"Bearer {create_token(UserClaims(id=1, username='test_user'))}"
     yield client
-    app.dependency_overrides.pop(get_current_user, None)
+    client.headers.pop("Authorization", None)
 
 
 

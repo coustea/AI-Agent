@@ -19,7 +19,7 @@ from typing_extensions import TypedDict
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 if TYPE_CHECKING:
-    from app.infra.models import PathNode, PathNodeTutorial, PathNodeQuestion, PathNodeResource
+    from app.infra.models import PathNode, PathNodeQuestion, PathNodeResource
 
 # ======================================================================
 # 路径偏好参数（前后端对齐）
@@ -141,19 +141,25 @@ class LearningPathTutorialDTO(BaseModel):
 
     # 从 ORM 模型构建教程 DTO
     @classmethod
-    def from_model(cls, tutorial: PathNodeTutorial) -> LearningPathTutorialDTO:
+    def from_node(cls, node: PathNode) -> LearningPathTutorialDTO:
+        """从扁平化后的 PathNode 模型构建教程 DTO。"""
         return cls(
-            id=tutorial.id,
-            tutorial_type=tutorial.tutorial_type,
-            version_no=tutorial.version_no,
-            based_on_tutorial_id=tutorial.based_on_tutorial_id,
-            title=tutorial.title,
-            summary=tutorial.summary,
-            content_markdown=tutorial.content_markdown,
-            knowledge_points=list(tutorial.knowledge_points or []),
-            weak_knowledge_points=list(tutorial.weak_knowledge_points or []),
-            created_at=tutorial.created_at.isoformat() if tutorial.created_at else "",
+            id=node.id or 0,
+            tutorial_type="primary",
+            version_no=1,
+            based_on_tutorial_id=None,
+            title=node.tutorial_title or node.title,
+            summary=node.tutorial_summary,
+            content_markdown=node.tutorial_markdown or "",
+            knowledge_points=list(node.knowledge_points or []),
+            weak_knowledge_points=list(node.weak_knowledge_points or []),
+            created_at=node.tutorial_generated_at.isoformat() if node.tutorial_generated_at else "",
         )
+
+    @classmethod
+    def from_model(cls, node: PathNode) -> LearningPathTutorialDTO:
+        """从 PathNode ORM 模型构建教程 DTO。"""
+        return cls.from_node(node)
 
 
 # 路径节点资源生成请求 — 统一参数模型
@@ -510,9 +516,9 @@ class LearnState(TypedDict, total=False):
     path: Any
     """LearningPath ORM 实例。"""
     tutorials: list[Any]
-    """当前节点的所有 PathNodeTutorial 实例，按版本号排序。"""
+    """节点教程对象列表。"""
     current_tutorial: Any
-    """当前激活的 PathNodeTutorial，不存在时为 None。"""
+    """当前激活的教程对象，不存在时为 None。"""
     profile_markdown: str
     """预渲染的学习者画像 Markdown 文本。"""
     username: str

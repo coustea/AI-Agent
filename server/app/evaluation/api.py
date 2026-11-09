@@ -16,7 +16,7 @@ from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
 from app.evaluation.service import evaluation_service
 from app.infra.database import get_session
 from app.infra.logging import get_logger
-from app.infra.models import LearningAssessment, UserDailyActivity
+from app.infra.models import LearningAssessment, LearningEvent
 from app.response import HttpResponse
 
 router = APIRouter()
@@ -153,7 +153,7 @@ async def _run_assessment_generation(user_id: int, assessment_id: int, range_day
             assessment.generated_at = datetime.now(timezone.utc)
             assessment.updated_at = datetime.now(timezone.utc)
 
-            # 写入辅导策略到 UserProfile
+            # 写入辅导策略到 User
             await evaluation_service._update_guidance_strategy(
                 bg_session,
                 user_id=user_id,
@@ -371,14 +371,15 @@ async def _build_dashboard_data(
     ]
     today_seconds = daily_seconds_by_date.get(login_end_date.isoformat(), 0)
 
-    # 每日首次登录活跃：与学习行为、学习时长分开统计。
+    # 每日首次登录活跃：与学习行为、学习时长分开统计（按 auth.daily_login 幂等事件）。
     active_login_days = (await session.exec(
-        select(func.count())
-        .select_from(UserDailyActivity)
+        select(func.count(LearningEvent.id))
         .where(
-            UserDailyActivity.user_id == user_id,
-            UserDailyActivity.activity_date >= login_start_date,
-            UserDailyActivity.activity_date <= login_end_date,
+            LearningEvent.user_id == user_id,
+            LearningEvent.module == "auth",
+            LearningEvent.event_type == "daily_login",
+            LearningEvent.occurred_at >= datetime.combine(login_start_date, datetime.min.time(), tzinfo=timezone.utc),
+            LearningEvent.occurred_at <= datetime.combine(login_end_date, datetime.max.time(), tzinfo=timezone.utc),
         )
     )).one() or 0
 

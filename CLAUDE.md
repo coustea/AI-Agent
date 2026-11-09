@@ -4,10 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-agent personalized learning platform (多智能体个性化学习资源平台). Full-stack monorepo with three workspaces:
+Multi-agent personalized learning platform (多智能体个性化学习资源平台). Full-stack monorepo with two workspaces:
 - `src/` — Vue 3 + TypeScript frontend
 - `server/` — FastAPI + SQLModel backend
-- `video-render/` — Remotion 4.0 video rendering project (Node.js, must `npm install` separately)
 
 Two business flows stay deliberately separate even though they reuse some agent infrastructure:
 - **Standalone resource generation** (`resource` domain)
@@ -26,7 +25,7 @@ npm run build          # runs vue-tsc -b && vite build — main frontend validat
 npm run preview
 ```
 
-- No committed frontend lint or test script.
+- No committed frontend linter; run `npm run build` (type check) and `npm run test:run` (Vitest).
 - `vite.config.ts` proxies `/api` and `/static` to `http://127.0.0.1:9999` by default, overridable with `VITE_API_PROXY_TARGET`.
 
 ### Backend (run from `server/`)
@@ -44,14 +43,6 @@ uv run pytest -x                                       # stop on first failure
 - Requires Python `>=3.13`.
 - FastAPI docs at `/docs` on the configured backend port.
 - `pytest` is the main backend verification path.
-- Known pre-existing failure: `tests/chat/test_reasoning_agent.py` — `FakeLlm` lacks `astream`. Don't waste time debugging.
-
-### Video render (run from `video-render/`)
-
-```bash
-npm install
-npx remotion --version   # verify Remotion 4.0.478
-```
 
 ## High-Level Architecture
 
@@ -66,7 +57,6 @@ Routing lives in `src/app/router/routes.ts`. Authenticated pages render inside `
 
 Path aliases in `vite.config.ts`:
 - `@` → `./src`
-- `@ppt-manifest` → `./server/app/resource/templates/ppt_manifest.json`
 
 ### Backend shape
 
@@ -78,13 +68,15 @@ Modular by feature area under `server/app/`. Most domains follow the same patter
 Key domains:
 - `auth` — registration, login, token validation, current-user resolution
 - `chat` — SSE tutor conversation, uploads, chat history, profile/school endpoints, memory integration
-  - `chat/agent/` — TutorAgent LangGraph graph (`nodes.py`, `state.py`, `tools.py`, `background.py`)
-  - `chat/memory/` — `compression.py`, `long_term.py`, `service.py`
-  - `chat/storage/`, `chat/tools/`, `chat/streaming.py`, `chat/context_builder.py`
+  - `chat/agent.py` — `run_tutor_agent` pure loop (model stream → tool dispatch → append messages)
+  - `chat/hooks.py` — `ChatRunHooks` snapshot container + 1-slot notification queue
+  - `chat/memory.py` — compression, long-term memory, token accounting
+  - `chat/context.py`, `chat/tools.py`, `chat/files.py`, `chat/service.py`
 - `resource` — standalone resource generation and event streaming
-  - `resource/agents/` — `base.py`, `planning`, `content`, `mindmap`, `quiz`, `code`, `reading`, `ppt`, `video`, `cartoon`, `review` (each inherits `BaseResourceAgent`, registered via `@register_agent`)
-  - `resource/workflow/` — LangGraph parent workflow
-  - `resource/orchestrator.py` — background job orchestration
+  - `resource/agent.py` — `run_resource_lead_agent` loop (mirrors `chat/agent.py`)
+  - `resource/hooks.py` — `ResourceRunHooks` snapshot container
+  - `resource/tools.py` — the 7 sub-agent tools invoked by the lead agent
+  - `resource/agents/__init__.py` — stateless adapter used by the `path` domain
 - `path` — learning-path planning, node workspace, quizzes, auxiliary node resources, path evaluation
   - `path/workflows.py` — LangGraph learn workflow
   - `path/service.py` — `PathService.run_generation()`, `PathPlannerAgent`
@@ -92,8 +84,8 @@ Key domains:
 - `evaluation` — learning events and summaries
 - `dashboard` — homepage aggregation and recommendations
 - `quiz` — question bank and wrong-question APIs
-- `shared/` — cross-domain modules: `video/`, `cartoon/`, `ppt/`, `research/`, `utils/`
-- `infra` — database, models, logging, prompts, config, response envelope, LLM singleton
+- `shared/` — cross-domain modules: `tools/` (Tool/registry/sandbox/skills + builtin workspace tools), `ppt/`, `cartoon/`
+- `infra` — database, models, logging, LLM singleton, UtcDateTime, JSON utils, seed data
 
 Application startup is centered on `server/app/main.py`:
 - `create_app()` configures CORS, exception handlers, and route installation
@@ -104,22 +96,23 @@ Application startup is centered on `server/app/main.py`:
 
 Current route grouping (trust `server/app/routes.py` and each domain `api.py` over older docs):
 - `/api/v1/users/*` — auth/user endpoints
-- `/api/v1/ai/chat/*` — tutor chat stream, uploads, sessions, profile/school helpers
-- `/api/v1/ai/resources*` — standalone resource generation, status, detail, history, agents, SSE
-- `/api/v1/ai/path-plan*` — learning-path generation, active/history views, node workspace, node quizzes/resources, path events/evaluation
-- `/api/v1/ai/cartoon/*` — cartoon video generation
-- `/api/v1/ai/dashboard*`, `/api/v1/ai/evaluation*`, `/api/v1/ai/quiz-bank*`, `/api/v1/ai/wrong-questions*` — supporting domains
+- `/api/v1/ai/chat/*` — tutor chat run creation, sessions, history, uploads, SSE
+- `/api/v1/ai/resource/*` — standalone resource generation, run snapshot, cancel, bundles, SSE
+- `/api/v1/ai/resources` — standalone resource list
+- `/api/v1/ai/path-plan*` — learning-path generation, latest/history, node workspace, node quizzes/resources, path events/evaluation
+- `/api/v1/ai/dashboard/*` — homepage aggregation (recommendation, profile-radar, continue-learning, quick-actions, recent-resources)
+- `/api/v1/ai/profile*`, `/api/v1/ai/schools/*`, `/api/v1/ai/evaluation/*`, `/api/v1/ai/quiz*`, `/api/v1/ai/wrong*` — supporting domains
+- Cartoon/PPT are not separate HTTP surfaces: they are agent tools invoked from chat and resource
 
 ## Critical Runtime Flows
 
 ### Tutor chat flow
 
-`server/app/chat/api.py` exposes the SSE entrypoint at `POST /api/v1/ai/chat/stream`.
+`server/app/chat/api.py` exposes `POST /api/v1/ai/chat/messages`, which returns a `run_id`; the client then opens `GET /api/v1/ai/chat/runs/{run_id}/events` via `EventSource`.
 The runtime is orchestrated by `server/app/chat/service.py`:
-- create a `ChatTurn`
-- persist the user message and attachments
-- build context via `context_builder.py` and delegate answering to `TutorAgent`
-- stream SSE events back to the client
+- create a `ChatRun` and persist the user message plus attachments
+- build context via `chat/context.py` and delegate answering to `run_tutor_agent` in `chat/agent.py`
+- stream `run.state` snapshots back to the client through `ChatRunHooks`
 - persist the final assistant reply
 - run post-turn compression / long-term-memory checks
 
@@ -134,19 +127,17 @@ This is the main personalization pipeline in the repo.
 
 ### Standalone resource generation flow
 
-`server/app/resource/api.py` and `server/app/resource/orchestrator.py` implement two request modes:
-- `POST /api/v1/ai/resources` — creates a background multi-agent resource task
-- `POST /api/v1/ai/resources/single` — creates a single-agent task through the same orchestration
+`server/app/resource/api.py` exposes the entrypoint at `POST /api/v1/ai/resource/generate`.
 
 The runtime flow:
-1. persist a `GeneratedResource` task record
-2. start a background job
-3. mark the resource as `generating`
-4. run the LangGraph parent workflow from `server/app/resource/workflow/`
-5. persist `GeneratedResourceItem` rows and final status
-6. stream progress via SSE from `/api/v1/ai/resources/{id}/events`
+1. `prepare_resource_run()` persists a `GeneratedResource` record with status `pending`
+2. the request is scheduled as a FastAPI background task
+3. `execute_resource_run()` builds `ResourceRunHooks` and runs `run_resource_lead_agent`
+4. the lead agent calls the sub-agent tools in `resource/tools.py` (lecture, mindmap, quiz, code, reading, PPT, cartoon)
+5. artifacts are persisted as `GeneratedResourceItem` rows and the record reaches a terminal status
+6. progress streams as full `RunState` snapshots over SSE from `/api/v1/ai/resource/runs/{run_id}/events`
 
-Agent implementations live in `server/app/resource/agents/` and are coordinated through the resource workflow/orchestrator layer. Registered agents: `planning`, `content`, `mindmap`, `quiz`, `code`, `reading`, `ppt`, `video`, `cartoon`, `review`.
+The current architecture streams one `run.state` snapshot per change rather than per-event records; `ResourceRunHooks` owns the in-memory snapshot and a single-slot notification queue.
 
 ### Learning-path flow
 
@@ -162,17 +153,18 @@ Typical flow:
 
 Path-node resources are stored and queried separately from standalone resource records. Preserve that boundary.
 
-### Video rendering flow
+### Cartoon (teaching video) flow
 
-Two independent pipelines, both require FFmpeg:
+One pipeline, invoked as the `generate_teaching_video` agent tool:
 
-1. **Remotion lecture videos** — `resource/agents/video.py` → `shared/video/agent.py` → `shared/video/renderer.py` → `video-render/` (npx tsx scripts/render.ts)
-   - Pipeline: `VideoMaterialAgent` → `VideoDirectorAgent` → `SceneWriterAgent` → `VideoTtsService` → `RemotionVideoRenderer`
-   - Config: `config.yaml` → `video` section
+`shared/cartoon/tool.py` → `shared/cartoon/agent.py` → `node_modules/.bin/hyperframes`
 
-2. **HyperFrames cartoon videos** — `resource/agents/cartoon.py` → `shared/cartoon/pipeline.py` → `shared/cartoon/renderer.py` → `npx hyperframes render`
-   - Auto-detects CPU cores, memory, NVIDIA GPU (Linux only)
-   - Low-memory mode (≤8GB) degrades to single-worker CPU rendering
+- `CartoonAgent` is itself a tool-loop agent: it loads the `hyperframes` / `hyperframes-cli` / `media-use` skills on demand and drives the local HyperFrames CLI to render HTML scenes into `video.mp4`
+- `shared/cartoon/tts.py` handles narration audio
+- `shared/cartoon/schemas.py` defines the artifact contract (`CartoonArtifact`)
+- Both `chat` and `resource` reach it through `build_cartoon_tool()`
+
+PPT generation follows the same shape: `shared/ppt/tool.py` → `shared/ppt/agent.py` → `node deck.cjs` (PptxGenJS living in the project's `node_modules`).
 
 ### Profile and memory flow
 
@@ -190,7 +182,7 @@ When changing personalization behavior, inspect `chat`, `profile`, and `evaluati
 ### Configuration
 
 Backend runtime configuration comes from `server/config.yaml`, not `.env`.
-Important groups: `app`, `database`, `jwt`, `models` (incl. `models.vision`), `spark`, `search`, `paths`, `knowledge`, `memory`, `chat`, `evaluation`, `paths_config`, `resource`, `quiz`, `video`.
+Important groups: `app`, `database`, `jwt`, `models` (incl. `models.vision`), `search`, `paths`, `knowledge`, `memory`, `chat`, `evaluation`, `paths_config`, `resource`, `quiz`, `video`.
 
 ### Database and schema source of truth
 
@@ -216,7 +208,7 @@ Database session usage is intentionally split:
 - `get_session()` — FastAPI dependency injection for request handlers
 - `session_scope()` — background tasks / manual async context manager with commit/rollback handling
 
-Auth resolution in `server/app/auth/security.py` depends on the request-scoped `AsyncSession` from `get_session()`. Avoid swapping auth dependencies over to `session_scope()`.
+Auth resolution does no DB I/O: `JWTMiddleware` decodes the JWT and stores `UserClaims` in `current_user_ctx`; `get_current_user()` reads that ContextVar. SSE endpoints accept `?token=` because `EventSource` cannot set headers.
 
 ### Shared backend conventions
 
@@ -243,7 +235,7 @@ Auth resolution in `server/app/auth/security.py` depends on the request-scoped `
 5. `server/app/routes.py`
 6. `server/app/chat/service.py`
 7. `server/app/resource/api.py`
-8. `server/app/resource/orchestrator.py`
+8. `server/app/resource/agent.py`
 9. `server/app/path/api.py`
 10. `server/app/path/service.py`
 11. `server/app/infra/models.py`

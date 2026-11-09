@@ -2216,11 +2216,6 @@ function readDailyCompletionMap(): Record<string, boolean> {
     // ignore invalid local cache
   }
 
-  const legacyKey = 'daily_completed_' + new Date().toDateString()
-  if (localStorage.getItem(legacyKey) === 'true') {
-    next[formatDateKey(new Date())] = true
-  }
-
   return next
 }
 

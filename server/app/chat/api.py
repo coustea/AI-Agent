@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
-from typing import Any
-
 from fastapi import APIRouter, BackgroundTasks, File, Form, Query, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
@@ -28,7 +26,6 @@ from app.chat.service import (
     get_run_state,
     list_sessions,
     prepare_chat_run,
-    update_session_title,
 )
 from app.infra.logging import get_logger
 from app.response import HttpResponse
@@ -99,24 +96,11 @@ async def upload_file(
     return HttpResponse.success(data=saved)
 
 
-@router.get("/chat/runs/{run_id}")
-async def get_chat_run(run_id: str) -> JSONResponse:
-    """读取指定运行的完整状态快照（支持页面刷新恢复）。"""
+@router.get("/chat/runs/{run_id}/events", response_model=None)
+async def stream_chat_run_events(run_id: str) -> JSONResponse | StreamingResponse:
+    """发送最新运行快照，合并高频更新，并在终态或断开时释放订阅。"""
     user = get_current_user()
     state = await get_run_state(user.id, run_id)
-    if state is None:
-        return HttpResponse.error(code=404, message="运行不存在或无权限")
-    return HttpResponse.success(data=state.model_dump())
-
-
-@router.get("/chat/runs/{run_id}/events", response_model=None)
-async def stream_chat_run_events(
-    run_id: str,
-    user: UserClaims | None = None,
-) -> JSONResponse | StreamingResponse:
-    """发送最新运行快照，合并高频更新，并在终态或断开时释放订阅。"""
-    user_claims = user or get_current_user()
-    state = await get_run_state(user_claims.id, run_id)
     if state is None:
         return HttpResponse.error(code=404, message="运行不存在或无权限")
     hooks = get_active_run(run_id)
@@ -186,23 +170,6 @@ async def delete_session_endpoint(session_id: str) -> JSONResponse:
     if not ok:
         return HttpResponse.error(code=404, message="会话不存在或无权操作")
     return HttpResponse.success(message="会话已归档")
-
-
-@router.patch("/chat/sessions/{session_id}")
-async def update_session_endpoint(session_id: str, payload: dict[str, Any]) -> JSONResponse:
-    """修改指定会话的标题。"""
-    title = str(payload.get("title") or "").strip()
-    if not title:
-        return HttpResponse.error(code=400, message="标题不能为空")
-    user = get_current_user()
-    ok = await update_session_title(
-        user_id=user.id,
-        session_id=session_id,
-        title=title,
-    )
-    if not ok:
-        return HttpResponse.error(code=404, message="会话不存在或无权操作")
-    return HttpResponse.success(message="标题已更新")
 
 
 @router.get("/chat/history")

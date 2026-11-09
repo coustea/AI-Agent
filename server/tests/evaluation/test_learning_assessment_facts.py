@@ -171,8 +171,6 @@ def test_polymorphic_learning_session_model():
     assert sess.module == "path"
     assert sess.entity_id == "42"
     assert sess.sub_entity_id == "node_99"
-    assert sess.path_id == 42
-    assert sess.resource_id is None
 
     res_sess = LearningSession(
         user_id=1,
@@ -184,6 +182,5 @@ def test_polymorphic_learning_session_model():
         duration_seconds=300,
     )
     assert res_sess.module == "resource"
-    assert res_sess.resource_id == 88
-    assert res_sess.path_id is None
+    assert res_sess.entity_id == "88"
 

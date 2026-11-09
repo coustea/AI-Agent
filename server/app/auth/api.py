@@ -64,16 +64,6 @@ async def get_me(session: AsyncSession = Depends(get_session)) -> HttpResponse:
     return HttpResponse.success(data=UserRead.model_validate(user))
 
 
-@router.patch("/me")
-async def update_me(
-    data: UserUpdate,
-    session: AsyncSession = Depends(get_session),
-) -> HttpResponse:
-    """更新当前用户信息（PATCH 语义，只更新提交的字段）。"""
-    user = await auth_service.update_profile(session, get_current_user().id, data)
-    return HttpResponse.success(data=user)
-
-
 @router.post("/me/avatar")
 async def upload_avatar(
     file: UploadFile = File(...),

@@ -83,21 +83,7 @@
             <div class="title-row">
               <h1>个性化学习资源包</h1>
 
-              <button
-                v-if="isPartial"
-                type="button"
-                class="generation-status partial"
-                title="查看部分完成说明"
-                @click="showPartialInfo"
-              >
-                <i></i>
-                部分完成
-              </button>
-
-              <span
-                v-else
-                class="generation-status completed"
-              >
+              <span class="generation-status completed">
                 <PhCheckCircle />
                 生成完成
               </span>
@@ -417,12 +403,6 @@ const resourceId = computed(() => {
     : null
 })
 
-const isPartial = computed(
-  () =>
-    bundle.value?.status ===
-    'partial',
-)
-
 const createdAt = computed(() =>
   formatResourceTime(
     bundle.value?.created_at || null,
@@ -498,12 +478,6 @@ function openDetail(card: ResourceCard) {
       type: card.type,
     },
   })
-}
-
-function showPartialInfo() {
-  toast.warning(
-    '部分资源未能完成生成，当前仅展示已经成功生成且可以正常使用的学习资源。',
-  )
 }
 
 function goBack() {
@@ -698,26 +672,6 @@ button.generation-status {
 .generation-status.completed svg {
   width: 13px;
   height: 13px;
-}
-
-.generation-status.partial {
-  border: 1px solid #f1cf95;
-  background: #fff9ed;
-  color: #a96612;
-}
-
-.generation-status.partial:hover {
-  border-color: #e5b963;
-  background: #fff3dc;
-}
-
-.generation-status.partial i {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 6px;
-
-  border-radius: 50%;
-  background: #e69124;
 }
 
 .header-meta {

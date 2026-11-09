@@ -77,6 +77,3 @@ class ProfileDimensionsPatch(BaseModel):
     dimensions_patch: dict[str, DimensionValue] = Field(default_factory=dict)
 
 
-class ProfileScoreOutput(BaseModel):
-    """画像评分推理输出 — 仅输出 7 维度分数，overall_score 由后端按均值计算。"""
-    dimension_scores: dict[str, int] = Field(default_factory=dict)

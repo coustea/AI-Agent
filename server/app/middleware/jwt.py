@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import inspect
 from contextvars import ContextVar
 import jwt
 from fastapi import Request
@@ -57,27 +56,7 @@ class JWTMiddleware(BaseHTTPMiddleware):
         if request.method == "OPTIONS":
             return await call_next(request)
 
-        # 若外部环境或测试已提前设置上下文，优先沿用
         claims: UserClaims | None = current_user_ctx.get()
-
-        # 0. 支持测试环境通过 app.dependency_overrides 模拟登录
-        if claims is None and hasattr(request.app, "dependency_overrides"):
-            from app.auth.security import get_current_user
-            override = request.app.dependency_overrides.get(get_current_user)
-            if override is not None:
-                res = override()
-                if inspect.isawaitable(res):
-                    res = await res
-                if isinstance(res, UserClaims):
-                    claims = res
-                elif hasattr(res, "id") and hasattr(res, "username"):
-                    claims = UserClaims(
-                        id=res.id,
-                        username=res.username,
-                        email=getattr(res, "email", None),
-                        role=getattr(res, "role", "user"),
-                        onboarding_completed=getattr(res, "onboarding_completed", False),
-                    )
 
         # 1. 提取 Token：优先 Authorization Header (Bearer)，回落 Query 参数 (token)
         if claims is None:

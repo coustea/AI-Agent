@@ -8,8 +8,9 @@ Vue 3 + TypeScript frontend (`src/`) + FastAPI + SQLModel backend (`server/`).
 
 ### Frontend (repo root)
 ```bash
-npm run build    # vue-tsc -b && vite build — the only frontend check (no linter)
-npm run dev      # Vite dev server on :5173
+npm run build     # vue-tsc -b && vite build — type check + production build
+npm run dev       # Vite dev server on :5173
+npm run test:run  # Vitest suite
 ```
 
 ### Backend (`server/`)
@@ -34,12 +35,9 @@ uv run pytest tests/chat/ -q             # single module
 
 Backend: `pytest` + `pytest-asyncio`. Tests in `server/tests/` mirror `server/app/`. `conftest.py` adds `server/` to `sys.path`.
 
-Pre-existing failures (do not debug):
-- `tests/chat/test_agent_single_module_refactor.py`
-- `tests/chat/test_onboarding_api.py`
-- `tests/chat/test_reasoning_agent.py`
+Use `with TestClient(app)` (not bare `TestClient(app)`) when a test needs the app lifespan — a bare client never runs startup, so startup-time breakage goes undetected.
 
-Frontend has no tests.
+Frontend: `npm run test:run` (Vitest + jsdom). Tests live next to the code as `*.test.ts`.
 
 ## Coding Style
 
@@ -61,10 +59,10 @@ API prefixes (from `server/app/routes.py`):
 - `/api/v1/users` — auth
 - `/api/v1/ai/*` — chat, resource, path, dashboard, evaluation, quiz/quiz-bank/wrong-questions
 
-All responses use `HttpResponse` envelope: `{code, message, data}` (see `app/infra/response.py`).
+All responses use `HttpResponse` envelope: `{code, message, data}` (see `app/response.py`).
 
 ### Auth
-JWT + `ActiveToken` whitelist. `get_current_user` / `get_current_user_flexible` in `app/auth/security.py` inject the request-scoped `AsyncSession` directly — **never** use `session_scope()` inside auth deps (causes detached-User greenlet errors).
+JWT + `ActiveToken` whitelist. `JWTMiddleware` (`app/middleware/jwt.py`) decodes the token and stores `UserClaims` in the `current_user_ctx` ContextVar; `get_current_user()` in `app/auth/security.py` is a **zero-argument** helper that reads that ContextVar (no DB I/O). SSE endpoints pass the token as `?token=` because `EventSource` cannot set headers.
 
 ### Database
 MySQL via `aiomysql`. Single source of truth:
@@ -83,10 +81,10 @@ Session patterns:
 - `session_scope()` — context manager, auto-commit, for background tasks
 
 ### Configuration
-`server/config.yaml` only (no `.env`). Loaded by `app/config.py`. Key groups: `app`, `database`, `jwt`, `models`, `spark`, `search`, `paths`, `knowledge`, `memory`, `chat`.
+`server/config.yaml` only (no `.env`). Loaded by `app/config.py`. Key groups: `app`, `database`, `jwt`, `models`, `search`, `paths`, `knowledge`, `memory`, `chat`, `resource`, `quiz`, `video`.
 
 ### Backend module pattern
-Each domain under `server/app/` follows `api.py` → `service.py` → schemas. The `infra/` module holds shared infrastructure: `database.py`, `models.py`, `llm.py`, `response.py`, `prompts/`, `logging.py`, `context.py`.
+Each domain under `server/app/` follows `api.py` → `service.py` → schemas. The `infra/` module holds shared infrastructure: `database.py`, `models.py`, `llm.py`, `types.py`, `utils.py`, `seed.py`, `logging.py`. The response envelope lives at `app/response.py`.
 
 ## Commit Convention
 Short conventional prefixes: `feat:`, `fix:`, `refactor:`. Chinese or English summaries. Keep commits focused.

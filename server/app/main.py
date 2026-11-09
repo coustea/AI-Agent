@@ -26,6 +26,8 @@ from app.infra.logging import configure_logging, get_logger
 from app.routes import install_routes
 from app.middleware import JWTMiddleware
 
+logger = get_logger("main")
+
 
 @asynccontextmanager
 # 应用生命周期管理器：启动阶段初始化数据库与知识库，关闭阶段暂留空
@@ -48,15 +50,15 @@ async def lifespan(app: FastAPI):
 
     interrupted = await mark_interrupted_runs()
     if interrupted:
-        get_logger("main").warning("[Chat] 标记中断运行: %d 条", interrupted)
+        logger.warning("[Chat] 标记中断运行: %d 条", interrupted)
 
-    log.info("[Main] 应用启动完成，开始接受请求")
+    logger.info("[Main] 应用启动完成，开始接受请求")
 
     # yield 将控制权交给 FastAPI 应用，开始处理请求
     yield
 
     # 应用关闭时的清理逻辑
-    log.info("[Main] 应用正在关闭，开始清理资源")
+    logger.info("[Main] 应用正在关闭，开始清理资源")
 
 
 # 创建并配置 FastAPI 应用实例：日志、CORS、异常处理器、静态目录与路由注册

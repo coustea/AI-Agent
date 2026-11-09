@@ -6,8 +6,6 @@ export type DifficultyLevel = 'beginner' | 'intermediate' | 'advanced'
 
 export type LearningScenario = 'exam_prep' | 'daily_review' | 'project_practice' | 'self_study' | 'path_learning'
 
-export type ResourceLifecycleStatus = 'pending' | 'generating' | 'completed' | 'partial' | 'failed'
-
 export type ResourceContentFormat = 'markdown' | 'json' | 'pptx' | 'mp4'
 
 export type ResourceContent = Record<string, unknown> | unknown[] | string | null
@@ -19,7 +17,6 @@ export interface ResourceGenerationRequest {
   target_resources: ResourceAgentId[]
   difficulty: DifficultyLevel
   preferences?: Record<string, unknown>
-  agent_configs?: Record<string, Record<string, unknown>>
 }
 
 // 子智能体生成的单项教学产物

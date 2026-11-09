@@ -12,7 +12,6 @@ from app.infra.models import (
     PathNode,
     PathNodeQuestion,
     PathNodeResource,
-    PathNodeTutorial,
 )
 from app.evaluation.schemas import LearningEventCreate
 from app.path.service import PathService
@@ -277,18 +276,9 @@ async def test_question_generation_uses_learn_workflow():
         status="in_progress",
         priority=1,
         prerequisites=[],
-    )
-    tutorial = PathNodeTutorial(
-        id=20,
-        path_id=path.id,
-        node_id=node.id,
-        user_id=path.user_id,
-        tutorial_type="primary",
-        version_no=1,
-        is_current=True,
-        title="变量与类型",
-        summary="讲清楚变量、赋值与基本类型",
-        content_markdown="教程内容",
+        tutorial_title="变量与类型",
+        tutorial_summary="讲清楚变量、赋值与基本类型",
+        tutorial_markdown="教程内容",
     )
     session = _CaptureSession()
     service = PathService(session)
@@ -301,7 +291,6 @@ async def test_question_generation_uses_learn_workflow():
             id=index,
             path_id=path.id,
             node_id=node.id,
-            tutorial_id=20,
             user_id=path.user_id,
             round_no=1,
             question_no=index,
@@ -315,7 +304,7 @@ async def test_question_generation_uses_learn_workflow():
     with patch("app.path.service.run_learn_workflow", new_callable=AsyncMock) as mock_workflow:
         mock_workflow.return_value = {
             "quiz_questions": mock_questions,
-            "current_tutorial": tutorial,
+            "current_tutorial": node,
             "round_no": 1,
         }
 
@@ -350,25 +339,15 @@ async def test_auxiliary_resource_generation_uses_learn_workflow():
         status="in_progress",
         priority=1,
         prerequisites=[],
-    )
-    tutorial = PathNodeTutorial(
-        id=20,
-        path_id=path.id,
-        node_id=node.id,
-        user_id=path.user_id,
-        tutorial_type="primary",
-        version_no=1,
-        is_current=True,
-        title="变量与类型",
-        summary="讲清楚变量、赋值与基本类型",
-        content_markdown="教程内容",
+        tutorial_title="变量与类型",
+        tutorial_summary="讲清楚变量、赋值与基本类型",
+        tutorial_markdown="教程内容",
     )
 
     session = _CaptureSession()
     service = PathService(session)
     service._must_get_node = AsyncMock(return_value=node)
     service._must_get_path = AsyncMock(return_value=path)
-    service._get_current_tutorial = AsyncMock(return_value=tutorial)
     service._count_resources = AsyncMock(return_value=0)
 
     result = await service.create_node_resource_task(
@@ -599,7 +578,6 @@ async def test_failed_quiz_delegates_to_learn_workflow():
             id=index,
             path_id=path.id,
             node_id=node.id,
-            tutorial_id=20,
             user_id=path.user_id,
             round_no=1,
             question_no=index,
@@ -610,24 +588,12 @@ async def test_failed_quiz_delegates_to_learn_workflow():
         )
         for index in range(1, 6)
     ]
-    remediation = PathNodeTutorial(
-        id=30,
-        path_id=path.id,
-        node_id=node.id,
-        user_id=path.user_id,
-        tutorial_type="remediation",
-        version_no=2,
-        is_current=True,
-        title="变量与类型 - 补救教程",
-        content_markdown="补救内容",
-    )
 
     service = PathService(_CommitSession())
     service._must_get_node = AsyncMock(return_value=node)
     service._must_get_path = AsyncMock(return_value=path)
     service._get_latest_round = AsyncMock(return_value=1)
     service._get_round_questions = AsyncMock(return_value=questions)
-    service._get_current_tutorial = AsyncMock(return_value=remediation)
 
     with patch("app.path.service.run_learn_workflow", new_callable=AsyncMock) as mock_workflow:
         mock_workflow.return_value = {
@@ -677,13 +643,14 @@ async def test_second_failed_quiz_delegates_to_learn_workflow():
         priority=1,
         attempt_count=1,
         prerequisites=[],
+        tutorial_title="变量与类型",
+        tutorial_markdown="强化内容",
     )
     questions = [
         PathNodeQuestion(
             id=index,
             path_id=path.id,
             node_id=node.id,
-            tutorial_id=20,
             user_id=path.user_id,
             round_no=2,
             question_no=index,
@@ -694,24 +661,12 @@ async def test_second_failed_quiz_delegates_to_learn_workflow():
         )
         for index in range(1, 6)
     ]
-    reinforced = PathNodeTutorial(
-        id=30,
-        path_id=path.id,
-        node_id=node.id,
-        user_id=path.user_id,
-        tutorial_type="reinforced",
-        version_no=2,
-        is_current=True,
-        title="变量与类型 - 强化教程",
-        content_markdown="强化内容",
-    )
 
     service = PathService(_CommitSession())
     service._must_get_node = AsyncMock(return_value=node)
     service._must_get_path = AsyncMock(return_value=path)
     service._get_latest_round = AsyncMock(return_value=2)
     service._get_round_questions = AsyncMock(return_value=questions)
-    service._get_current_tutorial = AsyncMock(return_value=reinforced)
 
     with patch("app.path.service.run_learn_workflow", new_callable=AsyncMock) as mock_workflow:
         mock_workflow.return_value = {
@@ -734,7 +689,7 @@ async def test_second_failed_quiz_delegates_to_learn_workflow():
         assert result.outcome == "completed_with_gaps"
         assert result.passed is False
         assert result.next_node_id == 11
-        assert result.current_tutorial_id == reinforced.id
+        assert result.current_tutorial_id == node.id
         mock_workflow.assert_awaited_once()
 
 

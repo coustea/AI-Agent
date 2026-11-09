@@ -18,7 +18,6 @@ from pathlib import Path
 import re
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
-from loguru import logger as loguru_logger
 from sqlmodel import col, select
 
 from app.config import PATH_PASS_SCORE, PATH_QUIZ_SIZE
@@ -29,7 +28,6 @@ from app.infra.models import (
     PathNode,
     PathNodeQuestion,
     PathNodeResource,
-    PathNodeTutorial,
     User,
     WrongQuestion,
 )
@@ -334,10 +332,10 @@ class PathPlannerAgent:
         profile: dict[str, Any],
         progress_callback: ProgressCallback | None,
     ) -> str:
-        loguru_logger.info("[PathPlanner] research 开始")
+        logger.info("[PathPlanner] research 开始")
         await emit_progress(progress_callback, "researching", 30, "正在检索高价值参考资料")
         context = await self._search(request=request, profile=profile)
-        loguru_logger.info("[PathPlanner] research 完成, 上下文长度=%d", len(context))
+        logger.info("[PathPlanner] research 完成, 上下文长度=%d", len(context))
         return context
 
     # 生成结构化学习计划（原 strategist 节点）
@@ -349,7 +347,7 @@ class PathPlannerAgent:
         search_context: str,
         progress_callback: ProgressCallback | None,
     ) -> LearningPlan:
-        loguru_logger.info("[PathPlanner] strategist 开始")
+        logger.info("[PathPlanner] strategist 开始")
         await emit_progress(progress_callback, "analyzing", 44, "正在分析画像、目标与课程结构")
         await emit_progress(progress_callback, "strategizing", 58, "正在生成阶段与学习节点")
 
@@ -364,7 +362,7 @@ class PathPlannerAgent:
         )
         result = await self.llm.json(LearningPlan, messages)
         result = repair_plan(plan=result, macro_stages=result.stages, request=request)
-        loguru_logger.info("[PathPlanner] strategist 完成, 节点数=%d", len(result.nodes))
+        logger.info("[PathPlanner] strategist 完成, 节点数=%d", len(result.nodes))
         return result
 
     async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "", guidance_strategy: dict[str, Any] = None) -> LearningPlan:
@@ -372,7 +370,7 @@ class PathPlannerAgent:
 
         失败时自动降级到 build_fallback_plan。
         """
-        loguru_logger.info("PathPlannerAgent 开始规划路径 - Topic: {}", request.topic)
+        logger.info("[PathPlanner] 开始规划路径 topic=%s", request.topic)
         try:
             search_context = await self._research(request, profile, progress_callback)
             return await self._strategize(
@@ -383,9 +381,7 @@ class PathPlannerAgent:
                 progress_callback=progress_callback,
             )
         except Exception as exc:
-            loguru_logger.error(
-                "PathPlannerAgent 路径规划失败，使用兜底路径: {}", str(exc)
-            )
+            logger.exception("[PathPlanner] 路径规划失败，使用兜底路径: %s", exc)
             await emit_progress(
                 progress_callback,
                 "fallback",
@@ -707,16 +703,8 @@ async def node_load_context(state: LearnState) -> dict:
     if path is None:
         return {"error": "学习路径不存在"}
 
-    stmt = (
-        select(PathNodeTutorial)
-        .where(PathNodeTutorial.node_id == node_id)
-        .order_by(
-            col(PathNodeTutorial.version_no).asc(),
-            col(PathNodeTutorial.id).asc(),
-        )
-    )
-    tutorials = list((await session.exec(stmt)).all())
-    current_tutorial = next((t for t in tutorials if t.is_current), None)
+    tutorials = [node] if node.tutorial_markdown else []
+    current_tutorial = node if node.tutorial_markdown else None
 
     try:
         ctx = await load_learner_context(session, user_id=user_id, scope=ProfileScope.PATH)
@@ -758,24 +746,13 @@ async def node_generate_tutorial(state: LearnState) -> dict:
 
 # 工作流节点：持久化教程并标记为 current
 async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
-    """持久化教程并标记为 current，更新节点状态为 in_progress。"""
+    """持久化教程直接写入 PathNode，更新节点状态为 in_progress。"""
     if state.get("error"):
         return {}
     session = state["session"]
     node = state["node"]
-    path = state["path"]
-    user_id = state["user_id"]
     tutorial_type = state.get("tutorial_type", "primary")
 
-    prev_stmt = select(PathNodeTutorial).where(
-        PathNodeTutorial.node_id == node.id,
-        PathNodeTutorial.is_current.is_(True),
-    )
-    prev_current = (await session.exec(prev_stmt)).first()
-    if prev_current is not None:
-        prev_current.is_current = False
-
-    existing = state.get("tutorials", [])
     content_md = state["tutorial_content"]
     meta, body = _parse_markdown_metadata(content_md)
 
@@ -785,32 +762,21 @@ async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
             meta["type"], tutorial_type, node.title,
         )
 
-    tutorial = PathNodeTutorial(
-        path_id=path.id,
-        node_id=node.id,
-        user_id=user_id,
-        tutorial_type=tutorial_type,
-        version_no=len(existing) + 1,
-        based_on_tutorial_id=state.get("based_on_tutorial_id"),
-        is_current=True,
-        title=meta.get("title", f"{node.title} - {tutorial_type}"),
-        summary=meta.get("summary", tutorial_type),
-        content_markdown=body,
-        knowledge_points=meta.get("knowledge_points", [node.title]),
-        weak_knowledge_points=state.get("weak_knowledge_points", []),
-    )
-    session.add(tutorial)
-    await session.flush()
-
-    node.current_tutorial_id = tutorial.id
+    node.tutorial_title = meta.get("title", f"{node.title} - {tutorial_type}")
+    node.tutorial_summary = meta.get("summary", tutorial_type)
+    node.tutorial_markdown = body
+    node.knowledge_points = meta.get("knowledge_points", [node.title])
+    node.weak_knowledge_points = state.get("weak_knowledge_points", [])
+    node.tutorial_generated_at = datetime.now(timezone.utc)
     if node.status == "available":
         node.status = "in_progress"
     if node.started_at is None:
         node.started_at = datetime.now(timezone.utc)
 
+    session.add(node)
     await session.commit()
-    await session.refresh(tutorial)
-    return {"tutorial": tutorial}
+    await session.refresh(node)
+    return {"tutorial": node, "current_tutorial": node, "tutorials": [node]}
 
 
 # 工作流节点：生成测验题目（需要先有教程）
@@ -820,9 +786,8 @@ async def node_generate_questions(state: LearnState) -> dict:
         return {}
     node = state["node"]
     path = state["path"]
-    current_tutorial = state.get("current_tutorial")
 
-    if current_tutorial is None:
+    if not node.tutorial_markdown:
         return {"error": "当前节点还没有教程，请先生成主教程再生成测验"}
 
     round_no = await _latest_round(state["session"], node.id) + 1
@@ -831,8 +796,8 @@ async def node_generate_questions(state: LearnState) -> dict:
         path_goal=path.goal,
         node_title=node.title,
         mastery_target="掌握该节点核心能力",
-        tutorial_title=current_tutorial.title,
-        tutorial_summary=current_tutorial.summary or current_tutorial.title,
+        tutorial_title=node.tutorial_title or node.title,
+        tutorial_summary=node.tutorial_summary or node.tutorial_title or node.title,
         round_no=round_no,
     )
     if len(generated) != PATH_QUIZ_SIZE:
@@ -849,7 +814,6 @@ async def node_persist_questions(state: LearnState) -> dict:
     node = state["node"]
     path = state["path"]
     user_id = state["user_id"]
-    current_tutorial = state.get("current_tutorial")
     round_no = state["round_no"]
 
     questions: list[PathNodeQuestion] = []
@@ -859,7 +823,6 @@ async def node_persist_questions(state: LearnState) -> dict:
         question = PathNodeQuestion(
             path_id=path.id,
             node_id=node.id,
-            tutorial_id=current_tutorial.id if current_tutorial else None,
             user_id=user_id,
             round_no=round_no,
             question_no=index,

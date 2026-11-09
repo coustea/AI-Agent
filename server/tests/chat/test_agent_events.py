@@ -385,8 +385,8 @@ async def test_sse_reconnect_and_disconnect(
 
     monkeypatch.setattr(api, "get_run_state", AsyncMock(return_value=stream.state))
     monkeypatch.setattr(api, "get_active_run", MagicMock(return_value=stream))
-    user = UserClaims(id=1, username="alice")
-    response = await api.stream_chat_run_events(stream.state.run_id, user)
+    monkeypatch.setattr(api, "get_current_user", lambda: UserClaims(id=1, username="alice"))
+    response = await api.stream_chat_run_events(stream.state.run_id)
     events = response.body_iterator
     first = await anext(events)
     assert '"status":"queued"' in first
@@ -399,7 +399,7 @@ async def test_sse_reconnect_and_disconnect(
     await events.aclose()
     assert not stream._subscribers
 
-    response = await api.stream_chat_run_events(stream.state.run_id, user)
+    response = await api.stream_chat_run_events(stream.state.run_id)
     events = response.body_iterator
     assert '"content":"' + "a" * 100 + '"' in await anext(events)
     stream.state = stream.result_state("cancelled")

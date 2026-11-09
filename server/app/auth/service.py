@@ -13,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.auth.schemas import UserLogin, UserRead, UserRegister, UserUpdate
 from app.auth.security import AuthError, create_token, hash_password, verify_password
 from app.infra.logging import get_logger
-from app.infra.models import User, UserDailyActivity
+from app.infra.models import LearningEvent, User
 
 logger = get_logger(__name__)
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
@@ -25,23 +25,28 @@ async def record_daily_login_activity(
     user_id: int,
     logged_in_at: datetime | None = None,
 ) -> None:
-    """记录用户当天首次登录事实，重复登录不重复计数。"""
+    """记录用户当天首次登录事实（写入 learning_events 表，按日期与 client_event_id 幂等）。"""
     occurred_at = logged_in_at or datetime.now(timezone.utc)
-    activity_date = occurred_at.astimezone(SHANGHAI_TZ).date()
+    activity_date = occurred_at.astimezone(SHANGHAI_TZ).date().isoformat()
+    client_event_id = f"login-{user_id}-{activity_date}"
+
     existing = await session.scalar(
-        select(UserDailyActivity).where(
-            UserDailyActivity.user_id == user_id,
-            UserDailyActivity.activity_date == activity_date,
+        select(LearningEvent).where(
+            LearningEvent.user_id == user_id,
+            LearningEvent.client_event_id == client_event_id,
         )
     )
     if existing is not None:
         return
 
     session.add(
-        UserDailyActivity(
+        LearningEvent(
             user_id=user_id,
-            activity_date=activity_date,
-            first_login_at=occurred_at,
+            module="auth",
+            event_type="daily_login",
+            client_event_id=client_event_id,
+            occurred_at=occurred_at,
+            created_at=occurred_at,
         )
     )
     try:

@@ -7,15 +7,6 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.resource.schemas import ResourcePlan, DownstreamContext, AgentResult, ResourcePlanTask
-from app.resource.agents import (
-    ContentAgent,
-    MindmapAgent,
-    QuizAgent,
-    CodeAgent,
-    ReadingAgent,
-    PPTAgent as PptAgent,
-    PlanningAgent,
-)
 
 
 def test_core_schemas_exist():
@@ -73,19 +64,3 @@ def test_agent_result_rejects_unknown_fields():
             "content": "hello",
             "previous_results": {},
         })
-
-
-def test_all_agents_instantiable():
-    """每个 Agent 类应该可以无参数实例化。"""
-    agent_classes = [
-        ContentAgent,
-        MindmapAgent,
-        QuizAgent,
-        CodeAgent,
-        ReadingAgent,
-        PptAgent,
-        PlanningAgent,
-    ]
-    for cls in agent_classes:
-        agent = cls()
-        assert hasattr(agent, "generate_resource") or hasattr(agent, "generate_node")

@@ -5,7 +5,7 @@ from sqlmodel.pool import StaticPool
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.infra.models import User, LearningEvent, LearningSession, WrongQuestion, UserProfile
+from app.infra.models import User, LearningEvent, LearningSession, WrongQuestion
 from app.profile.context import LearnerContext, ProfileScope, load_learner_context
 
 
@@ -21,7 +21,6 @@ async def test_learner_context_jit_loading():
         LearningEvent.__table__,
         LearningSession.__table__,
         WrongQuestion.__table__,
-        UserProfile.__table__,
     ]
     async with engine.begin() as conn:
         await conn.run_sync(lambda sync_conn: SQLModel.metadata.create_all(sync_conn, tables=tables))
@@ -29,7 +28,7 @@ async def test_learner_context_jit_loading():
     session_factory = async_sessionmaker(bind=engine, class_=AsyncSession, expire_on_commit=False)
 
     async with session_factory() as session:
-        # 1. 插入用户基础数据
+        # 1. 插入用户基础数据与指导策略
         user = User(
             id=10,
             username="student_10",
@@ -43,6 +42,10 @@ async def test_learner_context_jit_loading():
             learning_style="practice_first",
             content_depth="systematic_deep",
             weak_points=["红黑树", "动态规划"],
+            guidance_strategy={
+                "conclusion": "数据结构掌握良好，图论与动态规划需重点攻坚",
+                "tutoring_style": "案例驱动",
+            },
         )
         session.add(user)
 
@@ -79,16 +82,6 @@ async def test_learner_context_jit_loading():
         )
         session.add(evt1)
         session.add(evt2)
-
-        # 4. 插入指导策略
-        up = UserProfile(
-            user_id=10,
-            guidance_strategy={
-                "conclusion": "数据结构掌握良好，图论与动态规划需重点攻坚",
-                "tutoring_style": "案例驱动",
-            },
-        )
-        session.add(up)
         await session.commit()
 
         # 5. 测试 JIT 装配: Chat Scope

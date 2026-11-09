@@ -12,11 +12,9 @@ import {
   getResourceBundle,
 } from '@/features/resource/api/resource'
 import type {
-  LearningScenario,
   ResourceAgentId,
   ResourceGenerationRequest,
   ResourceRunState,
-  GeneratedResourceBundle,
   GeneratedResourceItem,
   ResourceContentFormat,
   ResourceContent,
@@ -27,7 +25,6 @@ import {
   COORDINATOR_AGENT_ID,
   BUNDLE_AGENT_ID,
   createDagNode,
-  type AnyAgentConfigs,
   type DagNodeState,
 } from '../model/catalog'
 
@@ -53,7 +50,6 @@ export function useGeneration() {
   // 阶段与表单配置
   const currentPhase = ref<Phase>('input')
   const naturalInput = ref('')
-  const learningScenario = ref<LearningScenario>('daily_review')
   const enabledAgentIds = ref<ResourceAgentId[]>([
     'content',
     'mindmap',
@@ -63,16 +59,6 @@ export function useGeneration() {
     'ppt',
     'cartoon',
   ])
-
-  const agentConfigs = ref<AnyAgentConfigs>({
-    content: { structure: 'progressive', depth_level: 'standard', focus_mode: 'full_coverage', include_examples: true },
-    mindmap: { map_type: 'knowledge_tree', max_depth: 3, leaf_detail: 'brief_note', show_relations: true },
-    quiz: { question_count: 5, difficulty_mode: 'adaptive', emphasis: 'foundations', question_types: ['single', 'multiple', 'judge', 'fill'] },
-    code: { programming_language: 'python', output_style: 'tutorial', focus: 'syntax', include_tests: false },
-    reading: { coverage: 'extended', max_items: 3, language_preference: 'chinese', focus: 'textbook' },
-    ppt: { narrative_style: 'concept', density: 'standard', emphasis: ['core_concepts'] },
-    cartoon: { lesson_depth: 'standard', visual_density: 'rich', pace: 'balanced', voice: 'teacher' },
-  })
 
   // 节点选择计算属性
   const dagSelectedAgentIds = computed(() => enabledAgentIds.value)
@@ -86,11 +72,8 @@ export function useGeneration() {
   const overallProgress = ref(0)
   const latestWorkflowMessage = ref('')
   const generatedResources = shallowRef<GeneratedResourceItem[]>([])
-  const finalBundle = shallowRef<GeneratedResourceBundle | null>(null)
   const generationError = ref<string | null>(null)
-  const resultWarning = ref('')
   const planReady = ref(false)
-  const latestArtifactAgentId = ref<string | null>(null)
 
   const isGenerating = ref(false)
   const generationFinalized = ref(false)
@@ -295,7 +278,6 @@ export function useGeneration() {
       node.artifactId = artifact.id
       if (artifact.title) node.currentMessage = `已交付：${artifact.title}`
       nextNodes[agentId] = node
-      latestArtifactAgentId.value = agentId
     }
 
     // 汇编归档节点
@@ -340,7 +322,6 @@ export function useGeneration() {
       const resp = await getResourceBundle(resourceId)
       const bundle = resp.data?.data
       if (bundle) {
-        finalBundle.value = bundle
         generatedResources.value = bundle.resources || []
       }
     } catch (err) {
@@ -389,8 +370,6 @@ export function useGeneration() {
     }
 
     es.addEventListener('run.state', onSnapshot)
-    es.addEventListener('snapshot', onSnapshot)
-    es.onmessage = onSnapshot
 
     es.onerror = () => {
       void pollSnapshot(runId, resourceId)
@@ -469,7 +448,6 @@ export function useGeneration() {
         target_resources: options?.targetResources || enabledAgentIds.value,
         difficulty: options?.difficulty || 'intermediate',
         preferences: options?.preferences || {},
-        agent_configs: agentConfigs.value,
       }
 
       const res = await startResourceGeneration(requestParams)
@@ -530,7 +508,6 @@ export function useGeneration() {
       const bundleResp = await getResourceBundle(resourceId)
       const bundle = bundleResp.data?.data
       if (bundle && bundle.resources?.length) {
-        finalBundle.value = bundle
         generatedResources.value = bundle.resources
         isGenerating.value = false
         currentPhase.value = 'result'
@@ -552,9 +529,7 @@ export function useGeneration() {
 
   function resetGenerationState() {
     generatedResources.value = []
-    finalBundle.value = null
     generationError.value = null
-    resultWarning.value = ''
     overallProgress.value = 0
     latestWorkflowMessage.value = ''
     isGenerating.value = false
@@ -562,7 +537,6 @@ export function useGeneration() {
     dagNodeStates.value = {}
     selectedDagNodeId.value = null
     planReady.value = false
-    latestArtifactAgentId.value = null
   }
 
   function pause() {
@@ -609,19 +583,14 @@ export function useGeneration() {
   return {
     currentPhase,
     naturalInput,
-    learningScenario,
     enabledAgentIds,
-    agentConfigs,
     dagNodeStates,
     selectedDagNodeId,
     overallProgress,
     latestWorkflowMessage,
     generatedResources,
-    finalBundle,
     generationError,
-    resultWarning,
     planReady,
-    latestArtifactAgentId,
     isGenerating,
     activeResourceId,
     activeRunId,
@@ -641,6 +610,5 @@ export function useGeneration() {
     selectDagNode,
     getStageNode,
     hasGeneratedResource,
-    applyResourceEvent: () => {},
   }
 }

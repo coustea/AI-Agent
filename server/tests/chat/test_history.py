@@ -16,7 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.chat import context, memory, service
 from app.chat.schemas import AgentInput
 from app.infra.llm import AIMessage
-from app.infra.models import ChatLongTermMemory, ChatMessage, ChatRun, ChatSession, ChatSessionSummaryBlock
+from app.infra.models import ChatMessage, ChatRun, ChatSession, User
 
 Scope = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 
@@ -25,7 +25,7 @@ Scope = Callable[[], AbstractAsyncContextManager[AsyncSession]]
 async def db_scope(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[Scope]:
     """仅创建聊天表并替换数据库入口，不访问开发数据库。"""
     engine = create_async_engine("sqlite+aiosqlite://")
-    tables = [model.__table__ for model in (ChatSession, ChatRun, ChatMessage, ChatSessionSummaryBlock, ChatLongTermMemory)]
+    tables = [model.__table__ for model in (User, ChatSession, ChatRun, ChatMessage)]
     async with engine.begin() as conn:
         await conn.run_sync(partial(SQLModel.metadata.create_all, tables=tables))
 
@@ -107,10 +107,11 @@ async def test_compression_watermark_only_covers_supplied_turns(db_scope: Scope,
     monkeypatch.setattr(memory, "LLM", MagicMock(return_value=MagicMock(text=summarize)))
     monkeypatch.setattr(memory, "COMPRESS_KEEP_RECENT_MESSAGES", 2)
     monkeypatch.setattr(memory, "COMPRESS_MIN_MESSAGES", 2)
-    block = await memory.compress_session(1, "s1")
+    summary_md = await memory.compress_session(1, "s1")
     async with db_scope() as db:
-        assert block is not None
-        assert block.end_message_id == 2
+        session = await db.get(ChatSession, "s1")
+        assert summary_md is not None
+        assert session.last_summarized_message_id == 2
         assert "消息1:" in captured[0].content
         assert "消息2:" not in captured[0].content
     history, summary = await context.load_conversation(1, "s1")
@@ -125,6 +126,7 @@ async def test_long_term_memory_consumes_backlog_without_skipping(
 ) -> None:
     """长期记忆按时间顺序分批读取，并保留未处理消息的触发计数。"""
     async with db_scope() as db:
+        db.add(User(id=1, username="test", password="pwd"))
         db.add(ChatSession(id="s1", user_id=1, ltm_message_count=62))
         for number in range(62):
             db.add(
@@ -159,7 +161,7 @@ async def test_http_run_sse_and_history(db_scope: Scope, monkeypatch: pytest.Mon
     from fastapi import FastAPI
     from httpx import ASGITransport, AsyncClient
     from app.auth.schemas import UserClaims
-    from app.auth.security import get_current_user
+    from app.auth.security import create_token
     from app.chat.api import router
     from app.infra.llm import Message, TextDelta, TurnDone
 
@@ -183,8 +185,10 @@ async def test_http_run_sse_and_history(db_scope: Scope, monkeypatch: pytest.Mon
     app = FastAPI()
     app.add_middleware(JWTMiddleware)
     app.include_router(router, prefix="/api/v1/ai")
-    app.dependency_overrides[get_current_user] = user
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    auth_headers = {"Authorization": f"Bearer {create_token(UserClaims(id=1, username='alice'))}"}
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", headers=auth_headers,
+    ) as client:
         empty = await client.post("/api/v1/ai/chat/messages", json={"question": "  "})
         assert empty.status_code == 400
         invalid = await client.post("/api/v1/ai/chat/messages", json={"attachments": "[]"})
@@ -192,15 +196,12 @@ async def test_http_run_sse_and_history(db_scope: Scope, monkeypatch: pytest.Mon
         response = await client.post("/api/v1/ai/chat/messages", json={"question": "问题", "session_id": "s1"})
         assert response.status_code == 202
         run_id = response.json()["data"]["run_id"]
-        snapshot = (await client.get(f"/api/v1/ai/chat/runs/{run_id}")).json()["data"]
-        assert snapshot["status"] == "completed"
-        assert snapshot["content"] == "实际路由回答"
         events = await client.get(f"/api/v1/ai/chat/runs/{run_id}/events")
         assert events.text.count("event: run.state") == 1
         assert '"status":"completed"' in events.text
         assert '"content":"实际路由回答"' in events.text
         history = await service.get_history(user_id=1, session_id="s1")
-        assert history[-1].content[0]["text"] == snapshot["content"]
+        assert history[-1].content[0]["text"] == "实际路由回答"
 
 
 @pytest.mark.asyncio
@@ -228,10 +229,12 @@ async def test_rolling_summary_preserves_recent_tool_tokens(
 ) -> None:
     """滚动摘要复用前文，近期工具消息仍计入未压缩水位。"""
     async with db_scope() as db:
-        db.add(ChatSession(id="s1", user_id=1, summary_token_count=500))
-        db.add(ChatSessionSummaryBlock(
-            session_id="s1", block_index=1, summary_markdown="先前学习 TCP",
-            start_message_id=1, end_message_id=2,
+        db.add(ChatSession(
+            id="s1",
+            user_id=1,
+            summary_token_count=500,
+            summary_markdown="先前学习 TCP",
+            last_summarized_message_id=2,
         ))
         for number in range(3, 9):
             db.add(ChatMessage(
@@ -244,13 +247,13 @@ async def test_rolling_summary_preserves_recent_tool_tokens(
     monkeypatch.setattr(memory, "LLM", MagicMock(return_value=MagicMock(text=summarize)))
     monkeypatch.setattr(memory, "COMPRESS_KEEP_RECENT_MESSAGES", 2)
     monkeypatch.setattr(memory, "COMPRESS_MIN_TOKENS", 100)
-    block = await memory.compress_session(1, "s1")
-    assert block.block_index == 2
-    assert block.end_message_id == 6
-    assert block.summary_markdown == "新的滚动摘要"
+    summary_md = await memory.compress_session(1, "s1")
+    assert summary_md == "新的滚动摘要"
     assert "先前学习 TCP" in summarize.call_args.args[0][0].content
     async with db_scope() as db:
         session = await db.get(ChatSession, "s1")
+        assert session.last_summarized_message_id == 6
+        assert session.summary_markdown == "新的滚动摘要"
         expected = sum(memory.estimate_token_count(text) for text in ("消息7", "消息8", "工具结果" * 100))
         assert session.summary_token_count == expected
 
@@ -261,8 +264,8 @@ async def test_memory_failure_and_cooldown_preserve_watermark(
 ) -> None:
     """冷却期与模型失败不推进水位；稳定偏好绕过冷却并正常写入。"""
     async with db_scope() as db:
+        db.add(User(id=1, username="test", password="pwd", long_term_memory="原记忆"))
         db.add(ChatSession(id="s1", user_id=1, ltm_message_count=100))
-        db.add(ChatLongTermMemory(user_id=1, memory_markdown="原记忆"))
         db.add(ChatMessage(session_id="s1", role="user",
                            content=[{"type": "text", "text": "我喜欢图解"}]))
     update = AsyncMock(side_effect=RuntimeError("模型暂不可用"))
@@ -278,4 +281,5 @@ async def test_memory_failure_and_cooldown_preserve_watermark(
     await memory.update_long_term_memory(1, "s1", "我喜欢图解", "好的")
     async with db_scope() as db:
         assert (await db.get(ChatSession, "s1")).last_ltm_message_id == 1
-        assert (await db.exec(select(ChatLongTermMemory))).one().memory_markdown == "偏好图解"
+        user = await db.get(User, 1)
+        assert user.long_term_memory == "偏好图解"

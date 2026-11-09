@@ -256,24 +256,6 @@ class GeneratedResourceBundleDTO(BaseModel):
         return self.topic
 
 
-class ResourceHistoryItemDTO(BaseModel):
-    """用户历史生成资源概览 DTO。"""
-
-    id: int = Field(description="任务主键 ID")
-    topic: str = Field(description="学习主题")
-    learning_goal: str = Field(default="", description="学习目标")
-    status: str = Field(description="状态")
-    created_at: datetime = Field(description="创建时间")
-    resource_count: int = Field(default=0, description="包含资源项数量")
-    resource_types: list[str] = Field(default_factory=list, description="包含的资源类型清单")
-
-    @computed_field
-    @property
-    def learning_need(self) -> str:
-        """获取学习主题别名。"""
-        return self.topic
-
-
 # ── 5. 通用辅助模型 (供 path 模块及测试导入) ────────────────────────────────
 
 
@@ -331,16 +313,3 @@ class ResourcePlan(BaseModel):
     def agent_ids(self) -> list[str]:
         """获取所有规划任务的 agent_id 列表。"""
         return [t.agent_id for t in self.tasks if t.agent_id]
-
-
-class ResourceInput(BaseModel):
-    """资源生成任务输入。"""
-
-    resource_id: str | int = "default"
-    username: str = "anonymous"
-    learning_need: str = ""
-    learning_scenario: str = "self_study"
-    profile: dict[str, Any] = Field(default_factory=dict)
-    teaching_plan: Any = None
-    upstream_handoffs: dict[str, Any] = Field(default_factory=dict)
-

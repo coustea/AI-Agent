@@ -1,4 +1,4 @@
-"""Chat 记忆管线 —— 基于 learn-claude-code s06 上下文自动压缩 (Auto-compact) 与长期记忆 (LTM)。"""
+"""Chat 记忆管线 —— 基于上下文自动压缩 (Auto-compact) 与长期记忆 (LTM)。"""
 
 from __future__ import annotations
 
@@ -19,12 +19,12 @@ from app.config import (
     UPDATE_MIN_TOKENS,
 )
 from app.infra.database import session_scope
+from app.infra.types import now_utc
 from app.infra.llm import HumanMessage, LLM, SystemMessage, load_prompt
 from app.infra.models import (
-    ChatLongTermMemory,
     ChatMessage,
     ChatSession,
-    ChatSessionSummaryBlock,
+    User,
 )
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
@@ -64,14 +64,9 @@ NON_SIGNIFICANT_TEXTS: Final[frozenset[str]] = frozenset(
 )
 
 
-def now_utc() -> datetime:
-    """返回当前 UTC 时间。"""
-    return datetime.now(timezone.utc)
-
-
 def extract_content_text(content: list[dict[str, Any]]) -> str:
     """从当前消息块列表中提取纯文本。"""
-    return " ".join(part["text"] for part in content if part["type"] == "text").strip()
+    return " ".join(part["text"] for part in content if part.get("type") == "text").strip()
 
 
 def estimate_token_count(text: str) -> int:
@@ -86,8 +81,8 @@ def estimate_token_count(text: str) -> int:
         return len(enc.encode(stripped))
     except Exception:
         pass
-    chinese_chars = len(re.findall(r"[一-鿿]", stripped))
-    non_chinese = re.sub(r"[一-鿿]", "", stripped)
+    chinese_chars = len(re.findall(r"[\u4e00-\u9fff]", stripped))
+    non_chinese = re.sub(r"[\u4e00-\u9fff]", "", stripped)
     return int(chinese_chars * 1.5) + len(non_chinese.split())
 
 
@@ -134,26 +129,23 @@ class MemoryUpdateOutput(BaseModel):
     update_reason: str = ""
 
 
-async def compress_session(user_id: int, session_id: str) -> ChatSessionSummaryBlock | None:
-    """达到阈值后压缩完整旧轮次，保留近期消息并推进实际摘要水位。"""
+async def compress_session(user_id: int, session_id: str) -> str | None:
+    """达到阈值后压缩完整旧轮次，滚动更新会话内置摘要并推进水位。"""
     async with session_scope() as db:
         chat_session = await db.get(ChatSession, session_id)
         if chat_session is None or chat_session.user_id != user_id:
             return None
-        latest_block = (await db.exec(
-            select(ChatSessionSummaryBlock)
-            .where(ChatSessionSummaryBlock.session_id == session_id)
-            .order_by(ChatSessionSummaryBlock.block_index.desc())
-            .limit(1)
-        )).first()
-        last_summarized_id = latest_block.end_message_id if latest_block else 0
+
+        last_summarized_id = chat_session.last_summarized_message_id
         messages = (await db.exec(
             select(ChatMessage)
             .where(ChatMessage.session_id == session_id, ChatMessage.id > last_summarized_id)
             .order_by(ChatMessage.id.asc())
         )).all()
+
         if chat_session.summary_token_count < COMPRESS_MIN_TOKENS and len(messages) < COMPRESS_MIN_MESSAGES:
             return None
+
         dialogue = [
             message for message in messages
             if message.role in {"user", "assistant"} and extract_content_text(message.content)
@@ -161,12 +153,12 @@ async def compress_session(user_id: int, session_id: str) -> ChatSessionSummaryB
         if len(dialogue) <= COMPRESS_KEEP_RECENT_MESSAGES:
             return None
 
-        # 保留最近消息所在的完整轮次，水位只能推进到实际送入模型的内容。
         cutoff = max(0, len(dialogue) - COMPRESS_KEEP_RECENT_MESSAGES)
         while 0 < cutoff < len(dialogue) and dialogue[cutoff].role != "user":
             cutoff -= 1
         if cutoff == 0:
             return None
+
         target: list[ChatMessage] = []
         lines: list[str] = []
         chars = 0
@@ -177,9 +169,10 @@ async def compress_session(user_id: int, session_id: str) -> ChatSessionSummaryB
             target.append(message)
             lines.append(line)
             chars += len(line)
+
         prompt = load_prompt(_COMPRESSION_PROMPT, dialogue_text="\n".join(lines))
-        if latest_block and latest_block.summary_markdown:
-            prompt += f"\n\n## 上一阶段滚动状态摘要\n{latest_block.summary_markdown}"
+        if chat_session.summary_markdown:
+            prompt += f"\n\n## 上一阶段滚动状态摘要\n{chat_session.summary_markdown}"
 
         resp = await LLM(temperature=0.7).text(
             [
@@ -191,16 +184,8 @@ async def compress_session(user_id: int, session_id: str) -> ChatSessionSummaryB
         if not summary_markdown:
             raise RuntimeError("LLM 生成的会话摘要为空")
 
-        next_block_index = (latest_block.block_index if latest_block else 0) + 1
-        summary_block = ChatSessionSummaryBlock(
-            session_id=session_id,
-            block_index=next_block_index,
-            summary_markdown=summary_markdown,
-            start_message_id=target[0].id,
-            end_message_id=target[-1].id,
-        )
-        db.add(summary_block)
-        await db.flush()
+        chat_session.summary_markdown = summary_markdown
+        chat_session.last_summarized_message_id = target[-1].id
 
         remaining = (await db.exec(select(ChatMessage).where(
             ChatMessage.session_id == session_id,
@@ -209,29 +194,31 @@ async def compress_session(user_id: int, session_id: str) -> ChatSessionSummaryB
         chat_session.summary_token_count = sum(
             estimate_token_count(extract_content_text(message.content)) for message in remaining
         )
+        chat_session.updated_at = now_utc()
         db.add(chat_session)
-        return summary_block
+        return summary_markdown
 
 
 async def update_long_term_memory(
     user_id: int, session_id: str, user_message: str, assistant_reply: str,
 ) -> None:
-    """按稳定信号或累计阈值分析新增对话，更新长期记忆及已分析水位。"""
+    """按稳定信号或累计阈值分析新增对话，直接增量更新 User 表中的长期记忆。"""
     detected = has_stable_signal(user_message) or (
         has_stable_signal(assistant_reply)
         and any(word in assistant_reply for word in ("以后", "下次", "记住", "偏好", "纠正"))
     )
     async with session_scope() as db:
         session = await db.get(ChatSession, session_id)
-        if session is None or session.user_id != user_id or not session.ltm_message_count:
+        user = await db.get(User, user_id)
+        if session is None or user is None or session.user_id != user_id or not session.ltm_message_count:
             return
+
         if not detected and session.ltm_token_count < UPDATE_MIN_TOKENS and session.ltm_message_count < UPDATE_MIN_MESSAGES:
             return
-        old_memory = (await db.exec(select(ChatLongTermMemory).where(
-            ChatLongTermMemory.user_id == user_id,
-        ))).first()
-        if old_memory and not detected and (now_utc() - old_memory.updated_at).total_seconds() < 1800:
+
+        if user.long_term_memory and not detected and user.updated_at and (now_utc() - user.updated_at).total_seconds() < 1800:
             return
+
         messages = (await db.exec(select(ChatMessage).where(
             ChatMessage.session_id == session_id,
             ChatMessage.role.in_(["user", "assistant"]),
@@ -243,24 +230,21 @@ async def update_long_term_memory(
         ]
         if not lines:
             return
-        summary = (await db.exec(select(ChatSessionSummaryBlock.summary_markdown).where(
-            ChatSessionSummaryBlock.session_id == session_id,
-        ).order_by(ChatSessionSummaryBlock.block_index.desc()).limit(1))).first()
+
         prompt = load_prompt(
             _LTM_PROMPT,
             new_dialogue="\n".join(lines),
             user_message=user_message[:1000],
             assistant_reply=assistant_reply[:1000],
-            session_summary=summary or "暂无会话概要。",
-            old_memory=old_memory.memory_markdown if old_memory else make_default_memory_markdown(),
+            session_summary=session.summary_markdown or "暂无会话概要。",
+            old_memory=user.long_term_memory or make_default_memory_markdown(),
         )
         result = await LLM(temperature=0.1).json(MemoryUpdateOutput, prompt)
         if result.need_update and result.memory_markdown and result.confidence >= LTM_MIN_CONFIDENCE:
-            if old_memory is None:
-                old_memory = ChatLongTermMemory(user_id=user_id)
-            old_memory.memory_markdown = result.memory_markdown
-            old_memory.updated_at = now_utc()
-            db.add(old_memory)
+            user.long_term_memory = result.memory_markdown
+            user.updated_at = now_utc()
+            db.add(user)
+
         latest_id = messages[-1].id
         remaining = (await db.exec(select(ChatMessage).where(
             ChatMessage.session_id == session_id, ChatMessage.id > latest_id,
@@ -274,12 +258,10 @@ async def update_long_term_memory(
 
 
 async def get_memory_markdown(user_id: int, category: str | None = None) -> str:
-    """读取用户长期记忆 Markdown，可按分类名称截取对应小节。"""
+    """读取 User 表中的长期记忆 Markdown，可按分类名称截取对应小节。"""
     async with session_scope() as db:
-        record = (
-            await db.exec(select(ChatLongTermMemory).where(ChatLongTermMemory.user_id == user_id))
-        ).first()
-    markdown = record.memory_markdown.strip() if record else ""
+        user = await db.get(User, user_id)
+    markdown = (user.long_term_memory if user else "").strip()
     if not markdown:
         return "暂无长期学习记忆。"
     category_value = str(category or "").strip()

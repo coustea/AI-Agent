@@ -20,13 +20,10 @@ from app.resource.schemas import (
 )
 from app.resource.service import (
     cancel_run,
-    delete_resource_record,
     execute_resource_run,
     get_active_run,
     get_resource_bundle,
-    get_resource_status,
     get_run_state,
-    list_resource_history,
     list_resources,
     prepare_resource_run,
 )
@@ -52,26 +49,6 @@ async def list_resources_endpoint(
     user = get_current_user()
     data = await list_resources(user.id, limit=limit, offset=offset)
     return HttpResponse.success(data=data)
-
-
-@router.get("/resources/{resource_id}")
-async def get_resource_detail_endpoint(resource_id: int) -> JSONResponse:
-    """获取指定资源详情。"""
-    user = get_current_user()
-    bundle = await get_resource_bundle(user.id, resource_id)
-    if bundle is None:
-        return HttpResponse.error(code=404, message="资源不存在或无权限")
-    return HttpResponse.success(data=bundle.model_dump())
-
-
-@router.get("/resources/{resource_id}/status")
-async def get_resource_status_endpoint(resource_id: int) -> JSONResponse:
-    """获取指定资源生成状态。"""
-    user = get_current_user()
-    status_data = await get_resource_status(user.id, resource_id)
-    if status_data is None:
-        return HttpResponse.error(code=404, message="资源不存在或无权限")
-    return HttpResponse.success(data=status_data)
 
 
 @router.post("/resource/generate")
@@ -166,22 +143,3 @@ async def get_bundle_by_id(resource_id: int) -> JSONResponse:
     return HttpResponse.success(data=bundle.model_dump())
 
 
-@router.get("/resource/history")
-async def list_history(
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-) -> JSONResponse:
-    """获取用户的教学资源生成历史记录列表。"""
-    user = get_current_user()
-    items = await list_resource_history(user.id, limit=limit, offset=offset)
-    return HttpResponse.success(data=[item.model_dump() for item in items])
-
-
-@router.delete("/resource/{resource_id}")
-async def delete_resource(resource_id: int) -> JSONResponse:
-    """删除指定的教学资源记录。"""
-    user = get_current_user()
-    success = await delete_resource_record(user.id, resource_id)
-    if not success:
-        return HttpResponse.error(code=404, message="资源记录不存在或无权限")
-    return HttpResponse.success(data={"deleted": True})

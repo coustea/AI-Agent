@@ -1,12 +1,5 @@
 import http from '@/shared/api/http'
-
-// 题型映射常量
-const QUESTION_TYPE_LABELS: Record<string, string> = {
-  single_choice: '单选题',
-  judge: '判断题',
-  fill_blank: '填空题',
-  analysis: '分析题',
-}
+import { toQuestionTypeLabel } from '@/features/question-bank/api/quizBank'
 
 // 错题数据类型定义
 export interface WrongQuestion {
@@ -100,10 +93,4 @@ function normalizeOptions(options: unknown): Record<string, string> | null {
   return Object.fromEntries(
     Object.entries(options as Record<string, unknown>).map(([key, value]) => [key, String(value ?? '')]),
   )
-}
-
-// 将后端题型枚举转为中文标签
-function toQuestionTypeLabel(value: unknown): string {
-  const key = String(value || '').trim()
-  return QUESTION_TYPE_LABELS[key] || key
 }

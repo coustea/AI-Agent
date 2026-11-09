@@ -168,7 +168,7 @@ class ResourceRunHooks:
         self.state.phase_label = f"子智能体正在推进: {step_title}"
         self.publish()
 
-    def on_subagent_progress(self, tool_name: str, message: str, progress: int = 50) -> None:
+    async def on_subagent_progress(self, tool_name: str, message: str, progress: int = 50) -> None:
         """子智能体内部进度推进通知（如 PPT 逐页渲染或动画音频合成）。"""
         for step in self._current_steps.values():
             if step.tool_name == tool_name and step.status == "running":

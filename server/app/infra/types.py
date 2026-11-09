@@ -15,7 +15,7 @@ from sqlalchemy.dialects import mysql
 from sqlalchemy.types import TypeDecorator
 
 
-def utcnow() -> datetime:
+def now_utc() -> datetime:
     """当前 UTC 时间（aware）。"""
     return datetime.now(timezone.utc)
 

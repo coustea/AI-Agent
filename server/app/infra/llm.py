@@ -6,7 +6,7 @@
 - `chat_json`: 结构化 JSON 生成函数（带自动重试与修复）
 - `chat_stream`: 流式生成生成器（返回 TextDelta / TurnDone）
 - `chat_vision`: 多模态图片理解函数
-- `get_llm_client`: 获取底层 (AsyncOpenAI, ProviderSpec) 元组
+- `get_llm_client`: 获取底层 (AsyncOpenAI, ModelSpec) 元组
 """
 
 from __future__ import annotations
@@ -184,10 +184,6 @@ class ModelSpec:
     model_name: str
     timeout: float = 300.0
     max_retries: int = 2
-
-
-# 兼容别名
-ProviderSpec = ModelSpec
 
 _MODELS: dict[str, ModelSpec] = {}
 _CLIENTS: dict[str, tuple[AsyncOpenAI, ModelSpec]] = {}
@@ -606,7 +602,6 @@ __all__ = [
     "LLM",
     "Message",
     "ModelSpec",
-    "ProviderSpec",
     "SystemMessage",
     "TextDelta",
     "ToolCall",

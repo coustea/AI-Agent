@@ -29,7 +29,7 @@ from app.config import MAX_UPLOAD_FILES_PER_REQUEST
 from app.infra.database import session_scope
 from app.infra.llm import LLM, Message, HumanMessage, SystemMessage
 from app.infra.logging import get_logger
-from app.infra.models import ChatMessage, ChatRun as ChatRunRow, ChatSession, ChatSessionSummaryBlock
+from app.infra.models import ChatMessage, ChatRun as ChatRunRow, ChatSession
 from app.shared.tools import ToolRegistry
 
 logger = get_logger(__name__)
@@ -338,10 +338,9 @@ async def cancel_run(user_id: int, run_id: str) -> str | None:
 async def mark_interrupted_runs() -> int:
     """服务启动时将上次进程遗留的 queued/running 运行标记为 interrupted。"""
     async with session_scope() as db:
-        result = await db.execute(
+        runs = list((await db.exec(
             select(ChatRunRow).where(ChatRunRow.status.in_(["queued", "running"]))
-        )
-        runs = list(result.scalars().all())
+        )).all())
         for run in runs:
             run.status = "interrupted"
             run.phase = "interrupted"
@@ -399,26 +398,6 @@ async def archive_session(user_id: int, session_id: str) -> bool:
         return True
 
 
-async def update_session_title(user_id: int, session_id: str, title: str) -> bool:
-    """更新指定会话的标题。"""
-    cleaned = (title or "").strip()[:TITLE_MAX_LENGTH]
-    if not cleaned:
-        return False
-    async with session_scope() as db:
-        chat_session = (
-            await db.exec(
-                select(ChatSession).where(
-                    ChatSession.id == session_id,
-                    ChatSession.user_id == user_id,
-                )
-            )
-        ).first()
-        if chat_session is None:
-            return False
-        chat_session.title = cleaned
-        chat_session.updated_at = now_utc()
-        db.add(chat_session)
-        return True
 
 
 async def get_history(
@@ -536,9 +515,8 @@ async def generate_session_title(user_id: int, session_id: str, first_message: s
 async def record_dialogue_event(user_id: int, session_id: str) -> None:
     """记录本轮辅导学习事件，供画像与评估更新使用。"""
     async with session_scope() as db:
-        summary = (await db.exec(select(ChatSessionSummaryBlock.summary_markdown).where(
-            ChatSessionSummaryBlock.session_id == session_id,
-        ).order_by(ChatSessionSummaryBlock.block_index.desc()).limit(1))).first()
+        chat_session = await db.get(ChatSession, session_id)
+        summary = chat_session.summary_markdown if chat_session else ""
         await EvaluationService().record_event(db, user_id=user_id, payload=LearningEventCreate(
             module=MODULE_CHAT, entity_id=session_id, event_type=CHAT_DIALOGUE,
             event_metadata={"summary_length": len(summary or ""), "turn_count": 1},

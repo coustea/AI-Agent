@@ -1,10 +1,8 @@
 """Profile HTTP 路由。
 
-从 chat/api.py 迁移而来，保持 profile 路由独立。
-包含首页仪表盘相关端点（从 dashboard 模块迁移）。
+包含个人中心画像查询/更新端点与首页仪表盘端点。
 """
 
-# 提供画像查询/更新接口与首页仪表盘（推荐、雷达、快捷操作）端点
 from __future__ import annotations
 
 from collections import Counter
@@ -12,6 +10,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.auth.security import get_current_user
 from app.infra.database import get_session
@@ -20,12 +20,12 @@ from app.infra.models import (
     ChatMessage,
     ChatSession,
     GeneratedResource,
+    LearningAssessment,
     LearningEvent,
     LearningPath,
     PathNode,
     School,
     User,
-    UserProfileDimension,
 )
 from app.response import HttpResponse
 from app.profile import (
@@ -40,8 +40,6 @@ from app.profile.service import (
     _user_base_info_dict,
 )
 from app.profile.types import ALL_DIMENSIONS, DIMENSION_NAMES
-from sqlmodel import col, select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -51,15 +49,14 @@ router = APIRouter()
 @router.get("/profile")
 async def get_profile(
     session: AsyncSession = Depends(get_session),
-):
-    """获取完整用户画像 — 聚合 User.base_info、UserProfileDimension 和 UserProfile.score。"""
+) -> HttpResponse:
+    """获取完整用户画像 — 聚合 User.base_info 与即时合成的维度评分。"""
     user_id = get_current_user().id
     current_user = await session.get(User, user_id)
     if not current_user:
         return HttpResponse.error(code=404, message="用户不存在")
     logger.info("GET /profile — user=%d", user_id)
     svc = get_profile_service()
-    profile = await svc.get_profile(user_id=user_id, db=session)
     dimensions = await svc.get_dimensions(user_id=user_id, db=session)
     base_info = _user_base_info_dict(current_user)
 
@@ -67,22 +64,19 @@ async def get_profile(
     dimension_scores = {
         key: dim.get("score", 0) for key, dim in dimensions.items()
     }
-    overall_score = profile.overall_score
-    if overall_score <= 0 and dimension_scores:
-        overall_score = round(sum(dimension_scores.values()) / len(dimension_scores))
+    overall_score = round(sum(dimension_scores.values()) / len(dimension_scores)) if dimension_scores else 0
 
-    # 返回完整画像数据
     return HttpResponse.success(data={
-        "user_id": profile.user_id,
+        "user_id": current_user.id,
         "module": "mentor",
         "base_info": BaseInfoData(**base_info).model_dump(),
         "dimensions": dimensions,
         "profile_score_json": {
             "overall_score": overall_score,
             "dimension_scores": dimension_scores,
-            "scored_at": profile.scored_at.isoformat() if profile.scored_at else (profile.updated_at.isoformat() if profile.updated_at else None),
+            "scored_at": current_user.updated_at.isoformat() if current_user.updated_at else None,
         },
-        "updated_at": profile.updated_at,
+        "updated_at": current_user.updated_at,
     })
 
 
@@ -90,7 +84,7 @@ async def get_profile(
 async def update_profile(
     payload: ProfileUpdate,
     session: AsyncSession = Depends(get_session),
-):
+) -> HttpResponse:
     """更新个人中心展示的基础资料，不改变 onboarding 完成状态或偏好字段。"""
     user_id = get_current_user().id
     logger.info("[ProfileAPI] 更新基础资料: user_id=%s", user_id)
@@ -106,7 +100,7 @@ async def update_profile(
 @router.get("/profile/onboarding")
 async def get_profile_onboarding(
     session: AsyncSession = Depends(get_session),
-):
+) -> HttpResponse:
     """获取 onboarding 基本信息 — 直接从 User 表读取。"""
     user_id = get_current_user().id
     current_user = await session.get(User, user_id)
@@ -125,13 +119,12 @@ async def get_profile_onboarding(
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
     session: AsyncSession = Depends(get_session),
-):
+) -> HttpResponse:
     """更新 onboarding 信息：同步保存基础信息与基线偏好到 User 表，即刻生效。"""
     payload_data = payload.model_dump()
     user_id = get_current_user().id
     svc = get_profile_service()
     logger.info("[ProfileAPI] onboarding 基础信息提交: user_id=%s", user_id)
-    # 同步保存基础信息到 User 表
     await svc.save_onboarding_info(
         user_id=user_id,
         payload=payload_data,
@@ -145,11 +138,9 @@ async def update_profile_onboarding(
 
 
 # ---------------------------------------------------------------------------
-# 仪表盘端点（从 dashboard 模块迁移）
+# 仪表盘端点
 # ---------------------------------------------------------------------------
 
-
-# 安全提取文本值：空值或非字符串返回默认值
 def _text(value: Any, fallback: str = "") -> str:
     """安全提取文本值，空值时返回默认值。"""
     if value is None:
@@ -159,19 +150,17 @@ def _text(value: Any, fallback: str = "") -> str:
     return str(value)
 
 
-# 取低分维度（<60 分）列表，按分数升序返回前 limit 个
 def _low_score_dimensions(score_json: dict[str, Any], *, limit: int = 5) -> list[str]:
     """获取低分维度列表（得分低于60分）。"""
     scores = score_json.get("dimension_scores") or {}
     items: list[tuple[str, float]] = []
     for key, value in scores.items():
-        if isinstance(value, (int, float)) and value > 0 and value < 60:
+        if isinstance(value, (int, float)) and 0 < value < 60:
             items.append((key, float(value)))
     items.sort(key=lambda item: item[1])
     return [DIMENSION_NAMES.get(key, key) for key, _ in items[:limit]]
 
 
-# 将资源/路径等状态值映射为中文标签
 def _status_label(value: str) -> str:
     """将状态值转换为中文标签。"""
     return {
@@ -194,7 +183,6 @@ def _status_label(value: str) -> str:
     }.get(value, value or "待更新")
 
 
-# 从学习事件中提取主题（topic 优先，其次 course）
 def _event_topic(event: LearningEvent | None) -> str:
     """从学习事件中提取主题。"""
     if not event:
@@ -202,15 +190,13 @@ def _event_topic(event: LearningEvent | None) -> str:
     return _text(event.topic) or _text(event.course)
 
 
-# 获取资源标题，缺省返回默认文案
 def _resource_title(resource: GeneratedResource | None) -> str:
     """获取资源标题。"""
     if not resource:
         return ""
-    return _text(resource.learning_need, "最近生成的资源")
+    return _text(resource.topic, "最近生成的资源")
 
 
-# 选取当前学习路径节点（优先 available，其次 completed_with_gaps）
 def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
     """获取当前学习路径节点（优先可用状态，其次已完成有缺陷状态）。"""
     for status in ("available", "completed_with_gaps"):
@@ -220,7 +206,6 @@ def _current_node(path_nodes: list[PathNode]) -> PathNode | None:
     return path_nodes[0] if path_nodes else None
 
 
-# 查询用户活跃学习路径（最多 limit 条，按更新时间倒序）
 async def _get_active_paths(session: AsyncSession, user_id: int, limit: int = 5) -> list[LearningPath]:
     """获取用户所有活跃的学习路径列表。"""
     return list((await session.exec(
@@ -231,7 +216,6 @@ async def _get_active_paths(session: AsyncSession, user_id: int, limit: int = 5)
     )).all())
 
 
-# 查询某路径下所有节点（按优先级升序、更新时间倒序，上限 12）
 async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> list[PathNode]:
     """获取学习路径的所有节点（按优先级排序）。"""
     return list((await session.exec(
@@ -242,7 +226,6 @@ async def _get_path_nodes(session: AsyncSession, user_id: int, path_id: int) -> 
     )).all())
 
 
-# 查询用户最近的学习事件（按时间倒序）
 async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 50) -> list[LearningEvent]:
     """获取用户最近的学习事件列表。"""
     return list((await session.exec(
@@ -253,24 +236,20 @@ async def _get_recent_events(session: AsyncSession, user_id: int, limit: int = 5
     )).all())
 
 
-# 聚合用户评分数据（总体分 + 各维度分 + 评分时间）
 async def _get_profile_score_json(session: AsyncSession, user_id: int) -> dict[str, Any]:
     """获取用户评分数据（支持 JIT 即时装配评分）。"""
+    user = await session.get(User, user_id)
     svc = get_profile_service()
-    profile = await svc.get_profile(user_id=user_id, db=session)
     dimensions = await svc.get_dimensions(user_id=user_id, db=session)
     dim_scores = {k: v.get("score", 0) for k, v in dimensions.items()}
-    overall = profile.overall_score
-    if overall <= 0 and dim_scores:
-        overall = round(sum(dim_scores.values()) / len(dim_scores))
+    overall = round(sum(dim_scores.values()) / len(dim_scores)) if dim_scores else 0
     return {
         "overall_score": overall,
         "dimension_scores": dim_scores,
-        "scored_at": profile.scored_at.isoformat() if profile.scored_at else (profile.updated_at.isoformat() if profile.updated_at else None),
+        "scored_at": user.updated_at.isoformat() if user and user.updated_at else None,
     }
 
 
-# 从学习事件中提取薄弱知识点（按测验低分与困难反馈加权计数）
 def _weak_topics_from_events(events: list[LearningEvent]) -> list[str]:
     """从学习事件中提取薄弱知识点。"""
     counter: Counter[str] = Counter()
@@ -287,18 +266,16 @@ def _weak_topics_from_events(events: list[LearningEvent]) -> list[str]:
     return [topic for topic, _ in counter.most_common(5)]
 
 
-# 获取首页推荐内容（根据用户状态返回个性化下一步建议）
 @router.get("/dashboard/recommendation")
 async def get_recommendation(
     session: AsyncSession = Depends(get_session),
-):
+) -> HttpResponse:
     """获取首页推荐内容 — 根据用户状态返回个性化学习建议。"""
     user_id = get_current_user().id
     current_user = await session.get(User, user_id)
     if not current_user:
         return HttpResponse.error(code=404, message="用户不存在")
     logger.info("GET /dashboard/recommendation — user=%d", user_id)
-    await get_profile_service().get_profile(user_id=user_id, db=session)
     goal = _text(current_user.global_learning_goal)
     courses = current_user.courses or []
     primary_course = courses[0] if courses else ""
@@ -325,16 +302,13 @@ async def get_recommendation(
         .where(ChatSession.user_id == current_user.id, ChatMessage.role == "user")
     )).one()
 
-    # 判断是否存在任何使用信号
     has_activity = any((chat_session_count, user_message_count, recent_resources, active_path, recent_events))
-    # 无专业信息且无任何活动则判定为冷启动
     cold_start = not _text(current_user.major) and not has_activity
     weak_topics = _weak_topics_from_events(recent_events)
     node = _current_node(path_nodes)
     latest_event = recent_events[0] if recent_events else None
     latest_resource = recent_resources[0] if recent_resources else None
 
-    # 冷启动：引导先完善画像
     if cold_start and not has_activity:
         recommendation = {
             "label": "推荐下一步",
@@ -344,7 +318,6 @@ async def get_recommendation(
             "path": "/profile",
             "icon": "monitor",
         }
-    # 最近低分测验：引导复盘错因
     elif latest_event and latest_event.event_type == "quiz_submitted" and latest_event.score is not None and latest_event.score < 70:
         topic = _event_topic(latest_event) or (weak_topics[0] if weak_topics else "最近测验")
         recommendation = {
@@ -355,7 +328,6 @@ async def get_recommendation(
             "path": "/tutor",
             "icon": "chat",
         }
-    # 有当前路径节点：建议继续推进
     elif node:
         recommendation = {
             "label": "今日建议",
@@ -365,7 +337,6 @@ async def get_recommendation(
             "path": "/path-planner",
             "icon": "path",
         }
-    # 有薄弱点：建议针对生成资源
     elif weak_topics:
         fallback_text = goal or f"建议继续围绕「{primary_course}」推进" if primary_course else "建议先补充学习目标和课程信息"
         recommendation = {
@@ -376,7 +347,6 @@ async def get_recommendation(
             "path": "/resource-generator",
             "icon": "resource",
         }
-    # 最近资源仍在处理中：提示查看进度
     elif latest_resource and latest_resource.status in {"pending", "generating", "processing"}:
         recommendation = {
             "label": "资源进度",
@@ -386,7 +356,6 @@ async def get_recommendation(
             "path": f"/resource-detail/{latest_resource.id}" if latest_resource.id else "/resource-generator",
             "icon": "resource",
         }
-    # 最近资源已完成：建议回看并练习
     elif latest_resource and latest_resource.id:
         recommendation = {
             "label": "最近资源",
@@ -396,7 +365,6 @@ async def get_recommendation(
             "path": f"/resource-detail/{latest_resource.id}",
             "icon": "resource",
         }
-    # 兜底：建议生成第一条学习路径
     else:
         recommendation = {
             "label": "推荐下一步",
@@ -407,22 +375,19 @@ async def get_recommendation(
             "icon": "path",
         }
 
-    # 返回首页推荐状态与推荐内容
     return HttpResponse.success(data={
         "state": "cold_start" if cold_start else "active",
         "recommendation": recommendation,
     })
 
 
-# 获取用户画像雷达图数据（各维度得分与薄弱区域）
 @router.get("/dashboard/profile-radar")
 async def get_profile_radar(
     session: AsyncSession = Depends(get_session),
-):
+) -> HttpResponse:
     """获取用户画像雷达图数据 — 各维度得分。"""
     user_id = get_current_user().id
     logger.info("GET /dashboard/profile-radar — user=%d", user_id)
-    await get_profile_service().get_profile(user_id=user_id, db=session)
     score_dict = await _get_profile_score_json(session, user_id)
 
     scores = score_dict.get("dimension_scores") or {}
@@ -437,7 +402,6 @@ async def get_profile_radar(
 
     weak_areas = _low_score_dimensions(score_dict)
 
-    # 返回雷达图所需的总体分、维度分与薄弱区域
     return HttpResponse.success(data={
         "score": score_dict.get("overall_score"),
         "dimensions": dimensions,
@@ -450,15 +414,54 @@ async def get_profile_radar(
     })
 
 
-# 获取快捷操作和今日建议（按权重排序）
+_RESOURCE_TYPE_LABELS: dict[str, str] = {
+    "content": "课程讲解",
+    "mindmap": "思维导图",
+    "code": "代码实操",
+    "quiz": "随堂练习",
+    "reading": "拓展阅读",
+    "ppt": "演示幻灯",
+    "cartoon": "动画讲解",
+}
+
+
+@router.get("/dashboard/recent-resources")
+async def get_recent_resources(
+    limit: int = Query(default=20, ge=1, le=100),
+    session: AsyncSession = Depends(get_session),
+) -> HttpResponse:
+    """获取用户最近生成的独立教学资源，直接从 GeneratedResource.artifacts 解析。"""
+    user_id = get_current_user().id
+    logger.info("GET /dashboard/recent-resources — user=%d limit=%d", user_id, limit)
+
+    records = list((await session.exec(
+        select(GeneratedResource)
+        .where(GeneratedResource.user_id == user_id)
+        .order_by(col(GeneratedResource.id).desc())
+        .limit(limit)
+    )).all())
+
+    data = []
+    for record in records:
+        agent_types = [a.get("kind") for a in (record.artifacts or []) if isinstance(a, dict) and a.get("kind")]
+        primary = agent_types[0] if agent_types else ""
+        data.append({
+            "id": record.id or 0,
+            "title": record.topic,
+            "type": _RESOURCE_TYPE_LABELS.get(primary, primary or "资源包"),
+            "agent": "资源生成智能体",
+            "created_at": record.created_at,
+        })
+    return HttpResponse.success(data=data)
+
+
 @router.get("/dashboard/quick-actions")
 async def get_quick_actions(
     session: AsyncSession = Depends(get_session),
-):
+) -> HttpResponse:
     """获取快捷操作和今日建议。"""
     user_id = get_current_user().id
     logger.info("GET /dashboard/quick-actions — user=%d", user_id)
-    await get_profile_service().get_profile(user_id=user_id, db=session)
     recent_events = await _get_recent_events(session, user_id, limit=30)
 
     chat_session_count = (await session.exec(
@@ -470,25 +473,23 @@ async def get_quick_actions(
         select(func.count())
         .select_from(ChatMessage)
         .join(ChatSession, ChatSession.id == ChatMessage.session_id)
-        .where(ChatSession.user_id == current_user.id, ChatMessage.role == "user")
+        .where(ChatSession.user_id == user_id, ChatMessage.role == "user")
     )).one()
     recent_resources = list((await session.exec(
         select(GeneratedResource)
-        .where(GeneratedResource.user_id == current_user.id)
+        .where(GeneratedResource.user_id == user_id)
         .order_by(col(GeneratedResource.updated_at).desc())
         .limit(5)
     )).all())
-    active_paths = await _get_active_paths(session, current_user.id)
+    active_paths = await _get_active_paths(session, user_id)
     active_path = active_paths[0] if active_paths else None
 
     weak_topics = _weak_topics_from_events(recent_events)
 
-    # Check if user has a ready assessment
-    from app.infra.models import LearningAssessment
     assessment_count = (await session.exec(
         select(func.count())
         .select_from(LearningAssessment)
-        .where(LearningAssessment.user_id == current_user.id, LearningAssessment.status == 'ready')
+        .where(LearningAssessment.user_id == user_id, LearningAssessment.status == "ready")
     )).one()
     has_ready_report = assessment_count > 0
 
@@ -539,13 +540,12 @@ async def get_quick_actions(
             "tag": "已有报告" if has_ready_report else "待生成",
         },
     ]
-    # 按 score 降序排序并剔除 score 字段，生成最终快捷操作列表
+
     actions = [
         {key: _text(value) for key, value in item.items() if key != "score"}
         for item in sorted(action_defs, key=lambda value: value["score"], reverse=True)
     ]
 
-    # 返回排序后的快捷操作
     return HttpResponse.success(data={"actions": actions})
 
 

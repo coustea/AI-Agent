@@ -13,27 +13,11 @@ class PPTModel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-class PPTPreferences(PPTModel):
-    """前端与调用方传入的课件偏好配置。"""
-
-    narrative_style: Literal["concept", "case_driven", "problem_led", "review"] = "concept"
-    density: Literal["concise", "standard", "detailed"] = "standard"
-    emphasis: list[Literal["core_concepts", "cases", "pitfalls", "derivation"]] = Field(
-        default_factory=lambda: ["core_concepts"],
-        min_length=1,
-        max_length=4,
-    )
-    template: str = "auto"
-    explanation_style: str = "concept"
-    focus: list[str] = Field(default_factory=lambda: ["core_concepts"])
-
-
 class PPTBrief(PPTModel):
     """交付给 PPTAgent 的结构化创作任务需求。"""
 
     title: str = Field(min_length=1, description="课件标题")
     context: str = Field(min_length=1, description="课件教学上下文、大纲或上游素材")
-    preferences: PPTPreferences = Field(default_factory=PPTPreferences)
 
 
 class PPTArtifact(PPTModel):
@@ -72,5 +56,4 @@ __all__ = [
     "PPTArtifact",
     "PPTBrief",
     "PPTGenerationError",
-    "PPTPreferences",
 ]

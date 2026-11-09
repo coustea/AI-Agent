@@ -10,7 +10,6 @@ from pydantic import ValidationError
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from app.resource.schemas import ResourceGenerationRequest
-from app.shared.ppt import PPTPreferences
 
 
 def test_resource_generation_request_rebuilds_for_fastapi_body_validation() -> None:
@@ -59,27 +58,3 @@ def test_resource_generation_request_default_values() -> None:
     assert request.target_resources == ["content", "mindmap", "quiz"]
     assert "content" in request.enabled_agent_ids()
     assert request.preferences == {}
-
-
-class TestPptConfig:
-    """PPTPreferences 配置模型校验测试。"""
-
-    def test_accepts_empty_object(self) -> None:
-        """测试缺省空配置时的默认值解析。"""
-        config = PPTPreferences.model_validate({})
-        assert config.template == "auto"
-        assert config.explanation_style == "concept"
-
-    @pytest.mark.parametrize(
-        "field,value",
-        [
-            ("theme_id", "neon"),
-            ("visual_emphasis", "high"),
-            ("template_id", "corporate"),
-            ("output_format", "pdf"),
-        ],
-    )
-    def test_rejects_old_fields(self, field: str, value: str) -> None:
-        """测试严谨拦截已弃用的旧版字段。"""
-        with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-            PPTPreferences.model_validate({field: value})

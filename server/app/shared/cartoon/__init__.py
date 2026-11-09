@@ -6,15 +6,11 @@ from app.shared.cartoon.schemas import (
     CartoonBrief,
     CartoonGenerationConfig,
     CartoonGenerationError,
-    CartoonInput,
-    CartoonResourceMetadata,
 )
 from app.shared.cartoon.tool import (
     GenerateVideoToolArgs,
     build_cartoon_tool,
 )
-
-build_cartoon_subagent_tool = build_cartoon_tool
 
 __all__ = [
     "CartoonAgent",
@@ -22,11 +18,8 @@ __all__ = [
     "CartoonBrief",
     "CartoonGenerationConfig",
     "CartoonGenerationError",
-    "CartoonInput",
-    "CartoonResourceMetadata",
     "GenerateVideoToolArgs",
     "ProgressCallback",
     "build_cartoon_tool",
-    "build_cartoon_subagent_tool",
     "generate",
 ]

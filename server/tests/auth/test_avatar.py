@@ -17,10 +17,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from httpx import ASGITransport, AsyncClient
 
 from app.auth.schemas import UserClaims, UserRead
-from app.auth.security import get_current_user
+from app.auth.security import create_token
 from app.config import user_avatar_dir
 from app.infra.database import get_session
 from app.main import create_app
+
+
+_AUTH_HEADERS = {
+    "Authorization": f"Bearer {create_token(UserClaims(id=42, username='testuser', email='test@example.com'))}",
+}
 
 
 @pytest.fixture
@@ -34,11 +39,8 @@ def mock_user():
 
 @pytest.fixture
 def app_with_auth(mock_user):
-    """创建 app 并 override 认证依赖。"""
+    """创建 app：真实 JWT 鉴权 + mock 数据库会话。"""
     app = create_app()
-
-    async def _override_user():
-        return mock_user
 
     async def _override_session():
         mock_session = AsyncMock()
@@ -47,10 +49,8 @@ def app_with_auth(mock_user):
         mock_session.rollback = AsyncMock()
         yield mock_session
 
-    app.dependency_overrides[get_current_user] = _override_user
     app.dependency_overrides[get_session] = _override_session
     yield app
-    app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_session, None)
 
 
@@ -92,7 +92,9 @@ async def test_upload_avatar_success(app_with_auth, mock_user):
         )
 
         transport = ASGITransport(app=app_with_auth)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(
+            transport=transport, base_url="http://test", headers=_AUTH_HEADERS,
+        ) as client:
             png_bytes = _make_png_bytes()
             response = await client.post(
                 "/api/v1/users/me/avatar",
@@ -118,7 +120,9 @@ async def test_upload_avatar_jpg(app_with_auth, mock_user):
         )
 
         transport = ASGITransport(app=app_with_auth)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(
+            transport=transport, base_url="http://test", headers=_AUTH_HEADERS,
+        ) as client:
             jpg_bytes = _make_jpg_bytes()
             response = await client.post(
                 "/api/v1/users/me/avatar",
@@ -134,7 +138,9 @@ async def test_upload_avatar_jpg(app_with_auth, mock_user):
 async def test_upload_avatar_unsupported_format(app_with_auth):
     """POST /me/avatar — 不支持的文件格式应返回 400。"""
     transport = ASGITransport(app=app_with_auth)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(
+            transport=transport, base_url="http://test", headers=_AUTH_HEADERS,
+        ) as client:
         svg_content = b"<svg><circle r='10'/></svg>"
         response = await client.post(
             "/api/v1/users/me/avatar",
@@ -148,7 +154,9 @@ async def test_upload_avatar_unsupported_format(app_with_auth):
 async def test_upload_avatar_too_large(app_with_auth):
     """POST /me/avatar — 超过 2MB 的文件应返回 400。"""
     transport = ASGITransport(app=app_with_auth)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
+    async with AsyncClient(
+            transport=transport, base_url="http://test", headers=_AUTH_HEADERS,
+        ) as client:
         big_content = b"x" * (2 * 1024 * 1024 + 100)
         response = await client.post(
             "/api/v1/users/me/avatar",
@@ -187,7 +195,9 @@ async def test_upload_avatar_writes_file(app_with_auth, mock_user, tmp_path):
         )
 
         transport = ASGITransport(app=app_with_auth)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(
+            transport=transport, base_url="http://test", headers=_AUTH_HEADERS,
+        ) as client:
             png_bytes = _make_png_bytes()
             response = await client.post(
                 "/api/v1/users/me/avatar",
@@ -215,7 +225,9 @@ async def test_upload_avatar_overwrites_previous(app_with_auth, mock_user, tmp_p
         )
 
         transport = ASGITransport(app=app_with_auth)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(
+            transport=transport, base_url="http://test", headers=_AUTH_HEADERS,
+        ) as client:
             png1 = _make_png_bytes()
             await client.post(
                 "/api/v1/users/me/avatar",

@@ -15,7 +15,7 @@
 
 LLM 输出两部分：
 - assessment：学习评估文案（一段话）
-- guidance_strategy：辅导策略（结构化），同步写入 UserProfile
+- guidance_strategy：辅导策略（结构化），同步写入 User
 """
 
 from __future__ import annotations
@@ -140,7 +140,7 @@ class EvaluationService:
         # 3. 使用 LLM 生成评估文案和辅导策略
         assessment_text, guidance_strategy = await self._derive_assessment_with_llm(facts_snapshot)
 
-        # 4. 更新评估状态并写入策略到 UserProfile
+        # 4. 更新评估状态并写入策略到 User
         assessment.status = "ready"
         assessment.assessment = assessment_text
         assessment.generated_at = datetime.now(timezone.utc)
@@ -273,27 +273,15 @@ class EvaluationService:
         strategy: dict[str, Any],
         assessment_id: int,
     ) -> None:
-        """将辅导策略写入 UserProfile。"""
-        from app.infra.models import UserProfile
-        profile = await session.scalar(select(UserProfile).where(UserProfile.user_id == user_id))
+        """将辅导策略写入 User。"""
+        from app.infra.models import User
+        user = await session.get(User, user_id)
         now = datetime.now(timezone.utc)
-        if profile is None:
-            profile = UserProfile(
-                user_id=user_id,
-                overall_score=0,
-                scored_at=None,
-                guidance_strategy=strategy,
-                guidance_updated_at=now,
-                last_assessment_id=assessment_id,
-                created_at=now,
-                updated_at=now,
-            )
-            session.add(profile)
-        else:
-            profile.guidance_strategy = strategy
-            profile.guidance_updated_at = now
-            profile.last_assessment_id = assessment_id
-            profile.updated_at = now
+        if user is not None:
+            user.guidance_strategy = strategy
+            user.guidance_updated_at = now
+            user.updated_at = now
+            session.add(user)
 
     # 记录单条学习事件并落库（带幂等去重）
     async def record_event(
@@ -373,17 +361,15 @@ class EvaluationService:
         - chat 模块累计 >= EVENT_THRESHOLD_CHAT 条新事件
         - 且当前没有生成中的评估
 
-        阈值重置：基于 UserProfile.profile_updated_at（Step1+2 完成后写入），
+        阈值重置：基于 User.profile_updated_at（Step1+2 完成后写入），
         而非 LearningAssessment.created_at，确保即使 Step3 失败也不会重复触发。
         """
         from app.infra.database import session_scope
-        from app.infra.models import UserProfile
+        from app.infra.models import User
 
         # 获取上次画像更新时间，作为阈值计数的起点
-        profile = await session.scalar(
-            select(UserProfile).where(UserProfile.user_id == user_id)
-        )
-        last_profile_update = profile.profile_updated_at if profile else None
+        user = await session.get(User, user_id)
+        last_profile_update = user.profile_updated_at if user else None
 
         # 统计上次画像更新后新增的事件数（按模块分开计数）
         if last_profile_update:
@@ -435,13 +421,11 @@ class EvaluationService:
             try:
                 # 重置阈值计数起点
                 now_utc = datetime.now(timezone.utc)
-                profile_row = await new_session.scalar(
-                    select(UserProfile).where(UserProfile.user_id == user_id)
-                )
-                if profile_row:
-                    profile_row.profile_updated_at = now_utc
-                    profile_row.updated_at = now_utc
-                    new_session.add(profile_row)
+                user_row = await new_session.get(User, user_id)
+                if user_row:
+                    user_row.profile_updated_at = now_utc
+                    user_row.updated_at = now_utc
+                    new_session.add(user_row)
                     await new_session.flush()
                     logger.info(
                         "[Evaluation] 阈值重置: user=%s profile_updated_at=%s",

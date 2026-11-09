@@ -12,7 +12,7 @@ from sqlmodel import select
 
 from app.chat.memory import extract_content_text
 from app.chat.schemas import AgentInput, AttachmentInput
-from app.config import CHAT_HISTORY_LIMIT, SUMMARY_CONTEXT_BLOCKS
+from app.config import CHAT_HISTORY_LIMIT
 from app.evaluation.guidance import get_effective_guidance_strategy
 from app.infra.database import session_scope
 from app.infra.llm import (
@@ -24,7 +24,7 @@ from app.infra.llm import (
     ToolMessage,
     load_prompt,
 )
-from app.infra.models import ChatMessage, ChatSession, ChatSessionSummaryBlock, UserProfile
+from app.infra.models import ChatMessage, ChatSession, User
 
 _PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "tutor_agent.md"
 
@@ -55,7 +55,7 @@ def convert_stored_message(message: ChatMessage) -> Message | None:
     if message.role == "user":
         notes = [
             f"[历史上传文件: {part['original_name']} ({part['url']})]"
-            for part in message.content if part["type"] in {"image_url", "file"}
+            for part in message.content if part.get("type") in {"image_url", "file"}
         ]
         return HumanMessage("\n".join([text, *notes]).strip())
     if message.role == "assistant":
@@ -130,27 +130,18 @@ async def load_conversation(
     *,
     exclude_message_id: int | None = None,
 ) -> tuple[list[Message], str]:
-    """使用同一批摘要及其水位加载历史，保留完整工具链并裁剪长输出。"""
+    """使用会话内置滚动摘要及其水位加载历史，保留完整工具链并裁剪长输出。"""
     async with session_scope() as db:
-        blocks = (
-            await db.exec(
-                select(ChatSessionSummaryBlock)
-                .join(ChatSession, ChatSession.id == ChatSessionSummaryBlock.session_id)
-                .where(
-                    ChatSession.user_id == user_id,
-                    ChatSessionSummaryBlock.session_id == session_id,
-                )
-                .order_by(ChatSessionSummaryBlock.block_index.desc())
-                .limit(max(1, SUMMARY_CONTEXT_BLOCKS))
-            )
-        ).all()
-        summarized_through_id = blocks[0].end_message_id if blocks else 0
+        chat_session = await db.get(ChatSession, session_id)
+        if chat_session is None or chat_session.user_id != user_id:
+            return [], ""
+
+        summary = chat_session.summary_markdown or ""
+        summarized_through_id = chat_session.last_summarized_message_id or 0
 
         stmt = (
             select(ChatMessage)
-            .join(ChatSession, ChatSession.id == ChatMessage.session_id)
             .where(
-                ChatSession.user_id == user_id,
                 ChatMessage.session_id == session_id,
                 ChatMessage.id > summarized_through_id,
             )
@@ -171,20 +162,7 @@ async def load_conversation(
 
     converted = [m for msg in raw_messages if (m := convert_stored_message(msg)) is not None]
     sanitized = sanitize_tool_message_chain(converted)
-    summary = "\n\n---\n\n".join(block.summary_markdown for block in reversed(blocks))
     return prune_tool_messages(sanitized), summary
-
-
-async def _load_agent_md(user_id: int) -> str:
-    """读取用户的 AGENT.md 学习档案文本。"""
-    try:
-        async with session_scope() as db:
-            result = await db.execute(
-                select(UserProfile.agent_md).where(UserProfile.user_id == user_id)
-            )
-            return (result.scalar_one_or_none() or "").strip()
-    except Exception:
-        return ""
 
 
 async def _load_guidance_strategy(user_id: int) -> dict[str, Any] | None:
@@ -220,15 +198,14 @@ def _format_attachment_manifest(attachments: list[AttachmentInput]) -> str:
 
 
 async def build_turn_messages(inp: AgentInput) -> list[Message]:
-    """根据 AgentInput 并行加载历史、会话摘要、辅导策略与学习档案，组装完整 Message 列表。"""
-    (history, session_summary), strategy, agent_md = await asyncio.gather(
+    """根据 AgentInput 并行加载历史、会话摘要与辅导策略，组装完整 Message 列表。"""
+    (history, session_summary), strategy = await asyncio.gather(
         load_conversation(
             inp.user_id,
             inp.session_id,
             exclude_message_id=inp.user_message_id or None,
         ),
         _load_guidance_strategy(inp.user_id),
-        _load_agent_md(inp.user_id),
     )
 
     blocks: list[str] = [f"[当前日期]\n{datetime.now().date().isoformat()}"]
@@ -257,8 +234,6 @@ async def build_turn_messages(inp: AgentInput) -> list[Message]:
             f"重点关注主题: {'、'.join(strategy.get('focus_topics', [])) or '无'}\n"
             f"策略依据: {strategy.get('reason')}"
         )
-    if agent_md:
-        blocks.append(f"[我的学习档案]\n{agent_md}")
 
     dynamic_context = "\n\n".join(blocks)
     question = inp.effective_question

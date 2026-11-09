@@ -351,14 +351,11 @@ async def list_wrong(
     # 按科目筛选
     if subject:
         stmt = stmt.where(WrongQuestion.subject == subject)
-    # 按题型筛选（兼容中英文标签）
+    # 按题型筛选：前端传中文标签，统一转换为数据库英文键
     if type:
-        # 前端传中文标签，需兼容英文键和中文标签两种存储格式
         from app.quiz.service import QuizBankService
         db_type = QuizBankService._TYPE_LABEL_TO_KEY.get(type, type)
-        stmt = stmt.where(
-            (WrongQuestion.question_type == type) | (WrongQuestion.question_type == db_type)
-        )
+        stmt = stmt.where(WrongQuestion.question_type == db_type)
 
     # 统计符合筛选条件的错题总数
     total = (await session.exec(

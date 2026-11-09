@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CartoonModel(BaseModel):
@@ -44,18 +44,6 @@ class CartoonArtifact(CartoonModel):
     html_path: Path
     video_path: Path
     caption_path: Path
-    duration_ms: int | None = Field(default=None, description="毫秒播放时长兼容字段")
-    output_dir: Path | None = Field(default=None, description="产物目录兼容字段")
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_duration(cls, data: Any) -> Any:
-        """兼容毫秒级时长输入并自动换算为秒。"""
-        if isinstance(data, dict):
-            if "duration_ms" in data and ("duration_seconds" not in data or not data["duration_seconds"]):
-                ms = data.get("duration_ms") or 0
-                data["duration_seconds"] = round(ms / 1000.0, 2)
-        return data
 
     def metadata(self) -> dict[str, Any]:
         """将视频产物信息转换为包含静态访问 URL 的元数据字典。"""
@@ -83,28 +71,9 @@ class CartoonGenerationError(RuntimeError):
         self.problems = list(problems or [])
 
 
-class CartoonInput(BaseModel):
-    """动画视频生成输入参数兼容结构。"""
-
-    output_dir: Path
-    brief: CartoonBrief
-
-
-class CartoonResourceMetadata(BaseModel):
-    """动画资源元数据。"""
-
-    video_url: str = ""
-    preview_url: str = ""
-    captions_url: str = ""
-    duration_seconds: float = 0.0
-    scene_count: int = 1
-
-
 __all__ = [
     "CartoonArtifact",
     "CartoonBrief",
     "CartoonGenerationConfig",
     "CartoonGenerationError",
-    "CartoonInput",
-    "CartoonResourceMetadata",
 ]

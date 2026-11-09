@@ -56,7 +56,6 @@ class QuizBankService:
         "判断题": "judge",
         "填空题": "fill_blank",
         "分析题": "analysis",
-        "选择题": "single_choice",  # 兼容旧标签
     }
 
     # 匹配未转义的 LaTeX 命令（缺少 \ 前缀）的正则
