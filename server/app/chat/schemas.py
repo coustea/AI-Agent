@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.auth.schemas import UserClaims
+
 DiagramMode = Literal["auto", "required"]
 
 TerminalStatus = Literal["completed", "failed", "cancelled", "interrupted"]
@@ -53,13 +55,24 @@ class ChatRequest(BaseModel):
 
 
 class AgentInput(ChatRequest):
-    """单轮对话的请求与登记信息，用于服务编排和上下文准备。"""
+    """单轮对话的请求与登记信息，统一承载从 JWT 解码的 UserClaims 身份并服务编排上下文。"""
 
-    user_id: int
-    username: str
+    user: UserClaims | None = None
+    user_id: int = 0
+    username: str = ""
     run_id: str = Field(default_factory=lambda: str(uuid4()))
     user_message_id: int = 0
     is_first_turn: bool = False
+
+    def model_post_init(self, __context: Any) -> None:
+        """统一对齐 UserClaims 与 user_id / username，保证链路数据契约一致性。"""
+        if self.user is not None:
+            if not self.user_id:
+                self.user_id = self.user.id
+            if not self.username:
+                self.username = self.user.username
+        elif self.user_id:
+            self.user = UserClaims(id=self.user_id, username=self.username or f"user_{self.user_id}")
 
     @property
     def effective_question(self) -> str:

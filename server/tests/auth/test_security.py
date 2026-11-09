@@ -24,13 +24,12 @@ from app.auth.security import (
     create_token,
     decode_token,
     get_current_user,
-    get_current_user_entity,
     hash_password,
     verify_password,
 )
 from app.auth.service import AuthService
 from app.infra.models import User
-from app.middleware.jwt import JWTMiddleware
+from app.middleware.jwt import JWTMiddleware, current_user_ctx
 
 
 def test_password_hashing():
@@ -101,39 +100,30 @@ def test_decode_token_invalid(monkeypatch):
         decode_token("this.is.not.a.valid.jwt")
 
 
-def test_get_current_user_from_request_state():
-    """get_current_user 依赖项直接从 request.state.user 读取。"""
-    mock_request = MagicMock(spec=Request)
-    mock_claims = UserClaims(id=99, username="state_user")
-    mock_request.state.user = mock_claims
+def test_get_current_user_from_context_and_request():
+    """get_current_user 优先从 ContextVar 获取，其次从 request.state 读取。"""
+    token = current_user_ctx.set(None)
+    try:
+        # 1. 既无 context 也无 request 时抛出异常
+        with pytest.raises(AuthError, match="未登录或登录已过期"):
+            get_current_user()
 
-    claims = get_current_user(mock_request)
-    assert claims.id == 99
-    assert claims.username == "state_user"
+        # 2. ContextVar 模式（推荐全局方式）
+        mock_claims = UserClaims(id=99, username="context_user")
+        current_user_ctx.set(mock_claims)
+        claims = get_current_user()
+        assert claims.id == 99
+        assert claims.username == "context_user"
 
-    # 若未登录抛出 AuthError
-    mock_request.state.user = None
-    with pytest.raises(AuthError, match="未登录或登录已过期"):
-        get_current_user(mock_request)
-
-
-@pytest.mark.asyncio
-async def test_get_current_user_entity():
-    """get_current_user_entity 按需从数据库加载完整 ORM 实体。"""
-    claims = UserClaims(id=77, username="db_user")
-    mock_session = AsyncMock()
-    mock_user = User(id=77, username="db_user", password="hashed", school="Tsinghua")
-    mock_session.get.return_value = mock_user
-
-    entity = await get_current_user_entity(claims=claims, session=mock_session)
-    assert entity.id == 77
-    assert entity.school == "Tsinghua"
-    mock_session.get.assert_called_once_with(User, 77)
-
-    # 用户在数据库不存在时抛出 404
-    mock_session.get.return_value = None
-    with pytest.raises(AuthError, match="用户不存在"):
-        await get_current_user_entity(claims=claims, session=mock_session)
+        # 3. Request 回退模式
+        current_user_ctx.set(None)
+        mock_request = MagicMock(spec=Request)
+        mock_request.state.user = UserClaims(id=100, username="state_user")
+        claims_req = get_current_user(mock_request)
+        assert claims_req.id == 100
+        assert claims_req.username == "state_user"
+    finally:
+        current_user_ctx.reset(token)
 
 
 @pytest.mark.asyncio

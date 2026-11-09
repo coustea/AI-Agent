@@ -40,7 +40,7 @@ def _extract_artifact(call_id: str, tool_name: str, raw: Any) -> RunArtifact | N
 
 
 def _extract_sources(raw: Any) -> list[SourceItem]:
-    """从知识库检索工具的返回字典中提取结构化引用来源列表。"""
+    """从工具返回字典中提取结构化引用来源列表。"""
     if not isinstance(raw, dict):
         return []
     raw_sources = raw.get("sources")
@@ -202,12 +202,6 @@ def _short(value: Any, limit: int = 72) -> str:
 
 def describe_tool_call(name: str, args: dict[str, Any]) -> tuple[str, str]:
     """将工具名称与参数映射为前端可直观展示的 (中文标题, 调用说明)。"""
-    if name == "search_knowledge_base":
-        query = _short(args.get("query") or "课程核心概念")
-        subject = _short(args.get("course_name") or "", 24)
-        sub = f"检索：{query}" + (f" ({subject})" if subject else "")
-        return "检索课程知识库", sub
-
     if name == "get_learner_profile":
         reason = _short(args.get("reason") or "个性化背景与薄弱点")
         return "查阅学习者画像", reason

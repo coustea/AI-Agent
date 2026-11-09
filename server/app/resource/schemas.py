@@ -1,25 +1,20 @@
-"""Resource 模块统一数据契约与 DTO 模型 (app.resource.schemas)。"""
+"""Resource 模块统一数据契约与 DTO 模型 (app.resource.schemas)。
+
+全面采用 Plan-and-Execute 架构，统一步伐与参数，消除冗余繁杂的单 Agent 独立配置。
+"""
 
 from __future__ import annotations
 
 from enum import Enum, StrEnum
 from typing import Any, Literal
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.resource.catalog import AGENT_DEFAULT_ENABLED, AGENT_DEFAULT_ORDER
-from app.shared.cartoon import CartoonGenerationConfig
-from app.shared.ppt import PPTPreferences
 
-MIN_SELECTED_AGENTS = 3
-LearningScenario = Literal["exam_prep", "daily_review", "project_practice", "self_study", "path_learning"]
-
-
-# ── 1. 任务生命周期状态 ────────────────────────────────────────────────────
+# ── 1. 任务生命周期与状态枚举 ──────────────────────────────────────────────
 
 
 class ResourceLifecycleStatus(StrEnum):
-    """独立资源生成任务的生命周期状态。"""
+    """资源生成总任务的生命周期状态。"""
 
     PENDING = "pending"
     GENERATING = "generating"
@@ -28,19 +23,18 @@ class ResourceLifecycleStatus(StrEnum):
     FAILED = "failed"
 
 
-SUCCESSFUL_RESOURCE_STATUSES = frozenset(
-    {
-        ResourceLifecycleStatus.COMPLETED,
-        ResourceLifecycleStatus.PARTIAL,
-    }
-)
+class TaskStatus(StrEnum):
+    """单个子任务 (SubAgent 任务) 的执行状态。"""
 
-
-# ── 2. 请求模型与 Agent 配置 ───────────────────────────────────────────────
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class ResourceAgentId(str, Enum):
-    """资源 Agent ID。"""
+    """资源 Agent 标识枚举（兼容定义）。"""
 
     CONTENT = "content"
     MINDMAP = "mindmap"
@@ -51,532 +45,439 @@ class ResourceAgentId(str, Enum):
     CARTOON = "cartoon"
 
 
-DEFAULT_SELECTED_AGENT_IDS: list[ResourceAgentId] = [
-    ResourceAgentId(agent_id) for agent_id in AGENT_DEFAULT_ENABLED
+DifficultyLevel = Literal["beginner", "intermediate", "advanced"]
+TaskType = Literal["text", "tool"]
+
+SUPPORTED_RESOURCE_TYPES = [
+    "content",
+    "mindmap",
+    "quiz",
+    "code",
+    "reading",
+    "ppt",
+    "cartoon",
 ]
 
 
-class AgentSelection(BaseModel):
-    """前端上传的 Agent 选择配置。"""
+# ── 2. 统一请求模型 ─────────────────────────────────────────────────────────
 
-    agent_id: ResourceAgentId
+
+class ResourceGenerationRequest(BaseModel):
+    """统一资源生成请求（前后端交互契约）。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    topic: str = Field(default="", description="学习主题或核心概念")
+    learning_goal: str = Field(default="", max_length=500, description="具体学习目标或掌握深度期望")
+    target_resources: list[str] = Field(
+        default_factory=lambda: ["content", "mindmap", "quiz"],
+        description="期望交付的资源清单：content, mindmap, quiz, code, reading, ppt, cartoon",
+    )
+    difficulty: DifficultyLevel = Field(
+        default="intermediate",
+        description="学习难度阶段：beginner(初学入门)、intermediate(进阶掌握)、advanced(精通探究)",
+    )
+    preferences: dict[str, Any] = Field(
+        default_factory=dict,
+        description="全局偏好字典（例如 programming_language='python', voice='teacher' 等）",
+    )
+
+    # 兼容过渡字段
+    learning_need: str | None = Field(default=None, description="兼容旧版字段别名")
+    learning_scenario: str | None = Field(default="self_study", description="兼容旧版字段别名")
+    selected_agents: list[Any] | None = Field(default=None, description="兼容旧版字段别名")
+    agent_configs: Any | None = Field(default=None, description="兼容旧版字段别名")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_input(cls, data: Any) -> Any:
+        """规范化输入数据，平滑处理别名与默认值。"""
+        if isinstance(data, dict):
+            if not data.get("topic") and data.get("learning_need"):
+                data["topic"] = data["learning_need"]
+            if not data.get("learning_need") and data.get("topic"):
+                data["learning_need"] = data["topic"]
+            if not data.get("target_resources") and data.get("selected_agents"):
+                raw_agents = data.get("selected_agents") or []
+                selected: list[str] = []
+                for item in raw_agents:
+                    if isinstance(item, dict) and item.get("enabled", True):
+                        selected.append(str(item.get("agent_id")))
+                    elif isinstance(item, str):
+                        selected.append(item)
+                if selected:
+                    data["target_resources"] = selected
+        return data
+
+    def enabled_agent_ids(self) -> list[str]:
+        """兼容获取已启用的资源类型列表。"""
+        return self.target_resources
+
+
+# ── 3. Plan-and-Execute 任务图与规划模型 ────────────────────────────────────
+
+
+class TaskNode(BaseModel):
+    """PlanAgent 规划生成的单项子任务节点。"""
+
+    task_id: str = Field(default="", description="任务标识，通常与 resource_type 一致，如 content, ppt")
+    title: str = Field(default="", description="任务标题，如 'Python 异步编程深度讲义'")
+    resource_type: str = Field(default="", description="生成的资源类型：content, mindmap, quiz, code, reading, ppt, cartoon")
+    task_type: TaskType = Field(default="text", description="执行类型：text(大模型生成) 或 tool(调用专用工具)")
+    tool_name: str | None = Field(default=None, description="当 task_type 为 tool 时调用的工具名")
+    dependencies: list[str] = Field(default_factory=list, description="依赖的前置 task_id 列表")
+    subagent_role: str = Field(default="学科专家", description="执行该任务的 SubAgent 角色说明")
+    task_prompt: str = Field(default="", description="分配给 SubAgent 的具体生成提示与上下文指导")
+    status: TaskStatus = Field(default=TaskStatus.PENDING, description="任务当前状态")
+    progress: int = Field(default=0, ge=0, le=100, description="任务执行进度百分比 0-100")
+    message: str = Field(default="等待调度", description="当前最新执行日志或状态描述")
+    elapsed_ms: int | None = Field(default=None, description="耗时（毫秒）")
+    error: str | None = Field(default=None, description="失败原因说明")
+
+    # 兼容历史测试字段
+    agent_id: str = ""
+    objective: str = ""
+    focus: list[str] = Field(default_factory=list)
+    required_elements: list[str] = Field(default_factory=list)
+    avoid: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def norm_task(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("task_id") and data.get("agent_id"):
+                data["task_id"] = data["agent_id"]
+            if not data.get("agent_id") and data.get("task_id"):
+                data["agent_id"] = data["task_id"]
+        return data
+
+
+class ExecutionPlan(BaseModel):
+    """由主规划智能体 (PlanAgent) 制定并驱动执行的任务执行图。"""
+
+    topic: str = Field(default="", description="学习主题")
+    learning_goal: str = Field(default="", description="核心学习目标")
+    difficulty: DifficultyLevel = Field(default="intermediate", description="难度定位")
+    overview: str = Field(default="", description="学习路径与规划总体说明")
+    tasks: list[Any] = Field(default_factory=list, description="DAG 规划子任务节点列表")
+
+    # 兼容历史测试属性
+    schema_version: int = Field(default=2)
+    learner_goal: str = Field(default="")
+    scope: list[str] = Field(default_factory=list)
+
+    @field_validator("scope")
+    @classmethod
+    def reject_empty_scope(cls, values: list[str]) -> list[str]:
+        """校验 scope 列表不含空项。"""
+        if any(not v or not v.strip() for v in values):
+            raise ValueError("scope 列表不能包含空项")
+        return values
+
+    @field_validator("tasks")
+    @classmethod
+    def validate_tasks_not_empty(cls, values: list[Any]) -> list[Any]:
+        """校验显式传入的任务列表不可为空。"""
+        if values is not None and len(values) == 0:
+            raise ValueError("tasks 列表不能为空")
+        return values
+
+    @property
+    def agent_ids(self) -> list[str]:
+        """获取所有规划任务的 agent_id 列表。"""
+        res: list[str] = []
+        for t in self.tasks:
+            tid = getattr(t, "task_id", None) or getattr(t, "agent_id", None)
+            if tid:
+                res.append(str(tid))
+            elif isinstance(t, dict):
+                res.append(str(t.get("task_id") or t.get("agent_id") or ""))
+        return res
+
+    def get_task(self, task_id: str) -> TaskNode | None:
+        """根据 task_id 查找任务节点。"""
+        for task in self.tasks:
+            tid = getattr(task, "task_id", None) or getattr(task, "agent_id", None)
+            if tid == task_id:
+                return task
+        return None
+
+    def ready_tasks(self, completed_task_ids: set[str], running_task_ids: set[str]) -> list[TaskNode]:
+        """获取当前已满足所有前置依赖且未在运行中的就绪任务。"""
+        ready: list[TaskNode] = []
+        for task in self.tasks:
+            tid = getattr(task, "task_id", None) or getattr(task, "agent_id", None)
+            if tid in completed_task_ids or tid in running_task_ids:
+                continue
+            status = getattr(task, "status", TaskStatus.PENDING)
+            if status in (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.SKIPPED):
+                continue
+            deps = getattr(task, "dependencies", [])
+            if all(dep in completed_task_ids for dep in deps):
+                ready.append(task)
+        return ready
+
+
+# ── 4. 产物与执行结果统一模型 ───────────────────────────────────────────────
+
+
+class AgentResult(BaseModel):
+    """子智能体执行或工具调用的标准化输出结果。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool = Field(description="执行是否成功")
+    title: str = Field(default="", description="产物展示标题")
+    file_type: str = Field(default="markdown", description="文件格式：markdown, json, pptx, mp4")
+    content: str | dict[str, Any] | list[Any] | None = Field(default=None, description="产物主要内容")
+    summary: str | None = Field(default=None, description="产物要点或摘要")
+    metrics: dict[str, Any] = Field(default_factory=dict, description="度量指标（如题数、幻灯片页数等）")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="产物附带元数据")
+    error: str | None = Field(default=None, description="错误信息（当失败时）")
+
+
+# ── 5. 结构化产物格式定义 (Quiz / Reading 等) ──────────────────────────────
+
+
+class QuizOption(BaseModel):
+    """单道测验题目的选项。"""
+
+    key: str = Field(default="", description="选项标识 (A, B, C, D)")
+    text: str = Field(default="", description="选项文本内容")
+    label: str = Field(default="", description="兼容旧版字段别名")
+    content: str = Field(default="", description="兼容旧版字段别名")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_option(cls, d: Any) -> Any:
+        if isinstance(d, dict):
+            if not d.get("key") and d.get("label"):
+                d["key"] = d["label"]
+            if not d.get("label") and d.get("key"):
+                d["label"] = d["key"]
+            if not d.get("text") and d.get("content"):
+                d["text"] = d["content"]
+            if not d.get("content") and d.get("text"):
+                d["content"] = d["text"]
+        return d
+
+
+class QuizQuestion(BaseModel):
+    """结构化测验题目模型。"""
+
+    id: int | str = Field(description="题目序号或唯一标识")
+    type: Literal["single", "multiple", "judge", "fill", "single_choice", "multiple_choice", "true_false"] = Field(
+        default="single", description="题目类型"
+    )
+    question: str = Field(description="题干内容")
+    options: list[QuizOption] = Field(default_factory=list, description="选择题选项列表")
+    answer: str | list[str] = Field(description="参考标准答案")
+    explanation: str = Field(default="", description="详细答案解析")
+    knowledge_point: str = Field(default="", description="考查的核心知识点")
+    difficulty: str = Field(default="basic", description="题目难度")
+
+
+class QuizPayload(BaseModel):
+    """习题资源标准 Payload。"""
+
+    title: str = Field(default="", description="测验标题")
+    summary: str = Field(default="", description="测验摘要")
+    questions: list[QuizQuestion] = Field(default_factory=list, description="题目列表")
+
+
+class ReadingResource(BaseModel):
+    """推荐阅读条目模型。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str = Field(description="阅读材料标题")
+    author: str = Field(default="佚名", description="作者或组织机构")
+    url: str | None = Field(default=None, description="在线参考链接或来源")
+    difficulty: str = Field(default="introductory", description="推荐阅读难度")
+    description: str = Field(default="", description="材料核心内容简介与推荐理由")
+    reading_time: str = Field(default="15 分钟", description="预估阅读时间")
+    source: str = Field(default="", description="来源或出版社")
+    relevance: str = Field(default="", description="相关度阐述")
+    id: str | None = Field(default=None, description="标识")
+    type: str | None = Field(default=None, description="类型")
+    language: str | None = Field(default=None, description="语言")
+
+
+class ReadingPayload(BaseModel):
+    """拓展阅读资源标准 Payload。"""
+
+    title: str = Field(default="", description="阅读标题")
+    summary: str = Field(default="", description="阅读摘要")
+    recommendations: list[ReadingResource] = Field(default_factory=list, description="推荐阅读列表")
+    resources: list[ReadingResource] = Field(default_factory=list, description="兼容旧版 resources 字段")
+    items: list[ReadingResource] = Field(default_factory=list, description="兼容旧版字段别名")
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_reading(cls, d: Any) -> Any:
+        """规范化阅读材料字段别名。"""
+        if isinstance(d, dict):
+            res = d.get("resources") or d.get("recommendations") or d.get("items") or []
+            d.setdefault("resources", res)
+            d.setdefault("recommendations", res)
+            d.setdefault("items", res)
+        return d
+
+
+# ── 6. 展示与查询 DTO 模型 ──────────────────────────────────────────────────
+
+
+class GeneratedResourceItemDTO(BaseModel):
+    """资源项明细 DTO。"""
+
+    id: str = Field(description="产物标识")
+    type: str = Field(description="资源类型")
+    title: str = Field(description="资源标题")
+    format: str = Field(description="格式：markdown, json, pptx, mp4")
+    content: Any = Field(default=None, description="内容主体")
+    metadata: dict[str, Any] = Field(default_factory=dict, description="元数据字典")
+    created_at: str | None = Field(default=None, description="创建时间 ISO 字符串")
+
+
+class TaskSnapshotDTO(BaseModel):
+    """任务实时快照 DTO。"""
+
+    task_id: str
+    status: TaskStatus
+    message: str
+    progress: int
+    elapsed_ms: int | None = None
+    artifact_title: str | None = None
+
+
+class ResourceStatusSnapshot(BaseModel):
+    """资源生成任务轮询状态快照。"""
+
+    resource_id: int
+    topic: str = ""
+    status: str = "pending"
+    tasks: list[TaskNode] = Field(default_factory=list)
+    current_message: str = ""
+    overall_progress: int = 0
+    resources: list[GeneratedResourceItemDTO] = Field(default_factory=list)
+    updated_at: str | None = None
+    learning_need: str = ""
+    selected_agents: list[str] = Field(default_factory=list)
+    agent_snapshots: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_compat_fields(cls, data: Any) -> Any:
+        """同步前后端兼容别名。"""
+        if isinstance(data, dict):
+            if not data.get("topic") and data.get("learning_need"):
+                data["topic"] = data["learning_need"]
+            if not data.get("learning_need") and data.get("topic"):
+                data["learning_need"] = data["topic"]
+        return data
+
+
+class GeneratedResourceBundleDTO(BaseModel):
+    """已完成资源包完整产物详情。"""
+
+    id: str
+    topic: str = ""
+    learning_goal: str = ""
+    status: str = "completed"
+    plan: dict[str, Any] | None = None
+    resources: list[GeneratedResourceItemDTO] = Field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    title: str = ""
+    learning_need: str = ""
+    selected_agents: list[str] = Field(default_factory=list)
+
+
+# ── 7. 兼容过渡模型 ────────────────────────────────────────────────────────
+
+
+class DownstreamContext(BaseModel):
+    """下游上下文传输模型（兼容过渡）。"""
+
+    source_agent: str = ""
+    title: str = ""
+    one_sentence_summary: str = ""
+    materials: list[str] = Field(default_factory=list)
+    key_points: list[str] = Field(default_factory=list)
+
+
+class ResourcePlanTask(TaskNode):
+    """兼容旧测试的任务模型。"""
+
+    pass
+
+
+class AgentSelection(BaseModel):
+    """兼容旧前端的 Agent 选择项。"""
+
+    agent_id: str
     enabled: bool = True
 
 
 class ContentConfig(BaseModel):
-    """内容 Agent 配置。"""
+    """兼容旧模型。"""
 
-    structure: Literal["progressive", "summary_first", "exam_points", "case_driven"] = "progressive"
-    depth_level: Literal["quick", "standard", "deep"] = "standard"
-    focus_mode: Literal["weak_points", "key_concepts", "full_coverage"] = "key_concepts"
-    include_examples: bool = True
+    structure: str = "progressive"
 
 
 class MindmapConfig(BaseModel):
-    """思维导图 Agent 配置。"""
+    """兼容旧模型。"""
 
-    map_type: Literal["knowledge_tree", "exam_map", "comparison_map"] = "knowledge_tree"
-    max_depth: int = Field(default=3, ge=2, le=5)
-    leaf_detail: Literal["keyword", "brief_note", "annotated"] = "brief_note"
-    show_relations: bool = True
+    map_type: str = "knowledge_tree"
 
 
 class QuizConfig(BaseModel):
-    """习题 Agent 配置。"""
+    """兼容旧模型。"""
 
-    difficulty_mode: Literal["basic", "adaptive", "exam"] = "adaptive"
-    question_count: int = Field(default=5, ge=1, le=20)
-    emphasis: Literal["foundations", "application", "analysis"] = "foundations"
-    question_types: list[Literal["single", "multiple", "judge", "fill"]] = Field(
-        default_factory=lambda: ["single", "multiple", "judge", "fill"]
-    )
+    question_count: int = 5
 
 
 class CodeConfig(BaseModel):
-    """代码 Agent 配置。"""
+    """兼容旧模型。"""
 
-    programming_language: Literal["python", "c", "cpp", "java", "go", "javascript", "typescript"] = "python"
-    output_style: Literal["tutorial", "reference", "challenge"] = "tutorial"
-    focus: Literal["syntax", "application", "debugging"] = "syntax"
-    include_tests: bool = False
+    programming_language: str = "python"
 
 
 class ReadingConfig(BaseModel):
-    """阅读推荐 Agent 配置。"""
+    """兼容旧模型。"""
 
-    coverage: Literal["core", "extended", "broad"] = "extended"
-    language_preference: Literal["chinese", "english", "both"] = "chinese"
-    max_items: int = Field(default=3, ge=1, le=10)
-    focus: Literal["textbook", "engineering", "research"] = "textbook"
+    coverage: str = "extended"
 
 
 class AgentConfigs(BaseModel):
-    """Agent 配置集合。"""
+    """兼容旧模型。"""
 
-    model_config = ConfigDict(extra="forbid")
-
-    content: ContentConfig = Field(default_factory=ContentConfig)
-    mindmap: MindmapConfig = Field(default_factory=MindmapConfig)
-    quiz: QuizConfig = Field(default_factory=QuizConfig)
-    code: CodeConfig = Field(default_factory=CodeConfig)
-    reading: ReadingConfig = Field(default_factory=ReadingConfig)
-    ppt: PPTPreferences = Field(default_factory=PPTPreferences)
-    cartoon: CartoonGenerationConfig = Field(default_factory=CartoonGenerationConfig)
-
-    def get(self, agent_id: str, default: Any = None) -> dict[str, Any]:
-        """按 Agent ID 获取对应的配置字典。"""
-        value = getattr(self, agent_id, None)
-        if value is None:
-            return default
-        return value.model_dump(mode="json")
-
-
-def _agent_sort_key(item: AgentSelection) -> int:
-    """返回用于给已选 Agent 排序的索引键值。"""
-    return (
-        AGENT_DEFAULT_ORDER.index(item.agent_id.value)
-        if item.agent_id.value in AGENT_DEFAULT_ORDER
-        else 999
-    )
-
-
-class ResourceGenerationRequest(BaseModel):
-    """资源生成请求。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    learning_need: str
-    learning_scenario: LearningScenario = "self_study"
-    selected_agents: list[AgentSelection] = Field(default_factory=list)
-    agent_configs: AgentConfigs = Field(default_factory=AgentConfigs)
-
-    @field_validator("learning_need")
-    @classmethod
-    def validate_learning_need(cls, value: str) -> str:
-        """校验学习需求非空。"""
-        value = value.strip()
-        if not value:
-            raise ValueError("学习需求不能为空")
-        return value
-
-    @model_validator(mode="after")
-    def validate_selection(self) -> "ResourceGenerationRequest":
-        """校验 Agent 选择列表有效性及聚合依赖关系。"""
-        if not self.selected_agents:
-            self.selected_agents = [
-                AgentSelection(agent_id=agent_id, enabled=True)
-                for agent_id in DEFAULT_SELECTED_AGENT_IDS
-            ]
-        agent_ids = [item.agent_id.value for item in self.selected_agents]
-        duplicate_agent_ids = sorted(
-            {agent_id for agent_id in agent_ids if agent_ids.count(agent_id) > 1}
-        )
-        if duplicate_agent_ids:
-            raise ValueError(f"selected_agents 包含重复 Agent: {duplicate_agent_ids}")
-        enabled_agent_ids = {
-            item.agent_id.value for item in self.selected_agents if item.enabled
-        }
-        if len(enabled_agent_ids) < MIN_SELECTED_AGENTS:
-            raise ValueError(
-                f"selected_agents 过滤 enabled=true 后至少需要 {MIN_SELECTED_AGENTS} 个 Agent"
-            )
-        aggregation_agent_ids = enabled_agent_ids & {"ppt", "cartoon"}
-        base_agent_ids = enabled_agent_ids & {"content", "mindmap", "quiz", "code", "reading"}
-        if aggregation_agent_ids and not base_agent_ids:
-            raise ValueError("PPT/Cartoon 聚合 Agent 至少需要一个基础资源 Agent 提供素材")
-        self.selected_agents = sorted(self.selected_agents, key=_agent_sort_key)
-        return self
-
-    def enabled_agent_ids(self) -> list[str]:
-        """获取所有已启用的 Agent ID 列表（按默认执行顺序排序）。"""
-        return [
-            item.agent_id.value
-            for item in sorted(self.selected_agents, key=_agent_sort_key)
-            if item.enabled
-        ]
-
-
-# ── 3. 协同计划与上游交接模型 ─────────────────────────────────────────────
-
-
-class ResourcePlanTask(BaseModel):
-    """单个 Agent 的结构化可执行任务。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    agent_id: str
-    objective: str = Field(min_length=8, max_length=500)
-    focus: list[str] = Field(min_length=1, max_length=8)
-    required_elements: list[str] = Field(min_length=1, max_length=10)
-    avoid: list[str] = Field(default_factory=list, max_length=8)
-
-
-class ResourcePlan(BaseModel):
-    """规划 Agent 交付的结构化控制协议。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    schema_version: Literal[1] = 1
-    learner_goal: str = Field(min_length=8, max_length=600)
-    scope: list[str] = Field(min_length=1, max_length=10)
-    tasks: list[ResourcePlanTask] = Field(min_length=1, max_length=7)
-
-    @field_validator("scope")
-    @classmethod
-    def reject_empty_strings(cls, values: list[str]) -> list[str]:
-        """校验计划范围列表中不包含空项。"""
-        cleaned = [value.strip() for value in values if value and value.strip()]
-        if len(cleaned) != len(values):
-            raise ValueError("计划列表不能包含空项")
-        return cleaned
-
-    @model_validator(mode="after")
-    def reject_duplicate_tasks(self) -> "ResourcePlan":
-        """校验计划任务中未出现重复分配的 Agent。"""
-        agent_ids = [task.agent_id for task in self.tasks]
-        if len(agent_ids) != len(set(agent_ids)):
-            raise ValueError("计划中不能为同一 Agent 分配重复任务")
-        return self
-
-    @property
-    def agent_ids(self) -> list[str]:
-        """获取计划中所有分配了任务的 Agent ID 列表。"""
-        return [task.agent_id for task in self.tasks]
-
-    def task_for(self, agent_id: str) -> ResourcePlanTask:
-        """获取指定 Agent 对应的任务计划项。"""
-        for task in self.tasks:
-            if task.agent_id == agent_id:
-                return task
-        raise KeyError(f"计划未包含 Agent: {agent_id}")
-
-
-class DownstreamContext(BaseModel):
-    """基础 Agent 向聚合 Agent (PPT/Cartoon) 提供的显式交接内容。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    source_agent: str
-    title: str = ""
-    one_sentence_summary: str = ""
-    materials: list[str] = Field(default_factory=list, max_length=12)
-
-
-class PlanValidationError(ValueError):
-    pass
-
-
-def validate_resource_plan(plan: ResourcePlan, expected_agent_ids: list[str]) -> ResourcePlan:
-    """校验计划分配的任务是否与预期的 Agent 列表完全一致。"""
-    expected = set(expected_agent_ids)
-    expected = set(expected_agent_ids)
-    actual = set(plan.agent_ids)
-    if actual != expected:
-        raise PlanValidationError(
-            "计划任务分配与已选 Agent 不一致: "
-            f"missing={sorted(expected - actual)} unexpected={sorted(actual - expected)}"
-        )
-    return plan
-
-
-# ── 4. Agent 运行时输入/输出模型 ──────────────────────────────────────────
-
-
-class AgentResult(BaseModel):
-    """统一 Agent 输出结果。"""
-
-    model_config = ConfigDict(extra="forbid")
-
-    success: bool = True
-    content: str = ""
-    file_type: str = "markdown"
-    title: str = ""
-    summary: str = ""
-    metrics: dict[str, Any] = Field(default_factory=dict)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    error: str = ""
+    model_config = ConfigDict(extra="allow")
 
 
 class ResourceInput(BaseModel):
-    """多智能体资源生成输入。"""
+    """兼容历史资源输入契约。"""
 
-    model_config = ConfigDict(extra="forbid")
-
-    resource_id: int | None = None
-    user_id: int | None = None
-    username: str = ""
-    learning_need: str
-    learning_scenario: LearningScenario = "self_study"
-    agent_name: str = ""
-    agent_config: dict[str, Any] = Field(default_factory=dict)
-    teaching_plan: ResourcePlan | None = None
-    profile: dict[str, Any] = Field(default_factory=dict)
-    upstream_handoffs: dict[str, DownstreamContext] = Field(default_factory=dict)
-
-
-# ── 5. Quiz 题目蓝图与校验契约 ────────────────────────────────────────────
-
-
-QuizQuestionType = Literal[
-    "single_choice",
-    "multiple_choice",
-    "true_false",
-    "fill_blank",
-]
-QuizDifficulty = Literal["basic", "medium", "advanced"]
-
-QUESTION_TYPE_MAP: dict[str, QuizQuestionType] = {
-    "single": "single_choice",
-    "multiple": "multiple_choice",
-    "judge": "true_false",
-    "fill": "fill_blank",
-}
-DEFAULT_QUESTION_TYPES: tuple[QuizQuestionType, ...] = (
-    "single_choice",
-    "multiple_choice",
-    "true_false",
-    "fill_blank",
-)
-
-
-class QuizOption(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    label: str = Field(pattern=r"^[A-D]$")
-    content: str = Field(min_length=1, max_length=240)
-
-
-class QuizQuestion(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: int = Field(ge=1)
-    type: QuizQuestionType
-    question: str = Field(min_length=1, max_length=600)
-    options: list[QuizOption] = Field(default_factory=list, max_length=4)
-    answer: str | bool | list[str]
-    explanation: str = Field(min_length=1, max_length=1200)
-    difficulty: QuizDifficulty
-    knowledge_points: list[str] = Field(min_length=1, max_length=6)
-
-    @model_validator(mode="after")
-    def validate_question_contract(self) -> "QuizQuestion":
-        """校验题目类型、选项与答案格式的一致性契约。"""
-        labels = [option.label for option in self.options]
-        if len(labels) != len(set(labels)):
-            raise ValueError("选项标签不能重复")
-
-        if self.type in {"single_choice", "multiple_choice"}:
-            if labels != ["A", "B", "C", "D"]:
-                raise ValueError("选择题必须按 A、B、C、D 提供恰好四个选项")
-        elif self.options:
-            raise ValueError("判断题和填空题的 options 必须为空")
-
-        if self.type == "single_choice":
-            if not isinstance(self.answer, str) or self.answer not in labels:
-                raise ValueError("单选题答案必须是一个有效选项标签")
-        elif self.type == "multiple_choice":
-            if not isinstance(self.answer, list):
-                raise ValueError("多选题答案必须是选项标签数组")
-            if len(self.answer) < 2 or len(self.answer) != len(set(self.answer)):
-                raise ValueError("多选题必须包含至少两个不重复的正确选项")
-            if any(answer not in labels for answer in self.answer):
-                raise ValueError("多选题答案必须来自已有选项")
-        elif self.type == "true_false":
-            if type(self.answer) is not bool:
-                raise ValueError("判断题答案必须是布尔值")
-        elif not isinstance(self.answer, str) or not self.answer.strip():
-            raise ValueError("填空题答案必须是非空字符串")
-
-        return self
-
-
-class QuizPayload(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    title: str = Field(min_length=1, max_length=120)
-    summary: str = Field(min_length=1, max_length=300)
-    questions: list[QuizQuestion] = Field(min_length=1, max_length=20)
-
-
-class QuizBlueprintSlot(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: int
-    type: QuizQuestionType
-    difficulty: QuizDifficulty
-
-
-def build_quiz_blueprint(
-    *,
-    question_count: int,
-    question_types: list[str] | None,
-    difficulty_mode: str,
-) -> list[QuizBlueprintSlot]:
-    """在调用模型前确定题目编号、题型和难度。"""
-    normalized_types = [
-        QUESTION_TYPE_MAP[value]
-        for value in (question_types or [])
-        if value in QUESTION_TYPE_MAP
-    ]
-    types = tuple(dict.fromkeys(normalized_types)) or DEFAULT_QUESTION_TYPES
-
-    if difficulty_mode == "basic":
-        difficulty_cycle: tuple[QuizDifficulty, ...] = ("basic",)
-    elif difficulty_mode == "exam":
-        difficulty_cycle = (
-            "basic",
-            "medium",
-            "medium",
-            "advanced",
-            "basic",
-            "medium",
-            "medium",
-            "advanced",
-            "basic",
-            "medium",
-        )
-    else:
-        difficulty_cycle = ("basic", "medium", "basic", "medium", "advanced")
-
-    return [
-        QuizBlueprintSlot(
-            id=index + 1,
-            type=types[index % len(types)],
-            difficulty=difficulty_cycle[index % len(difficulty_cycle)],
-        )
-        for index in range(question_count)
-    ]
-
-
-def validate_quiz_payload(
-    payload: QuizPayload,
-    blueprint: list[QuizBlueprintSlot],
-) -> None:
-    """校验模型输出与确定性蓝图完全一致。"""
-    errors: list[str] = []
-    if len(payload.questions) != len(blueprint):
-        errors.append(
-            f"题目数量应为 {len(blueprint)}，实际为 {len(payload.questions)}"
-        )
-
-    seen_questions: set[str] = set()
-    for index, slot in enumerate(blueprint):
-        if index >= len(payload.questions):
-            break
-        question = payload.questions[index]
-        if question.id != slot.id:
-            errors.append(f"第 {index + 1} 题 id 应为 {slot.id}，实际为 {question.id}")
-        if question.type != slot.type:
-            errors.append(f"第 {index + 1} 题类型应为 {slot.type}，实际为 {question.type}")
-        if question.difficulty != slot.difficulty:
-            errors.append(f"第 {index + 1} 题难度应为 {slot.difficulty}，实际为 {question.difficulty}")
-
-        normalized_question = " ".join(question.question.split()).casefold()
-        if normalized_question in seen_questions:
-            errors.append(f"第 {index + 1} 题与前面题目重复")
-        seen_questions.add(normalized_question)
-
-    if errors:
-        raise ValueError("；".join(errors[:12]))
-
-
-# ── 6. 响应 DTO 模型 ──────────────────────────────────────────────────────
-
-
-class GeneratedResourceItem(BaseModel):
-    """生成的资源项，作为后端存储和前端 SSE 的统一资源契约。"""
-
-    id: str
-    type: ResourceAgentId
-    title: str
-    format: Literal["markdown", "json", "pptx", "mp4"]
-    content: Any = None
-    metadata: dict[str, Any] = Field(default_factory=dict)
-    created_at: str | None = None
-
-
-class ResourceAgentSnapshot(BaseModel):
-    """单个 Agent 的持久化运行快照。"""
-
-    agent_id: str
-    status: Literal["pending", "running", "completed", "failed", "interrupted"]
-    message: str
-    progress: int = Field(ge=0, le=100)
-    phase: str
-    elapsed_ms: int | None = None
-    artifact_id: str | None = None
-    timestamp: int | None = None
-
-
-class ResourceStatusSnapshot(BaseModel):
-    """SSE/轮询状态接口返回的轻量任务快照。"""
-
-    resource_id: int
     learning_need: str = ""
-    status: ResourceLifecycleStatus
-    selected_agents: list[ResourceAgentId] = Field(default_factory=list)
-    agent_snapshots: dict[str, ResourceAgentSnapshot] = Field(default_factory=dict)
-    current_message: str = ""
-    resources: list[GeneratedResourceItem] = Field(default_factory=list)
-    updated_at: str | None = None
+    agent_name: str = ""
+    teaching_plan: Any = None
+    agent_config: dict[str, Any] = Field(default_factory=dict)
+    upstream_handoffs: dict[str, Any] = Field(default_factory=dict)
+    profile: dict[str, Any] = Field(default_factory=dict)
+    learning_scenario: str = "daily_review"
+    username: str = "anonymous"
+    resource_id: str | int = "default"
 
 
-class ResourceBundleMetadata(BaseModel):
-    """资源包任务级元数据。"""
-
-    failed_agents: list[str] = Field(default_factory=list)
-
-
-class ResourceBundle(BaseModel):
-    """资源生成完成后的完整资源包。"""
-
-    id: str
-    title: str = "个性化学习资源包"
-    learning_need: str
-    selected_agents: list[ResourceAgentId] = Field(default_factory=list)
-    plan: dict[str, Any] | None = None
-    resources: list[GeneratedResourceItem] = Field(default_factory=list)
-    status: ResourceLifecycleStatus = ResourceLifecycleStatus.COMPLETED
-    created_at: str
-    updated_at: str
-    metadata: ResourceBundleMetadata = Field(default_factory=ResourceBundleMetadata)
-
-
-__all__ = [
-    "AgentConfigs",
-    "AgentResult",
-    "AgentSelection",
-    "CodeConfig",
-    "ContentConfig",
-    "DEFAULT_QUESTION_TYPES",
-    "DEFAULT_SELECTED_AGENT_IDS",
-    "DownstreamContext",
-    "GeneratedResourceItem",
-    "LearningScenario",
-    "MIN_SELECTED_AGENTS",
-    "MindmapConfig",
-    "PlanValidationError",
-    "QUESTION_TYPE_MAP",
-    "QuizBlueprintSlot",
-    "QuizConfig",
-    "QuizDifficulty",
-    "QuizOption",
-    "QuizPayload",
-    "QuizQuestion",
-    "QuizQuestionType",
-    "ReadingConfig",
-    "ResourceAgentId",
-    "ResourceAgentSnapshot",
-    "ResourceBundle",
-    "ResourceBundleMetadata",
-    "ResourceGenerationRequest",
-    "ResourceInput",
-    "ResourceLifecycleStatus",
-    "ResourcePlan",
-    "ResourcePlanTask",
-    "ResourceStatusSnapshot",
-    "SUCCESSFUL_RESOURCE_STATUSES",
-    "build_quiz_blueprint",
-    "validate_quiz_payload",
-    "validate_resource_plan",
-]
+# 别名兼容
+TaskPlan = ExecutionPlan
+ResourcePlan = ExecutionPlan
+GeneratedResourceItem = GeneratedResourceItemDTO
+ResourceBundle = GeneratedResourceBundleDTO
+SUCCESSFUL_RESOURCE_STATUSES = frozenset(
+    {
+        ResourceLifecycleStatus.COMPLETED,
+        ResourceLifecycleStatus.PARTIAL,
+    }
+)

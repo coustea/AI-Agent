@@ -18,9 +18,8 @@ from app.chat.memory import compact_text, get_memory_markdown
 from app.config import user_chat_dir, user_chat_uploads_dir
 from app.infra.logging import get_logger
 from app.profile.service import get_profile_service
-from app.rag.tools import build_knowledge_tool
-from app.shared.cartoon.tool import build_cartoon_subagent_tool
-from app.shared.ppt.tool import build_ppt_subagent_tool
+from app.shared.cartoon.tool import build_cartoon_tool
+from app.shared.ppt.tool import build_ppt_tool
 from app.shared.tools import Tool, build_builtin_tools, resolve_sandbox_path, tool
 
 logger = get_logger(__name__)
@@ -177,13 +176,12 @@ def build_tutor_tools(
         *build_builtin_tools(effective_workdir),
         build_read_document_tool(username=username, session_id=session_id, workdir=effective_workdir),
         *build_user_context_tools(user_id),
-        build_knowledge_tool(),
-        build_ppt_subagent_tool(
+        build_ppt_tool(
             username=username,
             session_id=session_id,
             progress=_ppt_progress if on_subagent_progress else None,
         ),
-        build_cartoon_subagent_tool(
+        build_cartoon_tool(
             username=username,
             session_id=session_id,
             progress=_video_progress if on_subagent_progress else None,

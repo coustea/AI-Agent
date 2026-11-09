@@ -98,9 +98,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# RAG data (large binary)
-server/app/rag/data/
-
 # Generated static files
 server/static/
 

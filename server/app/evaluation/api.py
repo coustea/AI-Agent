@@ -11,7 +11,6 @@ from sqlalchemy import func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.schemas import UserClaims
 from app.auth.security import get_current_user
 from app.evaluation.schemas import LearningEventCreate, LearningSessionCreate
 from app.evaluation.service import evaluation_service
@@ -28,18 +27,18 @@ logger = get_logger(__name__)
 @router.post("/evaluation/events")
 async def record_learning_event(
     payload: LearningEventCreate,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """记录学习事件 — 资源浏览/完成/测验/对话/资源生成/路径节点/可视化运行等。"""
+    user_id = get_current_user().id
     event, deduplicated = await evaluation_service.record_event(
         session,
-        user_id=current_user.id,
+        user_id=user_id,
         payload=payload,
     )
     logger.info(
         "[EvalAPI] 事件已记录: user_id=%s event_type=%s event_id=%s deduplicated=%s",
-        current_user.id,
+        user_id,
         payload.event_type,
         event.id,
         deduplicated,
@@ -51,18 +50,18 @@ async def record_learning_event(
 @router.post("/evaluation/sessions")
 async def record_learning_session(
     payload: LearningSessionCreate,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """记录一次学习会话（前端离开学习页面时上报）。"""
+    user_id = get_current_user().id
     learning_session, deduplicated = await evaluation_service.record_session(
         session,
-        user_id=current_user.id,
+        user_id=user_id,
         payload=payload,
     )
     logger.info(
         "[EvalAPI] 学习会话已记录: user_id=%s page=%s duration=%ss deduplicated=%s",
-        current_user.id,
+        user_id,
         payload.source_page,
         payload.duration_seconds,
         deduplicated,
@@ -79,7 +78,6 @@ class AssessmentGenerateRequest(BaseModel):
 @router.post("/evaluation/assessments")
 async def generate_assessment(
     payload: AssessmentGenerateRequest,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """手动触发生成学习评估；已有生成中评估返回 409。
@@ -87,24 +85,24 @@ async def generate_assessment(
     立即返回 generating 状态的评估记录，后台异步执行 LLM 生成。
     前端通过 GET /latest 或 GET /{id} 轮询生成结果。
     """
-    # 检查是否已有生成中的评估
+    user_id = get_current_user().id
     existing = await session.scalar(
         select(LearningAssessment).where(
-            LearningAssessment.user_id == current_user.id,
+            LearningAssessment.user_id == user_id,
             LearningAssessment.status == "generating",
         )
     )
     if existing is not None:
-        logger.info("[EvalAPI] 评估生成冲突(已有进行中): user_id=%s", current_user.id)
+        logger.info("[EvalAPI] 评估生成冲突(已有进行中): user_id=%s", user_id)
         return HttpResponse.error(code=409, message="assessment_generation_in_progress")
 
-    logger.info("[EvalAPI] 触发评估生成: user_id=%s range_days=%d", current_user.id, payload.range_days)
+    logger.info("[EvalAPI] 触发评估生成: user_id=%s range_days=%d", user_id, payload.range_days)
 
     # 创建 generating 记录并立即返回
     now_utc = datetime.now(timezone.utc)
     window_start = now_utc - timedelta(days=payload.range_days)
     assessment = LearningAssessment(
-        user_id=current_user.id,
+        user_id=user_id,
         trigger_source="manual",
         range_days=payload.range_days,
         window_start=window_start,
@@ -118,7 +116,6 @@ async def generate_assessment(
     await session.refresh(assessment)
 
     assessment_id = assessment.id
-    user_id = current_user.id
     range_days = payload.range_days
 
     # 后台异步执行 LLM 生成
@@ -186,15 +183,15 @@ async def _run_assessment_generation(user_id: int, assessment_id: int, range_day
 # 2. GET /api/v1/ai/evaluation/assessments/latest -> 获取最新 ready 评估
 @router.get("/evaluation/assessments/latest")
 async def get_latest_assessment(
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取最新的一条 ready 评估；无评估则返回 null/None。"""
-    logger.info("[EvalAPI] 查询最新评估: user_id=%s", current_user.id)
+    user_id = get_current_user().id
+    logger.info("[EvalAPI] 查询最新评估: user_id=%s", user_id)
     assessment = (await session.exec(
         select(LearningAssessment)
         .where(
-            LearningAssessment.user_id == current_user.id,
+            LearningAssessment.user_id == user_id,
             LearningAssessment.status == "ready"
         )
         .order_by(col(LearningAssessment.generated_at).desc())
@@ -211,20 +208,20 @@ async def get_latest_assessment(
 async def get_assessments_history(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """历史分页列表。不回传 assessment 正文以减小带宽。"""
+    user_id = get_current_user().id
     total = (await session.exec(
         select(func.count())
         .select_from(LearningAssessment)
-        .where(LearningAssessment.user_id == current_user.id)
+        .where(LearningAssessment.user_id == user_id)
     )).one() or 0
 
     offset = (page - 1) * page_size
     stmt = (
         select(LearningAssessment)
-        .where(LearningAssessment.user_id == current_user.id)
+        .where(LearningAssessment.user_id == user_id)
         .order_by(col(LearningAssessment.created_at).desc())
         .offset(offset)
         .limit(page_size)
@@ -249,13 +246,13 @@ async def get_assessments_history(
 @router.get("/evaluation/assessments/{assessment_id}")
 async def get_assessment_detail(
     assessment_id: int,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取单次评估详情。如果非本人拥有，返回 404，不泄露存在性。"""
-    logger.info("[EvalAPI] 查询评估详情: user_id=%s assessment_id=%s", current_user.id, assessment_id)
+    user_id = get_current_user().id
+    logger.info("[EvalAPI] 查询评估详情: user_id=%s assessment_id=%s", user_id, assessment_id)
     assessment = await session.get(LearningAssessment, assessment_id)
-    if assessment is None or assessment.user_id != current_user.id:
+    if assessment is None or assessment.user_id != user_id:
         return HttpResponse.error(code=404, message="assessment_not_found")
 
     return HttpResponse.success(data=assessment.model_dump(mode="json"))
@@ -265,11 +262,11 @@ async def get_assessment_detail(
 @router.get("/evaluation/dashboard")
 async def get_dashboard_data(
     range_days: int = Query(default=7, description="统计天数窗口"),
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。"""
-    logger.info("[EvalAPI] 查询看板数据: user_id=%s range_days=%d", current_user.id, range_days)
+    user_id = get_current_user().id
+    logger.info("[EvalAPI] 查询看板数据: user_id=%s range_days=%d", user_id, range_days)
     if range_days < 1 or range_days > 90:
         return HttpResponse.error(code=400, message="range_days must be between 1 and 90")
 
@@ -279,7 +276,7 @@ async def get_dashboard_data(
 
     dashboard_data = await _build_dashboard_data(
         session,
-        user_id=current_user.id,
+        user_id=user_id,
         window_start=window_start,
         window_end=window_end,
         now_utc=now_utc,
@@ -292,17 +289,17 @@ async def get_dashboard_data(
 @router.get("/evaluation/assessments/{assessment_id}/dashboard")
 async def get_assessment_dashboard(
     assessment_id: int,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """根据历史评估的时间窗口重新计算看板数据，用于历史评估联动看板。"""
+    user_id = get_current_user().id
     assessment = await session.get(LearningAssessment, assessment_id)
-    if assessment is None or assessment.user_id != current_user.id:
+    if assessment is None or assessment.user_id != user_id:
         return HttpResponse.error(code=404, message="assessment_not_found")
 
     dashboard_data = await _build_dashboard_data(
         session,
-        user_id=current_user.id,
+        user_id=user_id,
         window_start=assessment.window_start,
         window_end=assessment.window_end,
         now_utc=assessment.window_end,

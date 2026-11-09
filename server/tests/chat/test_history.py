@@ -179,7 +179,9 @@ async def test_http_run_sse_and_history(db_scope: Scope, monkeypatch: pytest.Mon
     monkeypatch.setattr(service, "compress_session", AsyncMock())
     monkeypatch.setattr(service, "update_long_term_memory", AsyncMock())
     monkeypatch.setattr(service, "record_dialogue_event", AsyncMock())
+    from app.middleware.jwt import JWTMiddleware
     app = FastAPI()
+    app.add_middleware(JWTMiddleware)
     app.include_router(router, prefix="/api/v1/ai")
     app.dependency_overrides[get_current_user] = user
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:

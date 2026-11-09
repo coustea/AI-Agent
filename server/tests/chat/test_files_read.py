@@ -62,9 +62,9 @@ class TestReadAndResolveFiles:
 
     def test_describe_tool_call_semantics(self) -> None:
         """验证工具步骤标题与参数描述。"""
-        title, sub = describe_tool_call("search_knowledge_base", {"query": "TCP拥塞控制"})
-        assert "检索课程知识库" in title
-        assert "TCP拥塞控制" in sub
+        title, sub = describe_tool_call("get_learner_profile", {"reason": "基础薄弱点"})
+        assert "查阅学习者画像" in title
+        assert "基础薄弱点" in sub
 
         v_title, v_sub = describe_tool_call(
             "view_image",

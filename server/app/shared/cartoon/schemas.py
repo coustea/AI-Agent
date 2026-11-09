@@ -1,101 +1,110 @@
-"""Cartoon (HyperFrames 教学视频) 数据模型 — CLI 工具循环。"""
+"""Cartoon (HyperFrames 教学视频) 数据契约。"""
 
 from __future__ import annotations
 
-from enum import StrEnum
 from pathlib import Path
 from typing import Any, Literal
-
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class _Model(BaseModel):
-    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+class CartoonModel(BaseModel):
+    """Cartoon 模块基础模型，严格校验字段且剥离首尾空格。"""
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
 
-class LessonDepth(StrEnum):
-    FOCUSED = "focused"
-    STANDARD = "standard"
-    DEEP = "deep"
+class CartoonGenerationConfig(CartoonModel):
+    """前端与调用方传入的教学视频偏好配置。"""
 
-
-class CartoonGenerationConfig(_Model):
-    """前端/调用方传入的动画视频偏好配置。"""
-
-    lesson_depth: LessonDepth = LessonDepth.STANDARD
+    lesson_depth: Literal["focused", "standard", "deep"] = "standard"
     visual_density: Literal["moderate", "rich", "intensive"] = "rich"
     pace: Literal["fast", "balanced", "calm"] = "balanced"
     voice: Literal["teacher", "coach"] = "teacher"
-    target_duration_seconds: int = Field(default=120, ge=30)
+    target_duration_seconds: int = 120
 
 
-class CartoonBrief(_Model):
-    """交给动画视频 agent 的统一请求契约。"""
+class CartoonBrief(CartoonModel):
+    """交付给 CartoonAgent 的结构化创作任务需求。"""
 
-    learning_need: str = Field(min_length=1)
-    instruction_context: dict[str, Any] = Field(default_factory=dict)
-    source_materials: list[str] = Field(default_factory=list)
-    knowledge_points: list[str] = Field(default_factory=list)
-    weak_knowledge_points: list[str] = Field(default_factory=list)
+    title: str = Field(default="", description="视频标题")
+    learning_need: str = Field(min_length=1, description="核心教学需求或主题说明")
+    source_materials: list[str] = Field(default_factory=list, description="上游参考材料或讲义要点")
     configuration: CartoonGenerationConfig = Field(default_factory=CartoonGenerationConfig)
+    instruction_context: dict[str, Any] = Field(default_factory=dict, description="教学上下文元数据")
 
 
-class CartoonInput(_Model):
-    """一次动画视频生成的完整输入。"""
+class CartoonArtifact(CartoonModel):
+    """视频生成完成后的物理文件产物引用与媒体规格。"""
 
-    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True, arbitrary_types_allowed=True)
-
-    output_dir: Path
-    brief: CartoonBrief
-
-
-class CartoonArtifact(_Model):
-    """Cartoon 生成完成后的产物引用。"""
-
-    schema_version: Literal["cartoon/artifact-v8"] = "cartoon/artifact-v8"
     title: str
-    duration_ms: int = Field(gt=0)
-    scene_count: int = Field(ge=1)
-    has_audio: Literal[True] = True
-    output_dir: Path
+    duration_seconds: float = Field(default=0.0, ge=0, description="视频实际播放时长（秒）")
+    scene_count: int = Field(ge=1, description="语义场景分镜数")
+    width: int = Field(default=1920, gt=0, description="视频画面宽度")
+    height: int = Field(default=1080, gt=0, description="视频画面高度")
     html_path: Path
     video_path: Path
     caption_path: Path
+    duration_ms: int | None = Field(default=None, description="毫秒播放时长兼容字段")
+    output_dir: Path | None = Field(default=None, description="产物目录兼容字段")
 
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_duration(cls, data: Any) -> Any:
+        """兼容毫秒级时长输入并自动换算为秒。"""
+        if isinstance(data, dict):
+            if "duration_ms" in data and ("duration_seconds" not in data or not data["duration_seconds"]):
+                ms = data.get("duration_ms") or 0
+                data["duration_seconds"] = round(ms / 1000.0, 2)
+        return data
 
-class CartoonResourceMetadata(_Model):
-    """发布到 AgentResult.metadata 的前端契约。"""
+    def metadata(self) -> dict[str, Any]:
+        """将视频产物信息转换为包含静态访问 URL 的元数据字典。"""
+        from app.config import static_url
 
-    agent_id: Literal["cartoon"] = "cartoon"
-    schema_version: Literal["cartoon/v8"] = "cartoon/v8"
-    engine: Literal["hyperframes"] = "hyperframes"
-    has_audio: Literal[True] = True
-    quality_passed: Literal[True] = True
-    video_url: str = Field(min_length=1)
-    preview_url: str = Field(min_length=1)
-    captions_url: str = Field(min_length=1)
-    duration_seconds: float = Field(gt=0)
-    scene_count: int = Field(ge=1)
-
-    @model_validator(mode="after")
-    def validate_urls(self) -> "CartoonResourceMetadata":
-        """校验各产物 URL 扩展名契约（.mp4/.html/.vtt）。"""
-        expected = {
-            "video_url": ".mp4",
-            "preview_url": ".html",
-            "captions_url": ".vtt",
+        return {
+            "agent_id": "cartoon",
+            "video_url": static_url(self.video_path),
+            "preview_url": static_url(self.html_path),
+            "captions_url": static_url(self.caption_path),
+            "duration_seconds": self.duration_seconds,
+            "scene_count": self.scene_count,
+            "width": self.width,
+            "height": self.height,
         }
-        for field_name, suffix in expected.items():
-            if not str(getattr(self, field_name)).strip().endswith(suffix):
-                raise ValueError(f"{field_name} must reference a {suffix} file")
-        return self
 
 
 class CartoonGenerationError(RuntimeError):
     """动画视频生成阶段结构化异常。"""
 
-    def __init__(self, message: str, *, stage: str, problems: list[str] | None = None) -> None:
+    def __init__(self, message: str, *, stage: str = "generate", problems: list[str] | None = None) -> None:
         """初始化动画生成异常、发生阶段及详细问题列表。"""
         super().__init__(message)
         self.stage = stage
         self.problems = list(problems or [])
+
+
+class CartoonInput(BaseModel):
+    """动画视频生成输入参数兼容结构。"""
+
+    output_dir: Path
+    brief: CartoonBrief
+
+
+class CartoonResourceMetadata(BaseModel):
+    """动画资源元数据。"""
+
+    video_url: str = ""
+    preview_url: str = ""
+    captions_url: str = ""
+    duration_seconds: float = 0.0
+    scene_count: int = 1
+
+
+__all__ = [
+    "CartoonArtifact",
+    "CartoonBrief",
+    "CartoonGenerationConfig",
+    "CartoonGenerationError",
+    "CartoonInput",
+    "CartoonResourceMetadata",
+]

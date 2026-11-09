@@ -1,22 +1,29 @@
-"""视频生成的上层工具入口。"""
+"""教学动画视频生成工具入口。"""
+
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+
 from pydantic import BaseModel, Field
-from app.config import static_url, user_resource_cartoon_dir
-from app.shared.cartoon.agent import ProgressCallback, generate
-from app.shared.cartoon.schemas import CartoonBrief, CartoonGenerationConfig, CartoonInput
+
+from app.config import user_resource_cartoon_dir
+from app.shared.cartoon.agent import CartoonAgent, ProgressCallback
+from app.shared.cartoon.schemas import CartoonBrief, CartoonGenerationConfig
 from app.shared.tools.registry import Tool
 
 
 class GenerateVideoToolArgs(BaseModel):
-    topic: str = Field(min_length=2)
-    learning_goal: str = Field(min_length=2)
-    source_materials: list[str] = Field(default_factory=list)
-    voice: str = "teacher"
+    """教学动画视频生成工具入参模式。"""
+
+    topic: str = Field(min_length=2, description="教学视频主题")
+    learning_goal: str = Field(min_length=2, description="核心教学目标或需求说明")
+    source_materials: list[str] = Field(default_factory=list, description="讲义要点或补充材料")
+    voice: str = Field(default="teacher", description="旁白音色：teacher 或 coach")
 
 
-def build_cartoon_subagent_tool(
+def build_cartoon_tool(
     *,
     username: str = "anonymous",
     resource_id: str | None = None,
@@ -26,39 +33,35 @@ def build_cartoon_subagent_tool(
 ) -> Tool:
     """构造供 chat、resource 等父智能体统一调用的 generate_teaching_video 工具。"""
 
-    async def _run(
+    async def generate_teaching_video(
         topic: str,
         learning_goal: str,
         source_materials: list[str] | None = None,
         voice: str = "teacher",
     ) -> dict[str, Any]:
-        """生成教学动画视频并返回标准化结果字典。"""
+        """调用 CartoonAgent 生成教学动画视频并返回标准化产物元数据。"""
         res_key = resource_id or (f"chat_{session_id}" if session_id else uuid4().hex[:12])
         target_dir = output_dir or user_resource_cartoon_dir(username, res_key)
         voice_val = "coach" if voice == "coach" else "teacher"
         brief = CartoonBrief(
-            learning_need=f"{topic}：{learning_goal}",
-            instruction_context={"topic": topic, "learning_goal": learning_goal},
+            title=topic,
+            learning_need=learning_goal,
             source_materials=list(source_materials or [learning_goal])[:8],
-            configuration=CartoonGenerationConfig(voice=voice_val),  # type: ignore[arg-type]
+            configuration=CartoonGenerationConfig(voice=voice_val),
         )
-        artifact = await generate(CartoonInput(output_dir=target_dir, brief=brief), progress=progress)
+        artifact = await CartoonAgent().generate(brief, target_dir, progress=progress)
         return {
             "status": "ok",
             "title": artifact.title,
-            "scene_count": artifact.scene_count,
-            "duration_seconds": round(artifact.duration_ms / 1000.0, 2),
-            "video_url": static_url(artifact.video_path),
-            "preview_url": static_url(artifact.html_path),
-            "captions_url": static_url(artifact.caption_path),
+            **artifact.metadata(),
         }
 
     return Tool(
         name="generate_teaching_video",
-        description=(
-            "Invoke the specialized cartoon video agent (HyperFrames CLI + TTS) "
-            "to generate a 1920x1080 narrated MP4 teaching video with synchronized captions."
-        ),
+        description="生成 1080p 教学动画视频（含中文语音旁白与同步 WebVTT 字幕）。",
         args_model=GenerateVideoToolArgs,
-        handler=_run,
+        handler=generate_teaching_video,
     )
+
+
+__all__ = ["GenerateVideoToolArgs", "build_cartoon_tool"]

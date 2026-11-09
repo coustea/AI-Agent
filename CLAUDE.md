@@ -92,7 +92,6 @@ Key domains:
 - `evaluation` — learning events and summaries
 - `dashboard` — homepage aggregation and recommendations
 - `quiz` — question bank and wrong-question APIs
-- `rag` — knowledge-base retrieval (`retriever.py`, `indexing/`, `embeddings.py`, `tools.py`)
 - `shared/` — cross-domain modules: `video/`, `cartoon/`, `ppt/`, `research/`, `utils/`
 - `infra` — database, models, logging, prompts, config, response envelope, LLM singleton
 
@@ -129,7 +128,7 @@ Chat context is assembled from multiple layers spanning chat, profile, and memor
 - compressed summary blocks (`ChatSessionSummaryBlock`)
 - long-term memory (`ChatLongTermMemory`)
 - learner profile (`GlobalProfile`, `CourseProfile`)
-- optional web-search / knowledge-base (RAG) sources
+- optional web-search sources
 
 This is the main personalization pipeline in the repo.
 

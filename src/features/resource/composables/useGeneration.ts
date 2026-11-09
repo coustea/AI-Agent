@@ -625,19 +625,30 @@ export function useGeneration() {
   }
 
   // 启动新一轮资源生成：重置状态、发起请求、建立事件流
-  const start = async () => {
+  const start = async (options?: {
+    topic?: string
+    learningGoal?: string
+    targetResources?: ResourceAgentId[]
+    difficulty?: import('../model/resource').DifficultyLevel
+    preferences?: Record<string, unknown>
+  }) => {
     currentPhase.value = 'generating'
     resetGenerationState()
+    if (options?.targetResources && options.targetResources.length > 0) {
+      enabledAgentIds.value = options.targetResources
+    }
     initializeWaitingNodes()
     isGenerating.value = true
 
     try {
-      // 构建生成请求参数
+      // 构建统一生成请求参数
       const requestParams: ResourceGenerationRequest = {
-        learning_need: naturalInput.value,
-        learning_scenario: learningScenario.value,
-        selected_agents: enabledAgentIds.value.map((id) => ({ agent_id: id, enabled: true })),
-        agent_configs: agentConfigs.value,
+        topic: options?.topic || naturalInput.value,
+        learning_goal: options?.learningGoal || '',
+        target_resources: options?.targetResources || enabledAgentIds.value,
+        difficulty: options?.difficulty || 'intermediate',
+        preferences: options?.preferences || {},
+        learning_need: options?.topic || naturalInput.value,
       }
       // 发起生成请求并获取资源 id
       const { resource_id } = (await startResourceGeneration(requestParams)).data.data

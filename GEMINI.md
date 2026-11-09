@@ -79,4 +79,3 @@ A comprehensive AI-powered learning platform leveraging Multi-Agent Systems (MAS
 ## Knowledge & Memory System
 - **Long-term Memory**: Facts extracted from conversations into `UserLongTermMemory`.
 - **Profiles**: Incremental updates to `UserProfile` 8-dimension data.
-- **Knowledge Base**: Integrated RAG using ChromaDB/FAISS (configured in `config.yaml`).

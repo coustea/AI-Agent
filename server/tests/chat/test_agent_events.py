@@ -72,8 +72,8 @@ async def test_tool_ids_sequential_execution_and_final_text(
                 TurnDone(
                     text="先查询",
                     tool_calls=(
-                        ToolCall(id="", name="search_knowledge_base", args={"query": "first"}),
-                        ToolCall(id="", name="search_knowledge_base", args={"query": "second"}),
+                        ToolCall(id="", name="query_tool", args={"query": "first"}),
+                        ToolCall(id="", name="query_tool", args={"query": "second"}),
                     ),
                 ),
             ],
@@ -88,9 +88,9 @@ async def test_tool_ids_sequential_execution_and_final_text(
             assert executed == ["first"]
         await asyncio.sleep(0)
         executed.append(query)
-        return {"text": query, "sources": [{"source": "kb", "title": query}]}
+        return {"text": query, "sources": [{"source": "mock", "title": query}]}
 
-    tools = [Tool("search_knowledge_base", "查询", QueryArgs, search)]
+    tools = [Tool("query_tool", "查询", QueryArgs, search)]
     queue = stream.subscribe()
     result = await run(stream, model, tools)
     assert result.answer == "最终回答"

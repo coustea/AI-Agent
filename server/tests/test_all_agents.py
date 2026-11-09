@@ -7,13 +7,15 @@ import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.resource.schemas import ResourcePlan, DownstreamContext, AgentResult, ResourcePlanTask
-from app.resource.agents.content import ContentAgent
-from app.resource.agents.mindmap import MindmapAgent
-from app.resource.agents.quiz import QuizAgent
-from app.resource.agents.code import CodeAgent
-from app.resource.agents.reading import ReadingAgent
-from app.resource.agents.ppt import PPTAgent as PptAgent
-from app.resource.agents.planning import PlanningAgent
+from app.resource.agents import (
+    ContentAgent,
+    MindmapAgent,
+    QuizAgent,
+    CodeAgent,
+    ReadingAgent,
+    PPTAgent as PptAgent,
+    PlanningAgent,
+)
 
 
 def test_core_schemas_exist():

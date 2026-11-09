@@ -34,7 +34,6 @@ from app.infra.models import (
     WrongQuestion,
 )
 from app.profile.context import ProfileScope, load_learner_context
-from app.rag.tools import build_knowledge_tool
 
 # 从本地合并后的 schemas 导入
 from app.path.schemas import (
@@ -548,17 +547,8 @@ class NodeLearningAgent:
         profile_section = (
             f"学习者画像:\n{profile_markdown[:2000]}" if profile_markdown else ""
         )
-        # 本地知识库检索 —— 直接调用 RAG 工具，为教程提供权威教材依据
-        try:
-            kb_result = await build_knowledge_tool().handler(query=node_title)
-            kb_section = (
-                kb_result.get("text")
-                if isinstance(kb_result, dict) and kb_result.get("status") == "ok"
-                else "无"
-            )
-        except Exception as exc:
-            logger.warning("[NodeLearningAgent] 知识库检索失败: %s", exc)
-            kb_section = "无"
+        # 本地知识库检索已解耦，待未来重构 RAG 模块后重新接入
+        kb_section = "无"
         # 根据 tutorial_type 选择对应的 prompt
         prompt_key = "tutorial_primary"  # 简化：只生成主教程
         prompt = load_prompt(

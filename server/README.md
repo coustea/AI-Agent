@@ -20,7 +20,6 @@ Mentorly 后端基于 **Python 3.13+ · FastAPI · SQLModel (SQLAlchemy 2.0 Asyn
 | **鉴权与安全** | PyJWT（HS256）· Passlib (`bcrypt`) · 全局 `JWTMiddleware` |
 | **大模型接入** | OpenAI Async SDK（统一封装 `LLM`：支持文本模型 `text` 与视觉模型 `vision`） |
 | **Agent 核心** | `run_tutor_agent` · `RunHooks` · `ToolRegistry` · `SkillLoader` · 无状态子智能体 (`run_subagent`) |
-| **RAG 知识库** | ChromaDB · BM25（`jieba` + `rank-bm25`）· RRF 融合 · `bge-m3` Embedding |
 | **课件与视频生产** | PptxGenJS · LibreOffice (`soffice`) · Poppler (`pdftoppm`) · HyperFrames CLI · Edge TTS · FFmpeg / `ffprobe` |
 | **测试工具** | `pytest` · `pytest-asyncio` |
 
@@ -61,7 +60,6 @@ server/
 │   ├── profile/              # 7 维学习者画像模块 (Onboarding、维度推理评分、AGENT.md 生成、首页推荐与雷达图)
 │   ├── quiz/                 # 408 题库检索、客观题提交判分、主观题单题/批量 AI 审阅、错题本管理
 │   ├── evaluation/           # 学习行为事件、页面会话时长、7 天窗口事实聚合、评估报告与辅导策略更新
-│   ├── rag/                  # 离线索引构建 (build.py)、语义切分、ChromaDB + BM25 双路混合检索与 RAG 工具
 │   ├── shared/               # 跨模块 Agent 共享底座
 │   │   ├── tools/            # ToolRegistry、sandbox 路径防护、SkillLoader、subagent 及 7 个 builtin 工具
 │   │   ├── ppt/              # PPTAgent (PptxGenJS + LibreOffice + 逐页视觉审查)
@@ -116,7 +114,7 @@ uv run fastapi dev app/main.py --port 9999
 - **会话使用模式**：
   - 路由请求级依赖注入使用 `Depends(get_session)`（`expire_on_commit=False`）。
   - 后台任务与独立事务块使用 `async with session_scope() as db:`（自动提交/回滚）。
-  - 认证依赖（`get_current_user` / `get_current_user_entity`）直接复用请求级 `AsyncSession`。
+  - 认证统一由 `JWTMiddleware` 全局拦截与注入，接口内部通过免参的 `get_current_user()` 读取 `UserClaims` 上下文。
 
 ---
 

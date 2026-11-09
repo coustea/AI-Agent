@@ -1,4 +1,4 @@
-"""SkillLoader、load_skill 与 copy_skill_template 工具。"""
+"""技能加载器与 load_skill 工具 —— 基于 learn-claude-code s05 技能按需加载。"""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ class SkillLoader:
     """技能目录索引：扫描时只记描述，正文在 load_skill 时按需读取。"""
 
     def __init__(self, skills_dir: Path | None = None) -> None:
-        """扫描技能目录，建立 技能名 → frontmatter 描述 的索引。"""
+        """扫描技能目录，建立 技能名 -> frontmatter 描述 的索引。"""
         self.skills_dir = (skills_dir or DEFAULT_SKILLS_DIR).resolve()
         self.skills: dict[str, str] = {
             path.parent.name: _read_description(path)
@@ -99,10 +99,10 @@ def get_skill_loader(*, refresh: bool = False) -> SkillLoader:
 class LoadSkillArgs(BaseModel):
     """读取技能说明或技能目录内的参考文件。"""
 
-    name: str = Field(min_length=1)
+    name: str = Field(min_length=1, description="技能名称")
     reference: str = Field(
         default="",
-        description="Optional file path relative to the skill root, e.g. references/format.md",
+        description="相对于技能根目录的文件路径，例如 references/format.md",
     )
 
 
@@ -125,68 +125,10 @@ def build_load_skill_tool(loader: SkillLoader | None = None, *, only: Sequence[s
     )
 
 
-class CopySkillTemplateArgs(BaseModel):
-    """从技能包复制物理骨架模板到当前工作目录。"""
-
-    skill: str = Field(min_length=1, description="技能名称，如 'hyperframes' 或 'pptx'")
-    template: str = Field(
-        min_length=1,
-        description="技能 templates/ 下的模板文件名，如 'scene_skeleton.html' 或 'slide_skeleton.py'",
-    )
-    dest_path: str = Field(
-        min_length=1,
-        description="复制到当前工作目录的相对路径，如 'compositions/s01.html' 或 'slides/s01.py'",
-    )
-    replacements: dict[str, str] = Field(
-        default_factory=dict,
-        description="可选：复制时顺带替换的占位符字典",
-    )
-
-
-def build_copy_skill_template_tool(
-    workdir: Path,
-    loader: SkillLoader | None = None,
-    *,
-    only: Sequence[str] | None = None,
-) -> Tool:
-    """构造将技能包物理骨架文件复制到工作区的 copy_skill_template 工具。"""
-    skill_loader = loader or get_skill_loader()
-
-    async def _copy_template(
-        skill: str,
-        template: str,
-        dest_path: str,
-        replacements: dict[str, str] | None = None,
-    ) -> dict[str, Any]:
-        """将技能模板安全复制到工作区并替换占位符。"""
-        root = skill_loader.skills_dir / skill
-        src = (root / "templates" / template).resolve()
-        if not src.is_file():
-            return {"status": "failed", "error": f"Template not found: {template}"}
-        dest = (workdir / dest_path).resolve()
-        if not dest.is_relative_to(workdir.resolve()):
-            raise PermissionError(f"目标路径越界: {dest_path}")
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        content = src.read_text(encoding="utf-8")
-        for k, v in (replacements or {}).items():
-            content = content.replace(k, str(v))
-        dest.write_text(content, encoding="utf-8")
-        return {"status": "ok", "path": str(dest)}
-
-    return Tool(
-        name="copy_skill_template",
-        description="从技能包复制物理骨架模板到当前工作目录。",
-        args_model=CopySkillTemplateArgs,
-        handler=_copy_template,
-    )
-
-
 __all__ = [
-    "CopySkillTemplateArgs",
     "DEFAULT_SKILLS_DIR",
     "LoadSkillArgs",
     "SkillLoader",
-    "build_copy_skill_template_tool",
     "build_load_skill_tool",
     "get_skill_loader",
 ]

@@ -36,6 +36,3 @@ def build_ppt_tool(
         handler=generate,
     )
 
-
-build_ppt_subagent_tool = build_ppt_tool
-

@@ -90,8 +90,6 @@ JWT_EXPIRE = get("jwt.expire_days", 7)
 WORKPLACE_DIR_NAME = get("paths.workplace", "workplace")
 # 日志目录名称
 LOGS_DIR_NAME = get("paths.logs", "logs")
-# 知识库数据目录名称
-KB_DIR_NAME = get("paths.knowledge", "app/rag/data/index")
 
 # ============ 路径对象 ============
 # 项目根目录：server/
@@ -100,8 +98,6 @@ SERVER_DIR = Path(__file__).resolve().parents[1]
 WORKPLACE_DIR = SERVER_DIR / WORKPLACE_DIR_NAME
 # 日志输出目录：server/logs/
 LOGS_DIR = SERVER_DIR / LOGS_DIR_NAME
-# 知识库目录：server/app/rag/data/index/
-KB_DIR = SERVER_DIR / KB_DIR_NAME
 
 
 # ============ 用户路径构建函数 ============
@@ -225,21 +221,6 @@ def chat_upload_url(username: str, session_id: str, filename: str) -> str:
     """构建聊天附件 URL：/static/{username}/chat/{session_id}/uploads/{filename}"""
     return f"/static/{username}/chat/{session_id}/uploads/{filename}"
 
-
-# ============ 知识库配置 ============
-# 仅保留部署/调优参数；collection、切分、RRF 等实现细节下沉为 RAG 模块常量
-# 是否启用知识库功能
-KB_ENABLED = get("knowledge.enabled", True)
-# 嵌入模型名（OpenAI 兼容 API）
-KB_EMBED_MODEL = get("knowledge.embed_model", "bge-m3")
-# 嵌入服务地址（llama.cpp /v1）
-KB_EMBED_BASE_URL = get("knowledge.embed_base_url", "http://127.0.0.1:10000/v1")
-# 嵌入服务 API Key（llama.cpp 等本地服务可不校验，填占位符即可）
-KB_EMBED_API_KEY = get("knowledge.embed_api_key", "sk-placeholder")
-# 检索时返回的最相似文档数量
-KB_TOP_K = get("knowledge.top_k", 4)
-# 返回给 ChatAgent 的最大上下文字符数
-KB_MAX_CONTEXT_CHARS = get("knowledge.max_context_chars", 6000)
 
 # ============ 星火 Spark WebSocket 配置 ============
 # 星火大模型应用 ID

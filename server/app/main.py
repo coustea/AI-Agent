@@ -19,13 +19,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.config import KB_ENABLED, KB_EMBED_MODEL, WORKPLACE_DIR
+from app.config import WORKPLACE_DIR
 from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging, get_logger
 from app.routes import install_routes
 from app.middleware import JWTMiddleware
-from app.rag.retriever import check_index_health
 
 
 @asynccontextmanager
@@ -50,29 +49,6 @@ async def lifespan(app: FastAPI):
     interrupted = await mark_interrupted_runs()
     if interrupted:
         get_logger("main").warning("[Chat] 标记中断运行: %d 条", interrupted)
-
-    # 知识库索引状态检查（不自动构建，构建请执行: python -m app.rag）
-    log = get_logger("main")
-    if not KB_ENABLED:
-        log.info("[KB] 知识库已在配置中禁用")
-    else:
-        try:
-            health = check_index_health()
-            if health.ready:
-                log.info(
-                    "[KB] 知识检索可用: %d 个分块, 嵌入模型=%s",
-                    health.chunk_count,
-                    KB_EMBED_MODEL,
-                )
-            else:
-                log.warning(
-                    "[KB] 知识检索不可用 (原因: %s, 嵌入模型=%s)。"
-                    "请执行 python -m app.rag 构建索引",
-                    health.reason,
-                    KB_EMBED_MODEL,
-                )
-        except Exception as exc:
-            log.error("[KB] 索引检查失败: %s", exc, exc_info=True)
 
     log.info("[Main] 应用启动完成，开始接受请求")
 

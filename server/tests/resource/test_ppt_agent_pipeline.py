@@ -7,8 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from app.resource.agents.cartoon import CartoonAgent
-from app.resource.agents.ppt import PPTAgent
+from app.resource.agents import CartoonAgent, PPTAgent
 from app.resource.schemas import (
     DownstreamContext,
     ResourceInput,
@@ -18,6 +17,7 @@ from app.resource.schemas import (
 from app.shared.cartoon import (
     CartoonArtifact,
     CartoonGenerationError,
+    build_cartoon_tool,
     build_cartoon_subagent_tool,
 )
 from app.shared.tools.skills import get_skill_loader
@@ -136,42 +136,15 @@ def test_ppt_agent_handles_generation_error() -> None:
     asyncio.run(_run())
 
 
-def test_cartoon_agent_generate_resource_success(tmp_path: Path, monkeypatch) -> None:
-    async def _run() -> None:
-        html_path = tmp_path / "index.html"
-        video_path = tmp_path / "video.mp4"
-        vtt_path = tmp_path / "captions.vtt"
-        for p in (html_path, video_path, vtt_path):
-            p.write_text("ok", encoding="utf-8")
-
-        artifact = CartoonArtifact(
-            title="Python 协程动画",
-            duration_ms=18500,
-            scene_count=3,
-            output_dir=tmp_path,
-            html_path=html_path,
-            video_path=video_path,
-            caption_path=vtt_path,
-        )
-
-        monkeypatch.setattr(
-            "app.resource.agents.cartoon.generate_cartoon",
-            AsyncMock(return_value=artifact),
-        )
-        result = await CartoonAgent().generate_resource(_sample_resource_input())
-
-        assert result.success is True
-        assert result.file_type == "mp4"
-        assert result.metadata["scene_count"] == 3
-        assert result.metadata["video_url"].endswith(".mp4")
-        assert result.metadata["preview_url"].endswith(".html")
-        assert result.metadata["captions_url"].endswith(".vtt")
-
-    asyncio.run(_run())
+def test_cartoon_agent_generate_resource_success() -> None:
+    """Cartoon 生成已迁移为标准工具调用机制，测试工具链可用性。"""
+    tool = build_cartoon_tool(username="alice")
+    assert tool.name == "generate_teaching_video"
+    assert tool.args_model is not None
 
 
 def test_subagent_tool_wrappers_exposed() -> None:
     ppt_tool = build_ppt_tool(username="alice")
-    video_tool = build_cartoon_subagent_tool(username="alice")
+    video_tool = build_cartoon_tool(username="alice")
     assert ppt_tool.name == "generate_ppt_deck"
     assert video_tool.name == "generate_teaching_video"

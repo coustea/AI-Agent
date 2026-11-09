@@ -1,18 +1,17 @@
-"""认证安全模块：密码哈希、JWT 签发及身份依赖注入。"""
+"""认证安全模块：密码哈希、JWT 签发及身份上下文访问。"""
 
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import bcrypt
 import jwt
-from fastapi import Depends, Request
-from sqlmodel.ext.asyncio.session import AsyncSession
+from fastapi import Request
 
 from app.auth.schemas import UserClaims
 from app.config import JWT_ALGO, JWT_EXPIRE, JWT_SECRET
-from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import User
+from app.middleware.jwt import current_user_ctx
 
 logger = get_logger(__name__)
 
@@ -74,22 +73,13 @@ def decode_token(token: str) -> UserClaims:
         raise AuthError("无效 Token", code=401) from exc
 
 
-def get_current_user(request: Request) -> UserClaims:
-    """FastAPI 核心依赖项：从请求上下文直接获取当前用户 Claims（0 次数据库 I/O）。"""
-    user: UserClaims | None = getattr(request.state, "user", None)
+def get_current_user(request: Request | None = None) -> UserClaims:
+    """从协程上下文中获取当前用户 UserClaims（0 次数据库 I/O，无需传参）。"""
+    user = current_user_ctx.get()
+    if user is None and request is not None:
+        user = getattr(request.state, "user", None)
     if user is None:
         raise AuthError("未登录或登录已过期", code=401)
-    return user
-
-
-async def get_current_user_entity(
-    claims: UserClaims = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
-) -> User:
-    """按需从数据库加载完整 User ORM 实体（仅在需要修改或读取全量扩展字段时使用）。"""
-    user = await session.get(User, claims.id)
-    if not user:
-        raise AuthError("用户不存在", code=404)
     return user
 
 
@@ -100,5 +90,4 @@ __all__ = [
     "create_token",
     "decode_token",
     "get_current_user",
-    "get_current_user_entity",
 ]

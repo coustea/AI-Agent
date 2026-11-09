@@ -26,9 +26,6 @@
         <ResourceSetting
           v-else-if="currentPhase === 'personalize'"
           key="personalize"
-          v-model:learningScenario="learningScenario"
-          v-model:enabledAgentIds="enabledAgentIds"
-          v-model:agentConfigs="agentConfigs"
           :naturalInput="naturalInput"
           @back="currentPhase = 'input'"
           @launch="start"
@@ -76,7 +73,7 @@ const router = useRouter()
 
 // 解构 useGeneration 组合式函数，获取全部状态与操作方法
 const {
-  currentPhase, naturalInput, learningScenario, enabledAgentIds, agentConfigs,
+  currentPhase, naturalInput,
   dagNodeStates, selectedDagNodeId, overallProgress, latestWorkflowMessage,
   generatedResources, generationError, planReady,
   activeResourceId, visibleWorkflowNodes, dagSelectedAgentIds,

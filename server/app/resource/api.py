@@ -27,7 +27,7 @@ from app.infra.logging import get_logger
 from app.profile.context import ProfileScope, load_learner_context
 from app.resource.schemas import ResourceGenerationRequest
 from app.resource.service import ResourceService
-from app.resource.orchestrator import run_multi_agent_generation
+from app.resource.harness import run_multi_agent_generation
 from app.response import HttpResponse
 from app.resource.event import (
     RESOURCE_TERMINAL_EVENTS,
@@ -43,10 +43,10 @@ logger = get_logger(__name__)
 @router.post("/resources")
 async def create_resource_task(
     req: ResourceGenerationRequest,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """启动独立资源生成后台任务。"""
+    current_user = get_current_user()
     logger.info(
         "[ResourceAPI] 收到后台生成请求: user_id=%s selected_agents=%s",
         current_user.id,
@@ -87,10 +87,10 @@ async def create_resource_task(
 @router.get("/resources/{resource_id}/status")
 async def get_generation_status(
     resource_id: int,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """查询后台生成任务的状态。"""
+    current_user = get_current_user()
     logger.debug("[ResourceAPI] 查询生成状态: user_id=%s resource_id=%s", current_user.id, resource_id)
     service = ResourceService(session)
     status_data = await service.get_generation_status(
@@ -108,10 +108,10 @@ async def get_resource_events(
     resource_id: int,
     after_sequence: int = Query(default=0, ge=0),
     last_event_id: str | None = Header(default=None, alias="Last-Event-ID"),
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """SSE 推送任务事件。"""
+    current_user = get_current_user()
     logger.debug("[ResourceAPI] SSE订阅: user_id=%s resource_id=%s after=%s", current_user.id, resource_id, after_sequence)
     # 验证资源所有权
     service = ResourceService(session)
@@ -179,10 +179,10 @@ async def get_resource_events(
 async def list_resources(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """查询资源列表。"""
+    current_user = get_current_user()
     logger.debug("[ResourceAPI] 查询资源列表: user_id=%s limit=%d offset=%d", current_user.id, limit, offset)
     service = ResourceService(session)
     resources = await service.list_resources(
@@ -215,10 +215,10 @@ async def list_resources(
 @router.get("/resources/{resource_id}")
 async def get_resource(
     resource_id: int,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """查询资源详情。"""
+    current_user = get_current_user()
     logger.debug("[ResourceAPI] 查询资源详情: user_id=%s resource_id=%s", current_user.id, resource_id)
     service = ResourceService(session)
     bundle = await service.get_resource_bundle(
@@ -264,10 +264,10 @@ def _resource_title(resource: Any) -> str:
 
 @router.get("/dashboard/recent-resources")
 async def get_recent_resources(
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     """获取最近生成的学习资源列表。"""
+    current_user = get_current_user()
     """获取最近生成的学习资源列表。"""
     from app.infra.models import GeneratedResource, GeneratedResourceItem
 

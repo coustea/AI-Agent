@@ -1,61 +1,64 @@
-"""资源生成智能体 — 通过 @register_agent 装饰器自动注册。
+"""Resource 模块智能体包导出定义 (app.resource.agents)。
 
-每个 agent 实现以下方法：
-- generate_resource: standalone 多智能体资源生成（必需）
-- generate_for_path: 路径规划资源生成（可选，部分 agent 实现）
+导出主规划智能体 PlanAgent 与通用执行智能体 SubAgent，
+并为系统外部模块（如 path 学习路径系统）提供统一轻量兼容导出。
 """
 
-# 基类、注册表和注册装饰器
-from app.resource.agents.base import AGENT_REGISTRY, BaseResourceAgent, register_agent
+from __future__ import annotations
 
-# 导入所有 agent 以触发 @register_agent 注册 — 模块加载时自动调用装饰器
+from typing import Any
 
-# 规划 Agent：分析学习需求，生成全局教学大纲
-from app.resource.agents.planning import PlanningAgent
+from app.resource.agents.planner import PlanAgent, PlannerAgent, PlanningAgent
+from app.resource.agents.subagent import SubAgent
+from app.resource.schemas import QuizPayload, ReadingPayload
 
-# 内容 Agent：生成专业课程讲解文档
-from app.resource.agents.content import ContentAgent
 
-# 习题 Agent：生成选择题/判断题等结构化习题
-from app.resource.agents.quiz import QuizAgent
+class _AgentFactory:
+    """包装 SubAgent 角色工厂，以兼容旧版无参实例化。"""
 
-# 思维导图 Agent：生成 Markmap 格式知识结构图
-from app.resource.agents.mindmap import MindmapAgent
+    def __init__(self, role: str) -> None:
+        """初始化工厂并记录角色名称。"""
+        self.role = role
 
-# 代码 Agent：生成教学示例代码
-from app.resource.agents.code import CodeAgent
+    def __call__(self, *args: Any, **kwargs: Any) -> SubAgent:
+        """实例化并返回具备指定角色的 SubAgent。"""
+        return SubAgent(role=self.role)
 
-# 阅读 Agent：生成拓展阅读材料（含真实 URL）
-from app.resource.agents.reading import ReadingAgent
 
-# 课件 Agent：生成教学 PPT
-from app.resource.agents.ppt import PPTAgent
+ContentAgent = _AgentFactory("资深课程讲师")
+MindmapAgent = _AgentFactory("知识体系架构师")
+QuizAgent = _AgentFactory("教学测评出题专家")
+CodeAgent = _AgentFactory("资深软件研发专家")
+ReadingAgent = _AgentFactory("学科文献策展人")
+PPTAgent = _AgentFactory("课件制作专家")
+CartoonAgent = _AgentFactory("概念动画专家")
 
-# 动画讲解 Agent：使用 HyperFrames 生成带配音与字幕的 MP4
-from app.resource.agents.cartoon import CartoonAgent
+# 兼容外部调用的 Registry 字典
+AGENT_REGISTRY: dict[str, Any] = {
+    "planning": PlanAgent,
+    "planner": PlanAgent,
+    "content": ContentAgent,
+    "mindmap": MindmapAgent,
+    "quiz": QuizAgent,
+    "code": CodeAgent,
+    "reading": ReadingAgent,
+    "ppt": PPTAgent,
+    "cartoon": CartoonAgent,
+}
 
-# 模块公开导出列表
 __all__ = [
-    # 全局 agent 注册表字典
-    "AGENT_REGISTRY",
-    # Agent 基类，所有具体 Agent 继承此类
-    "BaseResourceAgent",
-    # 注册装饰器，将 Agent 类加入 AGENT_REGISTRY
-    "register_agent",
-    # 规划 Agent
+    "PlanAgent",
+    "PlannerAgent",
     "PlanningAgent",
-    # 内容 Agent
+    "SubAgent",
     "ContentAgent",
-    # 习题 Agent
-    "QuizAgent",
-    # 思维导图 Agent
     "MindmapAgent",
-    # 代码 Agent
+    "QuizAgent",
     "CodeAgent",
-    # 阅读 Agent
     "ReadingAgent",
-    # 课件 Agent
     "PPTAgent",
-    # 动画讲解 Agent
     "CartoonAgent",
+    "AGENT_REGISTRY",
+    "QuizPayload",
+    "ReadingPayload",
 ]

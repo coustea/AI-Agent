@@ -2,7 +2,7 @@
 
 Mentorly 是一个面向个性化学习场景的全栈 AI 学习平台。前端基于 **Vue 3 + TypeScript + Vite 7** 构建单页应用，后端基于 **FastAPI + SQLModel (SQLAlchemy Async) + MySQL** 提供异步 API，围绕 **AI 辅导对话、多模态资源生成、学习路径规划、题库与错题本、7 维学习者画像、学习评估** 构建完整学习闭环。
 
-> **编排说明**：系统采用自研轻量 Agent 运行时——`TutorAgent` 使用基于 `learn-claude-code` 思想的无状态 ReAct / 工具循环与 `RunHooks` 快照状态机；多模态资源生成使用自研 `asyncio` 四阶段 DAG 编排；学习路径规划使用两阶段工作流，**不依赖 LangGraph**。LangChain 仅用于 RAG 离线文档加载与文本切分。
+> **编排说明**：系统采用自研轻量 Agent 运行时——`TutorAgent` 使用基于 `learn-claude-code` 思想的无状态 ReAct / 工具循环与 `RunHooks` 快照状态机；多模态资源生成使用自研 `asyncio` 四阶段 DAG 编排；学习路径规划使用两阶段工作流，**不依赖 LangGraph**。
 
 ---
 
@@ -26,14 +26,13 @@ Mentorly 是一个面向个性化学习场景的全栈 AI 学习平台。前端�
 
 ## 核心能力
 
-- **AI 辅导对话 (`chat`)**：基于 `RunState` 全量快照的 SSE 实时流式输出，支持多模态附件（图片视觉理解与 PDF/Word/Excel/CSV/Markdown 文档解析）、知识库检索、强制 Mermaid 图解模式（`diagram_mode`）、PPT 课件生成与教学视频生成（`video_mode`），并实时展示推理与工具调用步骤时间线（含子智能体内部进度）。
+- **AI 辅导对话 (`chat`)**：基于 `RunState` 全量快照的 SSE 实时流式输出，支持多模态附件（图片视觉理解与 PDF/Word/Excel/CSV/Markdown 文档解析）、强制 Mermaid 图解模式（`diagram_mode`）、PPT 课件生成与教学视频生成（`video_mode`），并实时展示推理与工具调用步骤时间线（含子智能体内部进度）。
 - **三层记忆与个性化档案 (`memory` & `profile`)**：融合会话未压缩近期历史、滚动会话摘要块（`ChatSessionSummaryBlock`）、7 类跨会话长期记忆（`ChatLongTermMemory`）、7 维学习者画像以及个性化教学指令档案（`AGENT.md`）与生效辅导策略。
 - **多模态资源生成 (`resource`)**：单次任务通过四阶段 DAG（`Planning → Base Agents → Aggregation Agents → Finalize`）协同生成课程讲解、思维导图、随堂练习题、代码实操、拓展阅读、可编辑 PPTX 课件与带中文配音字幕的 MP4 动画视频。
 - **学习路径规划 (`path`)**：通过 `research → strategist` 两阶段生成课程级阶段与节点（含自动修复与兜底路径），节点内形成「主教程生成 → 5 题闯关测验 → 按需衍生思维导图/代码/PPT/阅读/视频辅助资源」的学习闭环。
 - **题库与错题本 (`quiz`)**：覆盖 408 核心科目（数据结构与算法、计算机组成原理、计算机网络、操作系统），支持单选、多选、判断、填空与主观分析题；客观题与精确填空规则判分，主观题支持单题/批量并发 LLM 审阅；答错题目自动归集至错题本并累计错误次数。
 - **7 维学习者画像 (`profile`)**：知识层 3 维（知识基础、易错点偏好、知识缺口模式）+ 认知层 4 维（认知风格、学习目标导向、难度耐受度、自纠能力水平），支持 Onboarding 基线采集、事件驱动画像更新与首页能力雷达图。
 - **学习评估与看板 (`evaluation`)**：统一采集跨模块学习行为事件（`LearningEvent`）、页面活跃会话时长（`LearningSession`）与每日首次登录活跃（`UserDailyActivity`），按周期生成学习评估报告（`LearningAssessment`）并反哺当前生效辅导策略。
-- **混合检索知识库 (`rag`)**：ChromaDB 向量检索 + BM25（`jieba` + `rank-bm25`）关键词检索并行召回，经倒数排名融合（RRF）输出结构化引用来源。
 - **课件与视频生产 (`shared/ppt` & `shared/cartoon`)**：`PPTAgent` 基于 PptxGenJS + LibreOffice + Poppler + 视觉模型逐页审查生产可编辑 `.pptx`；`CartoonAgent` 基于 HyperFrames CLI + Edge TTS + 关键帧视觉审查 + `ffprobe` 校验生产 1080p `.mp4` 教学视频。
 
 ---
@@ -66,11 +65,6 @@ flowchart LR
     PROFILE --> LLM
     EVAL --> LLM
 
-    CHAT --> RAG["RAG 混合检索器"]
-    PATH --> RAG
-    RAG --> VEC[("ChromaDB")]
-    RAG --> BM25[("BM25 索引")]
-
     CHAT --> PPT["PPTAgent (PptxGenJS)"]
     CHAT --> VIDEO["CartoonAgent (HyperFrames + Edge TTS)"]
     RES --> PPT
@@ -83,7 +77,7 @@ flowchart LR
 
 - **前端**：Vue 3 SPA，开发环境通过 Vite 将 `/api` 与 `/static` 代理到后端 `127.0.0.1:9999`；Markdown 渲染在独立 Web Worker 中完成语法高亮与公式排版。
 - **后端**：FastAPI 单服务，按领域模块化组织（`api.py` → `service.py` → `schemas.py`）；启动时自动建表、清理上次进程遗留的未完成聊天运行，并检查 RAG 索引健康状态。
-- **数据与存储**：MySQL 存储全部业务与运行快照数据；ChromaDB + BM25 存储知识库索引；用户上传附件、头像、生成的 PPTX/PDF/预览图与 MP4/WebVTT 字幕存储在本地 `storage/workplace` 目录并通过 `/static` 挂载访问。
+- **数据与存储**：MySQL 存储全部业务与运行快照数据；用户上传附件、头像、生成的 PPTX/PDF/预览图与 MP4/WebVTT 字幕存储在本地 `storage/workplace` 目录并通过 `/static` 挂载访问。
 
 ---
 
@@ -94,9 +88,8 @@ flowchart LR
 | **前端核心** | Vue 3.5 (`<script setup lang="ts">`) · TypeScript 5.9 · Vite 7 · Vue Router 4 · Tailwind CSS 4 · PrimeVue 4 · Reka UI |
 | **前端渲染与可视化** | Unified / Remark / Rehype (Web Worker) · KaTeX · Shiki · Mermaid 12 · markmap · ECharts 6 · D3 · GSAP · Monaco Editor |
 | **后端核心** | Python ≥ 3.13 · FastAPI · SQLModel · SQLAlchemy 2.0 Async · `aiomysql` · Pydantic v2 · Loguru |
-| **鉴权与安全** | PyJWT（HS256）· Passlib / bcrypt · 全局 `JWTMiddleware` + 路由级依赖注入 |
+| **鉴权与安全** | PyJWT（HS256）· Passlib / bcrypt · 全局 `JWTMiddleware` |
 | **Agent 运行时** | 自研无状态 ReAct 循环 (`run_tutor_agent`) · `RunHooks` 快照状态机 · `ToolRegistry` · 沙箱工具集 · 无状态子智能体 |
-| **知识库 (RAG)** | ChromaDB · BM25（`jieba` + `rank-bm25`）· RRF 倒数排名融合 · OpenAI 兼容 Embedding（默认 `bge-m3`） |
 | **课件与视频** | PptxGenJS · LibreOffice (`soffice`) · Poppler (`pdftoppm`) · HyperFrames CLI · Edge TTS · FFmpeg / `ffprobe` |
 | **数据库** | MySQL 8.0+（`server/docker-compose.yml` 提供 MySQL 8.4 容器） |
 | **测试与工程化** | `pytest` · `pytest-asyncio` · Vitest · `vue-tsc` · `uv` · `npm` |
@@ -131,7 +124,6 @@ flowchart LR
 │   │   ├── profile/                  # 7 维学习者画像服务、Onboarding 落库、AGENT.md 生成与仪表盘推荐
 │   │   ├── quiz/                     # 题库分页检索、客观题判分、主观题单题/批量 LLM 审阅、错题本管理
 │   │   ├── evaluation/               # 学习事件/会话记录、事实聚合、周期评估报告生成与辅导策略更新
-│   │   ├── rag/                      # 多格式文档加载、语义切分、ChromaDB + BM25 索引构建与混合检索
 │   │   ├── shared/                   # 跨模块 Agent 基础设施：ToolRegistry、沙箱工具、SkillLoader、PPTAgent、CartoonAgent
 │   │   ├── infra/                    # 数据库连接池、统一 SQLModel 表定义 (models.py)、LLM 客户端封装、日志与种子数据
 │   │   ├── middleware/               # 全局 JWT 认证中间件
@@ -216,17 +208,7 @@ npm run dev
 VITE_API_PROXY_TARGET=http://127.0.0.1:9999 npm run dev
 ```
 
-### 4. 构建 RAG 知识库索引（可选）
-
-将自有课程资料放入 `server/app/rag/data/source/`（支持 `.md` / `.txt` / `.pdf`），并在 `server/config.yaml` 中将 `knowledge.enabled` 设为 `true` 后执行：
-
-```bash
-cd server
-uv run python -m app.rag.build
-uv run python -m app.rag.build --check-only   # 仅检查现有索引健康状态
-```
-
-### 5. 运行测试与类型检查
+### 4. 运行测试与类型检查
 
 ```bash
 # 后端测试
@@ -254,10 +236,7 @@ npm run build
 | `jwt.algorithm` / `jwt.expire_days` | 否 | 默认 `"HS256"` / `7` 天 |
 | `models.text` | **是** | 文本主模型配置：`base_url`、`api_key`、`model_name`、`timeout`（默认 300s）、`max_retries` |
 | `models.vision` | 否 | 视觉模型配置：用于 `view_image` 图片理解及 PPT/视频逐帧视觉审查 |
-| `paths.workplace` / `logs` / `knowledge` | 否 | 本地工作区、日志与知识库持久化目录（默认位于 `./storage/*`） |
-| `knowledge.enabled` | 否 | 是否启用 RAG 知识库检索，默认 `false` |
-| `knowledge.embed_model` / `embed_base_url` / `embed_api_key` | 否 | 向量嵌入模型配置，默认使用 `bge-m3:latest` |
-| `knowledge.top_k` / `max_context_chars` | 否 | 混合检索返回条数与上下文字符上限，默认 `4` / `6000` |
+| `paths.workplace` / `logs` | 否 | 本地工作区与日志持久化目录（默认位于 `./storage/*`） |
 | `memory.compress_min_messages` / `compress_min_tokens` | 否 | 触发会话摘要压缩的消息数 / Token 阈值，默认 `16` / `4000` |
 | `memory.compress_keep_recent_messages` / `summary_context_blocks` | 否 | 压缩时保留的近期消息数（默认 `4`）与加载进上下文的摘要块数（默认 `3`） |
 | `memory.update_min_messages` / `update_min_tokens` / `ltm_min_confidence` | 否 | 长期记忆更新阈值（默认 `12` 条 / `6000` Token）与最低写入置信度（`0.75`） |
@@ -354,16 +333,16 @@ POST /api/v1/ai/path-plan
 | [`server/app/chat/agent.py`](file:///Users/apple/Code/Python/software/server/app/chat/agent.py) | `run_tutor_agent`：纯净的无状态模型流式调用与工具执行循环，返回 `AgentResult(answer, new_messages)` |
 | [`server/app/chat/hooks.py`](file:///Users/apple/Code/Python/software/server/app/chat/hooks.py) | `RunHooks`：记录真实运行阶段、耗时、工具参数/输出预览、引用来源与产物，通过单槽位通知队列驱动 SSE |
 | [`server/app/chat/memory.py`](file:///Users/apple/Code/Python/software/server/app/chat/memory.py) | 基于水位线的会话滚动摘要压缩（`compress_session`）与基于稳定信号/阈值的 7 类长期记忆更新（`update_long_term_memory`） |
-| [`server/app/chat/tools.py`](file:///Users/apple/Code/Python/software/server/app/chat/tools.py) | 装配 TutorAgent 的 13 个工具，并将 PPT / 视频子智能体的内部进度桥接到 `RunHooks.on_subagent_progress` |
+| [`server/app/chat/tools.py`](file:///Users/apple/Code/Python/software/server/app/chat/tools.py) | 装配 TutorAgent 的 12 个工具，并将 PPT / 视频子智能体的内部进度桥接到 `RunHooks.on_subagent_progress` |
 | [`server/app/chat/files.py`](file:///Users/apple/Code/Python/software/server/app/chat/files.py) | 聊天上传文件安全校验、沙箱路径解析及多格式文档（PDF/Docx/Excel/CSV/文本）内容提取 |
 | [`server/app/shared/tools/`](file:///Users/apple/Code/Python/software/server/app/shared/tools/__init__.py) | `Tool` / `ToolRegistry`、工作区越界防护 (`sandbox.py`)、`SkillLoader` (`skills.py`)、无状态子智能体 (`subagent.py`) 与 7 个内置沙箱工具 (`builtin/`) |
 | [`server/app/shared/ppt/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/ppt/agent.py) | `PPTAgent`：最多 60 步工具循环，PptxGenJS 编写 → LibreOffice/pdftoppm 渲染 → 视觉模型逐页审查修复（最多 3 轮） |
 | [`server/app/shared/cartoon/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/cartoon/agent.py) | `CartoonAgent`：最多 50 步工具循环，Edge TTS 合成中文旁白 → HyperFrames CLI 关键帧截图审查 → 渲染 1080p MP4 并经 `ffprobe` 核验 |
 
-**TutorAgent 可用工具（共 13 个）**
+**TutorAgent 可用工具（共 12 个）**
 
 - **沙箱工作区工具（7 个）**：`bash`、`read`、`write`、`edit`、`glob`、`grep`、`view_image`
-- **教学业务工具（6 个）**：`read_document`、`get_learner_profile`、`get_long_term_memory`、`search_knowledge_base`、`generate_ppt_deck`、`generate_teaching_video`
+- **教学业务工具（5 个）**：`read_document`、`get_learner_profile`、`get_long_term_memory`、`generate_ppt_deck`、`generate_teaching_video`
 
 ---
 

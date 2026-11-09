@@ -13,8 +13,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func
 
-from app.auth.schemas import UserClaims
-from app.auth.security import get_current_user, get_current_user_entity
+from app.auth.security import get_current_user
 from app.infra.database import get_session
 from app.infra.logging import get_logger
 from app.infra.models import (
@@ -51,14 +50,17 @@ router = APIRouter()
 # 获取完整用户画像
 @router.get("/profile")
 async def get_profile(
-    current_user: User = Depends(get_current_user_entity),
     session: AsyncSession = Depends(get_session),
 ):
     """获取完整用户画像 — 聚合 User.base_info、UserProfileDimension 和 UserProfile.score。"""
-    logger.info("GET /profile — user=%d", current_user.id)
+    user_id = get_current_user().id
+    current_user = await session.get(User, user_id)
+    if not current_user:
+        return HttpResponse.error(code=404, message="用户不存在")
+    logger.info("GET /profile — user=%d", user_id)
     svc = get_profile_service()
-    profile = await svc.get_profile(user_id=current_user.id, db=session)
-    dimensions = await svc.get_dimensions(user_id=current_user.id, db=session)
+    profile = await svc.get_profile(user_id=user_id, db=session)
+    dimensions = await svc.get_dimensions(user_id=user_id, db=session)
     base_info = _user_base_info_dict(current_user)
 
     # 组装各维度得分映射
@@ -87,13 +89,13 @@ async def get_profile(
 @router.patch("/profile")
 async def update_profile(
     payload: ProfileUpdate,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """更新个人中心展示的基础资料，不改变 onboarding 完成状态或偏好字段。"""
-    logger.info("[ProfileAPI] 更新基础资料: user_id=%s", current_user.id)
+    user_id = get_current_user().id
+    logger.info("[ProfileAPI] 更新基础资料: user_id=%s", user_id)
     result = await get_profile_service().save_profile_info(
-        user_id=int(current_user.id),
+        user_id=int(user_id),
         payload=payload.model_dump(),
         db=session,
     )
@@ -103,9 +105,13 @@ async def update_profile(
 # 获取 onboarding 基本信息（直接从 User 表读取）
 @router.get("/profile/onboarding")
 async def get_profile_onboarding(
-    current_user: User = Depends(get_current_user_entity),
+    session: AsyncSession = Depends(get_session),
 ):
     """获取 onboarding 基本信息 — 直接从 User 表读取。"""
+    user_id = get_current_user().id
+    current_user = await session.get(User, user_id)
+    if not current_user:
+        return HttpResponse.error(code=404, message="用户不存在")
     base_info = _user_base_info_dict(current_user)
     return HttpResponse.success(data=OnboardingResponse(
         base_info=BaseInfoData(**base_info),
@@ -118,12 +124,11 @@ async def get_profile_onboarding(
 @router.patch("/profile/onboarding")
 async def update_profile_onboarding(
     payload: OnboardingUpdate,
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """更新 onboarding 信息：同步保存基础信息与基线偏好到 User 表，即刻生效。"""
     payload_data = payload.model_dump()
-    user_id = int(current_user.id)
+    user_id = get_current_user().id
     svc = get_profile_service()
     logger.info("[ProfileAPI] onboarding 基础信息提交: user_id=%s", user_id)
     # 同步保存基础信息到 User 表
@@ -285,30 +290,33 @@ def _weak_topics_from_events(events: list[LearningEvent]) -> list[str]:
 # 获取首页推荐内容（根据用户状态返回个性化下一步建议）
 @router.get("/dashboard/recommendation")
 async def get_recommendation(
-    current_user: User = Depends(get_current_user_entity),
     session: AsyncSession = Depends(get_session),
 ):
     """获取首页推荐内容 — 根据用户状态返回个性化学习建议。"""
-    logger.info("GET /dashboard/recommendation — user=%d", current_user.id)
-    await get_profile_service().get_profile(user_id=current_user.id, db=session)
+    user_id = get_current_user().id
+    current_user = await session.get(User, user_id)
+    if not current_user:
+        return HttpResponse.error(code=404, message="用户不存在")
+    logger.info("GET /dashboard/recommendation — user=%d", user_id)
+    await get_profile_service().get_profile(user_id=user_id, db=session)
     goal = _text(current_user.global_learning_goal)
     courses = current_user.courses or []
     primary_course = courses[0] if courses else ""
 
-    active_paths = await _get_active_paths(session, current_user.id)
+    active_paths = await _get_active_paths(session, user_id)
     active_path = active_paths[0] if active_paths else None
-    path_nodes = await _get_path_nodes(session, current_user.id, active_path.id) if active_path else []
-    recent_events = await _get_recent_events(session, current_user.id, limit=20)
+    path_nodes = await _get_path_nodes(session, user_id, active_path.id) if active_path else []
+    recent_events = await _get_recent_events(session, user_id, limit=20)
     recent_resources = list((await session.exec(
         select(GeneratedResource)
-        .where(GeneratedResource.user_id == current_user.id)
+        .where(GeneratedResource.user_id == user_id)
         .order_by(col(GeneratedResource.updated_at).desc())
         .limit(3)
     )).all())
     chat_session_count = (await session.exec(
         select(func.count())
         .select_from(ChatSession)
-        .where(ChatSession.user_id == current_user.id, ChatSession.is_archived.is_(False))
+        .where(ChatSession.user_id == user_id, ChatSession.is_archived.is_(False))
     )).one()
     user_message_count = (await session.exec(
         select(func.count())
@@ -409,13 +417,13 @@ async def get_recommendation(
 # 获取用户画像雷达图数据（各维度得分与薄弱区域）
 @router.get("/dashboard/profile-radar")
 async def get_profile_radar(
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取用户画像雷达图数据 — 各维度得分。"""
-    logger.info("GET /dashboard/profile-radar — user=%d", current_user.id)
-    await get_profile_service().get_profile(user_id=current_user.id, db=session)
-    score_dict = await _get_profile_score_json(session, current_user.id)
+    user_id = get_current_user().id
+    logger.info("GET /dashboard/profile-radar — user=%d", user_id)
+    await get_profile_service().get_profile(user_id=user_id, db=session)
+    score_dict = await _get_profile_score_json(session, user_id)
 
     scores = score_dict.get("dimension_scores") or {}
     dimensions = [
@@ -445,18 +453,18 @@ async def get_profile_radar(
 # 获取快捷操作和今日建议（按权重排序）
 @router.get("/dashboard/quick-actions")
 async def get_quick_actions(
-    current_user: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
     """获取快捷操作和今日建议。"""
-    logger.info("GET /dashboard/quick-actions — user=%d", current_user.id)
-    await get_profile_service().get_profile(user_id=current_user.id, db=session)
-    recent_events = await _get_recent_events(session, current_user.id, limit=30)
+    user_id = get_current_user().id
+    logger.info("GET /dashboard/quick-actions — user=%d", user_id)
+    await get_profile_service().get_profile(user_id=user_id, db=session)
+    recent_events = await _get_recent_events(session, user_id, limit=30)
 
     chat_session_count = (await session.exec(
         select(func.count())
         .select_from(ChatSession)
-        .where(ChatSession.user_id == current_user.id, ChatSession.is_archived.is_(False))
+        .where(ChatSession.user_id == user_id, ChatSession.is_archived.is_(False))
     )).one()
     user_message_count = (await session.exec(
         select(func.count())

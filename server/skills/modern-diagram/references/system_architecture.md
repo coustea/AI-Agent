@@ -123,8 +123,8 @@
       <path d="M18 19v-3"/>
       <rect x="2" y="5" width="20" height="11" rx="2"/>
     </g>
-    <text x="50" y="36" font-family="system-ui" font-size="13" font-weight="600" fill="#0f172a">向量索引 / 缓存</text>
-    <text x="50" y="54" font-family="system-ui" font-size="10" fill="#64748b">ChromaDB / RAG 知识检索</text>
+    <text x="50" y="36" font-family="system-ui" font-size="13" font-weight="600" fill="#0f172a">结构化持久化</text>
+    <text x="50" y="54" font-family="system-ui" font-size="10" fill="#64748b">MySQL 8.0+ 关系数据与快照</text>
   </g>
 </svg>
 ```

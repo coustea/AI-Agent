@@ -9,8 +9,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, UploadFile
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.auth.schemas import UserClaims, UserLogin, UserRead, UserRegister, UserUpdate
-from app.auth.security import get_current_user, get_current_user_entity
+from app.auth.schemas import UserLogin, UserRead, UserRegister, UserUpdate
+from app.auth.security import get_current_user
 from app.auth.service import auth_service
 from app.config import avatar_url, user_avatar_dir
 from app.infra.database import get_session
@@ -50,36 +50,33 @@ async def logout() -> HttpResponse:
 
 
 @router.get("/auth/status")
-async def check_auth_status(
-    _: UserClaims = Depends(get_current_user),
-) -> HttpResponse:
-    """轻量级 Token 探活接口。"""
+async def check_auth_status() -> HttpResponse:
+    """轻量级 Token 探活接口（已通过 JWTMiddleware 强鉴权）。"""
     return HttpResponse.success(message="Token 有效")
 
 
 @router.get("/me")
-async def get_me(
-    user: User = Depends(get_current_user_entity),
-) -> HttpResponse:
+async def get_me(session: AsyncSession = Depends(get_session)) -> HttpResponse:
     """获取当前登录用户的完整详细信息。"""
+    user = await session.get(User, get_current_user().id)
+    if not user:
+        return HttpResponse.error(code=404, message="用户不存在")
     return HttpResponse.success(data=UserRead.model_validate(user))
 
 
 @router.patch("/me")
 async def update_me(
     data: UserUpdate,
-    claims: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> HttpResponse:
     """更新当前用户信息（PATCH 语义，只更新提交的字段）。"""
-    user = await auth_service.update_profile(session, claims.id, data)
+    user = await auth_service.update_profile(session, get_current_user().id, data)
     return HttpResponse.success(data=user)
 
 
 @router.post("/me/avatar")
 async def upload_avatar(
     file: UploadFile = File(...),
-    claims: UserClaims = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> HttpResponse:
     """上传用户头像。"""
@@ -98,6 +95,7 @@ async def upload_avatar(
             message=f"文件大小超过限制（最大 {max_size // (1024 * 1024)}MB）",
         )
 
+    claims = get_current_user()
     username = claims.username
     avatar_dir = user_avatar_dir(username)
     avatar_dir.mkdir(parents=True, exist_ok=True)
