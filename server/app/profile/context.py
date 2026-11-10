@@ -172,7 +172,7 @@ async def load_learner_context(
             if subj and subj not in weak_topics:
                 weak_topics.append(subj)
     except Exception as e:
-        logger.warning("[JIT LearnerContext] 查询错题失败: %s", e)
+        logger.warning("[JIT LearnerContext] 查询错题失败: {}", e)
 
     # 3. 统计近期测验事件表现
     since = datetime.now(timezone.utc) - timedelta(days=range_days)
@@ -201,7 +201,7 @@ async def load_learner_context(
             )
             recent_accuracy = correct_count / total_practice if total_practice > 0 else None
     except Exception as e:
-        logger.warning("[JIT LearnerContext] 统计测验表现失败: %s", e)
+        logger.warning("[JIT LearnerContext] 统计测验表现失败: {}", e)
 
     # 4. 若指定了具体主题，计算该主题专项学情
     topic_perf: dict[str, Any] = {}
@@ -231,7 +231,7 @@ async def load_learner_context(
                     "accuracy": q_correct / len(q_events) if q_events else None,
                 }
         except Exception as e:
-            logger.warning("[JIT LearnerContext] 查询专项主题失败: %s", e)
+            logger.warning("[JIT LearnerContext] 查询专项主题失败: {}", e)
 
     # 5. 读取宏观导学策略（来自正式评估报告沉淀在 User 上）
     guidance_strategy: dict[str, Any] | None = user.guidance_strategy if user and user.guidance_strategy else None

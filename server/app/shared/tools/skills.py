@@ -9,7 +9,10 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
+from app.infra.logging import get_logger
 from app.shared.tools.registry import Tool
+
+logger = get_logger(__name__)
 
 DEFAULT_SKILLS_DIR = Path(__file__).resolve().parents[3] / "skills"
 
@@ -112,10 +115,17 @@ def build_load_skill_tool(loader: SkillLoader | None = None, *, only: Sequence[s
 
     async def load(name: str, reference: str = "") -> dict[str, Any]:
         """按需读取技能完整说明或该技能目录内的专项参考文档。"""
+        ref_desc = f" (ref={reference})" if reference else ""
+        logger.info("[SkillTool] 请求读取技能: name={}{}", name, ref_desc)
         if only is not None and name not in only:
+            logger.warning("[SkillTool] 技能未在该智能体授权清单中: name={}", name)
             return {"status": "failed", "text": f"Skill not enabled: {name}"}
         text = skill_loader.get_content(name, reference)
-        return {"status": "failed" if text.startswith("Error:") else "ok", "text": text}
+        if text.startswith("Error:"):
+            logger.warning("[SkillTool] 技能读取失败: name={}, 原因={}", name, text)
+            return {"status": "failed", "text": text}
+        logger.info("[SkillTool] 技能读取成功: name={}, 产出正文 {} 字符", name, len(text))
+        return {"status": "ok", "text": text}
 
     return Tool(
         name="load_skill",

@@ -70,7 +70,7 @@ async def start_resource_generation(
             status_code=202,
         )
     except Exception as exc:
-        logger.exception("启动资源生成失败: %s", exc)
+        logger.exception("启动资源生成失败: {}", exc)
         return HttpResponse.error(code=500, message=f"启动生成失败: {exc}")
 
 

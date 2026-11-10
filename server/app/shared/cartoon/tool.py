@@ -47,7 +47,7 @@ def build_cartoon_tool(
         target_dir = output_dir or user_resource_cartoon_dir(username, res_key)
         voice_val = "coach" if voice == "coach" else "teacher"
         logger.info(
-            "[CartoonTool] 收到视频生成请求: topic=%s user=%s voice=%s target=%s",
+            "[CartoonTool] 收到视频生成请求: topic={} user={} voice={} target={}",
             topic, username, voice_val, target_dir,
         )
         brief = CartoonBrief(
@@ -58,7 +58,7 @@ def build_cartoon_tool(
         )
         artifact = await CartoonAgent().generate(brief, target_dir, progress=progress)
         logger.info(
-            "[CartoonTool] 视频交付: title=%s duration=%.1fs scenes=%d",
+            "[CartoonTool] 视频交付: title={} duration={:.1f}s scenes={}",
             artifact.title, artifact.duration_seconds, artifact.scene_count,
         )
         return {

@@ -44,7 +44,7 @@ async def import_408_quiz() -> int:
     """
 
     if not QUIZ_DIR.exists():
-        logger.error("[Quiz] 目录不存在: %s", QUIZ_DIR)
+        logger.error("[Quiz] 目录不存在: {}", QUIZ_DIR)
         return 0
 
     async with session_scope() as session:
@@ -53,7 +53,7 @@ async def import_408_quiz() -> int:
         )).one() or 0
 
         if cnt > 0:
-            logger.info("[Quiz] 已存在 %d 条，跳过", cnt)
+            logger.info("[Quiz] 已存在 {} 条，跳过", cnt)
             return 0
 
         files = list(QUIZ_DIR.rglob("*.json"))
@@ -61,7 +61,7 @@ async def import_408_quiz() -> int:
             logger.error("[Quiz] 无 JSON 文件")
             return 0
 
-        logger.info("[Quiz] 开始导入 %d 个文件", len(files))
+        logger.info("[Quiz] 开始导入 {} 个文件", len(files))
         return _load_quiz_files(session, files)
 
 
@@ -71,13 +71,13 @@ def _load_quiz_files(session, files) -> int:
     total = 0
     for f in files:
         subj = f.parent.name
-        logger.info("[Quiz] 处理: %s/%s", subj, f.name)
+        logger.info("[Quiz] 处理: {}/{}", subj, f.name)
         try:
             total += _load_quiz_file(session, f, subj)
         except Exception as e:
-            logger.error("[Quiz] %s 失败: %s", f.name, e)
+            logger.error("[Quiz] {} 失败: {}", f.name, e)
 
-    logger.info("[Quiz] 导入完成，共 %d 题", total)
+    logger.info("[Quiz] 导入完成，共 {} 题", total)
     return total
 
 
@@ -96,7 +96,7 @@ def _load_quiz_file(session, f: Path, subj: str) -> int:
         raw_type = str(item.get("type") or "").strip()
         t = TYPE_MAP.get(raw_type)
         if not t:
-            logger.warning("[Quiz] 跳过未知题型: file=%s id=%s type=%r", f.name, qid, raw_type)
+            logger.warning("[Quiz] 跳过未知题型: file={} id={} type={!r}", f.name, qid, raw_type)
             continue
         qs.append(QuizQuestion(
             question_id=qid, source="408", subject=item.get("subject", subj),
@@ -127,7 +127,7 @@ async def import_schools() -> int:
     """
 
     if not SCHOOL_XLSX.exists():
-        logger.warning("[Schools] 文件不存在: %s", SCHOOL_XLSX)
+        logger.warning("[Schools] 文件不存在: {}", SCHOOL_XLSX)
         return 0
 
     async with session_scope() as session:
@@ -136,7 +136,7 @@ async def import_schools() -> int:
         )).one() or 0
 
         if cnt > 0:
-            logger.info("[Schools] 已存在 %d 条，跳过", cnt)
+            logger.info("[Schools] 已存在 {} 条，跳过", cnt)
             return 0
 
         return _load_xlsx(session)
@@ -179,7 +179,7 @@ def _load_xlsx(session) -> int:
         schools.append(School(name=name, level=level, tier=tier))
 
     session.add_all(schools)
-    logger.info("[Schools] 导入 %d 所", len(schools))
+    logger.info("[Schools] 导入 {} 所", len(schools))
     return len(schools)
 
 

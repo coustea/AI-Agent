@@ -10,8 +10,11 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.infra.logging import get_logger
 from app.shared.tools.registry import Tool
 from app.shared.tools.sandbox import BASH_TIMEOUT_S, truncate_output
+
+logger = get_logger(__name__)
 
 
 class BashArgs(BaseModel):
@@ -27,7 +30,13 @@ def build(workdir: Path, *, timeout_s: float = BASH_TIMEOUT_S) -> Tool:
         """在工作目录执行 shell 命令；工作目录不构成系统沙箱。"""
         dangerous = ("rm -rf /", "sudo ", "shutdown", "reboot")
         if any(d in command for d in dangerous):
+            logger.warning("[BashTool] 拒绝执行危险命令: cmd={}", command)
             return {"text": "拒绝执行危险命令", "status": "failed"}
+
+        cmd_preview = command.strip().replace("\n", " ")
+        if len(cmd_preview) > 120:
+            cmd_preview = f"{cmd_preview[:117]}..."
+        logger.info("[BashTool] 执行 shell 命令: cwd={} cmd={!r}", workdir.name, cmd_preview)
 
         proc = await asyncio.create_subprocess_exec(
             "bash",
@@ -56,11 +65,18 @@ def build(workdir: Path, *, timeout_s: float = BASH_TIMEOUT_S) -> Tool:
             await proc.communicate()
             if isinstance(exc, asyncio.CancelledError):
                 raise
+            logger.error("[BashTool] 命令执行超时 (>{}s): cmd={!r}", timeout_s, cmd_preview)
             return {"stderr": f"命令超时（>{timeout_s}s）", "stdout": "", "exit_code": -1}
 
+        out_str = stdout.decode("utf-8", "replace")
+        err_str = stderr.decode("utf-8", "replace")
+        logger.info(
+            "[BashTool] 命令执行完成: exit={} stdout_len={} stderr_len={}",
+            proc.returncode, len(out_str), len(err_str),
+        )
         return {
-            "stdout": truncate_output(stdout.decode("utf-8", "replace")),
-            "stderr": truncate_output(stderr.decode("utf-8", "replace")),
+            "stdout": truncate_output(out_str),
+            "stderr": truncate_output(err_str),
             "exit_code": proc.returncode,
         }
 

@@ -54,24 +54,6 @@ class ResourcePreferences(BaseModel):
         description="教学动画旁白音色（teacher 学术讲师, coach 实战教练）",
     )
 
-    def __getitem__(self, item: str) -> Any:
-        """支持字典下标访问以兼容字典式解构。"""
-        return getattr(self, item)
-
-    def __contains__(self, item: str) -> bool:
-        """检查偏好字段是否存在。"""
-        return hasattr(self, item)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        """安全读取偏好配置项。"""
-        return getattr(self, key, default)
-
-    def __eq__(self, other: Any) -> bool:
-        """支持与字典进行相等性比较。"""
-        if isinstance(other, dict):
-            return self.model_dump(exclude_defaults=True) == other or self.model_dump() == other
-        return super().__eq__(other)
-
 
 class ResourceGenerationRequest(BaseModel):
     """统一多智能体资源生成请求数据契约。"""
@@ -156,6 +138,13 @@ class ResourceRunState(BaseModel):
     artifacts: list[ResourceArtifact] = Field(default_factory=list, description="已就绪的教学产物列表")
     total_elapsed_ms: int = Field(default=0, description="总耗时（毫秒）")
     error: str = Field(default="", description="失败时的错误原因")
+    summary: str = Field(default="", description="主规划智能体的交付总结与导学陈述")
+    target_resources: list[ResourceAgentId] = Field(
+        default_factory=list, description="用户选定的目标资源类型清单"
+    )
+    topic: str = Field(default="", description="本次学习主题")
+    learning_goal: str = Field(default="", description="核心攻坚学习目标")
+    difficulty: DifficultyLevel = Field(default="intermediate", description="认知难度阶梯")
 
 
 def encode_resource_sse(state: ResourceRunState) -> str:
@@ -314,7 +303,7 @@ class GeneratedResourceBundleDTO(BaseModel):
         return self.topic
 
 
-# ── 5. 通用辅助模型 (供 path 模块及测试导入) ────────────────────────────────
+# ── 5. 通用结果模型 (供 path 模块及测试导入) ────────────────────────────────
 
 
 class AgentResult(BaseModel):
@@ -330,44 +319,3 @@ class AgentResult(BaseModel):
     error: str | None = None
     metrics: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-class DownstreamContext(BaseModel):
-    """下游上下文传递模型。"""
-
-    source_agent: str = ""
-    title: str = ""
-    one_sentence_summary: str = ""
-    materials: list[str] = Field(default_factory=list)
-
-
-class ResourcePlanTask(BaseModel):
-    """规划单项任务模型。"""
-
-    agent_id: str = ""
-    objective: str = ""
-    focus: list[str] = Field(default_factory=list)
-    required_elements: list[str] = Field(default_factory=list)
-    avoid: list[str] = Field(default_factory=list)
-
-
-class ResourcePlan(BaseModel):
-    """教学方案规划模型。"""
-
-    schema_version: int = 1
-    learner_goal: str = ""
-    scope: list[str] = Field(default_factory=list)
-    tasks: list[ResourcePlanTask] = Field(default_factory=list)
-
-    @field_validator("tasks")
-    @classmethod
-    def validate_tasks(cls, v: list[ResourcePlanTask]) -> list[ResourcePlanTask]:
-        """校验显式传入的 tasks 不可为空。"""
-        if v is not None and len(v) == 0:
-            raise ValueError("tasks 列表不可为空")
-        return v
-
-    @property
-    def agent_ids(self) -> list[str]:
-        """获取所有规划任务的 agent_id 列表。"""
-        return [t.agent_id for t in self.tasks if t.agent_id]

@@ -1,10 +1,9 @@
 """全局异常处理模块。
 
 将各种异常统一转换为标准的 JSON 响应格式（HttpResponse 包装），
-确保前端始终收到结构一致的错误信息。
+确保前端始终收到结构一致的错误信息，并在日志中完整追踪错误链路。
 """
 
-# 本模块定义全局异常处理器，将 AuthError 与 HTTPException 统一包装为标准响应
 from __future__ import annotations
 
 from fastapi import FastAPI, HTTPException, Request
@@ -14,35 +13,45 @@ from app.auth.security import AuthError
 from app.infra.logging import get_logger
 from app.response import HttpResponse
 
-logger = get_logger(__name__)
+logger = get_logger("exceptions")
 
 
-# 处理认证错误，将 AuthError 转换为标准错误响应
 async def auth_error_handler(request: Request, exc: AuthError) -> JSONResponse:
-    """处理认证与授权业务异常，自动附带字段级错误提示。"""
-    logger.warning("[Exception] AuthError: path=%s message=%s field=%s code=%s", request.url.path, exc.message, exc.field, exc.code)
+    """处理认证与授权业务异常，记录警告日志并返回格式化响应。"""
+    logger.warning(
+        "[Exception] AuthError: path={} message={} field={} code={}",
+        request.url.path,
+        exc.message,
+        exc.field,
+        exc.code,
+    )
     data = {"field": exc.field} if exc.field else None
     return HttpResponse.error(code=exc.code, message=exc.message, data=data)
 
 
-# 处理 FastAPI 内置 HTTPException，映射到统一错误响应格式
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """处理 FastAPI 内置 HTTPException。
-
-    将 status_code 和 detail 映射到统一的错误响应格式。
-    """
-    logger.warning("[Exception] HTTPException: path=%s status=%s detail=%s", request.url.path, exc.status_code, exc.detail)
+    """处理 FastAPI 内置 HTTPException 并记录警告日志。"""
+    logger.warning(
+        "[Exception] HTTPException: path={} status={} detail={}",
+        request.url.path,
+        exc.status_code,
+        exc.detail,
+    )
     return HttpResponse.error(code=exc.status_code, message=str(exc.detail))
 
 
-# 向 FastAPI 应用注册全局异常处理器
-def install_exception_handlers(app: FastAPI) -> None:
-    """向 FastAPI 应用注册全局异常处理器。
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """处理未捕获的服务端兜底异常，记录堆栈日志并返回 500 响应。"""
+    logger.exception(
+        "[Exception] 全局未捕获异常: path={} error={}",
+        request.url.path,
+        exc,
+    )
+    return HttpResponse.error(code=500, message="服务器内部错误，请稍后重试")
 
-    Args:
-        app: FastAPI 应用实例
-    """
-    # 注册自定义认证错误处理器
+
+def install_exception_handlers(app: FastAPI) -> None:
+    """向 FastAPI 应用注册全局异常处理器。"""
     app.add_exception_handler(AuthError, auth_error_handler)
-    # 注册 FastAPI 内置 HTTP 异常处理器
     app.add_exception_handler(HTTPException, http_exception_handler)
+    app.add_exception_handler(Exception, unhandled_exception_handler)

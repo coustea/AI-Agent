@@ -15,6 +15,118 @@ from pydantic import BaseModel
 ToolHandler = Callable[..., Awaitable[Any]]
 
 
+def summarize_tool_args(name: str, args: Mapping[str, Any] | str) -> str:
+    """提取并格式化工具入参为人性化可读的紧凑单行字符串。"""
+    payload: dict[str, Any] = {}
+    if isinstance(args, str):
+        try:
+            payload = json.loads(args) if args.strip() else {}
+        except Exception:
+            return f"raw='{args.strip()[:100]}'"
+    elif isinstance(args, Mapping):
+        payload = dict(args)
+
+    if not payload:
+        return "无参数"
+
+    if name == "load_skill":
+        skill_name = payload.get("name", "unknown")
+        ref = payload.get("reference", "")
+        return f"skill='{skill_name}'" + (f" (ref='{ref}')" if ref else "")
+
+    if name == "bash":
+        cmd = str(payload.get("command", "")).strip()
+        cmd_preview = cmd if len(cmd) <= 120 else f"{cmd[:117]}..."
+        return f"command={cmd_preview!r}"
+
+    if name == "synthesize_speech":
+        out = payload.get("output_path", "")
+        text = str(payload.get("text", "")).strip()
+        text_preview = text if len(text) <= 40 else f"{text[:37]}..."
+        return f"output={out!r}, text={text_preview!r} (共 {len(text)} 字)"
+
+    if name in {"write", "edit"}:
+        path = payload.get("path", "")
+        content = str(payload.get("content", ""))
+        return f"path={path!r}, length={len(content)}"
+
+    if name in {"read", "view_image"}:
+        path = payload.get("path", "")
+        return f"path={path!r}"
+
+    if name == "generate_lecture_content":
+        return f"topic={payload.get('topic', '')!r}, goal={payload.get('learning_goal', '')!r}"
+
+    if name == "generate_quiz":
+        return f"topic={payload.get('topic', '')!r}, difficulty={payload.get('difficulty', '')!r}"
+
+    if name == "generate_code":
+        return f"topic={payload.get('topic', '')!r}, lang={payload.get('language', '')!r}"
+
+    if name == "generate_mindmap":
+        return f"topic={payload.get('topic', '')!r}"
+
+    if name == "generate_reading":
+        return f"topic={payload.get('topic', '')!r}, difficulty={payload.get('difficulty', '')!r}"
+
+    # 通用参数缩减
+    items = []
+    for k, v in payload.items():
+        val_str = str(v).replace("\n", " ")
+        if len(val_str) > 50:
+            val_str = f"{val_str[:47]}..."
+        items.append(f"{k}={val_str}")
+    preview = ", ".join(items)
+    return preview if len(preview) <= 180 else f"{preview[:177]}..."
+
+
+def summarize_tool_result(name: str, raw: Any, max_len: int = 150) -> str:
+    """提取并格式化工具执行结果的关键摘要信息。"""
+    if raw is None:
+        return "无返回结果 (None)"
+
+    if isinstance(raw, Mapping):
+        status = raw.get("status", "ok")
+        if name == "bash":
+            exit_code = raw.get("exit_code", 0)
+            stdout = str(raw.get("stdout", "")).strip().replace("\n", " ")
+            stderr = str(raw.get("stderr", "")).strip().replace("\n", " ")
+            std_part = f"stdout={stdout[:80]!r}" if stdout else ""
+            err_part = f"stderr={stderr[:80]!r}" if stderr else ""
+            parts = [f"exit={exit_code}"]
+            if std_part:
+                parts.append(std_part)
+            if err_part:
+                parts.append(err_part)
+            return ", ".join(parts)
+
+        if name == "synthesize_speech":
+            return f"audio={raw.get('audio_path')!r}, duration={raw.get('duration_ms')}ms"
+
+        if name == "load_skill":
+            text = str(raw.get("text", "")).strip().replace("\n", " ")
+            preview = text if len(text) <= 80 else f"{text[:77]}..."
+            return f"status={status}, preview={preview!r} (共 {len(str(raw.get('text', '')))} 字符)"
+
+        if "title" in raw:
+            title = raw.get("title", "")
+            summary = raw.get("summary", "")
+            return f"status={status}, title={title!r}, summary={summary!r}"
+
+        # 通用 dict
+        filtered = {k: v for k, v in raw.items() if k not in {"text", "content"}}
+        if filtered:
+            raw_preview = json.dumps(filtered, ensure_ascii=False)
+            if len(raw_preview) > max_len:
+                raw_preview = f"{raw_preview[:max_len - 3]}..."
+            return f"status={status}, data={raw_preview}"
+
+    text_rep = str(raw).strip().replace("\n", " ")
+    if len(text_rep) > max_len:
+        text_rep = f"{text_rep[:max_len - 3]}..."
+    return text_rep
+
+
 def format_tool_output(raw: Any) -> str:
     """将工具返回的任意结构（dict / str / BaseModel）归一化为回灌给 LLM 的文本。"""
     if raw is None:

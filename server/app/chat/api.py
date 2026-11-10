@@ -64,7 +64,7 @@ async def create_mentor_chat_message(
 
     background_tasks.add_task(execute_chat_run, agent_input)
     logger.info(
-        "[ChatAPI] 收到消息并调度运行: user=%s session=%s run_id=%s 附件=%d",
+        "[ChatAPI] 收到消息并调度运行: user={} session={} run_id={} 附件={}",
         agent_input.username, agent_input.session_id, agent_input.run_id, len(payload.attachments),
     )
     return HttpResponse.success(
@@ -109,7 +109,7 @@ async def stream_chat_run_events(run_id: str) -> JSONResponse | StreamingRespons
         return HttpResponse.error(code=404, message="运行不存在或无权限")
     hooks = get_active_run(run_id)
     logger.info(
-        "[ChatAPI] SSE 订阅: user=%s run_id=%s status=%s 活跃=%s",
+        "[ChatAPI] SSE 订阅: user={} run_id={} status={} 活跃={}",
         user.username, run_id, state.status, hooks is not None,
     )
 
@@ -146,7 +146,7 @@ async def cancel_chat_run(run_id: str) -> JSONResponse:
     status = await cancel_run(user.id, run_id)
     if status is None:
         return HttpResponse.error(code=404, message="运行不存在或无权限")
-    logger.info("[ChatAPI] 请求取消运行: user=%s run_id=%s phase=%s", user.username, run_id, status)
+    logger.info("[ChatAPI] 请求取消运行: user={} run_id={} phase={}", user.username, run_id, status)
     return HttpResponse.success(data={"run_id": run_id, "status": status})
 
 

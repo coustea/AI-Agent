@@ -138,7 +138,7 @@ class _PathChannel:
         if event in PATH_TERMINAL_EVENTS:
             self._is_terminal = True
             logger.info(
-                "路径频道收到终止事件: run_id=%s event=%s, 将在 %ds 后清理",
+                "路径频道收到终止事件: run_id={} event={}, 将在 {}s 后清理",
                 self.run_id, event, self.terminal_retention_seconds,
             )
             asyncio.get_running_loop().call_later(
@@ -175,14 +175,14 @@ class _PathChannel:
         """清理无订阅者的终止频道。"""
         if self._subscribers:
             logger.debug(
-                "路径频道清理已跳过: run_id=%s 仍有 %d 个订阅者",
+                "路径频道清理已跳过: run_id={} 仍有 {} 个订阅者",
                 self.run_id, len(self._subscribers),
             )
             return
         key = (self.user_id, self.path_id, self.run_id)
         async with _path_lock:
             _path_channels.pop(key, None)
-            logger.info("路径频道已清理: run_id=%s", self.run_id)
+            logger.info("路径频道已清理: run_id={}", self.run_id)
 
 
 # 公共事件管理器 — 用户侧 API 入口
@@ -212,7 +212,7 @@ class PathEvents:
             if self._key in _path_channels:
                 self._channel = _path_channels[self._key]
                 logger.debug(
-                    "PathEvents 复用已有频道: run_id=%s",
+                    "PathEvents 复用已有频道: run_id={}",
                     self._run_id,
                 )
             else:
@@ -226,7 +226,7 @@ class PathEvents:
                 )
                 _path_channels[self._key] = self._channel
                 logger.info(
-                    "PathEvents 频道已打开: user_id=%s path_id=%s run_id=%s",
+                    "PathEvents 频道已打开: user_id={} path_id={} run_id={}",
                     self._user_id, self._path_id, self._run_id,
                 )
 

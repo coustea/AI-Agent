@@ -112,7 +112,7 @@ async def _test_connection() -> bool:
         return True
     except (OperationalError, ConnectionRefusedError, OSError) as exc:
         logger.error(
-            "[Database] 连接测试失败: url=%s error_type=%s error=%s",
+            "[Database] 连接测试失败: url={} error_type={} error={}",
             engine.url.render_as_string(hide_password=True),
             type(exc).__name__,
             exc,
@@ -120,7 +120,7 @@ async def _test_connection() -> bool:
         return False
     except Exception as exc:
         logger.error(
-            "[Database] 连接测试发生未知异常: url=%s error_type=%s error=%s",
+            "[Database] 连接测试发生未知异常: url={} error_type={} error={}",
             engine.url.render_as_string(hide_password=True),
             type(exc).__name__,
             exc,
@@ -151,9 +151,9 @@ async def check_all() -> HealthReport:
 
     for s in report.services:
         if s.ok:
-            logger.info("[Health] %s: ok (%dms)", s.name, s.latency_ms)
+            logger.info("[Health] {}: ok ({}ms)", s.name, s.latency_ms)
         else:
-            logger.error("[Health] %s: FAIL - %s", s.name, s.error)
+            logger.error("[Health] {}: FAIL - {}", s.name, s.error)
 
     return report
 
@@ -166,20 +166,20 @@ async def init_db() -> None:
     """
     if not await _test_connection():
         logger.error(
-            "[Database] 无法建立数据库连接: url=%s",
+            "[Database] 无法建立数据库连接: url={}",
             engine.url.render_as_string(hide_password=True),
         )
         raise OperationalError("数据库连接失败", {}, None)
 
     logger.info(
-        "[Database] 连接验证通过: url=%s",
+        "[Database] 连接验证通过: url={}",
         engine.url.render_as_string(hide_password=True),
     )
 
     # 按 models.py 定义建表；create_all 只创建缺失的表，不会修改已有表结构
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
-    logger.info("[Database] 表结构检查完成: %d 张表", len(SQLModel.metadata.tables))
+    logger.info("[Database] 表结构检查完成: {} 张表", len(SQLModel.metadata.tables))
 
     # 启动时自动导入种子数据
     await _seed_initial_data()
@@ -224,7 +224,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     except OperationalError as exc:
         if yielded_exception:
             raise
-        logger.warning("[Database] 会话关闭时连接已不可用: %s", exc)
+        logger.warning("[Database] 会话关闭时连接已不可用: {}", exc)
 
 
 # 显式短生命周期会话上下文：退出时自动提交，异常时回滚

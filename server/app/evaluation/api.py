@@ -37,7 +37,7 @@ async def record_learning_event(
         payload=payload,
     )
     logger.info(
-        "[EvalAPI] 事件已记录: user_id=%s event_type=%s event_id=%s deduplicated=%s",
+        "[EvalAPI] 事件已记录: user_id={} event_type={} event_id={} deduplicated={}",
         user_id,
         payload.event_type,
         event.id,
@@ -60,7 +60,7 @@ async def record_learning_session(
         payload=payload,
     )
     logger.info(
-        "[EvalAPI] 学习会话已记录: user_id=%s page=%s duration=%ss deduplicated=%s",
+        "[EvalAPI] 学习会话已记录: user_id={} page={} duration={}s deduplicated={}",
         user_id,
         payload.source_page,
         payload.duration_seconds,
@@ -93,10 +93,10 @@ async def generate_assessment(
         )
     )
     if existing is not None:
-        logger.info("[EvalAPI] 评估生成冲突(已有进行中): user_id=%s", user_id)
+        logger.info("[EvalAPI] 评估生成冲突(已有进行中): user_id={}", user_id)
         return HttpResponse.error(code=409, message="assessment_generation_in_progress")
 
-    logger.info("[EvalAPI] 触发评估生成: user_id=%s range_days=%d", user_id, payload.range_days)
+    logger.info("[EvalAPI] 触发评估生成: user_id={} range_days={}", user_id, payload.range_days)
 
     # 创建 generating 记录并立即返回
     now_utc = datetime.now(timezone.utc)
@@ -163,11 +163,11 @@ async def _run_assessment_generation(user_id: int, assessment_id: int, range_day
             await bg_session.commit()
 
             logger.info(
-                "[EvalAPI] 后台评估生成完成: user_id=%s assessment_id=%s range_days=%d",
+                "[EvalAPI] 后台评估生成完成: user_id={} assessment_id={} range_days={}",
                 user_id, assessment_id, range_days,
             )
     except Exception as e:
-        logger.error("[EvalAPI] 后台评估生成失败: user_id=%s assessment_id=%s error=%s", user_id, assessment_id, e)
+        logger.error("[EvalAPI] 后台评估生成失败: user_id={} assessment_id={} error={}", user_id, assessment_id, e)
         try:
             async with session_scope() as bg_session:
                 assessment = await bg_session.get(LearningAssessment, assessment_id)
@@ -177,7 +177,7 @@ async def _run_assessment_generation(user_id: int, assessment_id: int, range_day
                     assessment.updated_at = datetime.now(timezone.utc)
                     await bg_session.commit()
         except Exception:
-            logger.error("[EvalAPI] 标记评估失败也失败: assessment_id=%s", assessment_id)
+            logger.error("[EvalAPI] 标记评估失败也失败: assessment_id={}", assessment_id)
 
 
 # 2. GET /api/v1/ai/evaluation/assessments/latest -> 获取最新 ready 评估
@@ -187,7 +187,7 @@ async def get_latest_assessment(
 ):
     """获取最新的一条 ready 评估；无评估则返回 null/None。"""
     user_id = get_current_user().id
-    logger.info("[EvalAPI] 查询最新评估: user_id=%s", user_id)
+    logger.info("[EvalAPI] 查询最新评估: user_id={}", user_id)
     assessment = (await session.exec(
         select(LearningAssessment)
         .where(
@@ -250,7 +250,7 @@ async def get_assessment_detail(
 ):
     """获取单次评估详情。如果非本人拥有，返回 404，不泄露存在性。"""
     user_id = get_current_user().id
-    logger.info("[EvalAPI] 查询评估详情: user_id=%s assessment_id=%s", user_id, assessment_id)
+    logger.info("[EvalAPI] 查询评估详情: user_id={} assessment_id={}", user_id, assessment_id)
     assessment = await session.get(LearningAssessment, assessment_id)
     if assessment is None or assessment.user_id != user_id:
         return HttpResponse.error(code=404, message="assessment_not_found")
@@ -266,7 +266,7 @@ async def get_dashboard_data(
 ):
     """为个人中心看板聚合图表数据：学习时长走势、模块分布、练习正确率、资源使用等。"""
     user_id = get_current_user().id
-    logger.info("[EvalAPI] 查询看板数据: user_id=%s range_days=%d", user_id, range_days)
+    logger.info("[EvalAPI] 查询看板数据: user_id={} range_days={}", user_id, range_days)
     if range_days < 1 or range_days > 90:
         return HttpResponse.error(code=400, message="range_days must be between 1 and 90")
 

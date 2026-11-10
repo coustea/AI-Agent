@@ -53,6 +53,7 @@ server/tests/*
 !server/tests/shared/
 server/tests/shared/*
 !server/tests/shared/test_ppt_agent.py
+!server/tests/shared/test_tool_logging.py
 !server/tests/profile/
 server/tests/profile/*
 !server/tests/profile/test_learner_context.py

@@ -28,7 +28,7 @@ from app.evaluation.service import EvaluationService
 from app.config import MAX_UPLOAD_FILES_PER_REQUEST
 from app.infra.database import session_scope
 from app.infra.llm import LLM, Message, HumanMessage, SystemMessage
-from app.infra.logging import get_logger
+from app.infra.logging import get_logger, trace_scope
 from app.infra.models import ChatMessage, ChatRun as ChatRunRow, ChatSession
 from app.shared.tools import ToolRegistry
 
@@ -159,12 +159,12 @@ async def prepare_chat_run(inp: AgentInput) -> RunHooks:
         )
 
     for run_id in recovered:
-        logger.warning("[ChatService] 补写上次遗留的失败终态: run_id=%s", run_id)
+        logger.warning("[ChatService] 补写上次遗留的失败终态: run_id={}", run_id)
         _active_runs.pop(run_id, None)
     hooks = RunHooks(inp.run_id)
     _active_runs[inp.run_id] = hooks
     logger.info(
-        "[ChatService] 运行已登记: run_id=%s session=%s user=%d 附件=%d 首轮=%s",
+        "[ChatService] 运行已登记: run_id={} session={} user={} 附件={} 首轮={}",
         inp.run_id, inp.session_id, inp.user_id, len(inp.attachments), inp.is_first_turn,
     )
     return hooks
@@ -211,81 +211,82 @@ async def save_run_result(
 
 async def execute_chat_run(inp: AgentInput) -> None:
     """准备依赖、执行循环、保存结果，最后发布终态并更新会话记忆。"""
-    hooks = _active_runs[inp.run_id]
-    hooks.task = asyncio.current_task()
-    new_messages: list[Message] = []
-    answer = ""
-    status: TerminalStatus = "completed"
-    error = ""
-    try:
-        if hooks.cancel_requested:
-            raise asyncio.CancelledError
-        async with asyncio.timeout(1800):
-            hooks.set_phase("preparing", "正在准备上下文")
-            messages = await build_turn_messages(inp)
-            tools = ToolRegistry(tools=build_tutor_tools(
-                user_id=inp.user_id,
-                username=inp.username,
-                session_id=inp.session_id,
-                on_subagent_progress=hooks.on_subagent_progress,
-            ))
-            result = await run_tutor_agent(
-                messages=messages,
-                llm=LLM(provider="text", temperature=0.7, max_tokens=8192),
-                registry=tools,
-                hooks=hooks,
-            )
-            answer = result.answer
-            new_messages = result.new_messages
-    except asyncio.CancelledError:
-        status, error = "cancelled", "用户停止生成"
-        logger.info("[ChatService] 运行被取消: run_id=%s", inp.run_id)
-    except TimeoutError:
-        status, error = "failed", "运行超过 1800 秒"
-        logger.error("[ChatService] 运行超时: run_id=%s", inp.run_id)
-    except Exception as exc:
-        logger.exception("[ChatService] 运行失败 run_id=%s", inp.run_id)
-        status, error = "failed", str(exc)
+    with trace_scope(trace_id=f"chat-{inp.run_id[:8]}", user=inp.username):
+        hooks = _active_runs[inp.run_id]
+        hooks.task = asyncio.current_task()
+        new_messages: list[Message] = []
+        answer = ""
+        status: TerminalStatus = "completed"
+        error = ""
+        try:
+            if hooks.cancel_requested:
+                raise asyncio.CancelledError
+            async with asyncio.timeout(1800):
+                hooks.set_phase("preparing", "正在准备上下文")
+                messages = await build_turn_messages(inp)
+                tools = ToolRegistry(tools=build_tutor_tools(
+                    user_id=inp.user_id,
+                    username=inp.username,
+                    session_id=inp.session_id,
+                    on_subagent_progress=hooks.on_subagent_progress,
+                ))
+                result = await run_tutor_agent(
+                    messages=messages,
+                    llm=LLM(provider="text", temperature=0.7, max_tokens=8192),
+                    registry=tools,
+                    hooks=hooks,
+                )
+                answer = result.answer
+                new_messages = result.new_messages
+        except asyncio.CancelledError:
+            status, error = "cancelled", "用户停止生成"
+            logger.info("[ChatService] 运行被取消: run_id={}", inp.run_id)
+        except TimeoutError:
+            status, error = "failed", "运行超过 1800 秒"
+            logger.error("[ChatService] 运行超时: run_id={}", inp.run_id)
+        except Exception as exc:
+            logger.exception("[ChatService] 运行失败 run_id={}", inp.run_id)
+            status, error = "failed", str(exc)
 
-    # 保存期间继续显示运行状态，提交完成后才能宣布结束。
-    final_state = hooks.result_state(status, error)
-    hooks.state.steps = final_state.steps
-    hooks.set_phase("saving", "正在保存回答")
-    saved = False
-    try:
-        await save_run_result(inp, final_state, new_messages)
-        saved = True
-    except Exception as exc:
-        logger.exception("[ChatService] 保存终态失败 run_id=%s", inp.run_id)
-        final_state = hooks.result_state("failed", f"保存回答失败：{exc}")
-    finally:
-        hooks.state = final_state
-        hooks.publish()
-        hooks.task = None
-        # 保存失败时保留内存终态，避免重连后又看到数据库中的 queued。
-        if saved:
-            _active_runs.pop(inp.run_id, None)
-            logger.info(
-                "[ChatService] 运行终态已落库: run_id=%s status=%s 回答=%d 字符 消息=%d 条 耗时=%dms",
-                inp.run_id, final_state.status, len(final_state.content),
-                len(new_messages), final_state.total_elapsed_ms,
-            )
+        # 保存期间继续显示运行状态，提交完成后才能宣布结束。
+        final_state = hooks.result_state(status, error)
+        hooks.state.steps = final_state.steps
+        hooks.set_phase("saving", "正在保存回答")
+        saved = False
+        try:
+            await save_run_result(inp, final_state, new_messages)
+            saved = True
+        except Exception as exc:
+            logger.exception("[ChatService] 保存终态失败 run_id={}", inp.run_id)
+            final_state = hooks.result_state("failed", f"保存回答失败：{exc}")
+        finally:
+            hooks.state = final_state
+            hooks.publish()
+            hooks.task = None
+            # 保存失败时保留内存终态，避免重连后又看到数据库中的 queued。
+            if saved:
+                _active_runs.pop(inp.run_id, None)
+                logger.info(
+                    "[ChatService] 运行终态已落库: run_id={} status={} 回答={} 字符 消息={} 条 耗时={}ms",
+                    inp.run_id, final_state.status, len(final_state.content),
+                    len(new_messages), final_state.total_elapsed_ms,
+                )
 
-    if hooks.state.status == "completed":
-        post_jobs = [
-            compress_session(inp.user_id, inp.session_id),
-            update_long_term_memory(inp.user_id, inp.session_id, inp.effective_question, answer),
-            record_dialogue_event(inp.user_id, inp.session_id),
-        ]
-        if inp.is_first_turn:
-            post_jobs.append(generate_session_title(
-                user_id=inp.user_id,
-                session_id=inp.session_id,
-                first_message=inp.effective_question,
-            ))
-        for result in await asyncio.gather(*post_jobs, return_exceptions=True):
-            if isinstance(result, BaseException):
-                logger.warning("[ChatService] 回答后任务失败: run_id=%s err=%s", inp.run_id, result)
+        if hooks.state.status == "completed":
+            post_jobs = [
+                compress_session(inp.user_id, inp.session_id),
+                update_long_term_memory(inp.user_id, inp.session_id, inp.effective_question, answer),
+                record_dialogue_event(inp.user_id, inp.session_id),
+            ]
+            if inp.is_first_turn:
+                post_jobs.append(generate_session_title(
+                    user_id=inp.user_id,
+                    session_id=inp.session_id,
+                    first_message=inp.effective_question,
+                ))
+            for result in await asyncio.gather(*post_jobs, return_exceptions=True):
+                if isinstance(result, BaseException):
+                    logger.warning("[ChatService] 回答后任务失败: run_id={} err={}", inp.run_id, result)
 
 
 def get_active_run(run_id: str) -> RunHooks | None:
@@ -360,7 +361,7 @@ async def mark_interrupted_runs() -> int:
             run.error = "服务重启，运行已中断"
             db.add(run)
         if runs:
-            logger.warning("[ChatService] 启动清理: %d 条遗留运行标记为 interrupted: %s", len(runs), [r.id for r in runs])
+            logger.warning("[ChatService] 启动清理: {} 条遗留运行标记为 interrupted: {}", len(runs), [r.id for r in runs])
         return len(runs)
 
 
@@ -507,7 +508,7 @@ async def generate_session_title(user_id: int, session_id: str, first_message: s
         )
         title = clean_session_title(resp) or fallback
     except Exception as exc:
-        logger.warning("[ChatService] 生成标题失败: user_id=%s session_id=%s err=%s", user_id, session_id, exc)
+        logger.warning("[ChatService] 生成标题失败: user_id={} session_id={} err={}", user_id, session_id, exc)
 
     async with session_scope() as db:
         chat_session = (

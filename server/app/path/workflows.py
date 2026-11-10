@@ -335,7 +335,7 @@ class PathPlannerAgent:
         logger.info("[PathPlanner] research 开始")
         await emit_progress(progress_callback, "researching", 30, "正在检索高价值参考资料")
         context = await self._search(request=request, profile=profile)
-        logger.info("[PathPlanner] research 完成, 上下文长度=%d", len(context))
+        logger.info("[PathPlanner] research 完成, 上下文长度={}", len(context))
         return context
 
     # 生成结构化学习计划（原 strategist 节点）
@@ -362,7 +362,7 @@ class PathPlannerAgent:
         )
         result = await self.llm.json(LearningPlan, messages)
         result = repair_plan(plan=result, macro_stages=result.stages, request=request)
-        logger.info("[PathPlanner] strategist 完成, 节点数=%d", len(result.nodes))
+        logger.info("[PathPlanner] strategist 完成, 节点数={}", len(result.nodes))
         return result
 
     async def generate_plan(self, request: PathRequest, profile: dict[str, Any], progress_callback: ProgressCallback | None = None, profile_markdown: str = "", guidance_strategy: dict[str, Any] = None) -> LearningPlan:
@@ -370,7 +370,7 @@ class PathPlannerAgent:
 
         失败时自动降级到 build_fallback_plan。
         """
-        logger.info("[PathPlanner] 开始规划路径 topic=%s", request.topic)
+        logger.info("[PathPlanner] 开始规划路径 topic={}", request.topic)
         try:
             search_context = await self._research(request, profile, progress_callback)
             return await self._strategize(
@@ -381,7 +381,7 @@ class PathPlannerAgent:
                 progress_callback=progress_callback,
             )
         except Exception as exc:
-            logger.exception("[PathPlanner] 路径规划失败，使用兜底路径: %s", exc)
+            logger.exception("[PathPlanner] 路径规划失败，使用兜底路径: {}", exc)
             await emit_progress(
                 progress_callback,
                 "fallback",
@@ -610,25 +610,25 @@ class NodeLearningAgent:
                             }
                         )
                     logger.info(
-                        "[NodeLearningAgent] 成功生成 %d 道测验题 (attempt=%d)",
+                        "[NodeLearningAgent] 成功生成 {} 道测验题 (attempt={})",
                         len(normalized), attempt + 1,
                     )
                     return normalized
                 else:
                     logger.warning(
-                        "[NodeLearningAgent] 题目数量不足: 期望 %d, 实际 %d (attempt=%d)",
+                        "[NodeLearningAgent] 题目数量不足: 期望 {}, 实际 {} (attempt={})",
                         PATH_QUIZ_SIZE, len(questions), attempt + 1,
                     )
             except Exception as e:
                 last_error = e
                 logger.warning(
-                    "[NodeLearningAgent] 生成测验题失败 (attempt=%d): %s",
+                    "[NodeLearningAgent] 生成测验题失败 (attempt={}): {}",
                     attempt + 1, e,
                 )
 
         # 所有重试都失败
         logger.error(
-            "[NodeLearningAgent] 生成测验题最终失败，已重试 %d 次: %s",
+            "[NodeLearningAgent] 生成测验题最终失败，已重试 {} 次: {}",
             max_retries, last_error,
         )
         return []
@@ -758,7 +758,7 @@ async def node_persist_tutorial_and_mark(state: LearnState) -> dict:
 
     if meta.get("type") and meta["type"] != tutorial_type:
         logger.warning(
-            "Tutorial type mismatch: LLM output type=%r, expected type=%r for node=%s",
+            "Tutorial type mismatch: LLM output type={!r}, expected type={!r} for node={}",
             meta["type"], tutorial_type, node.title,
         )
 
@@ -1108,7 +1108,7 @@ async def _save_wrong_questions(
 
     await session.flush()
     logger.info(
-        "[PathWorkflows] 已将 %d 道错题写入错题本: user_id=%s",
+        "[PathWorkflows] 已将 {} 道错题写入错题本: user_id={}",
         len(wrong_questions), user_id,
     )
 

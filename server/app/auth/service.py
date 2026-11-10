@@ -62,7 +62,7 @@ class AuthService:
         """注册新用户，用户名重复时直接抛出 AuthError。"""
         existing = (await session.exec(select(User).where(User.username == data.username))).first()
         if existing:
-            logger.warning("[Auth] 注册失败，用户名已存在: %s", data.username)
+            logger.warning("[Auth] 注册失败，用户名已存在: {}", data.username)
             raise AuthError("该用户名已被注册，请换一个试试", field="username", code=400)
 
         user = User(
@@ -75,28 +75,28 @@ class AuthService:
             await session.commit()
         except IntegrityError:
             await session.rollback()
-            logger.warning("[Auth] 注册并发冲突: %s", data.username)
+            logger.warning("[Auth] 注册并发冲突: {}", data.username)
             raise AuthError("该用户名已被注册，请换一个试试", field="username", code=400)
 
         await session.refresh(user)
-        logger.info("[Auth] 注册成功: username=%s user_id=%s", user.username, user.id)
+        logger.info("[Auth] 注册成功: username={} user_id={}", user.username, user.id)
         return UserRead.model_validate(user)
 
     async def login(self, session: AsyncSession, data: UserLogin) -> dict[str, Any]:
         """验证用户名密码并签发包含常用信息的 JWT Token。"""
         user = (await session.exec(select(User).where(User.username == data.username))).first()
         if not user:
-            logger.warning("[Auth] 登录失败，用户不存在: %s", data.username)
+            logger.warning("[Auth] 登录失败，用户不存在: {}", data.username)
             raise AuthError("该用户名未注册", field="username", code=401)
 
         await session.refresh(user)
         if not verify_password(data.password, user.password):
-            logger.warning("[Auth] 登录失败，密码错误: user_id=%s", user.id)
+            logger.warning("[Auth] 登录失败，密码错误: user_id={}", user.id)
             raise AuthError("密码不正确，请重新输入", field="password", code=401)
 
         token = create_token(user)
         await record_daily_login_activity(session, user_id=user.id)
-        logger.info("[Auth] 登录成功: user_id=%s username=%s", user.id, user.username)
+        logger.info("[Auth] 登录成功: user_id={} username={}", user.id, user.username)
         return {
             "token": token,
             "user": UserRead.model_validate(user),
@@ -118,7 +118,7 @@ class AuthService:
             await session.commit()
             await session.refresh(user)
 
-        logger.info("[Auth] 更新用户信息成功: user_id=%s fields=%s", user_id, list(update_data.keys()))
+        logger.info("[Auth] 更新用户信息成功: user_id={} fields={}", user_id, list(update_data.keys()))
         return UserRead.model_validate(user)
 
 

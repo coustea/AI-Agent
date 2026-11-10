@@ -7,32 +7,26 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from app.resource.schemas import ResourcePlan, ReadingPayload, QuizPayload
+from app.resource.schemas import (
+    ReadingPayload,
+    QuizPayload,
+    ResourceGenerationRequest,
+    ResourceRunState,
+)
 from app.chat.memory import MemoryUpdateOutput
 
 
 # ============ 典型 LLM 输出样本 ============
 
-RESOURCE_PLAN_JSON = {
-    "schema_version": 1,
-    "learner_goal": "掌握TCP三次握手与四次挥手的核心原理与状态流转过程",
-    "scope": ["三次握手流程", "SYN/ACK标志位", "连接建立状态"],
-    "tasks": [
-        {
-            "agent_id": "content",
-            "objective": "系统化梳理TCP握手的状态迁移与报文结构",
-            "focus": ["状态迁移", "报文序列号"],
-            "required_elements": ["SYN标志位", "ACK标志位"],
-            "avoid": ["拥塞控制算法"],
-        },
-        {
-            "agent_id": "mindmap",
-            "objective": "构建TCP握手整体知识脉络与关联考点思维导图",
-            "focus": ["知识架构", "关键步骤"],
-            "required_elements": ["三次握手结构"],
-            "avoid": ["细节过度展开"],
-        },
-    ],
+RESOURCE_REQUEST_JSON = {
+    "topic": "TCP 三次握手",
+    "learning_goal": "掌握TCP三次握手与四次挥手的核心原理与状态流转过程",
+    "target_resources": ["content", "mindmap"],
+    "difficulty": "intermediate",
+    "preferences": {
+        "programming_language": "python",
+        "voice": "teacher",
+    },
 }
 
 READING_PAYLOAD_JSON = {
@@ -81,16 +75,16 @@ MEMORY_UPDATE_OUTPUT_JSON = {
 # ============ 测试 ============
 
 
-class TestResourcePlanSchema:
+class TestResourceRequestSchema:
     def test_parses_valid_json(self) -> None:
-        result = ResourcePlan.model_validate(RESOURCE_PLAN_JSON)
-        assert result.learner_goal.startswith("掌握TCP三次握手")
-        assert result.agent_ids == ["content", "mindmap"]
-        assert "content" in result.agent_ids
+        result = ResourceGenerationRequest.model_validate(RESOURCE_REQUEST_JSON)
+        assert result.learning_goal.startswith("掌握TCP三次握手")
+        assert result.target_resources == ["content", "mindmap"]
+        assert "content" in result.target_resources
 
-    def test_rejects_empty_content(self) -> None:
+    def test_rejects_empty_topic(self) -> None:
         with pytest.raises(ValidationError):
-            ResourcePlan.model_validate({"tasks": []})
+            ResourceGenerationRequest.model_validate({"topic": "", "target_resources": ["content"]})
 
 
 class TestReadingPayloadSchema:
@@ -112,7 +106,7 @@ class TestSchemaRoundTrip:
     @pytest.mark.parametrize(
         "schema_cls,data",
         [
-            (ResourcePlan, RESOURCE_PLAN_JSON),
+            (ResourceGenerationRequest, RESOURCE_REQUEST_JSON),
             (ReadingPayload, READING_PAYLOAD_JSON),
             (QuizPayload, QUIZ_PAYLOAD_JSON),
             (MemoryUpdateOutput, MEMORY_UPDATE_OUTPUT_JSON),

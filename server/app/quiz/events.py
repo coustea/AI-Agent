@@ -57,7 +57,7 @@ async def record_quiz_submit_event(
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
     # 记录事件落库日志
     logger.info(
-        "[Quiz] event recorded: user_id=%s question_id=%s score=%s correct=%s attempt=%s",
+        "[Quiz] event recorded: user_id={} question_id={} score={} correct={} attempt={}",
         user_id,
         question_id,
         score,

@@ -62,6 +62,11 @@ export interface ResourceRunState {
   artifacts: ResourceArtifact[]
   total_elapsed_ms: number
   error?: string
+  summary?: string
+  target_resources?: ResourceAgentId[]
+  topic?: string
+  learning_goal?: string
+  difficulty?: DifficultyLevel
 }
 
 // 单项产物明细

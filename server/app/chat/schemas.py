@@ -64,7 +64,7 @@ class AgentInput(ChatRequest):
     user_message_id: int = 0
     is_first_turn: bool = False
 
-    def model_post_init(self, __context: Any) -> None:
+    def model_post_init(self, _context: Any) -> None:
         """统一对齐 UserClaims 与 user_id / username，保证链路数据契约一致性。"""
         if self.user is not None:
             if not self.user_id:

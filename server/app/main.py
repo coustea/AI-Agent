@@ -24,7 +24,7 @@ from app.exceptions import install_exception_handlers
 from app.infra.database import check_all, init_db
 from app.infra.logging import configure_logging, get_logger
 from app.routes import install_routes
-from app.middleware import JWTMiddleware
+from app.middleware import JWTMiddleware, TraceLoggingMiddleware
 
 logger = get_logger("main")
 
@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
 
     interrupted = await mark_interrupted_runs()
     if interrupted:
-        logger.warning("[Chat] 标记中断运行: %d 条", interrupted)
+        logger.warning("[Chat] 标记中断运行: {} 条", interrupted)
 
     logger.info("[Main] 应用启动完成，开始接受请求")
 
@@ -69,8 +69,10 @@ def create_app() -> FastAPI:
     1. 配置日志系统
     2. 创建 FastAPI 实例（绑定生命周期钩子）
     3. 添加 CORS 中间件（允许跨域请求）
-    4. 安装全局异常处理器
-    5. 注册所有 API 路由
+    4. 添加 TraceLoggingMiddleware 中间件（链路追踪与请求日志）
+    5. 添加 JWTMiddleware 中间件（统一认证拦截）
+    6. 安装全局异常处理器
+    7. 注册所有 API 路由
     """
     # 配置日志输出格式和级别（统一输出关键日志）
     configure_logging()
@@ -86,6 +88,9 @@ def create_app() -> FastAPI:
         allow_methods=["*"],         # 允许所有 HTTP 方法
         allow_headers=["*"],         # 允许所有请求头
     )
+
+    # 添加全局链路追踪中间件（自动生成/解析 Trace ID，记录请求与响应日志）
+    app.add_middleware(TraceLoggingMiddleware)
 
     # 添加全局 JWT 认证中间件
     app.add_middleware(JWTMiddleware)

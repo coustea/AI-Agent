@@ -38,7 +38,6 @@ def test_resource_generation_request_accepts_unified_payload() -> None:
     assert request.difficulty == "intermediate"
     assert request.preferences.programming_language == "python"
     assert request.preferences.voice == "teacher"
-    assert request.preferences["programming_language"] == "python"
     assert request.enabled_agent_ids() == ["content", "mindmap", "quiz", "ppt"]
 
 
@@ -59,4 +58,5 @@ def test_resource_generation_request_default_values() -> None:
     assert request.difficulty == "intermediate"
     assert request.target_resources == ["content", "mindmap", "quiz"]
     assert "content" in request.enabled_agent_ids()
-    assert request.preferences == {}
+    assert request.preferences.programming_language == "python"
+    assert request.preferences.voice == "teacher"

@@ -156,8 +156,8 @@ class EvaluationService:
         await session.refresh(assessment)
 
         logger.info(
-            "[Evaluation] 学习评估生成完成: user_id=%s assessment_id=%s range_days=%d "
-            "assessment_text='%s' guidance_conclusion='%s' focus_topics=%s",
+            "[Evaluation] 学习评估生成完成: user_id={} assessment_id={} range_days={} "
+            "assessment_text='{}' guidance_conclusion='{}' focus_topics={}",
             user_id, assessment.id, range_days,
             assessment_text[:80],
             guidance_strategy.get("conclusion", "")[:60],
@@ -206,7 +206,7 @@ class EvaluationService:
 
             return result.assessment, guidance_dict
         except Exception as e:
-            logger.warning("[Evaluation] LLM 评估生成失败，使用规则推导: %s", e)
+            logger.warning("[Evaluation] LLM 评估生成失败，使用规则推导: {}", e)
             return self._derive_assessment_from_facts_simple(facts, weak_topics)
 
     def _derive_assessment_from_facts_simple(
@@ -331,7 +331,7 @@ class EvaluationService:
             raise e
 
         logger.info(
-            "[Evaluation] 事件已记录: user=%s module=%s type=%s event_id=%s",
+            "[Evaluation] 事件已记录: user={} module={} type={} event_id={}",
             user_id,
             payload.module,
             payload.event_type,
@@ -342,7 +342,7 @@ class EvaluationService:
         try:
             await self._check_and_trigger_assessment(session, user_id)
         except Exception as e:
-            logger.warning("[Evaluation] 自动评估检测失败: user=%s error=%s", user_id, e)
+            logger.warning("[Evaluation] 自动评估检测失败: user={} error={}", user_id, e)
 
         return event, False
 
@@ -391,7 +391,7 @@ class EvaluationService:
                     (chat_count >= EVENT_THRESHOLD_CHAT)
         if not triggered:
             logger.info(
-                "[Evaluation] 自动评估跳过（未达阈值）: user=%s chat=%d/%d other=%d/%d last_profile_update=%s",
+                "[Evaluation] 自动评估跳过（未达阈值）: user={} chat={}/{} other={}/{} last_profile_update={}",
                 user_id, chat_count, EVENT_THRESHOLD_CHAT, other_count, EVENT_THRESHOLD_DEFAULT,
                 last_profile_update.isoformat() if last_profile_update else "never",
             )
@@ -405,13 +405,13 @@ class EvaluationService:
             )
         )
         if generating:
-            logger.info("[Evaluation] 自动评估跳过（已有生成中评估）: user=%s", user_id)
+            logger.info("[Evaluation] 自动评估跳过（已有生成中评估）: user={}", user_id)
             return
 
         # 满足条件，在新的 session 中执行完整链路
         logger.info(
-            "[Evaluation] 触发自动评估链路: user=%s trigger=profile_update range_days=%d "
-            "chat=%d other=%d last_profile_update=%s",
+            "[Evaluation] 触发自动评估链路: user={} trigger=profile_update range_days={} "
+            "chat={} other={} last_profile_update={}",
             user_id, DEFAULT_RANGE_DAYS,
             chat_count, other_count,
             last_profile_update.isoformat() if last_profile_update else "never",
@@ -428,23 +428,23 @@ class EvaluationService:
                     new_session.add(user_row)
                     await new_session.flush()
                     logger.info(
-                        "[Evaluation] 阈值重置: user=%s profile_updated_at=%s",
+                        "[Evaluation] 阈值重置: user={} profile_updated_at={}",
                         user_id, now_utc.isoformat(),
                     )
 
                 # 近期学习事件 → 学习评估诊断与导学策略更新
-                logger.info("[Evaluation] 自动触发学情诊断评估: user=%s", user_id)
+                logger.info("[Evaluation] 自动触发学情诊断评估: user={}", user_id)
                 await self.generate_assessment(
                     new_session,
                     user_id=user_id,
                     trigger_source="profile_update",
                     range_days=DEFAULT_RANGE_DAYS,
                 )
-                logger.info("[Evaluation] 自动学情诊断评估生成成功: user=%s", user_id)
+                logger.info("[Evaluation] 自动学情诊断评估生成成功: user={}", user_id)
             except ConcurrencyError:
-                logger.info("[Evaluation] 自动评估并发冲突: user=%s", user_id)
+                logger.info("[Evaluation] 自动评估并发冲突: user={}", user_id)
             except Exception as e:
-                logger.error("[Evaluation] 自动评估链路失败: user=%s error=%s", user_id, e)
+                logger.error("[Evaluation] 自动评估链路失败: user={} error={}", user_id, e)
 
     # 记录一次学习会话（带幂等去重）
     async def record_session(
@@ -526,7 +526,7 @@ class EvaluationService:
             raise e
 
         logger.info(
-            "[Evaluation] 学习会话已记录: user=%s page=%s duration=%ss session_id=%s",
+            "[Evaluation] 学习会话已记录: user={} page={} duration={}s session_id={}",
             user_id,
             payload.source_page,
             payload.duration_seconds,

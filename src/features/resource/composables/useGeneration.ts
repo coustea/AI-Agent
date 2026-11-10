@@ -175,6 +175,18 @@ export function useGeneration() {
 
   // 核心：基于全量 ResourceRunState 快照更新前端状态（与 chat 模块无缝对齐）
   function applyRunState(state: ResourceRunState) {
+    // 0. 同步选中的智能体与主题上下文（确保刷新或跨页恢复时严格对齐用户选择）
+    if (state.target_resources && state.target_resources.length > 0) {
+      const prevStr = enabledAgentIds.value.slice().sort().join(',')
+      const nextStr = state.target_resources.slice().sort().join(',')
+      if (prevStr !== nextStr) {
+        enabledAgentIds.value = [...state.target_resources]
+      }
+    }
+    if (state.topic && !naturalInput.value) {
+      naturalInput.value = state.topic
+    }
+
     // 1. 总体进度计算
     if (state.status === 'completed') {
       overallProgress.value = 100

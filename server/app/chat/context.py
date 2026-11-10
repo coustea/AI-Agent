@@ -174,7 +174,7 @@ async def _load_guidance_strategy(user_id: int) -> dict[str, Any] | None:
         async with session_scope() as db:
             return await get_effective_guidance_strategy(db, user_id)
     except Exception as exc:
-        logger.warning("[ChatContext] 读取辅导策略失败: user_id=%s err=%s", user_id, exc)
+        logger.warning("[ChatContext] 读取辅导策略失败: user_id={} err={}", user_id, exc)
         return None
 
 
@@ -212,7 +212,7 @@ async def build_turn_messages(inp: AgentInput) -> list[Message]:
         _load_guidance_strategy(inp.user_id),
     )
     logger.info(
-        "[ChatContext] 上下文装配完成: user_id=%d session=%s 历史=%d 条 摘要=%d 字符 策略=%s 附件=%d video_mode=%s diagram=%s",
+        "[ChatContext] 上下文装配完成: user_id={} session={} 历史={} 条 摘要={} 字符 策略={} 附件={} video_mode={} diagram={}",
         inp.user_id, inp.session_id, len(history), len(session_summary),
         bool(strategy), len(inp.attachments), inp.video_mode, inp.diagram_mode,
     )

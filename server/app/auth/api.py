@@ -101,5 +101,5 @@ async def upload_avatar(
         claims.id,
         UserUpdate(avatar=avatar_url_str),
     )
-    logger.info("[AuthAPI] 头像上传成功: user_id=%s ext=%s", claims.id, ext)
+    logger.info("[AuthAPI] 头像上传成功: user_id={} ext={}", claims.id, ext)
     return HttpResponse.success(data={"avatar": avatar_url_str})

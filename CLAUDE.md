@@ -240,3 +240,17 @@ Auth resolution does no DB I/O: `JWTMiddleware` decodes the JWT and stores `User
 10. `server/app/path/service.py`
 11. `server/app/infra/models.py`
 12. `server/app/infra/types.py`
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues at `coustea/AI-Agent` (remote `origin`), managed via the `gh` CLI — always with `-R coustea/AI-Agent`, because the clone has a second remote `private`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: root `GLOSSARY.md` + `docs/adr/`; absent files are read silently, created lazily by `/domain-modeling`. See `docs/agents/domain.md`.

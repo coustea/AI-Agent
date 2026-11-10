@@ -21,8 +21,6 @@ from app.profile.types import (
 
 logger = get_logger(__name__)
 
-_PROFILE_PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
-
 
 def _user_base_info_dict(user: User) -> dict[str, Any]:
     """从 User ORM 对象提取基础信息字典。"""
@@ -137,7 +135,7 @@ class ProfileService:
         db: AsyncSession | None = None,
     ) -> User:
         """获取用户对象，不存在则抛出异常。"""
-        logger.info("[ProfileService] get_profile — user=%d", user_id)
+        logger.info("[ProfileService] get_profile — user={}", user_id)
 
         async def _query(session: AsyncSession) -> User:
             user = await session.get(User, user_id)
@@ -157,7 +155,7 @@ class ProfileService:
         db: AsyncSession | None = None,
     ) -> dict[str, dict[str, Any]]:
         """即时装配用户画像维度明细。"""
-        logger.info("[ProfileService] get_dimensions — user=%d", user_id)
+        logger.info("[ProfileService] get_dimensions — user={}", user_id)
 
         async def _query(session: AsyncSession) -> dict[str, dict[str, Any]]:
             return await _synthesize_jit_dimensions(user_id, session, {})
@@ -169,7 +167,7 @@ class ProfileService:
 
     async def build_profile_markdown(self, *, user_id: int) -> str:
         """将画像维度 + User 基础信息转为结构化 Markdown。"""
-        logger.info("[ProfileService] build_profile_markdown — user=%d", user_id)
+        logger.info("[ProfileService] build_profile_markdown — user={}", user_id)
         async with session_scope() as db:
             user = (await db.exec(select(User).where(User.id == user_id))).first()
             dimensions = await self.get_dimensions(user_id=user_id, db=db)
@@ -275,11 +273,11 @@ class ProfileService:
     ) -> dict[str, Any]:
         """写入基础资料；只有首次 onboarding 可以写偏好并完成引导。"""
         update_source = "onboarding" if complete_onboarding else "profile"
-        logger.info("[ProfileService] %s 写入开始: user_id=%s", update_source, user_id)
+        logger.info("[ProfileService] {} 写入开始: user_id={}", update_source, user_id)
 
         user = (await db.exec(select(User).where(User.id == user_id))).first()
         if not user:
-            logger.error("[ProfileService] %s 写入失败，用户不存在: user_id=%s", update_source, user_id)
+            logger.error("[ProfileService] {} 写入失败，用户不存在: user_id={}", update_source, user_id)
             raise ValueError(f"User {user_id} not found")
 
         school_name = payload.get("school")

@@ -1,67 +1,138 @@
-"""集中日志配置模块 —— 基于 Loguru，异步写入。
+"""集中日志配置模块 —— 基于 Loguru 的全链路结构化系统日志。
 
-- 业务代码统一 `logger = get_logger(__name__)`，支持 logging 风格 `%s` 占位符
-- 捕获 `logging` 标准库日志与 uvicorn/fastapi/sqlalchemy 等第三方日志，统一导入 Loguru
-- macOS spawn 模式下 multiprocessing SemLock 数量受限，因此不启用 enqueue
-
-统一日志输出：
-- 终端：INFO+（关键业务日志、Agent 流程、LLM 调用）
-- app.log：INFO+，异步写入，按天轮转
-- error.log：ERROR+，异步写入，保留 10 个文件
+本模块全面摒弃旧式 logging.Logger 与包装代理，提供纯正的 Loguru 日志驱动：
+- 支持基于 ContextVar 的全链路 Trace ID 与用户上下文自动补齐（无需手动层层传参）；
+- 提供控制台高亮彩色输出与针对第三方噪音的智能过滤；
+- 提供 app.log（天级轮转、保留30天）与 error.log（按大小轮转、保留10份备份）双文件落盘；
+- 拦截并清洗 Uvicorn / FastAPI / SQLAlchemy / HTTPX 等第三方库日志到同一管道。
 """
 
-# 本模块基于 Loguru 统一日志输出，并拦截标准 logging 与第三方库日志到同一管线
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar, Token
 import logging
+from pathlib import Path
 import sys
 from typing import Any, Optional
 
 from loguru import logger as _loguru_logger
+from loguru._logger import Logger
 
 from app.config import LOGS_DIR as LOG_DIR
 
+# 全链路追踪上下文变量（协程隔离与任务继承）
+trace_id_ctx: ContextVar[str] = ContextVar("trace_id", default="-")
+user_ctx: ContextVar[str] = ContextVar("user", default="-")
 
-# 输出格式尽量与旧 logging 版保持一致，便于 grep/排障。
-_LOGURU_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} | {level:<8} | {extra[logger_name]} | {message}"
+# 控制台格式（带有层级色彩与追踪高亮）
+_CONSOLE_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+    "<level>{level:<8}</level> | "
+    "<cyan>[{extra[trace_id]}]</cyan> "
+    "<magenta>[{extra[user]}]</magenta> "
+    "<blue>{name}:{function}:{line}</blue> - "
+    "<level>{message}</level>"
+)
 
-# 终端过滤：过滤第三方库噪音，保留关键业务日志
-_CONSOLE_NOISY_PREFIXES = (
+# 文件落盘格式（去色彩纯文本，便于 grep 与自动化日志解析）
+_FILE_FORMAT = (
+    "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
+    "{level:<8} | "
+    "[{extra[trace_id]}] "
+    "[{extra[user]}] "
+    "{name}:{function}:{line} - "
+    "{message}"
+)
+
+# 终端过滤名单：屏蔽第三方高频低信噪比调试日志
+_CONSOLE_NOISY_PREFIXES: tuple[str, ...] = (
     "httpcore",
     "httpx",
     "openai",
     "sqlalchemy",
+    "sqlalchemy.engine",
     "aiomysql",
     "uvicorn.access",
 )
 
 
-# 终端日志过滤器：丢弃第三方库噪音，仅保留业务日志
-def _console_filter(record: Any) -> bool:
-    """终端过滤器：只保留业务日志，过滤第三方噪音。"""
-    name = record["extra"].get("logger_name", "")
-    # 过滤第三方库噪音
+def get_trace_id() -> str:
+    """获取当前协程上下文绑定的 Trace ID。"""
+    return trace_id_ctx.get()
+
+
+def get_current_user_name() -> str:
+    """获取当前协程上下文绑定的操作用户标识。"""
+    return user_ctx.get()
+
+
+def set_trace_context(
+    trace_id: str | None = None,
+    user: str | None = None,
+) -> tuple[Token[str] | None, Token[str] | None]:
+    """设置当前协程的链路追踪与用户上下文，并返回回滚 Token。"""
+    token_trace = trace_id_ctx.set(trace_id) if trace_id is not None else None
+    token_user = user_ctx.set(user) if user is not None else None
+    return (token_trace, token_user)
+
+
+def reset_trace_context(tokens: tuple[Token[str] | None, Token[str] | None]) -> None:
+    """恢复先前保存的链路上下文 Token。"""
+    token_trace, token_user = tokens
+    if token_trace is not None:
+        trace_id_ctx.reset(token_trace)
+    if token_user is not None:
+        user_ctx.reset(token_user)
+
+
+@contextmanager
+def trace_scope(trace_id: str | None = None, user: str | None = None) -> Iterator[None]:
+    """链路追踪作用域上下文管理器，离开作用域自动恢复上下文。"""
+    tokens = set_trace_context(trace_id=trace_id, user=user)
+    try:
+        yield
+    finally:
+        reset_trace_context(tokens)
+
+
+def _context_patcher(record: dict[str, Any]) -> None:
+    """为 Loguru 记录动态补齐链路上下文（Trace ID、用户、记录源组件名）。"""
+    extra = record["extra"]
+    if "trace_id" not in extra or extra["trace_id"] == "-":
+        extra["trace_id"] = trace_id_ctx.get()
+    if "user" not in extra or extra["user"] == "-":
+        extra["user"] = user_ctx.get()
+    if "logger_name" not in extra:
+        extra["logger_name"] = record["name"]
+
+
+def _console_filter(record: dict[str, Any]) -> bool:
+    """控制台日志过滤器：对第三方库噪音仅在 WARNING+ 级别放行，业务日志正常放行。"""
+    name = str(record["extra"].get("logger_name") or record["name"] or "")
+    level_no = record["level"].no
+
+    # 如果是已知的第三方噪音库
     for prefix in _CONSOLE_NOISY_PREFIXES:
         if name.startswith(prefix) or name == prefix:
-            return False
+            # 仅放行 WARNING 及以上级别
+            return level_no >= 30
+
     return True
 
 
-# 标准库 logging 到 loguru 的拦截处理器
 class _InterceptHandler(logging.Handler):
-    """把标准 logging.Record 转发到 loguru。"""
+    """将标准 logging.Record 拦截并路由至统一 Loguru 管道。"""
 
-    # 将标准 logging 记录转发到 loguru，并定位真实调用点
     def emit(self, record: logging.LogRecord) -> None:
+        """接收标准库日志记录，解析原始调用栈并投递至 Loguru。"""
         try:
             level = _loguru_logger.level(record.levelname).name
         except (ValueError, TypeError):
             level = record.levelno
 
-        # record.getMessage() 已经完成了 %-style 格式化
-        msg = record.getMessage()
-
-        # 让 loguru 的 caller 定位尽量指向"真实调用点"，而不是 logging 框架内部。
+        # 动态回溯找到非 logging 模块的真实调用帧
         frame = logging.currentframe()
         depth = 2
         while frame and frame.f_code.co_filename == logging.__file__:
@@ -71,139 +142,55 @@ class _InterceptHandler(logging.Handler):
         _loguru_logger.bind(logger_name=record.name).opt(
             depth=depth,
             exception=record.exc_info,
-        ).log(level, msg)
+        ).log(level, record.getMessage())
 
 
-class LoguruLoggerProxy:
-    """项目内统一 logger 对象，支持两种格式化写法。
-
-    - logging 风格：logger.info("x=%s", x)
-    - loguru 风格： logger.info("x={}", x)
-    """
-
-    # 初始化：分别持有标准库 logger 与 loguru 绑定对象
-    def __init__(self, name: str):
-        self._name = name
-        self._stdlib_logger = logging.getLogger(name)
-        self._logger = _loguru_logger.bind(logger_name=name)
-
-    # 返回绑定了额外上下文的新 logger 代理
-    def bind(self, **kwargs: Any) -> "LoguruLoggerProxy":
-        proxy = LoguruLoggerProxy(self._name)
-        proxy._logger = self._logger.bind(**kwargs)
-        return proxy
-
-    # 兼容 loguru 的 {} 与 logging 的 %-style 两种消息格式化
-    def _format_message(self, message: Any, args: tuple[Any, ...]) -> tuple[str, tuple[Any, ...]]:
-        if not args:
-            return (str(message), ())
-
-        if not isinstance(message, str):
-            return (str(message), ())
-
-        # 优先保留 loguru 的 {} 格式化能力
-        if "{" in message and "}" in message:
-            return (message, args)
-
-        # 兼容 logging 的 %-style 格式化
-        try:
-            return (message % args, ())
-        except (TypeError, ValueError):
-            # 兜底：不让日志调用因为格式问题崩掉
-            return (f"{message} args={args!r}", ())
-
-    # 统一日志入口
-    def _log(self, level: str, message: Any, *args: Any, **kwargs: Any) -> None:
-        exc_info = kwargs.pop("exc_info", None)
-        msg, fmt_args = self._format_message(message, args)
-
-        l = self._logger
-        if exc_info:
-            if exc_info is True:
-                l = l.opt(exception=True)
-            else:
-                l = l.opt(exception=exc_info)
-        l.log(level, msg, *fmt_args, **kwargs)
-
-    def debug(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._log("DEBUG", message, *args, **kwargs)
-
-    def info(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._log("INFO", message, *args, **kwargs)
-
-    def warning(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._log("WARNING", message, *args, **kwargs)
-
-    def error(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        self._log("ERROR", message, *args, **kwargs)
-
-    # 记录异常堆栈（需在 except 块内调用）
-    def exception(self, message: Any, *args: Any, **kwargs: Any) -> None:
-        """记录当前异常堆栈（需在 except 块内调用）。"""
-        msg, fmt_args = self._format_message(message, args)
-        self._logger.opt(exception=True).error(msg, *fmt_args, **kwargs)
+def get_logger(name: str | None = None) -> Logger:
+    """获取项目统一的 Loguru Logger，支持按模块名称绑定。"""
+    if name:
+        return _loguru_logger.bind(logger_name=name)
+    return _loguru_logger
 
 
-# 获取项目统一 logger（返回 LoguruLoggerProxy 而非标准库 Logger）
-def get_logger(name: str) -> LoguruLoggerProxy:
-    """获取项目 logger（不再返回标准库 logging.Logger）。"""
-    return LoguruLoggerProxy(name)
-
-
-# 配置日志系统：统一输出关键日志到终端、app.log 与 error.log
-def configure_logging() -> None:
-    """Configure logging - unified output of key logs.
-
-    统一日志输出：
-    - 终端：INFO+（关键业务日志、Agent 流程、LLM 调用）
-    - app.log：INFO+，异步写入，按天轮转
-    - error.log：ERROR+，异步写入，保留 10 个文件
-    """
-    setup_logging(level="INFO", force=True)
+# 全局默认 Loguru 实例供直接引入使用
+logger: Logger = _loguru_logger
 
 
 _CONFIGURED = False
 
 
-# 初始化 Loguru 与标准库日志拦截，并配置各输出 sink（应用启动时调用一次）
 def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
-    """初始化 Loguru + 标准库 logging 拦截。
-
-    在应用启动时调用一次即可（FastAPI lifespan）。
-
-    统一输出关键日志：
-      - 终端：INFO+（关键业务日志、Agent 流程、LLM 调用）
-      - app.log：INFO+，异步写入，按天轮转
-      - error.log：ERROR+，异步写入，保留 10 个文件
-    """
+    """初始化 Loguru 日志系统与标准库拦截器。"""
     global _CONFIGURED
     if _CONFIGURED and not force:
         return
 
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    log_dir = Path(LOG_DIR)
+    log_dir.mkdir(parents=True, exist_ok=True)
 
-    log_level = "INFO"
+    target_level = level or "INFO"
 
-    # 1) 配置 loguru sinks
+    # 1. 配置全局 patcher 动态富化上下文
     _loguru_logger.remove()
-    _loguru_logger.configure(extra={"logger_name": "root"})
+    _loguru_logger.configure(patcher=_context_patcher)
 
-    # 终端：INFO+，过滤第三方噪音
+    # 2. 控制台输出 Sink：高亮色彩、带链路追踪、智能噪音过滤
     _loguru_logger.add(
         sys.stderr,
-        level="INFO",
-        format=_LOGURU_FORMAT,
+        level=target_level,
+        format=_CONSOLE_FORMAT,
         filter=_console_filter,
+        colorize=True,
         backtrace=True,
         diagnose=False,
         enqueue=False,
     )
 
-    # app.log：INFO+，异步写入，按天轮转
+    # 3. 业务全量日志文件 Sink (app.log)：天级轮转、保留30天
     _loguru_logger.add(
-        str(LOG_DIR / "app.log"),
-        level="INFO",
-        format=_LOGURU_FORMAT,
+        str(log_dir / "app.log"),
+        level=target_level,
+        format=_FILE_FORMAT,
         rotation="00:00",
         retention="30 days",
         encoding="utf-8",
@@ -212,24 +199,24 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
         enqueue=False,
     )
 
-    # error.log：ERROR+，保留 10 个文件
+    # 4. 错误排障日志文件 Sink (error.log)：ERROR 及以上、按10MB轮转、保留10份
     _loguru_logger.add(
-        str(LOG_DIR / "error.log"),
+        str(log_dir / "error.log"),
         level="ERROR",
-        format=_LOGURU_FORMAT,
+        format=_FILE_FORMAT,
         rotation="10 MB",
         retention=10,
         encoding="utf-8",
         backtrace=True,
-        diagnose=False,
+        diagnose=True,
         enqueue=False,
     )
 
-    # 2) 拦截标准 logging：所有旧代码 logger.info("x=%s", x) 都会被转发到 loguru
+    # 5. 接管 Python 标准库 logging 根处理器
     logging.basicConfig(handlers=[_InterceptHandler()], level=0, force=True)
 
-    # 清理常见第三方 logger 的 handler，避免重复输出
-    for name in (
+    # 清除常见第三方库默认的 handlers 避免双重打印
+    for noisy_name in (
         "uvicorn",
         "uvicorn.error",
         "uvicorn.access",
@@ -238,13 +225,17 @@ def setup_logging(*, level: Optional[str] = None, force: bool = False) -> None:
         "sqlalchemy.engine",
         "aiomysql",
     ):
-        ext_logger = logging.getLogger(name)
+        ext_logger = logging.getLogger(noisy_name)
         ext_logger.handlers.clear()
         ext_logger.propagate = True
 
-    _loguru_logger.bind(logger_name="root").info(
-        "[Logging] 日志系统初始化完成: console=INFO(filtered) file=app.log+error.log level=%s",
-        log_level,
+    _loguru_logger.info(
+        "[Logging] 全链路 Loguru 日志初始化完成: level={} console=彩色高亮 app.log=按天轮转 error.log=10MB轮转",
+        target_level,
     )
-
     _CONFIGURED = True
+
+
+def configure_logging() -> None:
+    """系统启动时的统一日志配置入口函数。"""
+    setup_logging(level="INFO", force=True)

@@ -198,7 +198,7 @@ async def compress_session(user_id: int, session_id: str) -> str | None:
         chat_session.updated_at = now_utc()
         db.add(chat_session)
         logger.info(
-            "[ChatMemory] 会话压缩完成: session_id=%s 压缩 %d 条消息 摘要 %d 字符 剩余水位 %d tokens",
+            "[ChatMemory] 会话压缩完成: session_id={} 压缩 {} 条消息 摘要 {} 字符 剩余水位 {} tokens",
             session_id, len(target), len(summary_markdown), chat_session.summary_token_count,
         )
         return summary_markdown
@@ -250,12 +250,12 @@ async def update_long_term_memory(
             user.updated_at = now_utc()
             db.add(user)
             logger.info(
-                "[ChatMemory] 长期记忆已更新: user_id=%d confidence=%.2f reason=%s",
+                "[ChatMemory] 长期记忆已更新: user_id={} confidence={:.2f} reason={}",
                 user_id, result.confidence, result.update_reason,
             )
         else:
             logger.info(
-                "[ChatMemory] 长期记忆未更新: user_id=%d need_update=%s confidence=%.2f (阈值 %.2f)",
+                "[ChatMemory] 长期记忆未更新: user_id={} need_update={} confidence={:.2f} (阈值 {:.2f})",
                 user_id, result.need_update, result.confidence, LTM_MIN_CONFIDENCE,
             )
 

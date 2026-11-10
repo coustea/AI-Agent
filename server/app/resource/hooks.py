@@ -13,6 +13,8 @@ from typing import Any
 from app.infra.llm import ToolCall
 from app.infra.logging import get_logger
 from app.resource.schemas import (
+    DifficultyLevel,
+    ResourceAgentId,
     ResourceArtifact,
     ResourceRunPhase,
     ResourceRunState,
@@ -96,9 +98,25 @@ def _extract_resource_artifact(call_id: str, tool_name: str, raw: Any) -> Resour
 class ResourceRunHooks:
     """Resource 主 Agent 运行状态容器与观察钩子。"""
 
-    def __init__(self, run_id: str, resource_id: int) -> None:
+    def __init__(
+        self,
+        run_id: str,
+        resource_id: int,
+        *,
+        target_resources: list[ResourceAgentId] | None = None,
+        topic: str = "",
+        learning_goal: str = "",
+        difficulty: DifficultyLevel = "intermediate",
+    ) -> None:
         """初始化运行快照容器、计时器与订阅者集合。"""
-        self.state = ResourceRunState(run_id=run_id, resource_id=resource_id)
+        self.state = ResourceRunState(
+            run_id=run_id,
+            resource_id=resource_id,
+            target_resources=list(target_resources or []),
+            topic=topic,
+            learning_goal=learning_goal,
+            difficulty=difficulty,
+        )
         self.task: asyncio.Task[None] | None = None
         self.cancel_requested = False
         self.started_at = time.monotonic()
@@ -133,6 +151,11 @@ class ResourceRunHooks:
         self.state.status = "running"
         self.state.phase = phase
         self.state.phase_label = label
+        self.publish()
+
+    def set_summary(self, summary: str) -> None:
+        """设置主规划智能体的交付总结并通知订阅者。"""
+        self.state.summary = summary
         self.publish()
 
     def on_text(self, delta: str) -> None:
@@ -192,7 +215,7 @@ class ResourceRunHooks:
                 a for a in self.state.artifacts if a.kind != artifact.kind
             ]
             self.state.artifacts.append(artifact)
-            logger.info("已捕获教学资源产物: kind=%s title=%s", artifact.kind, artifact.title)
+            logger.info("已捕获教学资源产物: kind={} title={}", artifact.kind, artifact.title)
 
         self.publish()
 

@@ -1,63 +1,64 @@
 # -*- coding: utf-8 -*-
-"""验证所有 Agent 类和核心 schema 可正常导入与实例化。"""
+"""验证 Resource 模块核心 schema 与请求契约可正常导入与校验。"""
 
-import sys
 import os
+import sys
+
+import pytest
+from pydantic import ValidationError
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from app.resource.schemas import ResourcePlan, DownstreamContext, AgentResult, ResourcePlanTask
+from app.resource.schemas import (
+    AgentResult,
+    ResourceGenerationRequest,
+    ResourcePreferences,
+    ResourceRunState,
+)
 
 
-def test_core_schemas_exist():
-    """ResourcePlan, DownstreamContext, AgentResult 必须可用。"""
-    assert hasattr(ResourcePlan, "model_validate")
-    assert hasattr(DownstreamContext, "model_validate")
+def test_core_schemas_exist() -> None:
+    """ResourceGenerationRequest, ResourceRunState, AgentResult 必须可用。"""
+    assert hasattr(ResourceGenerationRequest, "model_validate")
+    assert hasattr(ResourceRunState, "model_validate")
     assert hasattr(AgentResult, "model_validate")
 
 
-def test_resource_plan_validates():
-    plan = ResourcePlan(
-        schema_version=1,
-        learner_goal="掌握TCP三次握手与四次挥手的核心原理与状态流转过程",
-        scope=["三次握手流程", "SYN/ACK标志位", "连接建立状态"],
-        tasks=[
-            ResourcePlanTask(
-                agent_id="content",
-                objective="系统化梳理TCP握手的状态迁移与报文结构",
-                focus=["状态迁移", "报文序列号"],
-                required_elements=["SYN标志位", "ACK标志位"],
-                avoid=["拥塞控制算法"],
-            ),
-            ResourcePlanTask(
-                agent_id="mindmap",
-                objective="构建TCP握手整体知识脉络与关联考点思维导图",
-                focus=["知识架构", "关键步骤"],
-                required_elements=["三次握手结构"],
-                avoid=["细节过度展开"],
-            ),
-        ],
+def test_resource_request_validates() -> None:
+    """验证 ResourceGenerationRequest 能够正确校验用户请求。"""
+    req = ResourceGenerationRequest(
+        topic="TCP 三次握手",
+        learning_goal="掌握TCP三次握手与四次挥手的核心原理与状态流转过程",
+        target_resources=["content", "mindmap"],
+        difficulty="advanced",
+        preferences=ResourcePreferences(programming_language="typescript", voice="coach"),
     )
-    assert plan.agent_ids == ["content", "mindmap"]
-    assert "content" in plan.agent_ids
-    assert "quiz" not in plan.agent_ids
+    assert req.topic == "TCP 三次握手"
+    assert req.target_resources == ["content", "mindmap"]
+    assert req.difficulty == "advanced"
+    assert req.preferences.programming_language == "typescript"
+    assert req.preferences.voice == "coach"
+    assert req.enabled_agent_ids() == ["content", "mindmap"]
 
 
-def test_downstream_context_validates():
-    ctx = DownstreamContext(
-        source_agent="content",
-        title="TCP 内容",
-        one_sentence_summary="讲解 TCP 三次握手",
-        materials=["电话拨通比喻", "时序箭线图"],
+def test_resource_run_state_validates() -> None:
+    """验证 ResourceRunState 完整快照模型能够正确校验。"""
+    state = ResourceRunState(
+        run_id="run-test-123",
+        resource_id=1,
+        target_resources=["content", "quiz"],
+        topic="操作系统死锁",
+        learning_goal="理解死锁产生的4个必要条件",
+        difficulty="intermediate",
     )
-    assert ctx.source_agent == "content"
-    assert ctx.title == "TCP 内容"
-    assert len(ctx.materials) == 2
+    assert state.run_id == "run-test-123"
+    assert state.target_resources == ["content", "quiz"]
+    assert state.topic == "操作系统死锁"
+    assert state.status == "queued"
 
 
-def test_agent_result_rejects_unknown_fields():
-    import pytest
-    from pydantic import ValidationError
+def test_agent_result_rejects_unknown_fields() -> None:
+    """验证 AgentResult extra='forbid' 限制。"""
     with pytest.raises(ValidationError):
         AgentResult.model_validate({
             "success": True,

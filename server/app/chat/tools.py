@@ -84,11 +84,13 @@ def build_user_context_tools(user_id: int) -> list[Tool]:
     async def get_learner_profile(reason: str = "") -> str:
         """读取指定用户的学习者画像 Markdown。"""
         svc = get_profile_service()
+        logger.info("[ChatTool:get_learner_profile] 查询学习者画像: user_id={} reason={}", user_id, reason or "默认个性化辅导")
         try:
             markdown = await svc.build_profile_markdown(user_id=user_id)
+            logger.info("[ChatTool:get_learner_profile] 成功获取学习者画像: 字符数={}", len(markdown))
             return compact_text(f"画像读取原因: {reason or '个性化辅导'}\n{markdown}")
         except Exception as exc:
-            logger.warning("[get_learner_profile] 失败: %s", exc)
+            logger.warning("[ChatTool:get_learner_profile] 读取画像失败: {}", exc)
             return "暂时无法读取学习者画像。"
 
     @tool(
@@ -98,11 +100,16 @@ def build_user_context_tools(user_id: int) -> list[Tool]:
     )
     async def get_long_term_memory(category: LongTermMemoryCategory | None = None, reason: str = "") -> str:
         """按分类读取指定用户的长期学习记忆 Markdown。"""
+        logger.info(
+            "[ChatTool:get_long_term_memory] 查询长期记忆: user_id={} category={} reason={}",
+            user_id, category or "all", reason or "历史上下文参考",
+        )
         try:
             markdown = await get_memory_markdown(user_id, category=category)
+            logger.info("[ChatTool:get_long_term_memory] 成功获取长期记忆: 字符数={}", len(markdown))
             return compact_text(f"长期记忆读取原因: {reason or '历史上下文参考'}\n{markdown}")
         except Exception as exc:
-            logger.warning("[get_long_term_memory] 失败: %s", exc)
+            logger.warning("[ChatTool:get_long_term_memory] 读取长期记忆失败: {}", exc)
             return "暂时无法读取长期学习记忆。"
 
     return [get_learner_profile, get_long_term_memory]
@@ -115,6 +122,7 @@ def build_read_document_tool(*, username: str, session_id: str, workdir: Path) -
     async def read_document(path: str, max_chars: int = MAX_FILE_CONTENT_CHARS) -> dict[str, Any]:
         """定位并解析用户上传的文档或工作区文档内容。"""
         ref = (path or "").strip()
+        logger.info("[ChatTool:read_document] 请求解析文档: path={} max_chars={}", ref, max_chars)
         target: Path | None = None
 
         if ref.startswith("/static/"):
@@ -134,9 +142,14 @@ def build_read_document_tool(*, username: str, session_id: str, workdir: Path) -
                 target = None
 
         if target is None or not target.is_file():
+            logger.warning("[ChatTool:read_document] 文档不存在或无权访问: ref={}", ref)
             return {"status": "failed", "text": f"文档不存在或无权访问: {path}"}
 
         content = await asyncio.to_thread(read_uploaded_file_content, str(target), max_content_chars=max_chars)
+        logger.info(
+            "[ChatTool:read_document] 文档解析完成: filename={} 提取文本 {} 字符",
+            target.name, len(content),
+        )
         return {
             "status": "ok",
             "text": content,

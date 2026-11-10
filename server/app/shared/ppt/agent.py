@@ -6,6 +6,7 @@ import asyncio
 import re
 import shlex
 import sys
+import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -16,7 +17,12 @@ from app.infra.llm import get_llm_client
 from app.infra.logging import get_logger
 from app.shared.ppt.schemas import PPTArtifact, PPTBrief, PPTGenerationError
 from app.shared.tools.builtin import build_builtin_tools
-from app.shared.tools.registry import ToolRegistry, format_tool_output
+from app.shared.tools.registry import (
+    ToolRegistry,
+    format_tool_output,
+    summarize_tool_args,
+    summarize_tool_result,
+)
 from app.shared.tools.skills import build_load_skill_tool, get_skill_loader
 
 ProgressCallback = Callable[[str, int], Awaitable[None]]
@@ -53,7 +59,7 @@ class PPTAgent:
         progress: ProgressCallback | None = None,
     ) -> PPTArtifact:
         """根据课件大纲在指定输出目录下生成完整可编辑 PPTX 课件包。"""
-        logger.info("[PPTAgent] 开始生成课件: title=%s output_dir=%s", brief.title, output_dir)
+        logger.info("[PPTAgent] 开始生成课件: title={} output_dir={}", brief.title, output_dir)
         try:
             async with asyncio.timeout(1800):
                 workdir = output_dir.resolve() / uuid4().hex
@@ -70,20 +76,20 @@ class PPTAgent:
                 ])
                 artifact = await self._run(brief, workdir, registry, progress)
                 logger.info(
-                    "[PPTAgent] 课件生成完成: title=%s slides=%d pptx=%s",
+                    "[PPTAgent] 课件生成完成: title={} slides={} pptx={}",
                     getattr(artifact, "title", ""),
                     getattr(artifact, "slide_count", 0),
                     getattr(artifact, "pptx_path", ""),
                 )
                 return artifact
         except PPTGenerationError as exc:
-            logger.error("[PPTAgent] 课件生成失败: title=%s error=%s", brief.title, exc)
+            logger.error("[PPTAgent] 课件生成失败: title={} error={}", brief.title, exc)
             raise
         except TimeoutError:
-            logger.error("[PPTAgent] 课件生成超时 (>1800s): title=%s", brief.title)
+            logger.error("[PPTAgent] 课件生成超时 (>1800s): title={}", brief.title)
             raise PPTGenerationError("课件生成超时 (>1800s)")
         except Exception as exc:
-            logger.exception("[PPTAgent] 课件生成异常: title=%s", brief.title)
+            logger.exception("[PPTAgent] 课件生成异常: title={}", brief.title)
             raise PPTGenerationError(f"课件生成失败：{exc}") from exc
 
     async def _run(
@@ -116,24 +122,42 @@ class PPTAgent:
             tool_calls = getattr(msg, "tool_calls", None) or []
             content_str = getattr(msg, "content", None) or ""
             logger.info(
-                "[PPTAgent] 第 %d/%d 轮: tool_calls=%d text_len=%d",
+                "[PPTAgent] 第 {}/{} 轮: tool_calls={} text_len={}",
                 step + 1, max_total_steps, len(tool_calls), len(content_str),
             )
+            if content_str:
+                thought_preview = content_str.strip().replace("\n", " ")
+                if len(thought_preview) > 120:
+                    thought_preview = f"{thought_preview[:117]}..."
+                logger.info("[PPTAgent] 思考规划: {}", thought_preview)
 
             if tool_calls:
-                for call in tool_calls:
+                logger.info("[PPTAgent] 本轮待执行工具数量: {}", len(tool_calls))
+                for idx, call in enumerate(tool_calls, 1):
                     if progress:
                         await progress(f"正在制作课件：{call.function.name}", min(90, 10 + step))
+                    args_summary = summarize_tool_args(call.function.name, call.function.arguments)
+                    logger.info(
+                        "[PPTAgent]   -> [{}/{}] 调用工具: {} | 参数: {}",
+                        idx, len(tool_calls), call.function.name, args_summary,
+                    )
+                    start_t = time.perf_counter()
                     try:
                         raw_res = await registry.execute(call.function.name, call.function.arguments)
                         result = format_tool_output(raw_res)
+                        cost_ms = round((time.perf_counter() - start_t) * 1000)
+                        res_summary = summarize_tool_result(call.function.name, raw_res)
                         logger.info(
-                            "[PPTAgent] 工具 %s 执行成功 (输出 %d 字符)",
-                            call.function.name, len(result),
+                            "[PPTAgent]   <- [{}/{}] 工具完成: {} (耗时 {}ms) | 结果: {}",
+                            idx, len(tool_calls), call.function.name, cost_ms, res_summary,
                         )
                     except Exception as exc:
+                        cost_ms = round((time.perf_counter() - start_t) * 1000)
                         result = f"Error: {exc}"
-                        logger.warning("[PPTAgent] 工具 %s 执行失败: %s", call.function.name, exc)
+                        logger.warning(
+                            "[PPTAgent]   ❌ [{}/{}] 工具失败: {} (耗时 {}ms) | 错误: {}",
+                            idx, len(tool_calls), call.function.name, cost_ms, exc,
+                        )
                     messages.append({"role": "tool", "tool_call_id": call.id, "content": result})
                 continue
 
@@ -149,7 +173,7 @@ class PPTAgent:
             except (ValueError, OSError, KeyError, BadZipFile) as exc:
                 revisions += 1
                 logger.warning(
-                    "[PPTAgent] 物理核验未通过 (第 %d/%d 次修复): %s", revisions, max_revisions, exc,
+                    "[PPTAgent] 物理核验未通过 (第 {}/{} 次修复): {}", revisions, max_revisions, exc,
                 )
                 if revisions > max_revisions:
                     raise PPTGenerationError(f"课件交付核验未通过，已达最大修复次数：{exc}") from exc
@@ -192,7 +216,7 @@ class PPTAgent:
             result = await registry.execute("bash", {"command": command})
             if result.get("exit_code") != 0:
                 logger.error(
-                    "[PPTAgent] 构建命令失败 (exit=%s): %s\nstderr: %s",
+                    "[PPTAgent] 构建命令失败 (exit={}): {}\nstderr: {}",
                     result.get("exit_code"), command, result.get("stderr"),
                 )
                 raise ValueError(f"构建命令执行失败：{command}\n{result.get('stderr') or result}")
@@ -201,7 +225,7 @@ class PPTAgent:
         pdf = workdir / "deck.pdf"
         if len(images) != count or not pdf.is_file() or pdf.stat().st_size == 0:
             logger.error(
-                "[PPTAgent] 渲染产物不完整: slides=%d images=%d pdf_ok=%s",
+                "[PPTAgent] 渲染产物不完整: slides={} images={} pdf_ok={}",
                 count, len(images), pdf.is_file(),
             )
             raise ValueError("渲染产物不完整，页数与幻灯片数不匹配")

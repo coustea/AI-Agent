@@ -55,7 +55,7 @@ async def get_profile(
     current_user = await session.get(User, user_id)
     if not current_user:
         return HttpResponse.error(code=404, message="用户不存在")
-    logger.info("GET /profile — user=%d", user_id)
+    logger.info("GET /profile — user={}", user_id)
     svc = get_profile_service()
     dimensions = await svc.get_dimensions(user_id=user_id, db=session)
     base_info = _user_base_info_dict(current_user)
@@ -87,7 +87,7 @@ async def update_profile(
 ) -> HttpResponse:
     """更新个人中心展示的基础资料，不改变 onboarding 完成状态或偏好字段。"""
     user_id = get_current_user().id
-    logger.info("[ProfileAPI] 更新基础资料: user_id=%s", user_id)
+    logger.info("[ProfileAPI] 更新基础资料: user_id={}", user_id)
     result = await get_profile_service().save_profile_info(
         user_id=int(user_id),
         payload=payload.model_dump(),
@@ -124,13 +124,13 @@ async def update_profile_onboarding(
     payload_data = payload.model_dump()
     user_id = get_current_user().id
     svc = get_profile_service()
-    logger.info("[ProfileAPI] onboarding 基础信息提交: user_id=%s", user_id)
+    logger.info("[ProfileAPI] onboarding 基础信息提交: user_id={}", user_id)
     await svc.save_onboarding_info(
         user_id=user_id,
         payload=payload_data,
         db=session,
     )
-    logger.info("[ProfileAPI] onboarding 基础信息已即时落库: user_id=%s", user_id)
+    logger.info("[ProfileAPI] onboarding 基础信息已即时落库: user_id={}", user_id)
 
     return HttpResponse.success(data={
         "inference_ok": True,
@@ -275,7 +275,7 @@ async def get_recommendation(
     current_user = await session.get(User, user_id)
     if not current_user:
         return HttpResponse.error(code=404, message="用户不存在")
-    logger.info("GET /dashboard/recommendation — user=%d", user_id)
+    logger.info("GET /dashboard/recommendation — user={}", user_id)
     goal = _text(current_user.global_learning_goal)
     courses = current_user.courses or []
     primary_course = courses[0] if courses else ""
@@ -387,7 +387,7 @@ async def get_profile_radar(
 ) -> HttpResponse:
     """获取用户画像雷达图数据 — 各维度得分。"""
     user_id = get_current_user().id
-    logger.info("GET /dashboard/profile-radar — user=%d", user_id)
+    logger.info("GET /dashboard/profile-radar — user={}", user_id)
     score_dict = await _get_profile_score_json(session, user_id)
 
     scores = score_dict.get("dimension_scores") or {}
@@ -432,7 +432,7 @@ async def get_recent_resources(
 ) -> HttpResponse:
     """获取用户最近生成的独立教学资源，直接从 GeneratedResource.artifacts 解析。"""
     user_id = get_current_user().id
-    logger.info("GET /dashboard/recent-resources — user=%d limit=%d", user_id, limit)
+    logger.info("GET /dashboard/recent-resources — user={} limit={}", user_id, limit)
 
     records = list((await session.exec(
         select(GeneratedResource)
@@ -461,7 +461,7 @@ async def get_quick_actions(
 ) -> HttpResponse:
     """获取快捷操作和今日建议。"""
     user_id = get_current_user().id
-    logger.info("GET /dashboard/quick-actions — user=%d", user_id)
+    logger.info("GET /dashboard/quick-actions — user={}", user_id)
     recent_events = await _get_recent_events(session, user_id, limit=30)
 
     chat_session_count = (await session.exec(

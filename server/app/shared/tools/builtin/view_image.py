@@ -75,7 +75,7 @@ def build(workdir: Path) -> Tool:
                 image_url=data_url,
             )
         except Exception as exc:
-            logger.warning("[ViewImage] 分析失败: %s", exc)
+            logger.warning("[ViewImage] 分析失败: {}", exc)
             return {"text": f"图片分析失败: {exc}", "status": "failed"}
 
         return {"text": description, "status": "ok", "path": path}

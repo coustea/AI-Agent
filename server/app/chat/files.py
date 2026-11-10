@@ -76,7 +76,7 @@ def save_upload(
         safe_name = file_path.name
     file_path.write_bytes(content)
     logger.info(
-        "[ChatFiles] 附件已保存: user=%s session=%s file=%s type=%s size=%d",
+        "[ChatFiles] 附件已保存: user={} session={} file={} type={} size={}",
         username, session_id, safe_name, file_type, len(content),
     )
 
@@ -193,13 +193,13 @@ def read_uploaded_file_content(
         raise ValueError(f"不支持的文件类型: {suffix}")
 
     if not content or not content.strip():
-        logger.warning("[ChatFiles] 文档解析结果为空: path=%s", absolute_path)
+        logger.warning("[ChatFiles] 文档解析结果为空: path={}", absolute_path)
         return "文件内容为空"
     truncated = len(content) > max_content_chars
     if truncated:
         content = content[:max_content_chars] + "\n\n[...文档内容过长，已截断...]"
     logger.info(
-        "[ChatFiles] 文档已解析: file=%s suffix=%s chars=%d truncated=%s",
+        "[ChatFiles] 文档已解析: file={} suffix={} chars={} truncated={}",
         path.name, suffix, len(content), truncated,
     )
     return content

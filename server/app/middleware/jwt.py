@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextvars import ContextVar
+from typing import Any
 import jwt
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -10,9 +11,9 @@ from starlette.responses import JSONResponse, Response
 
 from app.auth.schemas import UserClaims
 from app.config import JWT_ALGO, JWT_SECRET
-from app.infra.logging import get_logger
+from app.infra.logging import get_logger, reset_trace_context, set_trace_context
 
-logger = get_logger(__name__)
+logger = get_logger("auth.jwt")
 
 # 全局协程安全的用户上下文变量
 current_user_ctx: ContextVar[UserClaims | None] = ContextVar("current_user", default=None)
@@ -50,7 +51,7 @@ def is_public_path(path: str) -> bool:
 class JWTMiddleware(BaseHTTPMiddleware):
     """全局 JWT 统一拦截与身份上下文注入中间件。"""
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Any) -> Response:
         """拦截请求，校验受保护端点并挂载全局 UserClaims 上下文。"""
         # CORS OPTIONS 预检请求直接放行
         if request.method == "OPTIONS":
@@ -77,20 +78,23 @@ class JWTMiddleware(BaseHTTPMiddleware):
                     )
                     claims = UserClaims.model_validate(payload)
                 except Exception as exc:
-                    logger.debug("[JWTMiddleware] Token 无效: path=%s reason=%s", request.url.path, exc)
+                    logger.debug("[JWTMiddleware] Token 无效: path={} reason={}", request.url.path, exc)
 
         # 3. 校验受保护路由：非白名单且无合法身份时，直接在中间件层阻断返回 401
         path = request.url.path
         if not is_public_path(path) and claims is None:
+            logger.warning("[JWTMiddleware] 拦截未登录或过期访问: path={}", path)
             return JSONResponse(
                 status_code=401,
                 content={"code": 401, "message": "未登录或登录已过期", "data": None},
             )
 
-        # 4. 将解析出的身份挂载至请求上下文与协程 ContextVar
+        # 4. 将解析出的身份挂载至请求上下文与协程 ContextVar，并同步到链路追踪日志
         request.state.user = claims
         token_ctx = current_user_ctx.set(claims)
+        trace_tokens = set_trace_context(user=claims.username) if claims else (None, None)
         try:
             return await call_next(request)
         finally:
             current_user_ctx.reset(token_ctx)
+            reset_trace_context(trace_tokens)

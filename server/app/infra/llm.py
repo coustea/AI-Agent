@@ -16,6 +16,7 @@ from dataclasses import dataclass
 import json
 from pathlib import Path
 import re
+import time
 from typing import Any, Literal, TypeVar
 
 from openai import AsyncOpenAI
@@ -295,8 +296,18 @@ class LLM:
             max_tokens=max_tokens,
         )
         payload.update(kwargs)
+        start = time.perf_counter()
         response = await client.chat.completions.create(**payload)
+        elapsed_ms = (time.perf_counter() - start) * 1000
         usage = getattr(response, "usage", None)
+        total_tokens = getattr(usage, "total_tokens", 0) if usage else 0
+        logger.debug(
+            "[LLM] 调用完成: provider={} model={} elapsed={:.2f}ms tokens={}",
+            self.spec.provider,
+            self.spec.model,
+            elapsed_ms,
+            total_tokens,
+        )
         return Message.from_openai(response.choices[0].message), usage
 
     async def text(
@@ -363,12 +374,12 @@ class LLM:
                 if validator is not None:
                     validator(payload)
                 if attempt:
-                    logger.info("[LLM] JSON 结构第 %d 次修复成功: %s", attempt, schema.__name__)
+                    logger.info("[LLM] JSON 结构第 {} 次修复成功: {}", attempt, schema.__name__)
                 return payload
             except Exception as exc:
                 last_error = f"{type(exc).__name__}: {exc}"
                 logger.warning(
-                    "[LLM] JSON 解析失败 (尝试 %d/%d): schema=%s error=%s",
+                    "[LLM] JSON 解析失败 (尝试 {}/{}): schema={} error={}",
                     attempt + 1,
                     _JSON_REPAIR_ATTEMPTS + 1,
                     schema.__name__,

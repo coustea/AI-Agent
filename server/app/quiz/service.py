@@ -532,12 +532,12 @@ class QuizReviewService:
             return self._parse_review_output(raw)
         except TimeoutError:
             logger.warning(
-                "[QuizReview] LLM timed out after %ss, using fallback",
+                "[QuizReview] LLM timed out after {}s, using fallback",
                 QUIZ_REVIEW_TIMEOUT_SECONDS,
             )
             return self._fallback_review(user_answer, standard_answer)
         except Exception as e:
-            logger.warning("[QuizReview] LLM failed: %s, using fallback", e)
+            logger.warning("[QuizReview] LLM failed: {}, using fallback", e)
             return self._fallback_review(user_answer, standard_answer)
 
     async def _llm_review_multi(self, items: list[dict]) -> dict[str, dict] | None:
@@ -587,7 +587,7 @@ class QuizReviewService:
                 raise ValueError(f"multi review missing ids: {missing}")
             return by_id
         except Exception as e:
-            logger.warning("[QuizReview] multi review failed, fallback per-item: %s", e)
+            logger.warning("[QuizReview] multi review failed, fallback per-item: {}", e)
             return None
 
     # 执行 AI 答案审查：调用 LLM 并返回评分与反馈
@@ -601,7 +601,7 @@ class QuizReviewService:
         knowledge_points: list[str] | None = None,
     ) -> dict:
         """执行 AI 答案审查 — 规则短路优先，否则调用轻量 LLM 评判。"""
-        logger.info("[QuizReview] 开始审查: question_type=%s", question_type)
+        logger.info("[QuizReview] 开始审查: question_type={}", question_type)
         rule_result = self._try_rule_review(
             question_type=question_type,
             standard_answer=standard_answer,
@@ -629,7 +629,7 @@ class QuizReviewService:
         if not items:
             return []
 
-        logger.info("[QuizReview] 批量审查开始: item_count=%s", len(items))
+        logger.info("[QuizReview] 批量审查开始: item_count={}", len(items))
         results: list[dict | None] = [None] * len(items)
         llm_jobs: list[tuple[int, dict]] = []
 

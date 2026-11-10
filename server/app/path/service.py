@@ -108,7 +108,7 @@ class PathService:
     # 创建学习路径记录，返回新路径 ID
     async def create_path(self, user_id: int, request: PathRequest) -> int:
         """创建学习路径任务，返回路径 ID。"""
-        logger.info("[PathService] 创建路径任务: user_id=%s goal=%s", user_id, request.goal[:50])
+        logger.info("[PathService] 创建路径任务: user_id={} goal={}", user_id, request.goal[:50])
         path = LearningPath(
             user_id=user_id,
             title=request.topic or "学习路径",
@@ -128,7 +128,7 @@ class PathService:
     # 持久化路径规划结果：校验、创建节点、更新路径状态
     async def _save_plan(self, path_id: int, user_id: int, plan: LearningPlan) -> None:
         """持久化路径规划结果到数据库。"""
-        logger.info("[PathService] 保存路径规划: path_id=%s nodes=%d", path_id, len(plan.nodes))
+        logger.info("[PathService] 保存路径规划: path_id={} nodes={}", path_id, len(plan.nodes))
         path = await self.session.get(LearningPath, path_id)
         if not path:
             return
@@ -172,7 +172,7 @@ class PathService:
     # 后台路径生成：调用 Agent 规划并推送 SSE 进度事件
     async def run_generation(self, path_id: int, user_id: int, request: PathRequest, run_id: str) -> None:
         """后台路径生成任务 — 调用 PathPlannerAgent 生成并持久化。"""
-        logger.info("[PathService] 开始后台路径生成: path_id=%s user_id=%s", path_id, user_id)
+        logger.info("[PathService] 开始后台路径生成: path_id={} user_id={}", path_id, user_id)
         events = PathEvents(user_id=user_id, path_id=path_id, run_id=run_id)
         await events.open()
 
@@ -288,7 +288,7 @@ class PathService:
     # 标记节点开始学习，记录学习事件
     async def start_learning(self, user_id: int, node_id: int) -> PathResponse:
         """标记节点开始学习（轻量，不生成教程）。"""
-        logger.info("[PathService] 开始节点学习: user_id=%s node_id=%s", user_id, node_id)
+        logger.info("[PathService] 开始节点学习: user_id={} node_id={}", user_id, node_id)
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
 
@@ -312,7 +312,7 @@ class PathService:
             )
         except Exception:
             logger.exception(
-                "Failed to record node_started event: user_id=%s node_id=%s",
+                "Failed to record node_started event: user_id={} node_id={}",
                 user_id,
                 node_id,
             )
@@ -326,7 +326,7 @@ class PathService:
         这防止了前端重复点击、页面刷新重入、或 PathPlanOverview + PathNodeStudy
         同时触发生成时产生重复教程。
         """
-        logger.info("[PathService] 生成节点教程: user_id=%s node_id=%s", user_id, node_id)
+        logger.info("[PathService] 生成节点教程: user_id={} node_id={}", user_id, node_id)
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
 
@@ -334,7 +334,7 @@ class PathService:
         async with lock:
             if node.tutorial_markdown:
                 logger.info(
-                    "[PathService] 节点已有教程，跳过生成，直接返回工作区: node_id=%d",
+                    "[PathService] 节点已有教程，跳过生成，直接返回工作区: node_id={}",
                     node.id,
                 )
                 return await self._build_workspace_response(node)
@@ -423,7 +423,7 @@ class PathService:
     ) -> AgentResult:
         """统一调用各服务的 generate_for_path 接口。"""
         logger.info(
-            "[PathService] 调用资源生成服务: type=%s node_id=%s node_title=%s",
+            "[PathService] 调用资源生成服务: type={} node_id={} node_title={}",
             resource_type, request.node_id, request.node_title,
         )
         services = self._resource_services
@@ -449,13 +449,13 @@ class PathService:
         """预创建资源生成服务实例。"""
         from app.path.ppt import PathPPTAdapter
         from app.path.cartoon import PathCartoonAdapter
-        from app.resource.agents import AGENT_REGISTRY
+        from app.path.text_resource import PathTextResourceAdapter
         return {
             "ppt": PathPPTAdapter(),
             "cartoon": PathCartoonAdapter(),
-            "mindmap": AGENT_REGISTRY["mindmap"](),
-            "code": AGENT_REGISTRY["code"](),
-            "reading": AGENT_REGISTRY["reading"](),
+            "mindmap": PathTextResourceAdapter("mindmap"),
+            "code": PathTextResourceAdapter("code"),
+            "reading": PathTextResourceAdapter("reading"),
         }
 
     # ── 测验 ────────────────────────────────────────────────────────────────
@@ -463,7 +463,7 @@ class PathService:
     # 获取最新一轮已有测验题目（不重新生成）
     async def get_node_questions(self, user_id: int, node_id: int) -> PathQuizRoundResponse | None:
         """获取最新一轮已有测验题目（不重新生成）。无题目时返回 None。"""
-        logger.info("[PathService] 获取已有测验题目: user_id=%s node_id=%s", user_id, node_id)
+        logger.info("[PathService] 获取已有测验题目: user_id={} node_id={}", user_id, node_id)
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
 
@@ -486,7 +486,7 @@ class PathService:
     # 生成节点测验题目，调用 LLM 生成 5 道选择题
     async def generate_node_questions(self, user_id: int, node_id: int) -> PathQuizRoundResponse:
         """生成节点测验题目 — 5 道选择题。"""
-        logger.info("[PathService] 生成测验题目: user_id=%s node_id=%s", user_id, node_id)
+        logger.info("[PathService] 生成测验题目: user_id={} node_id={}", user_id, node_id)
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
         self._ensure_node_quiz_ready(node)
@@ -515,7 +515,7 @@ class PathService:
     # 提交测验答案，评分并推进节点状态
     async def submit_node_quiz(self, user_id: int, node_id: int, payload: PathQuizSubmitRequest) -> PathQuizSubmitResponse:
         """提交测验答案并评分，决定节点下一步状态。"""
-        logger.info("[PathService] 提交测验: user_id=%s node_id=%s answers=%d", user_id, node_id, len(payload.answers))
+        logger.info("[PathService] 提交测验: user_id={} node_id={} answers={}", user_id, node_id, len(payload.answers))
         node = await self._must_get_node(user_id, node_id)
         self._ensure_node_accessible(node)
         self._ensure_node_quiz_ready(node)
@@ -763,8 +763,7 @@ class PathService:
             }
         except Exception as exc:
             logger.warning(
-                "[PathService] 学情装配异常，路径规划降级为空: "
-                "user_id=%s error=%s",
+                "[PathService] 学情装配异常，路径规划降级为空: user_id={} error={}",
                 user_id,
                 exc,
             )
@@ -777,8 +776,7 @@ class PathService:
             return ctx.to_prompt_text(ProfileScope.PATH)
         except Exception as exc:
             logger.warning(
-                "[PathService] 画像文本即时加载失败，教程生成降级无画像: "
-                "user_id=%s error=%s",
+                "[PathService] 画像文本即时加载失败，教程生成降级无画像: user_id={} error={}",
                 user_id,
                 exc,
             )
@@ -873,7 +871,7 @@ class PathService:
     ) -> None:
         """执行资源生成任务并更新任务记录。"""
         logger.info(
-            "[PathService] 开始执行资源生成任务: user_id=%s resource_id=%s run_id=%s",
+            "[PathService] 开始执行资源生成任务: user_id={} resource_id={} run_id={}",
             user_id, resource_id, run_id,
         )
         events = PathEvents(user_id=user_id, path_id=resource_id, run_id=run_id)
@@ -881,7 +879,7 @@ class PathService:
         resource = await self.session.get(PathNodeResource, resource_id)
         if resource is None or resource.user_id != user_id:
             logger.error(
-                "[PathService] 资源任务不存在或无权限: resource_id=%s user_id=%s",
+                "[PathService] 资源任务不存在或无权限: resource_id={} user_id={}",
                 resource_id, user_id,
             )
             await events.send(event="resource.failed", message="资源任务不存在", progress=0)
@@ -889,7 +887,7 @@ class PathService:
 
         resource_type = resource.resource_type
         logger.info(
-            "[PathService] 资源任务信息: resource_id=%s type=%s node_id=%s status=%s",
+            "[PathService] 资源任务信息: resource_id={} type={} node_id={} status={}",
             resource_id, resource_type, resource.node_id, resource.status,
         )
 
@@ -906,18 +904,18 @@ class PathService:
             if not node.tutorial_markdown:
                 raise ValueError("当前节点还没有教程，请先生成主教程再生成辅助资源")
             logger.info(
-                "[PathService] 构建资源生成请求: node_id=%s type=%s",
+                "[PathService] 构建资源生成请求: node_id={} type={}",
                 node.id, resource_type,
             )
             request = await self._build_resource_request(user_id, node)
             await events.send(event="resource.running", message="正在调用资源智能体", progress=35)
             logger.info(
-                "[PathService] 调用资源生成服务: type=%s node_title=%s",
+                "[PathService] 调用资源生成服务: type={} node_title={}",
                 resource_type, node.title,
             )
             result = await self._call_generate_for_path(resource_type, request)
             logger.info(
-                "[PathService] 资源生成完成: type=%s success=%s title=%s",
+                "[PathService] 资源生成完成: type={} success={} title={}",
                 resource_type, result.success, result.title,
             )
             await self._apply_resource_result(resource, result)
@@ -929,8 +927,8 @@ class PathService:
             )
         except Exception as exc:
             logger.error(
-                "[PathService] 路径节点资源任务异常: resource_id=%s type=%s error=%s",
-                resource_id, resource_type, exc, exc_info=True,
+                "[PathService] 路径节点资源任务异常: resource_id={} type={} error={}",
+                resource_id, resource_type, exc,
             )
             resource.status = "failed"
             resource.error_message = str(exc)
@@ -1106,7 +1104,7 @@ async def run_resource_generation_bg(
     run_id: str,
 ):
     logger.info(
-        "[PathBG] 开始后台资源生成: user_id=%s resource_id=%s run_id=%s",
+        "[PathBG] 开始后台资源生成: user_id={} resource_id={} run_id={}",
         user_id, resource_id, run_id,
     )
     try:
@@ -1118,13 +1116,13 @@ async def run_resource_generation_bg(
                 run_id=run_id,
             )
         logger.info(
-            "[PathBG] 后台资源生成完成: resource_id=%s run_id=%s",
+            "[PathBG] 后台资源生成完成: resource_id={} run_id={}",
             resource_id, run_id,
         )
     except Exception as exc:
         logger.error(
-            "[PathBG] 后台资源生成异常: resource_id=%s run_id=%s error=%s",
-            resource_id, run_id, exc, exc_info=True,
+            "[PathBG] 后台资源生成异常: resource_id={} run_id={} error={}",
+            resource_id, run_id, exc,
         )
 
 

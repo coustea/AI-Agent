@@ -72,8 +72,4 @@ class DimensionValue(BaseModel):
     evidence: list[str] = Field(default_factory=list)
 
 
-class ProfileDimensionsPatch(BaseModel):
-    """画像维度更新补丁。"""
-    dimensions_patch: dict[str, DimensionValue] = Field(default_factory=dict)
-
 

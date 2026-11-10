@@ -22,7 +22,7 @@ from app.evaluation.schemas import LearningEventCreate
 from app.evaluation.service import EvaluationService
 from app.infra.database import session_scope
 from app.infra.llm import LLM, Message
-from app.infra.logging import get_logger
+from app.infra.logging import get_logger, trace_scope
 from app.infra.types import now_utc
 from app.infra.models import GeneratedResource
 from app.resource.agent import run_resource_lead_agent
@@ -102,9 +102,16 @@ async def prepare_resource_run(
     if resource_id is None:
         raise RuntimeError("创建资源主记录失败")
 
-    hooks = ResourceRunHooks(run_id=run_id, resource_id=resource_id)
+    hooks = ResourceRunHooks(
+        run_id=run_id,
+        resource_id=resource_id,
+        target_resources=request.target_resources,
+        topic=request.topic,
+        learning_goal=request.learning_goal,
+        difficulty=request.difficulty,
+    )
     _active_runs[run_id] = hooks
-    logger.info("已注册活跃 Resource 运行 run_id=%s resource_id=%d", run_id, resource_id)
+    logger.info("已注册活跃 Resource 运行 run_id={} resource_id={}", run_id, resource_id)
     return run_id, resource_id
 
 
@@ -132,7 +139,7 @@ async def execute_resource_run(
     """后台任务：装配工具、启动主 Agent 循环、持久化产物并通知终态。"""
     hooks = _active_runs.get(run_id)
     if hooks is None:
-        logger.error("未找到对应的活跃运行上下文 run_id=%s", run_id)
+        logger.error("未找到对应的活跃运行上下文 run_id={}", run_id)
         return
 
     hooks.task = asyncio.current_task()
@@ -140,104 +147,119 @@ async def execute_resource_run(
     error = ""
     resource_id = hooks.state.resource_id
 
-    try:
-        if hooks.cancel_requested:
-            raise asyncio.CancelledError
+    with trace_scope(trace_id=f"res-{run_id[:8]}", user=user.username):
+        try:
+            if hooks.cancel_requested:
+                raise asyncio.CancelledError
 
-        async with asyncio.timeout(1800):
-            # 1. 准备阶段
-            hooks.set_phase("preparing", "正在准备教学方案设计与子智能体工作区")
+            async with asyncio.timeout(1800):
+                # 1. 准备阶段
+                hooks.set_phase("preparing", "正在准备教学方案设计与子智能体工作区")
 
-            targets_str = ", ".join(request.target_resources)
-            system_prompt = (
-                "你是多智能体课程规划总指挥与教学资源总设计师（Resource Lead Agent）。\n"
-                "你的核心使命是统筹协调并调度各个领域的专家子智能体工具，为学习者构建高质量、系统化且多模态融合的完整教学资源包。\n"
-                "【执行原则】:\n"
-                "1. 首先进行整体教学设计思考（输出你的教学规划与步骤安排），思考流会实时展示给用户；\n"
-                "2. 紧接着调用子智能体工具，逐项完成用户在【目标交付清单】中指定的全部资源制作；\n"
-                "3. 若包含课件 PPT 或教学视频，建议在核心讲义生成后进行调度，以确保多模态教材论据充实；\n"
-                "4. 当全部目标资源产出完毕后，输出一份温暖、精炼的导学建议与总结，完成交付。"
-            )
+                agent_name_map = {
+                    "content": "课程精讲讲义 (generate_lecture_content)",
+                    "mindmap": "思维导图知识体系 (generate_mindmap)",
+                    "quiz": "随堂测评练习 (generate_quiz)",
+                    "code": "实战工程代码 (generate_code)",
+                    "reading": "经典拓展文献 (generate_reading)",
+                    "ppt": "演示课件幻灯 (generate_ppt_deck)",
+                    "cartoon": "动画教学视频 (generate_teaching_video)",
+                }
+                targets_str = "、".join(agent_name_map.get(r, r) for r in request.target_resources)
+                system_prompt = (
+                    "你是多智能体课程规划总指挥与教学资源总设计师（Resource Lead Agent）。\n"
+                    "你的核心使命是统筹协调并调度各个领域的专家子智能体工具，为学习者构建高质量、系统化且多模态融合的专属教学资源包。\n"
+                    "【严格执行原则】:\n"
+                    f"1. 学习者本次唯一选定的目标交付清单为：【{targets_str}】（共 {len(request.target_resources)} 项）；\n"
+                    "2. 你的可用工具集已严格依据该清单配置，严禁调用任何未在清单中的未授权工具！\n"
+                    "3. 首先输出整体教学设计思考（你的思考规划将实时展示给用户）；\n"
+                    "4. 紧接着调度对应的子智能体工具，逐项完成清单中的全部资源制作；\n"
+                    "5. 若包含课件 PPT 或教学视频，建议在核心讲义生成后进行调度，以确保多模态教材论据充实；\n"
+                    "6. 当全部目标资源产出完毕后，必须输出一份温暖、精炼的导学建议与总结，完成终态交付。"
+                )
 
-            pref_items: list[str] = []
-            if "code" in request.target_resources:
-                pref_items.append(f"代码实操语言: {request.preferences.programming_language}")
-            if "cartoon" in request.target_resources:
-                pref_items.append(f"动画视频音色: {request.preferences.voice}")
-            pref_str = "，".join(pref_items) if pref_items else "标准学术规范"
+                pref_items: list[str] = []
+                if "code" in request.target_resources:
+                    pref_items.append(f"代码实操语言: {request.preferences.programming_language}")
+                if "cartoon" in request.target_resources:
+                    pref_items.append(f"动画视频音色: {request.preferences.voice}")
+                pref_str = "，".join(pref_items) if pref_items else "标准学术规范"
 
-            user_instruction = (
-                f"【学习主题】: {request.topic}\n"
-                f"【学习目标】: {request.learning_goal or f'全面系统掌握 {request.topic} 的核心要义'}\n"
-                f"【认知难度】: {request.difficulty}\n"
-                f"【目标交付清单】: {targets_str}\n"
-                f"【偏好设定】: {pref_str}\n\n"
-                "请开始统筹规划并调度子智能体生成全部所需的教学资源。"
-            )
+                user_instruction = (
+                    f"【学习主题】: {request.topic}\n"
+                    f"【学习目标】: {request.learning_goal or f'全面系统掌握 {request.topic} 的核心要义'}\n"
+                    f"【认知难度】: {request.difficulty}\n"
+                    f"【目标交付清单】: {targets_str}\n"
+                    f"【偏好设定】: {pref_str}\n\n"
+                    "请开始统筹规划并调度子智能体生成全部所需的教学资源。"
+                )
 
-            messages: list[Message] = [
-                Message(role="system", content=system_prompt),
-                Message(role="user", content=user_instruction),
-            ]
+                messages: list[Message] = [
+                    Message(role="system", content=system_prompt),
+                    Message(role="user", content=user_instruction),
+                ]
 
-            tools = build_resource_tools(
-                username=user.username,
-                resource_id=str(resource_id),
-                on_progress=hooks.on_subagent_progress,
-            )
-            registry = ToolRegistry(tools)
+                tools = build_resource_tools(
+                    request=request,
+                    username=user.username,
+                    resource_id=str(resource_id),
+                    on_progress=hooks.on_subagent_progress,
+                )
+                registry = ToolRegistry(tools)
 
-            # 2. 规划与生成阶段
-            hooks.set_phase("planning", "课程总指挥正在构思教学体系...")
-            result = await run_resource_lead_agent(
-                messages=messages,
-                llm=LLM(temperature=0.3),
-                registry=registry,
-                hooks=hooks,
-            )
-            logger.info("run_resource_lead_agent 执行完成 summary_len=%d", len(result.summary))
+                # 2. 规划与生成阶段
+                hooks.set_phase("planning", "课程总指挥正在构思教学体系...")
+                result = await run_resource_lead_agent(
+                    messages=messages,
+                    llm=LLM(temperature=0.3),
+                    registry=registry,
+                    hooks=hooks,
+                )
+                logger.info("run_resource_lead_agent 执行完成 summary_len={}", len(result.summary))
+                hooks.set_summary(result.summary)
+                status = "completed"
 
-    except asyncio.CancelledError:
-        status, error = "cancelled", "用户停止生成"
-    except TimeoutError:
-        status, error = "failed", "生成超时 (>1800s)"
-    except Exception as exc:
-        logger.exception("执行资源生成主循环异常: %s", exc)
-        status, error = "failed", str(exc)
+        except asyncio.CancelledError:
+            status, error = "cancelled", "用户停止生成"
+        except TimeoutError:
+            status, error = "failed", "生成超时 (>1800s)"
+        except Exception as exc:
+            logger.exception("执行资源生成主循环异常: {}", exc)
+            status, error = "failed", str(exc)
 
-    # 3. 持久化阶段
-    hooks.set_phase("saving", "正在保存教学资源包与产物明细...")
-    saved = False
-    try:
-        async with session_scope() as session:
-            record = await session.get(GeneratedResource, resource_id)
-            if record is not None:
-                record.status = status
-                record.steps = hooks.state.steps
-                record.artifacts = [a.model_dump(mode="json") for a in hooks.state.artifacts]
-                record.summary = hooks.state.summary
-                record.updated_at = now_utc()
-                session.add(record)
+        # 3. 持久化阶段
+        hooks.set_phase("saving", "正在保存教学资源包与产物明细...")
+        saved = False
+        try:
+            async with session_scope() as session:
+                record = await session.get(GeneratedResource, resource_id)
+                if record is not None:
+                    record.status = status
+                    record.steps = [s.model_dump(mode="json") for s in hooks.state.steps]
+                    record.artifacts = [a.model_dump(mode="json") for a in hooks.state.artifacts]
+                    record.summary = hooks.state.summary
+                    record.updated_at = now_utc()
+                    session.add(record)
 
-            await record_resource_generated_event(
-                session,
-                user_id=user.id,
-                resource_id=resource_id,
-                status=status,
-                topic=request.topic,
-                agent_types=[a.kind for a in hooks.state.artifacts],
-            )
+                await record_resource_generated_event(
+                    session,
+                    user_id=user.id,
+                    resource_id=resource_id,
+                    status=status,
+                    topic=request.topic,
+                    agent_types=[a.kind for a in hooks.state.artifacts],
+                )
 
-        saved = True
-    except Exception as exc:
-        logger.exception("持久化资源终态失败 resource_id=%d: %s", resource_id, exc)
-        status, error = "failed", f"持久化失败: {exc}"
-    finally:
-        hooks.result_state(status, error)
-        hooks.publish()
-        hooks.task = None
-        if saved:
-            _active_runs.pop(run_id, None)
+            saved = True
+        except Exception as exc:
+            logger.exception("持久化资源终态失败 resource_id={}: {}", resource_id, exc)
+            status, error = "failed", f"持久化失败: {exc}"
+        finally:
+            hooks.result_state(status, error)
+            hooks.publish()
+            hooks.task = None
+            if saved:
+                _active_runs.pop(run_id, None)
 
 
 async def get_run_state(user_id: int, run_id: str) -> ResourceRunState | None:
@@ -262,6 +284,14 @@ async def get_run_state(user_id: int, run_id: str) -> ResourceRunState | None:
         for a in (resource_row.artifacts or []):
             artifacts.append(ResourceArtifact.model_validate(a))
 
+        snapshot = resource_row.request_snapshot_json or {}
+        target_resources = snapshot.get("target_resources") or [
+            a.kind for a in artifacts
+        ]
+        topic = resource_row.topic or snapshot.get("topic") or ""
+        learning_goal = str(snapshot.get("learning_goal") or "")
+        difficulty = snapshot.get("difficulty") or "intermediate"
+
         state_status = "completed" if resource_row.status == "completed" else "failed"
         return ResourceRunState(
             run_id=resource_row.run_id,
@@ -272,6 +302,10 @@ async def get_run_state(user_id: int, run_id: str) -> ResourceRunState | None:
             steps=resource_row.steps or [],
             artifacts=artifacts,
             summary=resource_row.summary or "",
+            target_resources=target_resources,
+            topic=topic,
+            learning_goal=learning_goal,
+            difficulty=difficulty,
         )
 
 

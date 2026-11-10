@@ -60,7 +60,7 @@ async def record_node_started_event(
     )
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
     logger.info(
-        "[Path] node_started: user_id=%s path_id=%s node_id=%s topic=%s",
+        "[Path] node_started: user_id={} path_id={} node_id={} topic={}",
         user_id,
         path_id,
         node_id,
@@ -110,7 +110,7 @@ async def record_node_completed_event(
     )
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
     logger.info(
-        "[Path] node_completed: user_id=%s path_id=%s node_id=%s score=%s",
+        "[Path] node_completed: user_id={} path_id={} node_id={} score={}",
         user_id,
         path_id,
         node_id,
@@ -165,7 +165,7 @@ async def record_path_quiz_answered_event(
     )
     await EvaluationService().record_event(db, user_id=user_id, payload=payload)
     logger.info(
-        "[Path] quiz_answered: user_id=%s path_id=%s node_id=%s score=%s outcome=%s",
+        "[Path] quiz_answered: user_id={} path_id={} node_id={} score={} outcome={}",
         user_id,
         path_id,
         node_id,
