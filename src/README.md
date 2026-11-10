@@ -125,3 +125,10 @@ npm run preview
 ### 3. 开发代理与构建分包 (`vite.config.ts`)
 - **开发代理**：默认将 `/api` 与 `/static` 代理至 `http://127.0.0.1:9999`（可通过环境变量 `VITE_API_PROXY_TARGET` 覆盖）。
 - **代码分割 (`manualChunks`)**：自动将 ECharts (`vendor-charts`)、Markdown/KaTeX/Shiki/markmap (`vendor-renderers`)、Monaco Editor (`vendor-monaco`) 与基础框架 (`vendor`) 拆分为独立 chunk，优化首屏加载体积。
+
+### 4. 多智能体资源生成与沉浸式产物渲染 (`ResourceGenerator.vue` / `ArtifactRenderer.vue`)
+- **团队与参数自选编排**：支持在 UI 上勾选所需的 7 类智能体角色（课程讲义、思维导图、随堂测验、代码案例、拓展阅读、PPT 课件、教学动画），并实时配置主题、要求、受众、难度、首选编程语言、讲解语调与视频画幅。
+- **白名单精准协同**：前端载荷中的 `selected_agents` 强类型对齐后端，后端仅装配已选智能体的生产工具，杜绝未选 Agent 的无意义调用。
+- **SSE 全量快照状态流**：通过 SSE 订阅后端的 `ResourceRunState` 快照，界面动态展现主规划智能体思考与已装配子智能体的实时状态机（等待、运行中、已就绪、失败）及步骤耗时。
+- **多模态产物展示**：由 `ArtifactRenderer.vue` 提供沉浸式渲染，涵盖 Markmap 互动思维导图、在线即时作答评测卡片、Monaco 代码高亮演示、PPT 课件逐页在线翻阅与 HTML5 教学视频播放。
+

@@ -2,7 +2,12 @@
 
 Mentorly 是一个面向个性化学习场景的全栈 AI 学习平台。前端基于 **Vue 3 + TypeScript + Vite 7** 构建单页应用，后端基于 **FastAPI + SQLModel (SQLAlchemy Async) + MySQL** 提供异步 API，围绕 **AI 辅导对话、多模态资源生成、学习路径规划、题库与错题本、7 维学习者画像、学习评估** 构建完整学习闭环。
 
-> **编排说明**：系统采用自研轻量 Agent 运行时——`TutorAgent` 使用基于 `learn-claude-code` 思想的无状态 ReAct / 工具循环与 `RunHooks` 快照状态机；多模态资源生成使用自研 `asyncio` 四阶段 DAG 编排；学习路径规划使用两阶段工作流，**不依赖 LangGraph**。
+> **编排与系统设计说明**：
+> 1. **AI 辅导对话 (`chat`)**：采用基于 `learn-claude-code` 思想的无状态 ReAct / 工具循环与 `RunHooks` 快照状态机，流式推流 `event: run.state`。
+> 2. **多模态资源生成 (`resource`)**：采用标准 **Plan-and-Execute 主智能体 (`ResourceLeadAgent`) + 子智能体工具箱 (`ToolRegistry`)** 架构；严格按前端授权清单装配工具白名单并拦截未授权调用，同样通过 `event: run.state` 快照流实现实时多步骤进度与思考流式推送。
+> 3. **学习路径规划 (`path`)**：使用两阶段工作流（`research → strategist`），支持节点主教程、自测闯关与按需衍生专属辅助资源。
+> 4. **全链路 Loguru 日志体系**：基于 ContextVars 与 `TraceLoggingMiddleware` 实现全局请求追踪（`X-Request-ID`）、用户标记（`[user:xxx]`）、异步长任务隔离与结构化工具/技能入参及结果摘要，告别黑盒。
+> 5. **轻量自研架构**：全系统核心智能体流转均采用原生设计，**不依赖 LangGraph 运行时**。
 
 ---
 
@@ -28,7 +33,8 @@ Mentorly 是一个面向个性化学习场景的全栈 AI 学习平台。前端�
 
 - **AI 辅导对话 (`chat`)**：基于 `RunState` 全量快照的 SSE 实时流式输出，支持多模态附件（图片视觉理解与 PDF/Word/Excel/CSV/Markdown 文档解析）、强制 Mermaid 图解模式（`diagram_mode`）、PPT 课件生成与教学视频生成（`video_mode`），并实时展示推理与工具调用步骤时间线（含子智能体内部进度）。
 - **三层记忆与个性化档案 (`memory` & `profile`)**：融合会话未压缩近期历史、滚动会话摘要块（`ChatSessionSummaryBlock`）、7 类跨会话长期记忆（`ChatLongTermMemory`）、7 维学习者画像以及个性化教学指令档案（`AGENT.md`）与生效辅导策略。
-- **多模态资源生成 (`resource`)**：单次任务通过四阶段 DAG（`Planning → Base Agents → Aggregation Agents → Finalize`）协同生成课程讲解、思维导图、随堂练习题、代码实操、拓展阅读、可编辑 PPTX 课件与带中文配音字幕的 MP4 动画视频。
+- **多模态资源生成 (`resource`)**：基于 Plan-and-Execute 架构，由 `ResourceLeadAgent` 担任课程总规划师统筹全局，根据用户自定义勾选的目标智能体（`target_resources`）与强类型偏好（代码语言、动画音色）动态装配工具箱，协同交付课程讲义、思维导图、随堂测验、代码实操、拓展阅读、PPTX 课件与带配音字幕的 MP4 教学动画。
+- **全链路追踪与 Loguru 系统日志**：基于 ContextVars 协程级追踪与 `TraceLoggingMiddleware` 为所有 HTTP 请求注入 `X-Request-ID`，JWT 中间件打标用户身份，异步长任务自动隔离 Trace 作用域；提供工具调用参数易读提炼（`summarize_tool_args`）与结果摘要（`summarize_tool_result`），精确记录耗时，消除黑盒调用。
 - **学习路径规划 (`path`)**：通过 `research → strategist` 两阶段生成课程级阶段与节点（含自动修复与兜底路径），节点内形成「主教程生成 → 5 题闯关测验 → 按需衍生思维导图/代码/PPT/阅读/视频辅助资源」的学习闭环。
 - **题库与错题本 (`quiz`)**：覆盖 408 核心科目（数据结构与算法、计算机组成原理、计算机网络、操作系统），支持单选、多选、判断、填空与主观分析题；客观题与精确填空规则判分，主观题支持单题/批量并发 LLM 审阅；答错题目自动归集至错题本并累计错误次数。
 - **7 维学习者画像 (`profile`)**：知识层 3 维（知识基础、易错点偏好、知识缺口模式）+ 认知层 4 维（认知风格、学习目标导向、难度耐受度、自纠能力水平），支持 Onboarding 基线采集、事件驱动画像更新与首页能力雷达图。
@@ -45,7 +51,7 @@ flowchart LR
 
     API --> AUTH["auth / 认证与用户"]
     API --> CHAT["chat / TutorAgent"]
-    API --> RES["resource / 四阶段 DAG"]
+    API --> RES["resource / Plan-and-Execute 主智能体"]
     API --> PATH["path / 路径规划与节点学习"]
     API --> QUIZ["quiz / 题库与错题本"]
     API --> PROFILE["profile / 7 维画像与看板"]
@@ -119,14 +125,14 @@ flowchart LR
 │   ├── app/
 │   │   ├── auth/                     # 用户注册、登录、JWT 校验、个人资料与头像上传
 │   │   ├── chat/                     # TutorAgent 循环、RunHooks 快照流、上下文组装、三层记忆、沙箱与业务工具
-│   │   ├── resource/                 # 多模态资源生成四阶段 DAG 编排器、7 类 Agent 实现与确定性校验器
-│   │   ├── path/                     # 学习路径两阶段规划、节点教程/测验/辅助资源工作流与 SSE 事件流
+│   │   ├── resource/                 # Plan-and-Execute 资源生成 (ResourceLeadAgent + 7 类子工具按需白名单装配)
+│   │   ├── path/                     # 学习路径两阶段规划、节点教程/测验/辅助资源 (text_resource.py/ppt.py/cartoon.py)
 │   │   ├── profile/                  # 7 维学习者画像服务、Onboarding 落库、AGENT.md 生成与仪表盘推荐
 │   │   ├── quiz/                     # 题库分页检索、客观题判分、主观题单题/批量 LLM 审阅、错题本管理
 │   │   ├── evaluation/               # 学习事件/会话记录、事实聚合、周期评估报告生成与辅导策略更新
 │   │   ├── shared/                   # 跨模块 Agent 基础设施：ToolRegistry、沙箱工具、SkillLoader、PPTAgent、CartoonAgent
-│   │   ├── infra/                    # 数据库连接池、统一 SQLModel 表定义 (models.py)、LLM 客户端封装、日志与种子数据
-│   │   ├── middleware/               # 全局 JWT 认证中间件
+│   │   ├── infra/                    # 数据库连接池、统一 SQLModel 表定义 (models.py)、LLM 客户端封装、原生 Loguru 全链路日志
+│   │   ├── middleware/               # TraceLoggingMiddleware (请求追踪与耗时)、JWTMiddleware (身份解析)
 │   │   ├── config.py                 # YAML 配置加载与路径常量
 │   │   ├── exceptions.py             # 全局异常处理
 │   │   ├── response.py               # HttpResponse 统一响应信封
@@ -276,28 +282,35 @@ POST /api/v1/ai/chat/messages (ChatRequest)
 
 ### 2. 多模态资源生成 (`server/app/resource/`)
 
+重构后的多模态资源生成全面对齐 `chat` 模块快照流与 Plan-and-Execute 架构：
+
 ```text
-POST /api/v1/ai/resources
-  → 冻结请求快照 (request_snapshot_json) 并创建 GeneratedResource 任务记录
-  → Stage 1 [Planning]：PlanningAgent 生成结构化 ResourcePlan 并校验任务分配一致性
-  → Stage 2 [Base Agents]：按全局并发信号量 (Semaphore=3) 并行运行已选基础 Agent，
-      经过确定性结构校验 (validate_agent_result) 后落库，并提取 DownstreamContext 交接素材
-  → Stage 3 [Aggregation Agents]：并行运行已选聚合 Agent (ppt / cartoon)，消费上游 handoffs 素材
-  → Stage 4 [Finalize]：汇总任务终态 (completed / partial / failed) 并持久化广播完成事件
+POST /api/v1/ai/resources (ResourceGenerationRequest)
+  → 校验 target_resources（用户灵活选择的目标资源类型）与 preferences（代码语言、动画音色）
+  → prepare_resource_run：持久化创建 queued 状态任务记录与全局快照状态机 ResourceRunHooks
+  → BackgroundTasks 异步执行 execute_resource_run(run_id)：
+      1. 白名单装配：build_resource_tools 仅为用户选中的目标智能体构建执行工具 (ToolRegistry)
+      2. 独立链路追踪：绑定 trace_scope(f"res-{run_id[:8]}", username)
+      3. 主智能体调度：run_resource_lead_agent (ResourceLeadAgent) 作为课程总规划师启动循环：
+         - 输出全局教学设计与编排思考流 (thought_text)
+         - 依次发起并调度子智能体工具调用 (generate_lecture_content, generate_mindmap 等)
+         - 严格权限校验：尝试调用未授权工具直接拦截并拒绝执行，引导主 Agent 输出总结
+      4. 终态落库：保存 GeneratedResourceItem 明细、多模态产物与元数据，标记 completed
+      5. 快照广播：全生命周期通过 SSE (event: run.state) 实时向前端同步步骤进度与思考卡片
 ```
 
-| Agent ID | 名称 | 类型 | 产物格式 | 超时时间 | 说明 |
-|----------|------|------|----------|----------|------|
-| `content` | 课程内容 | `base` | `markdown` | 600s | 体系化课程精讲文档 |
-| `mindmap` | 思维导图 | `base` | `markdown` | 600s | 知识结构思维导图（前端 markmap 渲染） |
-| `quiz` | 练习题 | `base` | `json` | 600s | 按预设确定性蓝图（题型/难度槽位）生成的随堂习题 |
-| `code` | 代码示例 | `base` | `markdown` | 600s | 可运行代码实操案例与注释说明 |
-| `reading` | 拓展阅读 | `base` | `json` | 600s | 分层次的延伸阅读与资料推荐 |
-| `ppt` | PPT 文稿 | `aggregation` | `pptx` | 1800s | 消费基础 Agent 素材，调用 `PPTAgent` 生成可编辑课件 |
-| `cartoon` | 动画讲解 | `aggregation` | `mp4` | 1800s | 消费基础 Agent 素材，调用 `CartoonAgent` 生成配音字幕视频 |
+| 目标 Agent ID | 工具名称 | 产物格式 | 核心能力说明 |
+|---------------|----------|----------|--------------|
+| `content` | `generate_lecture_content` | `markdown` | 体系化深度课程讲义正文，包含清晰章节、原理图解与对比解析 |
+| `mindmap` | `generate_mindmap` | `markdown` | Mermaid 脑图格式结构化知识导图（前端自适应渲染） |
+| `quiz` | `generate_quiz` | `json` | 包含单选、多选与判断题的随堂自测试卷（严格符合试题数据契约） |
+| `code` | `generate_code` | `markdown` | 规范工程实战代码示例，严格对齐用户选定的编程语言与难度 |
+| `reading` | `generate_reading` | `json` | 权威官方文档与精选学术文献清单（含推荐理由与预估阅读时长） |
+| `ppt` | `generate_ppt_deck` | `pptx` | 调用 `PPTAgent`，经 PptxGenJS 编写、LibreOffice 编译与逐页视觉审查 |
+| `cartoon` | `generate_teaching_video` | `mp4` | 调用 `CartoonAgent`，经 Edge TTS 旁白合成、HyperFrames 时间轴审查与 1080p 严格渲染 |
 
-- 单次生成请求至少启用 **3 个 Agent**；若启用 `ppt` 或 `cartoon` 等聚合 Agent，则至少需要搭配 1 个基础 Agent 提供上游素材。
-- 所有进度事件先写入 `generated_resource_run_events` 表分配递增 `sequence` 序号，再推送至内存队列；SSE 端点支持 `after_sequence` 与 `Last-Event-ID` 断线续传。
+- **严格按需调度**：前端勾选哪些 Agent，后端仅装配哪些工具，未选中的工具无法被调用。
+- **快照流同步**：对齐 `chat` 模块的 `event: run.state` 实时推送完整状态快照（包含当前步骤、各子智能体实时百分比进度、思考流文本与多模态产物卡片）。
 
 ### 3. 学习路径规划与节点学习 (`server/app/path/`)
 
@@ -335,9 +348,15 @@ POST /api/v1/ai/path-plan
 | [`server/app/chat/memory.py`](file:///Users/apple/Code/Python/software/server/app/chat/memory.py) | 基于水位线的会话滚动摘要压缩（`compress_session`）与基于稳定信号/阈值的 7 类长期记忆更新（`update_long_term_memory`） |
 | [`server/app/chat/tools.py`](file:///Users/apple/Code/Python/software/server/app/chat/tools.py) | 装配 TutorAgent 的 12 个工具，并将 PPT / 视频子智能体的内部进度桥接到 `RunHooks.on_subagent_progress` |
 | [`server/app/chat/files.py`](file:///Users/apple/Code/Python/software/server/app/chat/files.py) | 聊天上传文件安全校验、沙箱路径解析及多格式文档（PDF/Docx/Excel/CSV/文本）内容提取 |
-| [`server/app/shared/tools/`](file:///Users/apple/Code/Python/software/server/app/shared/tools/__init__.py) | `Tool` / `ToolRegistry`、工作区越界防护 (`sandbox.py`)、`SkillLoader` (`skills.py`)、无状态子智能体 (`subagent.py`) 与 7 个内置沙箱工具 (`builtin/`) |
-| [`server/app/shared/ppt/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/ppt/agent.py) | `PPTAgent`：最多 60 步工具循环，PptxGenJS 编写 → LibreOffice/pdftoppm 渲染 → 视觉模型逐页审查修复（最多 3 轮） |
-| [`server/app/shared/cartoon/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/cartoon/agent.py) | `CartoonAgent`：最多 50 步工具循环，Edge TTS 合成中文旁白 → HyperFrames CLI 关键帧截图审查 → 渲染 1080p MP4 并经 `ffprobe` 核验 |
+| [`server/app/resource/agent.py`](file:///Users/apple/Code/Python/software/server/app/resource/agent.py) | `run_resource_lead_agent`：标准 Plan-and-Execute 循环，课程总规划师生成全局思路并调度子工具 |
+| [`server/app/resource/tools.py`](file:///Users/apple/Code/Python/software/server/app/resource/tools.py) | `build_resource_tools`：7 类教学资源 SubAgent 工具箱，根据用户请求白名单动态装配 |
+| [`server/app/resource/hooks.py`](file:///Users/apple/Code/Python/software/server/app/resource/hooks.py) | `ResourceRunHooks`：全生命周期资源生成快照容器与单槽位 SSE 通知队列 |
+| [`server/app/shared/tools/registry.py`](file:///Users/apple/Code/Python/software/server/app/shared/tools/registry.py) | `Tool` / `ToolRegistry`、`summarize_tool_args` (入参易读提炼) 与 `summarize_tool_result` (结果摘要) |
+| [`server/app/shared/tools/`](file:///Users/apple/Code/Python/software/server/app/shared/tools/__init__.py) | 工作区越界防护 (`sandbox.py`)、`SkillLoader` (`skills.py`) 与 7 个内置沙箱工具 (`builtin/`) |
+| [`server/app/shared/ppt/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/ppt/agent.py) | `PPTAgent`：最多 60 步工具循环，PptxGenJS 编写 → LibreOffice/pdftoppm 渲染 → 视觉模型逐页审查修复（最多 2 轮） |
+| [`server/app/shared/cartoon/agent.py`](file:///Users/apple/Code/Python/software/server/app/shared/cartoon/agent.py) | `CartoonAgent`：最多 60 步工具循环，Edge TTS (7.3.1+ Sec-MS-GEC v2) 合成中文旁白 → HyperFrames CLI 关键帧截图审查 → 渲染 1080p MP4 并经 `ffprobe` 核验 |
+| [`server/app/infra/logging.py`](file:///Users/apple/Code/Python/software/server/app/infra/logging.py) | 原生 Loguru 全链路日志基础设施、ContextVars 链路绑定（`trace_id`、`user`）、彩色控制台与双滚动文件 Sink |
+| [`server/app/middleware/trace.py`](file:///Users/apple/Code/Python/software/server/app/middleware/trace.py) | `TraceLoggingMiddleware`：全局 HTTP 请求入口追踪、`X-Request-ID` 生成与回显、毫秒级耗时度量 |
 
 **TutorAgent 可用工具（共 12 个）**
 
@@ -398,6 +417,7 @@ POST /api/v1/ai/path-plan
 | 知识库检索未生效 | 确认 `config.yaml` 中 `knowledge.enabled: true`，嵌入服务可访问，并已执行 `uv run python -m app.rag.build` |
 | PPT 生成失败或中文乱码 | 确认 `soffice`、`pdftoppm` 及中文字体已安装并在 `PATH` 中；macOS Headless 环境可参考 `server/skills/README.md` 字体说明 |
 | 教学视频生成失败 | 确认根目录已运行 `npm ci` 安装 `hyperframes`，且 Node.js ≥ 22、`ffmpeg`、`ffprobe` 可用 |
+| 语音合成报 403 握手失败 | 微软 Edge 语音端点启用了 `Sec-MS-GEC v2` 校验，请确认已升级至 `edge-tts >= 7.3.1`，执行 `cd server && uv sync` 即可 |
 | `pytest` 报 `httpx.InvalidURL: Invalid port ':1]'` | 本机环境变量 `NO_PROXY` / `no_proxy` 含 `[::1]` 等格式时触发，执行 `unset NO_PROXY no_proxy` 后重跑测试 |
 
 ---
