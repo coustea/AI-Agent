@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from pathlib import Path
 import re
 from typing import Any, Final
@@ -19,6 +18,7 @@ from app.config import (
     UPDATE_MIN_TOKENS,
 )
 from app.infra.database import session_scope
+from app.infra.logging import get_logger
 from app.infra.types import now_utc
 from app.infra.llm import HumanMessage, LLM, SystemMessage, load_prompt
 from app.infra.models import (
@@ -26,6 +26,8 @@ from app.infra.models import (
     ChatSession,
     User,
 )
+
+logger = get_logger(__name__)
 
 _PROMPTS_DIR = Path(__file__).resolve().parent / "prompts"
 _COMPRESSION_PROMPT = _PROMPTS_DIR / "compression.md"
@@ -145,7 +147,6 @@ async def compress_session(user_id: int, session_id: str) -> str | None:
 
         if chat_session.summary_token_count < COMPRESS_MIN_TOKENS and len(messages) < COMPRESS_MIN_MESSAGES:
             return None
-
         dialogue = [
             message for message in messages
             if message.role in {"user", "assistant"} and extract_content_text(message.content)
@@ -196,6 +197,10 @@ async def compress_session(user_id: int, session_id: str) -> str | None:
         )
         chat_session.updated_at = now_utc()
         db.add(chat_session)
+        logger.info(
+            "[ChatMemory] 会话压缩完成: session_id=%s 压缩 %d 条消息 摘要 %d 字符 剩余水位 %d tokens",
+            session_id, len(target), len(summary_markdown), chat_session.summary_token_count,
+        )
         return summary_markdown
 
 
@@ -244,6 +249,15 @@ async def update_long_term_memory(
             user.long_term_memory = result.memory_markdown
             user.updated_at = now_utc()
             db.add(user)
+            logger.info(
+                "[ChatMemory] 长期记忆已更新: user_id=%d confidence=%.2f reason=%s",
+                user_id, result.confidence, result.update_reason,
+            )
+        else:
+            logger.info(
+                "[ChatMemory] 长期记忆未更新: user_id=%d need_update=%s confidence=%.2f (阈值 %.2f)",
+                user_id, result.need_update, result.confidence, LTM_MIN_CONFIDENCE,
+            )
 
         latest_id = messages[-1].id
         remaining = (await db.exec(select(ChatMessage).where(

@@ -159,9 +159,14 @@ async def prepare_chat_run(inp: AgentInput) -> RunHooks:
         )
 
     for run_id in recovered:
+        logger.warning("[ChatService] 补写上次遗留的失败终态: run_id=%s", run_id)
         _active_runs.pop(run_id, None)
     hooks = RunHooks(inp.run_id)
     _active_runs[inp.run_id] = hooks
+    logger.info(
+        "[ChatService] 运行已登记: run_id=%s session=%s user=%d 附件=%d 首轮=%s",
+        inp.run_id, inp.session_id, inp.user_id, len(inp.attachments), inp.is_first_turn,
+    )
     return hooks
 
 
@@ -234,8 +239,10 @@ async def execute_chat_run(inp: AgentInput) -> None:
             new_messages = result.new_messages
     except asyncio.CancelledError:
         status, error = "cancelled", "用户停止生成"
+        logger.info("[ChatService] 运行被取消: run_id=%s", inp.run_id)
     except TimeoutError:
         status, error = "failed", "运行超过 1800 秒"
+        logger.error("[ChatService] 运行超时: run_id=%s", inp.run_id)
     except Exception as exc:
         logger.exception("[ChatService] 运行失败 run_id=%s", inp.run_id)
         status, error = "failed", str(exc)
@@ -258,6 +265,11 @@ async def execute_chat_run(inp: AgentInput) -> None:
         # 保存失败时保留内存终态，避免重连后又看到数据库中的 queued。
         if saved:
             _active_runs.pop(inp.run_id, None)
+            logger.info(
+                "[ChatService] 运行终态已落库: run_id=%s status=%s 回答=%d 字符 消息=%d 条 耗时=%dms",
+                inp.run_id, final_state.status, len(final_state.content),
+                len(new_messages), final_state.total_elapsed_ms,
+            )
 
     if hooks.state.status == "completed":
         post_jobs = [
@@ -273,7 +285,7 @@ async def execute_chat_run(inp: AgentInput) -> None:
             ))
         for result in await asyncio.gather(*post_jobs, return_exceptions=True):
             if isinstance(result, BaseException):
-                logger.warning("[ChatService] 回答后任务失败: %s", result)
+                logger.warning("[ChatService] 回答后任务失败: run_id=%s err=%s", inp.run_id, result)
 
 
 def get_active_run(run_id: str) -> RunHooks | None:
@@ -347,6 +359,8 @@ async def mark_interrupted_runs() -> int:
             run.phase_label = "服务重启，运行已中断"
             run.error = "服务重启，运行已中断"
             db.add(run)
+        if runs:
+            logger.warning("[ChatService] 启动清理: %d 条遗留运行标记为 interrupted: %s", len(runs), [r.id for r in runs])
         return len(runs)
 
 

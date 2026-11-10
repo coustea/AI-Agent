@@ -11,6 +11,9 @@ from typing import Any
 from app.chat.schemas import RunArtifact, RunPhase, RunState, RunStep, SourceItem, SubStep, TerminalStatus
 from app.chat.memory import LTM_CATEGORY_NAMES
 from app.infra.llm import Message, ToolCall
+from app.infra.logging import get_logger
+
+logger = get_logger(__name__)
 
 _MAX_PREVIEW_CHARS = 800
 
@@ -166,11 +169,17 @@ class RunHooks:
         step.elapsed_ms = int((time.time() - step.started_at) * 1000)
         step.output_preview = _truncate(output_text)
         step.error = _truncate(output_text, 300) if failed else ""
-        if not failed:
+        if failed:
+            logger.warning(
+                "[ChatHooks] 工具 %s 执行失败 (%dms): %s", call.name, step.elapsed_ms, step.error,
+            )
+        else:
+            logger.info("[ChatHooks] 工具 %s 执行成功 (%dms, 输出 %d 字符)", call.name, step.elapsed_ms, len(output_text))
             self.state.sources.extend(_extract_sources(raw))
             artifact = _extract_artifact(call.id, call.name, raw)
             if artifact is not None:
                 self.state.artifacts.append(artifact)
+                logger.info("[ChatHooks] 已捕获产物: kind=%s title=%s url=%s", artifact.kind, artifact.title, artifact.url)
         self.tool_step = None
         self.publish()
 

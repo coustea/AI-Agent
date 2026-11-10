@@ -15,6 +15,7 @@ from app.chat.schemas import AgentInput, AttachmentInput
 from app.config import CHAT_HISTORY_LIMIT
 from app.evaluation.guidance import get_effective_guidance_strategy
 from app.infra.database import session_scope
+from app.infra.logging import get_logger
 from app.infra.llm import (
     AIMessage,
     HumanMessage,
@@ -24,7 +25,9 @@ from app.infra.llm import (
     ToolMessage,
     load_prompt,
 )
-from app.infra.models import ChatMessage, ChatSession, User
+from app.infra.models import ChatMessage, ChatSession
+
+logger = get_logger(__name__)
 
 _PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "tutor_agent.md"
 
@@ -170,7 +173,8 @@ async def _load_guidance_strategy(user_id: int) -> dict[str, Any] | None:
     try:
         async with session_scope() as db:
             return await get_effective_guidance_strategy(db, user_id)
-    except Exception:
+    except Exception as exc:
+        logger.warning("[ChatContext] 读取辅导策略失败: user_id=%s err=%s", user_id, exc)
         return None
 
 
@@ -206,6 +210,11 @@ async def build_turn_messages(inp: AgentInput) -> list[Message]:
             exclude_message_id=inp.user_message_id or None,
         ),
         _load_guidance_strategy(inp.user_id),
+    )
+    logger.info(
+        "[ChatContext] 上下文装配完成: user_id=%d session=%s 历史=%d 条 摘要=%d 字符 策略=%s 附件=%d video_mode=%s diagram=%s",
+        inp.user_id, inp.session_id, len(history), len(session_summary),
+        bool(strategy), len(inp.attachments), inp.video_mode, inp.diagram_mode,
     )
 
     blocks: list[str] = [f"[当前日期]\n{datetime.now().date().isoformat()}"]

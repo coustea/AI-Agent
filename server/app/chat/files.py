@@ -10,7 +10,9 @@ from uuid import uuid4
 
 from app.chat.schemas import AttachmentInput
 from app.config import WORKPLACE_DIR, chat_upload_url, user_chat_uploads_dir
+from app.infra.logging import get_logger
 
+logger = get_logger(__name__)
 
 ALLOWED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 ALLOWED_DOC_EXT = {".pdf", ".docx", ".txt", ".md", ".log", ".xlsx", ".xls", ".csv", ".tsv"}
@@ -60,7 +62,6 @@ def save_upload(
 
     if len(content) > max_size:
         raise ValueError(f"文件大小超过限制（{max_size // (1024 * 1024)}MB）")
-
     uploads_dir = user_chat_uploads_dir(username, session_id)
     uploads_dir.mkdir(parents=True, exist_ok=True)
 
@@ -74,6 +75,10 @@ def save_upload(
         file_path = uploads_dir / f"{file_path.stem}-{uuid4().hex[:8]}{file_path.suffix}"
         safe_name = file_path.name
     file_path.write_bytes(content)
+    logger.info(
+        "[ChatFiles] 附件已保存: user=%s session=%s file=%s type=%s size=%d",
+        username, session_id, safe_name, file_type, len(content),
+    )
 
     return AttachmentInput(
         url=chat_upload_url(username, session_id, safe_name),
@@ -188,7 +193,13 @@ def read_uploaded_file_content(
         raise ValueError(f"不支持的文件类型: {suffix}")
 
     if not content or not content.strip():
+        logger.warning("[ChatFiles] 文档解析结果为空: path=%s", absolute_path)
         return "文件内容为空"
-    if len(content) > max_content_chars:
+    truncated = len(content) > max_content_chars
+    if truncated:
         content = content[:max_content_chars] + "\n\n[...文档内容过长，已截断...]"
+    logger.info(
+        "[ChatFiles] 文档已解析: file=%s suffix=%s chars=%d truncated=%s",
+        path.name, suffix, len(content), truncated,
+    )
     return content
