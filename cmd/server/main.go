@@ -13,12 +13,15 @@ import (
 	"github.com/subosito/gotenv"
 	"go.uber.org/zap"
 
-	"mentorly/internal/auth"
-	"mentorly/internal/config"
-	"mentorly/internal/dao"
-	"mentorly/internal/llm"
-	"mentorly/internal/logger"
-	"mentorly/internal/model"
+	"mentorly/internal/chat"
+	"mentorly/internal/identity"
+	"mentorly/internal/memory"
+	"mentorly/internal/platform/auth"
+	"mentorly/internal/platform/config"
+	"mentorly/internal/platform/llm"
+	"mentorly/internal/platform/logger"
+	"mentorly/internal/platform/store"
+
 	"mentorly/router"
 )
 
@@ -66,29 +69,27 @@ func main() {
 
 func run(cfg *config.Config) error {
 	// 4. 初始化 MySQL
-	db, err := dao.InitMySQL(cfg)
+	db, err := store.InitMySQL(cfg)
 	if err != nil {
 		return fmt.Errorf("初始化 MySQL 失败: %w", err)
 	}
-	defer func() { _ = dao.CloseMySQL(db) }()
+	defer func() { _ = store.CloseMySQL(db) }()
 	zap.L().Info("MySQL 初始化成功", zap.String("database", cfg.Database.MySQL.Database))
 
 	// 5. 自动迁移
-	if err := dao.AutoMigrate(db,
-		&model.User{},
-		&model.ChatSession{},
-		&model.ChatMessage{},
-		&model.UserMemory{},
+	// 各存储包自己声明拥有的表，main 不需要知道表结构细节。
+	if err := store.AutoMigrate(db,
+		append(append(identity.Schema(), chat.Schema()...), memory.Schema()...)...,
 	); err != nil {
 		return err
 	}
 
 	// 6. 初始化 Redis
-	rdb, err := dao.InitRedis(cfg)
+	rdb, err := store.InitRedis(cfg)
 	if err != nil {
 		return fmt.Errorf("初始化 Redis 失败: %w", err)
 	}
-	defer func() { _ = dao.CloseRedis(rdb) }()
+	defer func() { _ = store.CloseRedis(rdb) }()
 	zap.L().Info("Redis 初始化成功", zap.String("addr", cfg.Database.Redis.Addr))
 
 	// 7. 初始化 eino ChatModel。未配置 key 时返回 nil，服务照常启动。

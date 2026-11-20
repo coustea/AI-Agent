@@ -38,8 +38,9 @@ type Builder struct {
 }
 
 // NewBuilder 构造 Builder。
-// tools 为静态工具集（remember 等），文件工具由 filesystem 中间件动态注册。
-func NewBuilder(cm model.ToolCallingChatModel, skillsDir string, tools ...tool.BaseTool) *Builder {
+// tools 为静态工具集，由 capability.Registry 提供；
+// 文件工具由 filesystem 中间件动态注册。
+func NewBuilder(cm model.ToolCallingChatModel, skillsDir string, tools []tool.BaseTool) *Builder {
 	return &Builder{cm: cm, skillsDir: skillsDir, tools: tools}
 }
 
@@ -104,13 +105,8 @@ func (b *Builder) Build(ctx context.Context, spec Spec) (*adk.Runner, error) {
 	}
 	handlers = append(handlers, redMW)
 
-	// 过滤 nil 工具：NewRememberTool 在未启用记忆时返回 nil。
-	tools := make([]tool.BaseTool, 0, len(b.tools))
-	for _, t := range b.tools {
-		if t != nil {
-			tools = append(tools, t)
-		}
-	}
+	// 工具已由 capability.Registry 过滤过 nil，这里直接使用。
+	tools := b.tools
 
 	ag, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 		Name:        "mentorly_tutor",

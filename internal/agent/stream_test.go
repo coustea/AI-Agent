@@ -7,6 +7,8 @@ import (
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
+
+	"mentorly/internal/dialogue"
 )
 
 // fakeAgent 实现 adk.Agent 的最小接口，按脚本产出事件流。
@@ -286,11 +288,11 @@ func TestStreamSinkError(t *testing.T) {
 
 // TestToSchemaMessages 验证历史消息转换与空内容过滤。
 func TestToSchemaMessages(t *testing.T) {
-	msgs := []Message{
-		{Role: "user", Content: "问题"},
-		{Role: "assistant", Content: ""}, // 空内容应被过滤
-		{Role: "assistant", Content: "回答"},
-		{Role: "user", Content: "   "}, // 纯空白也应被过滤
+	msgs := []dialogue.Message{
+		{Role: dialogue.RoleUser, Content: "问题"},
+		{Role: dialogue.RoleAssistant, Content: ""}, // 空内容应被过滤
+		{Role: dialogue.RoleAssistant, Content: "回答"},
+		{Role: dialogue.RoleUser, Content: "   "}, // 纯空白也应被过滤
 	}
 
 	out := ToSchemaMessages(msgs)

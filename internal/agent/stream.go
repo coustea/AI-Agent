@@ -9,6 +9,8 @@ import (
 
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/schema"
+
+	"mentorly/internal/dialogue"
 )
 
 // ErrEmptyAnswer 表示模型没有产出任何可用回答。
@@ -230,25 +232,18 @@ func emit(sink func(Chunk) error, c Chunk) error {
 	return sink(c)
 }
 
-// Message 是 agent 包接受的历史消息（与 memory.Message 结构一致）。
-// 独立定义避免 agent 反向依赖 memory，两边在 harness 层转换。
-type Message struct {
-	ID      uint64
-	Role    string
-	Content string
-	Status  string
-}
-
-// ToSchemaMessages 把历史消息转换成 eino schema 消息。
-// 放在 agent 包是因为这是「喂给模型」的最后一步，memory 包不应依赖 schema。
-func ToSchemaMessages(msgs []Message) []*schema.Message {
+// ToSchemaMessages 把领域消息转换成 eino schema 消息。
+//
+// 放在 agent 包是因为这是「喂给模型」的最后一步：
+// dialogue 包不应依赖 eino，而 eino 的 schema 不该泄漏到其它层。
+func ToSchemaMessages(msgs []dialogue.Message) []*schema.Message {
 	out := make([]*schema.Message, 0, len(msgs)+1)
 	for _, m := range msgs {
 		if strings.TrimSpace(m.Content) == "" {
 			continue
 		}
 		role := schema.User
-		if m.Role == "assistant" {
+		if m.Role == dialogue.RoleAssistant {
 			role = schema.Assistant
 		}
 		out = append(out, &schema.Message{Role: role, Content: m.Content})

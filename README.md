@@ -17,27 +17,66 @@ Go + Gin + GORM + eino ADK + MySQL + Redis 的学习辅导后端。
 | 模型 | `eino-ext/components/model/openai` | v0.1.13 |
 | 鉴权 | `golang-jwt/jwt/v5` + `x/crypto/bcrypt` | v5.3.1 |
 
-## 架构：Agent Harness
+## 架构：以「一轮对话」为中心
 
-把「无状态 ReAct Agent」和「围绕它的确定性运行时外壳」分离：
-会话锁、落库、记忆提取、阈值压缩、上下文重建、超时取消、终态收口全部由
-Harness 编排，Agent 本身只负责推理与工具调用。
+本项目不采用 controller → service → dao 的传统后端分层。
+系统的设计单元是**一轮对话（turn）**，不是任何一层：Agent 围绕它运转，
+存储、窗口裁剪、记忆提取、HTTP 都只是这一轮对话的不同视角。
 
 ```
-HTTP POST /chat/sessions/:id/messages
+HTTP / CLI / 测试（任意驱动方）
   │
-  ├─ 1. Acquire & Persist User     Redis 会话锁 · 归属校验 · 落库 user 消息
-  │                                （必须在 SSE 头部之前完成，404/409 才能是标准 JSON）
+  ▼
+internal/turn          编排者：一轮对话的完整生命周期
+  ├─ 1. Acquire        Redis 会话锁 · 归属校验 · 落库 user 消息
+  │                    （必须在流式响应头之前完成，404/409 才能是标准 JSON）
+  ├─ 2. Prepare        记忆提取 → 上下文压缩 → 重建窗口与 Prompt
+  ├─ 3. Run            构建 Agent · 流式执行 · 推送 Event
+  └─ 4. Commit         按终态落库 · 回写用量 · 首轮异步标题
   │
-  ├─ 2. Pre-Run（调用 Agent 之前）
-  │      ├─ Consolidator   未提取轮数/tokens 达阈值 → 整合长期记忆 Markdown
-  │      ├─ Summarizer     未压缩消息达阈值 → 滚动压缩旧对话 → 写回 summary
-  │      └─ Rebuild        读最新 summary + 记忆 + 剩余历史 → 预算截断 → 组装 Prompt
-  │
-  ├─ 3. Build & Run Agent  按本轮上下文创建 adk.ChatModelAgent + Runner，流式推 SSE
-  │
-  └─ 4. Commit             WithoutCancel 落库 assistant · 释放锁 · 首轮异步生成标题
+  ▼  Event{Delta|Reset|Done|Error}
+internal/httpapi       唯一知道传输格式的地方：把 Event 编码成 SSE
 ```
+
+关键设计：**编排核心不产生 `sse.Frame`**。
+旧实现里 harness 直接构造 SSE 帧，等于让核心逻辑绑定一种传输格式；
+现在它只发出领域事件，HTTP、CLI 或测试可以各自解释。
+
+### 分层与依赖方向
+
+```
+        httpapi  ─────────┐
+                          ▼
+        turn  ──►  memory / window / agent / capability
+          │              │
+          └──────►  chat / dialogue / identity
+                          │
+                          ▼
+                   platform/store
+```
+
+规则只有三条：
+
+1. **依赖只向下**。`dialogue` 不依赖任何框架，任何层都可以引用它。
+2. **存储细节不上浮**。GORM 行类型只存在于各自的存储包内，
+   对外一律暴露 `dialogue` 的领域类型，边界处只转换一次。
+3. **不受框架污染的包不引入框架**。`window` 是纯计算，`agent` 不碰 DB/Gin，
+   `memory` 只面对消息切片和最小 LLM 接口——因此都能被单测完全覆盖。
+
+### 包职责
+
+| 包 | 职责 | 依赖 |
+| --- | --- | --- |
+| `dialogue` | 领域模型：消息、会话、状态、轮数 | 无 |
+| `window` | 上下文窗口裁剪与 token 估算（纯计算） | dialogue |
+| `agent` | 无状态 ADK Agent 构建与流式消费 | dialogue |
+| `capability` | 能力（工具）注册表 | agent, memory |
+| `memory` | 长期记忆提取、会话摘要压缩、标题生成 | dialogue, window, chat |
+| `chat` | 会话与消息存储、会话管理面 | dialogue |
+| `turn` | **一轮对话的编排者** | 上述全部 |
+| `identity` | 用户身份、注册登录、账号状态 | — |
+| `platform/*` | 配置、日志、LLM、鉴权、存储连接 | — |
+| `httpapi` | 参数绑定、事件编码、状态码映射 | turn, chat, memory, identity |
 
 ### 压缩基线的计算陷阱
 
@@ -58,40 +97,64 @@ eino 会在真实 prompt 里注入**工具 Schema 与技能清单**，这部分�
 
 顺序不可交换：先提取记忆，才能在压缩丢弃原文前保住长期信息。
 
+### 新增一个工具只需一行
+
+```go
+caps := capability.NewRegistry(
+    capability.Memory(adapters),   // remember：主动记录学生信息
+    // 新增能力在此追加，未启用时返回 nil 会被自动跳过
+)
+agentBuilder := agent.NewBuilder(model, skillsDir, caps.Tools())
+```
+
+旧实现里工具在 router 硬编码后作为可变参数传下去，加一个要改三处且无法按环境开关。
+
 ## 目录结构
 
 ```
 internal/
-  harness/               # 确定性外壳：PrepareTurn / RunTurn / 异步标题
-    harness.go
-    title.go
-  memory/                # Pre-Run 记忆与压缩策略（不依赖 eino agent）
-    token.go             # TokenCounter + 本地估算器
-    store.go             # Markdown 读写、去围栏、空小节剔除、待整合小节
+  dialogue/              # 领域模型：Message / Session / 状态常量
+  turn/                  # ★ 编排者：Prepare / Run / Commit
+    turn.go              # 事件、状态、对外错误
+    orchestrator.go      # 四阶段编排 + 三步上下文管线
+    lock.go              # store.Lock → turn.Lock 适配
+  window/                # 纯计算：预算裁剪 + 压缩窗口切分 + token 估算
+  memory/                # 长期记忆与会话摘要（跨轮、跨会话）
     consolidator.go      # 阈值判断 + 长期记忆整合
-    summarizer.go        # 阈值判断 + 滚动压缩 + 纯函数 selectWindow
-    context.go           # 三步管线 + 动态 Prompt 拼装 + 预算截断
+    digest.go            # 阈值判断 + 滚动压缩 + Prompt 拼装
+    store.go             # Markdown 读写、去围栏、空小节剔除、待整合小节
+    adapter.go           # chat/memory 仓储 → Transcript/Store/Recorder
+    service.go           # 记忆管理面 + 异步标题生成
     prompts/{summarize,consolidate}.md
-  agent/                 # 无状态 Agent 构建与运行（不碰 DB/Redis/Gin）
-    scope.go             # Scope 在 ctx 中的存取
-    prompt.go            # 静态 prompt(embed) + 条件拼装
-    sandbox.go           # filesystem.Backend 实现，三挂载点 + 越界防护
+  chat/                  # 会话与消息存储 + 会话管理面
+    model.go             # sessionRow / messageRow / MessageMeta
+    repo.go              # 仓储（对外只返回 dialogue 类型）
+    service.go           # 创建/列表/重命名/删除/历史分页
+  identity/              # 用户、注册登录、账号状态回查
+  capability/            # 能力注册表
+  agent/                 # 无状态 Agent（不碰 DB/Redis/Gin/SSE）
+    prompt.go            # 静态底座(embed) + 唯一的 Prompt 拼装实现
+    sandbox.go           # filesystem.Backend，三挂载点 + 越界防护
     tools.go             # remember 工具
     builder.go           # 按轮创建 adk.ChatModelAgent + Runner
-    stream.go            # 流式消费、reset 处理、用量捕获
+    stream.go            # 流式消费、reset、用量捕获
     prompts/tutor.md
-  services/chat.go       # 会话 CRUD、历史分页、记忆管理、调用 Harness
-  dao/{chat,memory,lock,session_store}.go
-  model/chat.go          # chat_sessions / chat_messages / user_memories
-  dto/chat.go  handlers/chat.go
+  httpapi/               # 唯一知道 HTTP/SSE 的地方
+    chat.go              # 会话接口 + SSE 编码
+    convert.go           # 领域类型 → dto
+    dto/
+  platform/
+    config/ logger/ llm/ auth/
+    store/               # MySQL/Redis 连接与分布式锁
+  middleware/            # 请求 ID、访问日志、恢复、CORS
 pkg/sse/sse.go           # SSE 帧与心跳
 skills/modern-diagram/   # Mermaid 绘图技能
 scripts/fake_llm.py      # 本地假模型，用于离线端到端验证
 ```
 
-**依赖方向**：`handlers → services → harness → {memory, agent, dao}`。
-`agent` 不依赖 `memory`/`dao`/`gin`，只通过 `MemoryAppender` 小接口拿记忆能力，
-装配在 `router` 层完成。
+**依赖方向**：`httpapi → turn → {memory, window, agent, capability} → {chat, dialogue}`。
+`agent` 不依赖 `memory`/`chat`/`gin`/`sse`；`turn` 只发出领域事件，
+`httpapi` 才把它编码成 SSE。所有装配集中在 `router`。
 
 ## 配置
 
@@ -276,17 +339,19 @@ LLM_API_KEY=test LLM_BASE_URL=http://127.0.0.1:18081/v1 LLM_MODEL=fake ./bin/men
 
 ```bash
 gofmt -l . && go vet ./... && go build ./...
-go test ./internal/agent/... ./internal/memory/... ./internal/harness/... ./pkg/sse/... -race
+go test ./... -race
 ```
 
 单测不依赖数据库与网络：
 
-- `memory`：预算截断（交替规则、user 开头、跳过 failed）、`selectWindow`、估算器、
-  Markdown 结构校验（去围栏/缺标题保护/空小节剔除）
+- `window`：预算裁剪（交替规则、user 开头、跳过 failed、预算紧张时回补 user 锚点）、
+  压缩窗口切分（按整轮截断、cutoff 正确性）、token 估算器
+- `memory`：Markdown 结构校验（去围栏/缺标题保护/空小节剔除/待整合小节）
 - `agent`：沙箱 `../` 逃逸、符号链接逃逸、`/skills` 只读、读写落盘；
   用伪造 `adk.Agent` 验证 reset、最终回答提取、用量捕获、ctx 取消；prompt 条件拼装
-- `harness`：内存 mock 验证 Pre-Run 顺序（先提取 → 再压缩 → 重建）、
-  压缩失败降级为预算截断、即将压缩时补跑未提取消息
+- `turn`：**终态判定**（ctx 已取消但 streamErr 为 nil 必须记 cancelled，
+  而非 completed——这个 bug 就是被这条测试抓出来的）、错误翻译、内部错误不泄露
+- `capability`：nil 能力自动跳过、nil 注册表安全、能力名正确
 - `sse`：`httptest` 验证帧格式、心跳、断连回调
 - `llm`：BaseURL 归一化（含 `/chat/completions` 拒绝）
 
