@@ -43,13 +43,28 @@ test: ## 运行测试
 .PHONY: check
 check: fmt vet build ## 格式化 + 检查 + 编译
 
-.PHONY: fake-llm
-fake-llm: ## 启动本地假模型（离线验证用，端口 18081）
-	python3 scripts/fake_llm.py 18081
+.PHONY: migrate
+migrate: ## 执行数据库迁移（保留现有用户数据）
+	@mysql -u$${MYSQL_USERNAME:-root} -p$${MYSQL_PASSWORD} -D $${MYSQL_DATABASE:-mentorly} < migrations/001_agent_first.sql
+
+.PHONY: backup
+backup: ## 备份数据库到 /tmp
+	@mkdir -p /tmp/mentorly-backup
+	@mysqldump -u$${MYSQL_USERNAME:-root} -p$${MYSQL_PASSWORD} --single-transaction \
+		$${MYSQL_DATABASE:-mentorly} > /tmp/mentorly-backup/$$(date +%Y%m%d-%H%M%S).sql
+	@echo "备份完成: /tmp/mentorly-backup/"
+
+.PHONY: doctor
+doctor: ## 检查运行时依赖（ffmpeg / 字体 / 数据库）
+	@echo "--- ffmpeg ---"; command -v ffmpeg || echo "缺失（视频能力不可用）"
+	@echo "--- 字体 ---"; ls /Library/Fonts/Arial\ Unicode.ttf 2>/dev/null || \
+		ls /System/Library/Fonts/Supplemental/Songti.ttc 2>/dev/null || echo "缺失（视频能力不可用）"
+	@echo "--- MySQL ---"; command -v mysql >/dev/null && echo "ok" || echo "缺失"
 
 .PHONY: clean
 clean: ## 清理构建产物与日志
 	rm -rf bin logs
+	@echo "注意：workspace/ 下的会话文件与产物未删除，如需清理请手动执行"
 
 .PHONY: db
 db: ## 创建本地数据库（需 mysql 客户端与 MySQL 凭据）

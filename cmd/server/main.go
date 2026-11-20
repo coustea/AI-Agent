@@ -13,12 +13,16 @@ import (
 	"github.com/subosito/gotenv"
 	"go.uber.org/zap"
 
-	"mentorly/internal/api"
+	"mentorly/internal/agents/tutor"
+	"mentorly/internal/app"
 	"mentorly/internal/auth"
-	"mentorly/internal/chat"
+	"mentorly/internal/capabilities/artifacts"
+	"mentorly/internal/capabilities/attachments"
+	"mentorly/internal/capabilities/memory"
 	"mentorly/internal/config"
 	"mentorly/internal/infra"
 	"mentorly/internal/log"
+	"mentorly/internal/runtime"
 )
 
 func main() {
@@ -34,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 3. 初始化日志。注意：日志组件依赖配置，所以必须放在配置加载之后。
+	// 3. 初始化日志。日志依赖配置，因此必须在配置之后。
 	lg, closer, err := log.Init(log.Options{
 		Dir:       cfg.Log.Dir,
 		Level:     cfg.Log.Level,
@@ -52,97 +56,114 @@ func main() {
 	}()
 	zap.ReplaceGlobals(lg)
 
-	zap.L().Info("配置加载成功",
+	lg.Info("配置加载成功",
 		zap.String("app", cfg.APP.Name),
 		zap.String("env", cfg.APP.Env),
 	)
 
-	if err := run(cfg); err != nil {
-		zap.L().Error("服务异常退出", zap.Error(err))
+	if err := run(cfg, lg); err != nil {
+		lg.Error("服务运行失败", zap.Error(err))
+		_ = lg.Sync()
 		os.Exit(1)
 	}
 }
 
-func run(cfg *config.Config) error {
-	// 4. 初始化 MySQL
-	db, err := infra.InitMySQL(cfg)
+func run(cfg *config.Config, lg *zap.Logger) error {
+	// 4. 连接 MySQL（硬依赖）
+	db, err := infra.InitMySQL(cfg.Database.MySQL, lg)
 	if err != nil {
-		return fmt.Errorf("初始化 MySQL 失败: %w", err)
+		return err
 	}
 	defer func() { _ = infra.CloseMySQL(db) }()
-	zap.L().Info("MySQL 初始化成功", zap.String("database", cfg.Database.MySQL.Database))
 
-	// 5. 自动迁移。各模块自己声明拥有的表，main 不需要知道表结构细节。
-	if err := infra.AutoMigrate(db, append(auth.Schema(), chat.Schema()...)...); err != nil {
+	// 5. 连接 Redis（软依赖，失败降级为 nil）
+	rdb, err := infra.InitRedis(cfg.Database.Redis, lg)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = infra.CloseRedis(rdb) }()
+
+	// 6. 建表。破坏性变更不在此处执行，见 migrations/。
+	models := []any{}
+	models = append(models, auth.Schema()...)
+	models = append(models, tutor.NewStore(db).Schema()...)
+	models = append(models, memory.NewStore(db).Schema()...)
+	models = append(models, (&attachments.Store{}).Schema()...)
+	models = append(models, (&artifacts.Store{}).Schema()...)
+
+	if err := infra.AutoMigrate(db, models, lg); err != nil {
 		return err
 	}
 
-	// 6. 初始化 Redis
-	rdb, err := infra.InitRedis(cfg)
+	// 7. 装配模型。未配置 api_key 时返回 nil，AI 能力关闭但不阻塞启动。
+	cm, err := runtime.NewModel(context.Background(), runtime.ModelConfig{
+		Provider: cfg.LLM.Provider,
+		Model:    cfg.LLM.Model,
+		BaseURL:  cfg.LLM.BaseURL,
+		APIKey:   cfg.LLM.APIKey,
+		MaxToken: cfg.LLM.MaxToken,
+		Timeout:  int64(cfg.LLM.Timeout.Seconds()),
+		Extra:    cfg.LLM.ExtraFields,
+		Vision:   cfg.LLM.Vision,
+	})
 	if err != nil {
-		return fmt.Errorf("初始化 Redis 失败: %w", err)
-	}
-	defer func() { _ = infra.CloseRedis(rdb) }()
-	zap.L().Info("Redis 初始化成功", zap.String("addr", cfg.Database.Redis.Addr))
-
-	// 7. 初始化 eino ChatModel。未配置 key 时返回 nil，服务照常启动。
-	ctx := context.Background()
-	cm, err := infra.NewModel(ctx, cfg.LLM)
-	if err != nil {
-		return fmt.Errorf("初始化 LLM 失败: %w", err)
+		return fmt.Errorf("初始化模型失败: %w", err)
 	}
 
-	// 8. 组装路由
-	app := api.New(api.Deps{
+	// 8. 装配应用
+	application, err := app.New(context.Background(), app.Deps{
 		Config: cfg,
 		DB:     db,
-		Redis:  rdb,
 		JWT:    auth.New(cfg.JWT),
 		LLM:    cm,
-		Log:    zap.L(),
+		Log:    lg,
 	})
-
-	// 退出时等待在途的标题生成任务，最多 10 秒。
-	if app.Chat != nil {
-		defer app.Chat.Close(10 * time.Second)
+	if err != nil {
+		return err
 	}
 
-	// 9. 启动 HTTP 服务，支持优雅关闭
-	addr := cfg.APP.Addr()
+	// 9. 启动 HTTP 服务
 	srv := &http.Server{
-		Addr:              addr,
-		Handler:           app.Engine,
+		Addr:              cfg.APP.Addr(),
+		Handler:           application.Engine,
 		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      90 * time.Second,
-		IdleTimeout:       120 * time.Second,
+		// 不设 WriteTimeout：SSE 长连接会被它强制中断。
+		// 单轮超时由 chat.run_timeout 在业务层控制。
+		IdleTimeout: 120 * time.Second,
 	}
-
-	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
 
 	errCh := make(chan error, 1)
 	go func() {
-		zap.L().Info("HTTP 服务启动", zap.String("address", addr))
+		lg.Info("HTTP 服务启动", zap.String("addr", cfg.APP.Addr()))
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
 	}()
 
+	// 10. 优雅退出
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
 	select {
 	case err := <-errCh:
-		return fmt.Errorf("HTTP 服务异常: %w", err)
-	case <-signalCtx.Done():
-		zap.L().Info("收到退出信号，开始优雅关闭")
+		application.Jobs.Close(5 * time.Second)
+		application.Titles.Close(5 * time.Second)
+		return fmt.Errorf("HTTP 服务异常退出: %w", err)
+	case sig := <-quit:
+		lg.Info("收到退出信号，开始优雅关闭", zap.String("signal", sig.String()))
 	}
 
-	// 给在途请求留出处理时间。
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("优雅关闭失败: %w", err)
+		lg.Warn("HTTP 服务关闭超时", zap.Error(err))
 	}
 
-	zap.L().Info("服务已退出")
+	// 等待在途的异步任务收尾，避免产物生成到一半被强杀。
+	application.Jobs.Close(10 * time.Second)
+	application.Titles.Close(5 * time.Second)
+
+	lg.Info("服务已退出")
 	return nil
 }

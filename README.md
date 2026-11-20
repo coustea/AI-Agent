@@ -1,350 +1,314 @@
-# Mentorly Backend
-
-Go + Gin + GORM + eino ADK + MySQL + Redis 的学习辅导后端。
-核心能力是一个 Agent 驱动的 ChatAgent：多轮流式对话、会话隔离、
-调用前上下文压缩、工具调用、会话工作目录与技能加载。
-
-## 技术栈
-
-| 组件 | 库 | 版本 |
-| --- | --- | --- |
-| Web 框架 | `github.com/gin-gonic/gin` | v1.12.0 |
-| 配置 | `github.com/spf13/viper` + `github.com/subosito/gotenv` | v1.21.0 / v1.6.0 |
-| 日志 | `go.uber.org/zap` + `gopkg.in/natefinch/lumberjack.v2` | v1.28.0 / v2.2.1 |
-| ORM | `gorm.io/gorm` + `gorm.io/driver/mysql` | v1.31.2 / v1.6.0 |
-| Redis | `github.com/redis/go-redis/v9` | v9.23.0 |
-| Agent | `github.com/cloudwego/eino` (ADK) | v0.9.23 |
-| 模型 | `eino-ext/components/model/openai` | v0.1.13 |
-| 鉴权 | `golang-jwt/jwt/v5` + `x/crypto/bcrypt` | v5.3.1 |
-
-## 架构：按模块组织
-
-系统由若干**限界上下文**模块组成，每个模块自包含：领域类型、存储、业务、HTTP 入口
-都在同一个包里，按文件职责分层。
-
-```
-cmd/server/main.go          配置 → 日志 → 依赖 → api.New().Run
-
-internal/
-  chat/                     ★ 对话上下文（11 文件）
-    entity.go    Session / Message / Role / Status（零框架依赖）
-    store.go     GORM 行类型（私有）+ Store 仓储
-    service.go   业务面：会话 CRUD、配置、异步标题
-    turn.go      一轮对话：Begin → Run → Close
-    window.go    token 估算与窗口裁剪（纯计算）
-    compress.go  上下文滚动压缩
-    agent.go     eino ADK 封装
-    prompt.go    System Prompt 组装
-    sandbox.go   文件系统沙箱（安全边界）
-    handler.go   HTTP handlers + SSE writer
-    dto.go       请求 / 响应结构
-    route.go     路由注册
-
-  auth/                     认证上下文（同构）
-    user.go  store.go  service.go  jwt.go
-    handler.go  middleware.go  dto.go  route.go
-
-  config/                   配置读取 + 默认值唯一来源 + 启动校验
-  log/                      zap + lumberjack
-  infra/                    MySQL、Redis、分布式锁、eino 模型构建
-  response/                 统一响应体
-
-  api/                      组合根
-    app.go        装配 + 路由表
-    middleware.go RequestID / Logger / Recovery / CORS
-    health.go     存活与就绪探针
-```
-
-**8 个包**，`internal/` 下无嵌套子包（除 `prompts/` 资源目录）。
-
-### 为什么是这个粒度
-
-判断标准只有一条：**改动一个需求时，要同时修改几个文件？**
-
-| 需求 | 改后要改几处 |
-| --- | --- |
-| 加一个接口端点 | 1（对应 `handler.go`） |
-| 改表结构 | 2（`store.go` + 相关用例） |
-| 改 Prompt 文案 | 1（`prompt.go` + `prompts/tutor.md`） |
-| 换 LLM 供应商 | 1（`config.yaml`，代码不动） |
-| 改压缩阈值 | 1（`config.yaml`） |
-
-`chat` 的 11 个文件是按**改动理由**切的，不是按代码类型：改 eino 相关只动 `agent.go`，
-改 HTTP 契约只动 `handler.go`，改安全边界只动 `sandbox.go`。
-`session.go` / `turn.go` 这类「按生命周期阶段」再细分是不做的——它们改动理由相同，
-拆开只会增加跳转成本。
-
-### 一轮对话
-
-```
-POST /api/v1/chat/sessions/:id/messages
- │
- ├─ Begin          加锁 · 归属校验 · 落库 user 消息
- │                 失败 → 404/409/400/503 标准 JSON（此时零字节已写出）
- ├─ defer Close    锁随 Turn 生命周期，幂等，无需在每个错误路径手动释放
- │
- ├─ 切换 SSE + 心跳
- └─ Run
-    ├─ Pre-Run     压缩上下文 → 重建窗口与 Prompt
-    ├─ 执行        构建 Agent → 流式推 Chunk → sink
-    └─ 收口        终态裁决 → 落库 → 回写用量 → 首轮异步标题
-```
-
-**关键设计**：`Begin`/`Run`/`Close` 取代了旧版的 `Prepare`/`Run`/`Release`。
-旧版的 `Release` 要求 handler 在每条错误路径手动调用（实际有 3 处），是泄漏 API；
-新版靠 `defer` 兜住所有路径。
-
-### 依赖方向
-
-```
-cmd/server → api → {chat, auth} → {config, infra, response}
-                 ↘ log
-```
-
-规则三条：
-
-1. **模块之间不互相 import**。`chat` 不知道 `auth` 存在——当前用户 id 由
-   `api` 注入的 `UserID func(*gin.Context) string` 提供。
-2. **配置不嵌入模块**。`chat` 只接收拍平后的 `chat.Config` 值对象，
-   import 列表里没有 `internal/config`，对配置文件与数据库连接零知识。
-3. **存储细节不上浮**。GORM 行类型（`sessionRow` / `messageRow`）只在
-   `store.go` 内可见，对外一律 `Session` / `Message`。
-
-### 上下文压缩的水位线
-
-压缩后的 `context_tokens` 不能简单用「本地估算的 system + 摘要 + 保留原文」。
-eino 会在真实 prompt 里注入**工具 Schema 与技能清单**，这部分固定开销实测约
-4500-4900 token，本地估算器完全看不到。
-
-若直接用估算值当新基线（实测算出 3612，真实 6803），下一轮立刻又超阈值，
-于是反复压缩却始终降不下来。正确做法是从真实基线里**剥离可压缩部分**
-（旧摘要 + 被压缩的原文），保留固定开销，再加上压缩后的新内容。
-日志里的 `fixed_overhead` 字段就是这项诊断值，对应 `compress.go` 的 `newBaseline`。
-
-### 终态裁决的顺序陷阱
-
-`turn.go` 的 `resolveOutcome` 必须**先判 ctx 是否取消，再判 streamErr 是否为 nil**。
-
-客户端断开时，写失败发生在传输层，`Stream` 本身可能正常返回 `nil` 错误，
-但 ctx 已被调用方取消。若顺序反了，这一轮会被误记为 `completed`——
-用户看到的是「回答完整」，实际只收到半截。
-`TestResolveOutcomeCtxCancelledWithoutError` 是这个 bug 的回归测试。
-
-### 目录
-
-```
-cmd/server/main.go
-internal/
-  chat/       entity store service turn window compress agent prompt sandbox handler dto route doc
-  auth/       user store service jwt handler middleware dto route
-  config/     config.go  config.yaml
-  log/        logger.go
-  infra/      database.go  llm.go  lock.go
-  response/   response.go
-  api/        router.go  middleware.go  health.go
-```
-
-## 配置
-
-三段式加载，与 HyperWeaver 一致：
-
-```
-.env (gotenv) → config.yaml 的 ${ENV} 占位符 → os.ExpandEnv → viper → 结构体 → validate
-```
-
-**未定义的环境变量会让启动失败并报出变量名**；显式留空（如本机 Redis 无密码）放行。
-
-### LLM 配置
-
-```bash
-LLM_PROVIDER=spark                              # spark / openai
-LLM_MODEL=spark-x2.6
-LLM_BASE_URL=https://maas-api.cn-huabei-1.xf-yun.com/v2
-LLM_API_KEY=...
-```
-
-> **注意**：`LLM_BASE_URL` **不能**带 `/chat/completions`——eino 会自行拼接，
-> 带了就变成 `/v2/chat/completions/chat/completions` 并 404。
-> 代码里 `normalizeBaseURL` 会提前拦下并给出正确写法。
-
-### 压缩阈值
-
-见 `internal/config/config.yaml` 的 `chat` 段。默认值面向真实使用：
-
-| 配置项 | 默认 | 含义 |
-| --- | --- | --- |
-| `compress_trigger_tokens` | 6000 | 上下文达此 token 数触发压缩 |
-| `compress_trigger_messages` | 16 | 未压缩消息达此条数触发压缩 |
-| `keep_recent_turns` | 2 | 压缩时保留最近几轮原文 |
-| `compress_source_max_chars` | 8000 | 单次送入压缩的原文上限（按整轮截断） |
-| `llm.timeout` | 480s | 单次模型调用超时，须 ≥ `run_timeout` 的一半 |
-
-> **`llm.timeout` 必须足够大**：它是单次模型调用的 HTTP 上限，而
-> `chat.run_timeout`（600s）是整轮上限。「详细讲解 Go 内存分配器」这类
-> 长回答实测需要 3~4 分钟，120s 会在流式传输中途被掐断，
-> 表现为整轮 `cancelled` 且 `prompt_tokens` 为空。启动期会校验两者关系。
-
-调低这些值可以让压缩在几轮对话内就被触发，便于验证。
-
-## 数据库
-
-| 表 | 说明 |
-| --- | --- |
-| `users` | 账号；`status` 为 0 时登录与鉴权都拒绝 |
-| `chat_sessions` | 会话；`summary` 与 `summary_cursor` 直接挂在行上，不存 system 消息 |
-| `chat_messages` | 消息；自增 id 作为游标依据，`meta` 存真实 usage |
-
-游标推进用条件更新（`WHERE summary_cursor < ?`），防止并发回退。
-
-## 接口
-
-全部需要 `Authorization: Bearer <token>`。未配置 `llm.api_key` 时对话接口返回 503。
-
-| 方法 | 路径 | 说明 |
-| --- | --- | --- |
-| POST | `/api/v1/chat/sessions` | 创建会话 |
-| GET | `/api/v1/chat/sessions?limit=` | 会话列表 |
-| PATCH | `/api/v1/chat/sessions/:id` | 重命名 |
-| DELETE | `/api/v1/chat/sessions/:id` | 软删除 |
-| GET | `/api/v1/chat/sessions/:id/messages?before_id=&limit=` | 游标分页历史 |
-| POST | `/api/v1/chat/sessions/:id/messages` | **SSE 流式对话** |
-
-认证接口：`POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`GET /api/v1/profile`。
-
-### 认证
-
-登录/注册返回 HS256 JWT，payload 携带 `user_id` 与 `username`：
-
-```json
-{
-  "user_id": "c8974b9e-6670-48b9-8f29-a102d58aad99",
-  "username": "alice",
-  "iss": "Mentorly",
-  "sub": "c8974b9e-6670-48b9-8f29-a102d58aad99",
-  "exp": 1795757143,
-  "nbf": 1795152343,
-  "iat": 1795152343
-}
-```
-
-校验分两层，缺一不可：
-
-1. **签名与有效期** — 验 HS256 签名、`iss` 必须匹配、`exp` 必须存在且未过期。
-   篡改签名、换密钥、换 issuer 均拒绝。
-2. **用户状态回查** — 签名只证明 token 是本服务签发的，**不能证明账号此刻仍可用**。
-   因此每次请求都按 `user_id` 回查数据库：已删除返回 401，`status=0` 返回 403。
-   否则停用和删号要等到 token 自然过期（默认 168h）才生效。
-
-回查失败（数据库故障）一律 500 拒绝，**不放行**——一次故障不能让认证退化。
-
-登录同样校验 `status`，避免被停用的账号重新登录换取新 token。
-
-`handler` 通过 `auth.CurrentUserID(c)` / `auth.CurrentUsername(c)` 取身份。
-用户名来自 token 载荷，仅用于展示与日志；需要权威信息时以 `user_id` 回查。
-
-### SSE 帧
-
-```
-event: delta    data: {"text":"增量文本"}
-event: reset    data:{}                      # 工具调用前的过渡语作废，前端应清空已渲染内容
-event: done     data:{"message_id":34,"status":"completed"}
-event: error    data:{"message":"..."}
-: ping                                        # 心跳，默认 15s
-```
-
-### 一轮对话的状态
-
-| status | 含义 |
-| --- | --- |
-| `completed` | 正常完成；若模型只调工具没输出文本，内容为 `[已完成工具操作]` |
-| `cancelled` | 客户端断开或超时；保留已生成的半截文本 |
-| `failed` | 生成失败，`meta.error` 记录原因 |
-
-## 工具与沙箱
-
-Agent 可用的工具由 eino 中间件注册：
-
-- **filesystem**：`ls` / `read_file` / `write_file` / `edit_file` / `glob` / `grep`
-- **skill**：渐进式加载 `SKILL.md`（只注入技能名与简介，需要细节时再读）
-- **reduction**：单轮内工具结果过大时卸载到 `/.offload`
-
-三个挂载点：
-
-| 虚拟路径 | 宿主机 | 权限 |
-| --- | --- | --- |
-| `/workspace` | `workspace/chat/{uid}/{sid}` | 读写 |
-| `/.offload` | `workspace/.offload/{uid}/{sid}` | 读写 |
-| `/skills` | `skills/` | 只读 |
-
-路径经过 `Clean` + `filepath.Rel` 前缀校验 + `EvalSymlinks`，拦住 `../` 与符号链接逃逸。
-
-**越界访问返回说明文本而非 error**：eino 会把工具 error 升级为节点错误导致整轮失败，
-而「读错路径」是模型能自行纠正的常规情况。返回拒绝原因让它换个合法路径重试，
-既安全（坚决不执行）又不中断对话。
+# Mentorly
+
+基于 **CloudWeGo Eino ADK** 的教学智能体系统。核心是一个能自主决策的 TutorAgent：
+它理解多轮对话、检索长期记忆、读取文档与图片附件、按需联网搜索，
+并能生成真实的**图解（SVG）**、**课件（PPTX）**与**讲解视频（MP4）**。
 
 ## 快速开始
 
 ```bash
-make env       # 生成 .env
-# 编辑 .env：填 LLM_API_KEY、MYSQL_PASSWORD
-make db        # 创建数据库
-make run       # 启动，自动建表
+# 1. 配置
+cp .env.example .env      # 填入 LLM_API_KEY 与 MYSQL_PASSWORD
+
+# 2. 迁移数据库（保留现有用户数据）
+mysql -uroot -p mentorly < migrations/001_agent_first.sql
+
+# 3. 运行
+go build -o bin/mentorly ./cmd/server && ./bin/mentorly
+
+# 4. 验证
+curl http://127.0.0.1:8080/readyz
 ```
+
+依赖：Go 1.26+、MySQL 8、Redis（可选）、ffmpeg（视频能力）。
+
+## 架构
+
+系统围绕 **TutorAgent** 组织，不是传统的 Controller / Service / Repository 三层。
+
+```
+Frontend
+   │
+   ▼
+internal/transport/http        SSE 编码 · 协议转换 · 权限入口
+   │
+   ▼
+internal/agents/tutor
+   ├── harness.go   运行上下文：历史 / 附件 / 工作区 / 消息组装
+   ├── agent.go     Agent 构建：模型 · 工具 · Middleware · Skills
+   ├── runtime.go   执行与事件转换：消费 Eino Runner 事件 → 业务事件
+   ├── events.go    面向前端的事件定义
+   ├── store.go     会话与消息持久化
+   ├── sandbox.go   文件系统边界
+   └── prompt.md    教学约束
+   │
+   ▼
+Eino Runner  →  ChatModelAgent  →  ReAct 循环（框架原生）
+   │
+   ├── Middleware（官方）
+   │   ├── filesystem     读写文件
+   │   ├── skill          技能渐进式加载
+   │   ├── summarization  上下文压缩
+   │   └── reduction      工具结果卸载
+   │
+   └── ToolGuard（自定义）
+   │
+   ▼
+internal/capabilities          能力模块
+   ├── memory        长期记忆（跨会话）
+   ├── attachments   附件解析与多模态
+   ├── search        联网搜索（可选）
+   ├── diagram       图解 → SVG
+   ├── presentation  课件 → PPTX
+   ├── video         讲解视频 → MP4
+   └── artifacts     产物存储与异步任务
+```
+
+### 目录
+
+| 目录 | 职责 | 非测试行数 |
+|---|---|---|
+| `internal/agents/tutor` | TutorAgent 全部代码 | 1986 |
+| `internal/agents/tutor/middleware` | ToolGuard | 170 |
+| `internal/capabilities/attachments` | 附件上传与解析 | 1147 |
+| `internal/capabilities/diagram` | 图解生成 | 1045 |
+| `internal/capabilities/video` | 视频生成 | 838 |
+| `internal/capabilities/artifacts` | 产物与任务 | 777 |
+| `internal/capabilities/presentation` | 课件生成 | 688 |
+| `internal/capabilities/memory` | 长期记忆 | 436 |
+| `internal/capabilities/search` | 联网搜索 | 190 |
+| `internal/transport/http` | HTTP + SSE | 993 |
+| `internal/runtime` | 模型 · 身份 · 回调 · 任务 | 678 |
+| `internal/app` | 组合根 | 474 |
+| `internal/auth` | 认证上下文 | 629 |
+| `internal/config` | 配置 | 385 |
+| `internal/infra` | MySQL / Redis | 131 |
+| `internal/log` `response` | 日志 / 响应体 | 235 |
+
+合计 **10971 行非测试代码 + 2310 行测试**，17 个包，无空目录、无占位实现。
+
+### 设计原则
+
+**1. Agent 自主决策，不写分类路由**
+
+没有 `direct_answer` / `search_answer` / `attachment_answer` 分支，
+没有手写 ReAct 循环、Tool Dispatcher 或 LLM ToolCall JSON 解析。
+是否调用工具、调用哪个，完全由 Eino 原生 ReAct 机制决定。
+
+**2. Harness 与 Agent 推理解耦**
+
+Harness 只负责把一次请求变成可执行环境：加载历史、校验附件、建工作区、组装消息。
+它不决定是否调用工具，也不管理 Agent 内部状态。
+
+**3. Middleware 优先用官方实现**
+
+上下文压缩、技能加载、工具结果卸载全部用 Eino 官方 Middleware。
+唯一自定义的 ToolGuard 只做框架没覆盖的事：工具级权限与配额。
+
+**4. 产物必须真实**
+
+图解是能打开的 SVG，课件是能在 PowerPoint 打开的 PPTX，
+视频是 ffmpeg 编码的真 MP4。没有外部依赖时明确降级（不注册工具），
+绝不用 Mock 或占位文件冒充成功。
+
+## TutorAgent 运行链路
+
+```
+POST /api/v1/conversations/:id/messages
+   │
+   ├─ 1. 认证中间件 → userID
+   ├─ 2. Harness.Prepare
+   │      ├─ 会话归属校验（不属于 → 404，不泄露存在性）
+   │      ├─ 统计消息数（判断首轮）
+   │      ├─ 建沙箱：workspace/{uid}/{cid} + offload + skills
+   │      ├─ 落库 user 消息（必须在写 SSE 头之前）
+   │      └─ 构造消息：历史 + 本轮（含附件多模态）
+   ├─ 3. 写 SSE 响应头（此后无法改状态码）
+   ├─ 4. Runtime.Run
+   │      ├─ 注入 Principal（用户身份唯一来源）
+   │      ├─ Agent.Build → 5 个 Middleware + 9 个工具
+   │      ├─ Runner.Run → 消费 AgentEvent
+   │      │     ├─ assistant 文本 → EventMessage
+   │      │     ├─ ToolCalls    → reset + EventToolStart
+   │      │     └─ tool 结果   → EventToolEnd + reset
+   │      └─ finish：判定终态 → 落库 → EventDone
+   └─ 5. 首轮成功 → 异步生成标题
+```
+
+### 终态判定顺序（不可调换）
+
+```go
+cancelled := errors.Is(runErr, context.Canceled) ||
+             errors.Is(runErr, context.DeadlineExceeded) ||
+             ctx.Err() != nil
+if cancelled { ... }        // 必须先判取消
+if runErr == nil { ... }    // 再判成功
+```
+
+客户端断开时 `Runner` 可能正常返回 `nil`，但 `ctx` 已取消。
+若先判 `runErr == nil`，这一轮会被误记为 `completed`——
+用户看到「回答完整」，实际只收到半截。
+
+## SSE 事件契约
+
+```
+event: message           data: {"text":"...","reset":false}
+event: tool_start        data: {"name":"...","call_id":"...","args":"..."}
+event: tool_end          data: {"name":"...","result":"...","elapsed_ms":123}
+event: artifact_created  data: {"artifact_id":"...","kind":"...","status":"queued"}
+event: artifact_progress data: {"artifact_id":"...","progress":45}
+event: artifact_completed data: {"artifact_id":"...","download_url":"..."}
+event: error             data: {"message":"...","retryable":false}
+event: done              data: {"message_id":1,"status":"completed","elapsed_ms":1234}
+: ping                   心跳注释行
+```
+
+`reset` 语义：模型调用工具前常先输出过渡语（「让我看一下」），
+那段话不属于最终回答，收到 `reset` 时前端应清空已渲染内容。
+
+## Eino Middleware 职责划分
+
+| Middleware | 来源 | 职责 |
+|---|---|---|
+| `filesystem` | 官方 | ls / read / write / edit / glob / grep |
+| `skill` | 官方 | 渐进式加载 SKILL.md，只注入名称与简介 |
+| `summarization` | 官方 | 超阈值时把旧对话压成摘要 |
+| `reduction` | 官方 | 工具结果过大时卸载到 `/offload` |
+| `ToolGuard` | **自定义** | 工具级身份校验与调用配额 |
+
+ToolGuard 必须覆盖四种工具类型，缺一种就会留下完全绕过校验的通道：
+
+```go
+WrapInvokableToolCall            // 同步
+WrapStreamableToolCall           // 流式
+WrapEnhancedInvokableToolCall    // 增强同步
+WrapEnhancedStreamableToolCall   // 增强流式
+```
+
+`TestAllWrapMethodsImplemented` 守住这一点。
+
+## 工具清单
+
+| 工具 | 能力 | 需要身份 | 配额 |
+|---|---|---|---|
+| `memory_search` | 检索长期记忆 | ✓ | — |
+| `memory_save` | 写入长期记忆 | ✓ | — |
+| `memory_delete` | 删除记忆 | ✓ | — |
+| `read_attachment` | 读取附件正文 | ✓ | — |
+| `list_attachments` | 列出会话附件 | ✓ | — |
+| `generate_diagram` | 生成 SVG 图解 | ✓ | 6/轮 |
+| `generate_presentation` | 生成 PPTX 课件 | ✓ | 4/轮 |
+| `generate_explainer_video` | 生成 MP4 视频 | ✓ | 3/轮 |
+| `get_artifact_status` | 查询产物进度 | ✓ | — |
+| `web_search` | 联网搜索 | — | — |
+
+配额存在的原因：模型可能陷入「反复生成同类产物」的循环，
+视频渲染尤其昂贵。`MaxIterations` 只能在轮次层面兜底。
+
+## Skills
+
+| 技能 | 指导内容 |
+|---|---|
+| `skills/diagram` | 何时画图、图类型选择、Mermaid 写法、构图原则 |
+| `skills/presentation` | 大纲规划、单页结构、要点精简、硬限制 |
+| `skills/explainer-video` | 脚本规划、分镜设计、按画面思考 |
+
+Skill 只给工作指导，真实文件处理仍由 Tool 与渲染器完成。
+
+## 产物生成实现
+
+| 产物 | 技术方案 | 外部依赖 |
+|---|---|---|
+| 图解 SVG | 纯 Go 手写 SVG，内置分层布局 | 无 |
+| 课件 PPTX | 纯 Go 手写 OOXML + `archive/zip` | 无 |
+| 讲解视频 MP4 | Go 逐帧绘制 → raw RGBA 管道 → ffmpeg | ffmpeg |
+| 附件 PDF | 纯 Go 解压内容流 + 提取文本层 | 无 |
+| 附件 DOCX/PPTX | 纯 Go 解 `archive/zip` + XML | 无 |
+
+**为什么手写 OOXML 而不引库**：`unioffice` 是商业授权；
+社区没有许可宽松且维护中的纯 Go pptx 写入库。
+手写约 500 行即可产出 PowerPoint 能打开的合法文件。
+
+**为什么视频不用 ffmpeg 的 drawtext**：本机 ffmpeg 未编译该滤镜。
+文字由 Go 用 `golang.org/x/image/font` 光栅化进帧，
+raw RGBA 通过 stdin 管道交给 ffmpeg，不落中间 PNG。
+
+## 数据模型
+
+```
+users          认证（既有表，结构不变）
+conversations  会话
+messages       消息（含 attachment_ids）
+memories       长期记忆
+attachments    附件元数据 + 提取文本
+artifacts      产物元数据 + 异步任务状态
+```
+
+### 迁移
+
+`migrations/001_agent_first.sql` 幂等，可重复执行：
+
+- `chat_sessions` → `conversations`（保留全部行）
+- `chat_messages` → `messages`（保留全部行）
+- `session_id` → `conversation_id`
+- 删除 `summary` / `summary_cursor` / `context_tokens` / `memory_cursor`
+  （上下文压缩改由官方 Middleware 在运行时完成，原始消息不删）
+- `last_active_at` → `updated_at`
+- 新增 `messages.attachment_ids`
+
+**破坏性变更不走 AutoMigrate**：启动时只建表与加列，不删列改类型。
+
+## 用户与文件隔离
+
+- **身份唯一来源**是 `runtime.Principal`，由 Harness 注入 context；
+  模型无法通过工具参数伪造 `user_id`。
+- **归属校验**在 Store 层统一完成，不属于该用户时返回与「不存在」
+  相同的错误，避免通过状态码探测他人资源。
+- **文件路径**由服务端生成（UUID），绝不拼接用户输入；
+  沙箱对每个路径做 Clean + 前缀校验 + 符号链接解析。
+
+已验证：跨用户读取会话 / 发消息 / 查询产物 / 下载产物均返回 404。
+
+## 开发
 
 ```bash
-# 拿 token
-TOKEN=$(curl -s -X POST localhost:8080/api/v1/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"me","email":"me@example.com","password":"secret123"}' \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["token"])')
-
-# 建会话
-SID=$(curl -s -X POST localhost:8080/api/v1/chat/sessions \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{}' \
-  | python3 -c 'import sys,json;print(json.load(sys.stdin)["data"]["id"])')
-
-# 流式对话
-curl -N -X POST "localhost:8080/api/v1/chat/sessions/$SID/messages" \
-  -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
-  -d '{"content":"用一句话说明 Go 的 GMP 模型"}'
+go fmt ./...
+go vet ./...
+go test ./...
+go test -race ./...
 ```
 
-## 离线验证
+需要外部环境的测试会自行跳过（缺 ffmpeg、缺字体、缺测试文件），
+不会把环境缺失伪装成测试通过。
 
-没有 LLM key 时，用本地假模型跑通整条链路（真实的 eino 流式、tool_call、SSE）：
+## 配置要点
 
-```bash
-python3 scripts/fake_llm.py 18081 &
-LLM_API_KEY=test LLM_BASE_URL=http://127.0.0.1:18081/v1 LLM_MODEL=fake ./bin/mentorly
+| 配置 | 说明 |
+|---|---|
+| `llm.base_url` | **不能**含 `/chat/completions`，eino 会自行拼接 |
+| `llm.timeout` | 必须 ≥ `chat.run_timeout` 的一半，否则长回答会被截断 |
+| `llm.vision` | 模型不支持图片时必须设 `false`，否则请求被供应商拒绝 |
+| `chat.summary_trigger_*` | 官方压缩中间件的触发阈值 |
+| `artifacts.ffmpeg_path` | 留空时用 PATH 里的 ffmpeg；找不到则不注册视频工具 |
+| `search.api_key` | 留空时不注册搜索工具 |
+
+## 未来扩展：多 Agent 资源生成
+
+当前 diagram / presentation / video 是独立 Capability。
+升级为多 Agent 时：
+
+```
+internal/agents/
+├── tutor/                 现有，负责交互与任务委派
+└── resource/              新增
+    ├── planner/           大纲与分镜规划
+    ├── diagram/           图解制作
+    ├── presentation/      课件制作
+    └── video/             视频制作
 ```
 
-## 测试
+改造点只在 `app.buildTools`：把当前的 `tool.BaseTool` 换成
+`adk.NewAgentTool(resourceAgent, ...)`。TutorAgent 主体不需要改动。
 
-```bash
-gofmt -l . && go vet ./... && go build ./...
-go test ./... -race
-```
-
-单测不依赖数据库与网络：
-
-- `chat` / 窗口裁剪：预算裁剪（交替规则、user 开头、跳过 failed、预算紧张时回补锚点）、
-  压缩窗口切分（按整轮截断、cutoff 正确性）、token 估算器
-- `chat` / 压缩基线：`newBaseline` 剥离固定开销（对应实测 3612 vs 6803）
-- `chat` / 终态判定：**ctx 已取消但 streamErr 为 nil 必须记 cancelled**，
-  而非 completed——这个 bug 就是被这条测试抓出来的
-- `chat` / Turn 生命周期：`Close` 幂等、nil 安全、错误路径不泄锁
-- `chat` / 沙箱：`../` 逃逸、符号链接逃逸、`/skills` 只读、读写落盘
-- `chat` / 流式消费：reset 语义、最终回答提取、用量捕获、ctx 取消
-- `auth`：JWT 签发解析、中间件四种状态（active/missing/disabled/checker 出错）
-- `config`：加载、缺失环境变量、短密钥拒绝、超时一致性
-- `infra`：BaseURL 归一化（含 `/chat/completions` 拒绝）
-
-## 常用命令
-
-```bash
-make help    # 列出命令
-make check   # fmt + vet + build
-make test    # -race 全量测试
-make build   # 编译到 bin/
-make clean   # 清理产物与日志
-```
+**现在不创建空目录**，也不提前实现 `AgentRegistry` / `AgentFactory`——
+没有第二个 Agent 时，这些抽象只会增加阅读成本。

@@ -18,45 +18,65 @@ const ConfigPath = "internal/config/config.yaml"
 
 // Config 是 config.yaml 的根对象
 type Config struct {
-	APP      APPConfig      `mapstructure:"app"`
-	Log      LogConfig      `mapstructure:"log"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	LLM      LLMConfig      `mapstructure:"llm"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Chat     ChatConfig     `mapstructure:"chat"`
+	APP         APPConfig         `mapstructure:"app"`
+	Log         LogConfig         `mapstructure:"log"`
+	JWT         JWTConfig         `mapstructure:"jwt"`
+	LLM         LLMConfig         `mapstructure:"llm"`
+	Database    DatabaseConfig    `mapstructure:"database"`
+	Chat        ChatConfig        `mapstructure:"chat"`
+	Attachments AttachmentsConfig `mapstructure:"attachments"`
+	Artifacts   ArtifactsConfig   `mapstructure:"artifacts"`
+	Search      SearchConfig      `mapstructure:"search"`
 }
 
-// ChatConfig 对应 config.yaml 中的 chat 段落，控制 ChatAgent 与 Harness 行为。
+// ChatConfig 对应 config.yaml 中的 chat 段落，控制 Tutor Harness 与 Agent 行为。
 type ChatConfig struct {
-	// WorkspaceDir 会话工作目录根路径，实际路径为 {WorkspaceDir}/{user_id}/{session_id}
+	// WorkspaceDir 会话工作目录根路径，实际路径为 {WorkspaceDir}/{user_id}/{conversation_id}
 	WorkspaceDir string `mapstructure:"workspace_dir"`
 	// OffloadRoot 工具结果卸载根目录，与工作目录分开以保持会话目录干净
 	OffloadRoot string `mapstructure:"offload_dir"`
 	// SkillsDir 技能目录，只读挂载为 Agent 的 /skills
 	SkillsDir string `mapstructure:"skills_dir"`
-	// MaxSteps Agent 单轮最大迭代步数
+	// MaxSteps Agent 单轮最大 ReAct 迭代步数
 	MaxSteps int `mapstructure:"max_steps"`
 	// RunTimeout 单轮生成总超时
 	RunTimeout time.Duration `mapstructure:"run_timeout"`
 	// Heartbeat SSE 心跳间隔
 	Heartbeat time.Duration `mapstructure:"heartbeat"`
-	// HistoryMaxMessages 送入模型的历史消息条数上限
-	HistoryMaxMessages int `mapstructure:"history_max_messages"`
-	// HistoryBudgetTokens 历史消息的 token 预算
-	HistoryBudgetTokens int `mapstructure:"history_budget_tokens"`
-	// CompressTriggerTokens 触发上下文压缩的 token 阈值
-	CompressTriggerTokens int `mapstructure:"compress_trigger_tokens"`
-	// CompressTriggerMessages 触发上下文压缩的消息条数阈值
-	CompressTriggerMessages int `mapstructure:"compress_trigger_messages"`
-	// CompressSourceMaxChars 单次送入压缩的原文最大字符数
-	CompressSourceMaxChars int `mapstructure:"compress_source_max_chars"`
-	// KeepRecentTurns 压缩时保留原文的最近轮数
-	KeepRecentTurns int `mapstructure:"keep_recent_turns"`
+	// SummaryTriggerTokens 触发官方 Summarization Middleware 的 token 阈值
+	SummaryTriggerTokens int `mapstructure:"summary_trigger_tokens"`
+	// SummaryTriggerMessages 触发官方 Summarization Middleware 的消息条数阈值
+	SummaryTriggerMessages int `mapstructure:"summary_trigger_messages"`
 	// TitleWorkers 异步生成标题的 worker 数
 	TitleWorkers int `mapstructure:"title_workers"`
-	// TitleTimeout 单次标题生成的超时。标题是异步副作用，
-	// 但要留足余量：慢模型（如 Spark）首包就要十几秒。
+	// TitleTimeout 单次标题生成超时
 	TitleTimeout time.Duration `mapstructure:"title_timeout"`
+}
+
+// AttachmentsConfig 控制附件上传与文本提取。
+type AttachmentsConfig struct {
+	Dir             string `mapstructure:"dir"`
+	MaxBytes        int64  `mapstructure:"max_bytes"`
+	MaxExtractChars int    `mapstructure:"max_extract_chars"`
+}
+
+// ArtifactsConfig 控制 Artifact 存储与异步生成任务。
+type ArtifactsConfig struct {
+	Dir         string        `mapstructure:"dir"`
+	JobWorkers  int           `mapstructure:"job_workers"`
+	JobTimeout  time.Duration `mapstructure:"job_timeout"`
+	FFmpegPath  string        `mapstructure:"ffmpeg_path"`
+	FontPath    string        `mapstructure:"font_path"`
+	VideoWidth  int           `mapstructure:"video_width"`
+	VideoHeight int           `mapstructure:"video_height"`
+	VideoFPS    int           `mapstructure:"video_fps"`
+}
+
+// SearchConfig 是可选联网搜索能力。api_key 为空时不注册搜索工具。
+type SearchConfig struct {
+	Provider string `mapstructure:"provider"`
+	APIKey   string `mapstructure:"api_key"`
+	BaseURL  string `mapstructure:"base_url"`
 }
 
 // APPConfig 对应 config.yaml 中的 app 段落
@@ -110,6 +130,9 @@ type LLMConfig struct {
 	MaxToken    int            `mapstructure:"max_token"`
 	Timeout     time.Duration  `mapstructure:"timeout"`
 	ExtraFields map[string]any `mapstructure:"extra_fields"`
+	// Vision 表示当前模型是否支持图片原生输入。
+	// 为 false 时不会把图片内联进消息，而是提示模型改用文本途径。
+	Vision bool `mapstructure:"vision"`
 }
 
 // DatabaseConfig 对应 config.yaml 中的 database 段落
@@ -277,29 +300,51 @@ func (c *Config) applyDefaults() {
 	if ch.Heartbeat <= 0 {
 		ch.Heartbeat = 15 * time.Second
 	}
-	if ch.HistoryMaxMessages <= 0 {
-		ch.HistoryMaxMessages = 40
+	if ch.SummaryTriggerTokens <= 0 {
+		ch.SummaryTriggerTokens = 60000
 	}
-	if ch.HistoryBudgetTokens <= 0 {
-		ch.HistoryBudgetTokens = 12000
-	}
-	if ch.CompressTriggerTokens <= 0 {
-		ch.CompressTriggerTokens = 6000
-	}
-	if ch.CompressTriggerMessages <= 0 {
-		ch.CompressTriggerMessages = 16
-	}
-	if ch.CompressSourceMaxChars <= 0 {
-		ch.CompressSourceMaxChars = 8000
-	}
-	if ch.KeepRecentTurns <= 0 {
-		ch.KeepRecentTurns = 2
+	if ch.SummaryTriggerMessages <= 0 {
+		ch.SummaryTriggerMessages = 40
 	}
 	if ch.TitleWorkers <= 0 {
 		ch.TitleWorkers = 4
 	}
 	if ch.TitleTimeout <= 0 {
 		ch.TitleTimeout = 120 * time.Second
+	}
+
+	at := &c.Attachments
+	if strings.TrimSpace(at.Dir) == "" {
+		at.Dir = "workspace/attachments"
+	}
+	if at.MaxBytes <= 0 {
+		at.MaxBytes = 32 << 20
+	}
+	if at.MaxExtractChars <= 0 {
+		at.MaxExtractChars = 20000
+	}
+
+	ar := &c.Artifacts
+	if strings.TrimSpace(ar.Dir) == "" {
+		ar.Dir = "workspace/artifacts"
+	}
+	if ar.JobWorkers <= 0 {
+		ar.JobWorkers = 2
+	}
+	if ar.JobTimeout <= 0 {
+		ar.JobTimeout = 10 * time.Minute
+	}
+	if strings.TrimSpace(ar.FFmpegPath) == "" {
+		ar.FFmpegPath = "ffmpeg"
+	}
+	if ar.VideoWidth <= 0 {
+		ar.VideoWidth = 1280
+	}
+	if ar.VideoHeight <= 0 {
+		ar.VideoHeight = 720
+	}
+	if ar.VideoFPS <= 0 {
+		ar.VideoFPS = 30
 	}
 }
 

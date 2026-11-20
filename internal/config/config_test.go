@@ -33,6 +33,10 @@ func setupEnv(t *testing.T) {
 		"REDIS_ADDR":     "127.0.0.1:6379",
 		"REDIS_PASSWORD": "",
 		"REDIS_DB":       "0",
+		// 联网搜索是可选项，显式留空表示禁用。
+		"SEARCH_PROVIDER": "",
+		"SEARCH_API_KEY":  "",
+		"SEARCH_BASE_URL": "",
 	}
 	for k, v := range vars {
 		t.Setenv(k, v)

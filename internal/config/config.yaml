@@ -47,6 +47,9 @@ llm:
   # 否则「详细讲解」这类长回答会在流式传输中途被掐断（实测 120s 不够）。
   # 注意：这是单次调用上限，整轮上限见 chat.run_timeout。
   timeout: 480s
+  # 是否支持图片原生输入（多模态）。开启后用户上传的图片会直接内联进消息。
+  # 若所用模型不支持图片，必须设为 false，否则请求会被供应商拒绝。
+  vision: true
   # 供应商扩展参数，原样透传
   extra_fields:
     temperature: 0.7
@@ -69,31 +72,59 @@ database:
     db: ${REDIS_DB}
     pool_size: 100
 
-#===============================Chat Agent 配置===============================
+#===============================TutorAgent 配置===============================
 chat:
-  # 会话工作目录根路径，实际为 {workspace_dir}/{user_id}/{session_id}
+  # 会话工作目录根路径，实际为 {workspace_dir}/{user_id}/{conversation_id}
   workspace_dir: workspace/chat
   # 工具结果卸载根目录，与工作目录分开以保持会话目录干净
   offload_dir: workspace/.offload
   # 技能目录，只读挂载为 Agent 的 /skills
   skills_dir: skills
-  # Agent 单轮最大迭代步数
-  max_steps: 8
+  # Agent 单轮最大 ReAct 迭代步数
+  max_steps: 12
   # 单轮生成总超时
   run_timeout: 600s
   # SSE 心跳间隔
   heartbeat: 15s
-  # 历史消息条数上限与 token 预算
-  history_max_messages: 40
-  history_budget_tokens: 12000
-  # 上下文压缩触发阈值
-  compress_trigger_tokens: 6000
-  compress_trigger_messages: 16
-  # 单次送入压缩的原文最大字符数（按整轮截断）
-  compress_source_max_chars: 8000
-  # 压缩时保留原文的最近轮数
-  keep_recent_turns: 2
+  # 官方 Summarization Middleware 的触发阈值。
+  # 达到任一阈值即把旧对话压成摘要，原始消息仍完整保留在数据库。
+  summary_trigger_tokens: 60000
+  summary_trigger_messages: 40
   # 异步生成标题的 worker 数
   title_workers: 4
   # 单次标题生成超时。慢模型首包可能要十几秒，30s 实测不够。
   title_timeout: 120s
+
+#===============================附件配置===============================
+attachments:
+  # 附件存储根目录，实际为 {dir}/{user_id}/{attachment_id}{ext}
+  dir: workspace/attachments
+  # 单文件大小上限（字节），默认 32MB
+  max_bytes: 33554432
+  # 送入模型前，单个附件提取文本的最大字符数
+  max_extract_chars: 20000
+
+#===============================产物与异步任务配置===============================
+artifacts:
+  # 产物存储根目录，实际为 {dir}/{user_id}/{artifact_id}{ext}
+  dir: workspace/artifacts
+  # 异步生成任务的并发 worker 数
+  job_workers: 2
+  # 单个生成任务的总超时
+  job_timeout: 600s
+  # ffmpeg 可执行文件路径。视频能力依赖它做 H.264 编码。
+  ffmpeg_path: ffmpeg
+  # 渲染用字体路径。留空则按平台常见路径自动探测。
+  font_path: ""
+  # 视频分辨率与帧率。宽高必须为偶数，否则 libx264 编码失败。
+  video_width: 1280
+  video_height: 720
+  video_fps: 30
+
+#===============================联网搜索配置（可选）===============================
+search:
+  # provider 为空或 api_key 为空时不注册搜索工具，Agent 也就不会尝试联网。
+  # 支持：tavily
+  provider: ${SEARCH_PROVIDER}
+  api_key: ${SEARCH_API_KEY}
+  base_url: ${SEARCH_BASE_URL}
