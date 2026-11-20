@@ -1,0 +1,25 @@
+# 二进制与构建产物
+bin/
+*.exe
+*.test
+*.out
+
+# 本地配置（含密码，勿提交）
+.env
+.env.local
+
+# 运行时产物
+logs/
+workspace/
+
+# Go
+vendor/
+
+# Python 缓存（scripts/fake_llm.py）
+__pycache__/
+*.pyc
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store

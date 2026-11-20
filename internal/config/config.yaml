@@ -1,0 +1,102 @@
+# Mentorly 配置文件
+#
+# 语法约定：${ENV_KEY} 占位符在加载时由环境变量替换（见 internal/config/config.go）。
+# 引用未设置的环境变量会导致启动失败，并明确报出变量名，避免密钥静默为空。
+
+#===============================应用配置===============================
+app:
+  name: ${APP_NAME}
+  env: ${APP_ENV}
+  host: ${APP_HOST}
+  port: ${APP_PORT}
+
+#===============================日志配置===============================
+log:
+  # 日志根目录，按日期分目录存放，如 logs/2026-11-20/app.log
+  dir: logs
+  # debug / info / warn / error
+  level: debug
+  # 单文件最大体积（MB），超过后分卷
+  max_size: 50
+  # 每个日期目录最多保留的备份数
+  max_backup: 5
+  # 是否压缩历史备份
+  compress: true
+
+#===============================JWT 配置===============================
+jwt:
+  # HS256 签名密钥，长度至少 32 字节，否则启动报错
+  secret: ${JWT_SECRET}
+  issuer: ${JWT_ISSUER}
+  # token 有效期，必须带单位：168h / 30m / 7d 不支持。纯数字会被当成纳秒。
+  expire: ${JWT_EXPIRE}
+
+#===============================LLM 配置===============================
+llm:
+  # 模型供应商，目前支持：openai（OpenAI 兼容协议）
+  provider: ${LLM_PROVIDER}
+  # 模型名称
+  model: ${LLM_MODEL}
+  # OpenAI 兼容接口的 BaseURL
+  base_url: ${LLM_BASE_URL}
+  # API Key，留空则不启用 AI 能力（/api/v1/chat 返回 503）
+  api_key: ${LLM_API_KEY}
+  # 最大输出 Token，0 表示使用服务端默认值
+  max_token: 8192
+  # 单次模型调用的 HTTP 超时。必须明显大于 chat.run_timeout 之外的余量，
+  # 否则「详细讲解」这类长回答会在流式传输中途被掐断（实测 120s 不够）。
+  # 注意：这是单次调用上限，整轮上限见 chat.run_timeout。
+  timeout: 480s
+  # 供应商扩展参数，原样透传
+  extra_fields:
+    temperature: 0.7
+
+#===============================数据库配置===============================
+database:
+  mysql:
+    database: ${MYSQL_DATABASE}
+    username: ${MYSQL_USERNAME}
+    password: ${MYSQL_PASSWORD}
+    # 显式配置则以此为准；留空时由上面三项拼装
+    dsn: ${DB_DSN}
+    max_idle_conns: 10
+    max_open_conns: 100
+    conn_max_lifetime: 1h
+
+  redis:
+    addr: ${REDIS_ADDR}
+    password: ${REDIS_PASSWORD}
+    db: ${REDIS_DB}
+    pool_size: 100
+
+#===============================Chat Agent 配置===============================
+chat:
+  # 会话工作目录根路径，实际为 {workspace_dir}/{user_id}/{session_id}
+  workspace_dir: workspace/chat
+  # 技能目录，只读挂载为 Agent 的 /skills
+  skills_dir: skills
+  # Agent 单轮最大迭代步数
+  max_steps: 8
+  # 单轮生成总超时
+  run_timeout: 600s
+  # SSE 心跳间隔
+  heartbeat: 15s
+  # 历史消息条数上限与 token 预算
+  history_max_messages: 40
+  history_budget_tokens: 12000
+  # 上下文压缩触发阈值
+  compress_trigger_tokens: 6000
+  compress_trigger_messages: 16
+  # 单次送入压缩的原文最大字符数（按整轮截断）
+  compress_source_max_chars: 8000
+  # 压缩时保留原文的最近轮数
+  keep_recent_turns: 2
+  # 长期记忆提取触发阈值
+  memory_min_turns: 4
+  memory_min_tokens: 4000
+  # 长期记忆文档最大字符数
+  memory_max_chars: 2000
+  # 异步生成标题的 worker 数
+  title_workers: 4
+  # 单次标题生成超时。慢模型首包可能要十几秒，30s 实测不够。
+  title_timeout: 120s
