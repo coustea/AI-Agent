@@ -73,6 +73,8 @@ database:
 chat:
   # 会话工作目录根路径，实际为 {workspace_dir}/{user_id}/{session_id}
   workspace_dir: workspace/chat
+  # 工具结果卸载根目录，与工作目录分开以保持会话目录干净
+  offload_dir: workspace/.offload
   # 技能目录，只读挂载为 Agent 的 /skills
   skills_dir: skills
   # Agent 单轮最大迭代步数
@@ -91,11 +93,6 @@ chat:
   compress_source_max_chars: 8000
   # 压缩时保留原文的最近轮数
   keep_recent_turns: 2
-  # 长期记忆提取触发阈值
-  memory_min_turns: 4
-  memory_min_tokens: 4000
-  # 长期记忆文档最大字符数
-  memory_max_chars: 2000
   # 异步生成标题的 worker 数
   title_workers: 4
   # 单次标题生成超时。慢模型首包可能要十几秒，30s 实测不够。

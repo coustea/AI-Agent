@@ -7,7 +7,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -53,31 +52,11 @@ type ChatConfig struct {
 	CompressSourceMaxChars int `mapstructure:"compress_source_max_chars"`
 	// KeepRecentTurns 压缩时保留原文的最近轮数
 	KeepRecentTurns int `mapstructure:"keep_recent_turns"`
-	// MemoryMinTurns 触发长期记忆提取的未提取 user 轮数阈值
-	MemoryMinTurns int `mapstructure:"memory_min_turns"`
-	// MemoryMinTokens 触发长期记忆提取的未提取 token 阈值
-	MemoryMinTokens int `mapstructure:"memory_min_tokens"`
-	// MemoryMaxChars 长期记忆文档最大字符数
-	MemoryMaxChars int `mapstructure:"memory_max_chars"`
 	// TitleWorkers 异步生成标题的 worker 数
 	TitleWorkers int `mapstructure:"title_workers"`
 	// TitleTimeout 单次标题生成的超时。标题是异步副作用，
 	// 但要留足余量：慢模型（如 Spark）首包就要十几秒。
 	TitleTimeout time.Duration `mapstructure:"title_timeout"`
-}
-
-// SessionDir 返回指定用户会话的工作目录。
-func (c ChatConfig) SessionDir(userID, sessionID string) string {
-	return filepath.Join(c.WorkspaceDir, userID, sessionID)
-}
-
-// OffloadDir 返回工具结果卸载目录，与工作目录分开以保持会话目录干净。
-func (c ChatConfig) OffloadDir(userID, sessionID string) string {
-	root := c.OffloadRoot
-	if root == "" {
-		root = filepath.Join("workspace", ".offload")
-	}
-	return filepath.Join(root, userID, sessionID)
 }
 
 // APPConfig 对应 config.yaml 中的 app 段落
@@ -315,15 +294,6 @@ func (c *Config) applyDefaults() {
 	}
 	if ch.KeepRecentTurns <= 0 {
 		ch.KeepRecentTurns = 2
-	}
-	if ch.MemoryMinTurns <= 0 {
-		ch.MemoryMinTurns = 4
-	}
-	if ch.MemoryMinTokens <= 0 {
-		ch.MemoryMinTokens = 4000
-	}
-	if ch.MemoryMaxChars <= 0 {
-		ch.MemoryMaxChars = 2000
 	}
 	if ch.TitleWorkers <= 0 {
 		ch.TitleWorkers = 4

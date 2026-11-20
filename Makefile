@@ -34,7 +34,7 @@ vet: ## 静态检查
 
 .PHONY: fmt
 fmt: ## 格式化代码
-	gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
+	gofmt -w $$(find . -name '*.go' -not -path './vendor/*' -not -path './workspace/*')
 
 .PHONY: test
 test: ## 运行测试

@@ -13,15 +13,12 @@ import (
 	"github.com/subosito/gotenv"
 	"go.uber.org/zap"
 
+	"mentorly/internal/api"
 	"mentorly/internal/auth"
 	"mentorly/internal/chat"
 	"mentorly/internal/config"
-	"mentorly/internal/identity"
 	"mentorly/internal/infra"
 	"mentorly/internal/log"
-	"mentorly/internal/memory"
-
-	"mentorly/router"
 )
 
 func main() {
@@ -38,7 +35,7 @@ func main() {
 	}
 
 	// 3. 初始化日志。注意：日志组件依赖配置，所以必须放在配置加载之后。
-	log, closer, err := log.Init(log.Options{
+	lg, closer, err := log.Init(log.Options{
 		Dir:       cfg.Log.Dir,
 		Level:     cfg.Log.Level,
 		MaxSize:   cfg.Log.MaxSize,
@@ -50,10 +47,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer func() {
-		_ = log.Sync()
+		_ = lg.Sync()
 		_ = closer.Close()
 	}()
-	zap.ReplaceGlobals(log)
+	zap.ReplaceGlobals(lg)
 
 	zap.L().Info("配置加载成功",
 		zap.String("app", cfg.APP.Name),
@@ -75,11 +72,8 @@ func run(cfg *config.Config) error {
 	defer func() { _ = infra.CloseMySQL(db) }()
 	zap.L().Info("MySQL 初始化成功", zap.String("database", cfg.Database.MySQL.Database))
 
-	// 5. 自动迁移
-	// 各存储包自己声明拥有的表，main 不需要知道表结构细节。
-	if err := infra.AutoMigrate(db,
-		append(append(identity.Schema(), chat.Schema()...), memory.Schema()...)...,
-	); err != nil {
+	// 5. 自动迁移。各模块自己声明拥有的表，main 不需要知道表结构细节。
+	if err := infra.AutoMigrate(db, append(auth.Schema(), chat.Schema()...)...); err != nil {
 		return err
 	}
 
@@ -97,28 +91,20 @@ func run(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("初始化 LLM 失败: %w", err)
 	}
-	if cm == nil {
-		zap.L().Warn("未配置 llm.api_key，AI 能力不可用（/api/v1/chat 将返回 503）")
-	} else {
-		zap.L().Info("LLM 初始化成功",
-			zap.String("provider", cfg.LLM.Provider),
-			zap.String("model", cfg.LLM.Model),
-		)
-	}
 
 	// 8. 组装路由
-	app := router.New(router.Deps{
+	app := api.New(api.Deps{
 		Config: cfg,
 		DB:     db,
 		Redis:  rdb,
-		JWT:    newJWT(cfg),
+		JWT:    auth.New(cfg.JWT),
 		LLM:    cm,
 		Log:    zap.L(),
 	})
 
 	// 退出时等待在途的标题生成任务，最多 10 秒。
-	if app.TitleGen != nil {
-		defer app.TitleGen.Close(10 * time.Second)
+	if app.Chat != nil {
+		defer app.Chat.Close(10 * time.Second)
 	}
 
 	// 9. 启动 HTTP 服务，支持优雅关闭
@@ -159,9 +145,4 @@ func run(cfg *config.Config) error {
 
 	zap.L().Info("服务已退出")
 	return nil
-}
-
-// newJWT 从配置构建 JWT 实例，集中一处便于后续扩展（如密钥轮换）。
-func newJWT(cfg *config.Config) *auth.Jwt {
-	return auth.New(cfg.JWT)
 }

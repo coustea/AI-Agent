@@ -1,8 +1,8 @@
 # Mentorly Backend
 
 Go + Gin + GORM + eino ADK + MySQL + Redis 的学习辅导后端。
-核心能力是一个 **Agent Harness 架构**的 ChatAgent：多轮流式对话、会话隔离、
-调用前上下文压缩、调用前长期记忆提取、工具调用、会话工作目录与技能加载。
+核心能力是一个 Agent 驱动的 ChatAgent：多轮流式对话、会话隔离、
+调用前上下文压缩、工具调用、会话工作目录与技能加载。
 
 ## 技术栈
 
@@ -17,68 +17,100 @@ Go + Gin + GORM + eino ADK + MySQL + Redis 的学习辅导后端。
 | 模型 | `eino-ext/components/model/openai` | v0.1.13 |
 | 鉴权 | `golang-jwt/jwt/v5` + `x/crypto/bcrypt` | v5.3.1 |
 
-## 架构：以「一轮对话」为中心
+## 架构：按模块组织
 
-本项目不采用 controller → service → dao 的传统后端分层。
-系统的设计单元是**一轮对话（turn）**，不是任何一层：Agent 围绕它运转，
-存储、窗口裁剪、记忆提取、HTTP 都只是这一轮对话的不同视角。
-
-```
-HTTP / CLI / 测试（任意驱动方）
-  │
-  ▼
-internal/turn          编排者：一轮对话的完整生命周期
-  ├─ 1. Acquire        Redis 会话锁 · 归属校验 · 落库 user 消息
-  │                    （必须在流式响应头之前完成，404/409 才能是标准 JSON）
-  ├─ 2. Prepare        记忆提取 → 上下文压缩 → 重建窗口与 Prompt
-  ├─ 3. Run            构建 Agent · 流式执行 · 推送 Event
-  └─ 4. Commit         按终态落库 · 回写用量 · 首轮异步标题
-  │
-  ▼  Event{Delta|Reset|Done|Error}
-internal/httpapi       唯一知道传输格式的地方：把 Event 编码成 SSE
-```
-
-关键设计：**编排核心不产生 `sse.Frame`**。
-旧实现里 harness 直接构造 SSE 帧，等于让核心逻辑绑定一种传输格式；
-现在它只发出领域事件，HTTP、CLI 或测试可以各自解释。
-
-### 分层与依赖方向
+系统由若干**限界上下文**模块组成，每个模块自包含：领域类型、存储、业务、HTTP 入口
+都在同一个包里，按文件职责分层。
 
 ```
-        httpapi  ─────────┐
-                          ▼
-        turn  ──►  memory / window / agent / capability
-          │              │
-          └──────►  chat / dialogue / identity
-                          │
-                          ▼
-                   platform/store
+cmd/server/main.go          配置 → 日志 → 依赖 → api.New().Run
+
+internal/
+  chat/                     ★ 对话上下文（11 文件）
+    entity.go    Session / Message / Role / Status（零框架依赖）
+    store.go     GORM 行类型（私有）+ Store 仓储
+    service.go   业务面：会话 CRUD、配置、异步标题
+    turn.go      一轮对话：Begin → Run → Close
+    window.go    token 估算与窗口裁剪（纯计算）
+    compress.go  上下文滚动压缩
+    agent.go     eino ADK 封装
+    prompt.go    System Prompt 组装
+    sandbox.go   文件系统沙箱（安全边界）
+    handler.go   HTTP handlers + SSE writer
+    dto.go       请求 / 响应结构
+    route.go     路由注册
+
+  auth/                     认证上下文（同构）
+    user.go  store.go  service.go  jwt.go
+    handler.go  middleware.go  dto.go  route.go
+
+  config/                   配置读取 + 默认值唯一来源 + 启动校验
+  log/                      zap + lumberjack
+  infra/                    MySQL、Redis、分布式锁、eino 模型构建
+  response/                 统一响应体
+
+  api/                      组合根
+    app.go        装配 + 路由表
+    middleware.go RequestID / Logger / Recovery / CORS
+    health.go     存活与就绪探针
 ```
 
-规则只有三条：
+**8 个包**，`internal/` 下无嵌套子包（除 `prompts/` 资源目录）。
 
-1. **依赖只向下**。`dialogue` 不依赖任何框架，任何层都可以引用它。
-2. **存储细节不上浮**。GORM 行类型只存在于各自的存储包内，
-   对外一律暴露 `dialogue` 的领域类型，边界处只转换一次。
-3. **不受框架污染的包不引入框架**。`window` 是纯计算，`agent` 不碰 DB/Gin，
-   `memory` 只面对消息切片和最小 LLM 接口——因此都能被单测完全覆盖。
+### 为什么是这个粒度
 
-### 包职责
+判断标准只有一条：**改动一个需求时，要同时修改几个文件？**
 
-| 包 | 职责 | 依赖 |
-| --- | --- | --- |
-| `dialogue` | 领域模型：消息、会话、状态、轮数 | 无 |
-| `window` | 上下文窗口裁剪与 token 估算（纯计算） | dialogue |
-| `agent` | 无状态 ADK Agent 构建与流式消费 | dialogue |
-| `capability` | 能力（工具）注册表 | agent, memory |
-| `memory` | 长期记忆提取、会话摘要压缩、标题生成 | dialogue, window, chat |
-| `chat` | 会话与消息存储、会话管理面 | dialogue |
-| `turn` | **一轮对话的编排者** | 上述全部 |
-| `identity` | 用户身份、注册登录、账号状态 | — |
-| `platform/*` | 配置、日志、LLM、鉴权、存储连接 | — |
-| `httpapi` | 参数绑定、事件编码、状态码映射 | turn, chat, memory, identity |
+| 需求 | 改后要改几处 |
+| --- | --- |
+| 加一个接口端点 | 1（对应 `handler.go`） |
+| 改表结构 | 2（`store.go` + 相关用例） |
+| 改 Prompt 文案 | 1（`prompt.go` + `prompts/tutor.md`） |
+| 换 LLM 供应商 | 1（`config.yaml`，代码不动） |
+| 改压缩阈值 | 1（`config.yaml`） |
 
-### 压缩基线的计算陷阱
+`chat` 的 11 个文件是按**改动理由**切的，不是按代码类型：改 eino 相关只动 `agent.go`，
+改 HTTP 契约只动 `handler.go`，改安全边界只动 `sandbox.go`。
+`session.go` / `turn.go` 这类「按生命周期阶段」再细分是不做的——它们改动理由相同，
+拆开只会增加跳转成本。
+
+### 一轮对话
+
+```
+POST /api/v1/chat/sessions/:id/messages
+ │
+ ├─ Begin          加锁 · 归属校验 · 落库 user 消息
+ │                 失败 → 404/409/400/503 标准 JSON（此时零字节已写出）
+ ├─ defer Close    锁随 Turn 生命周期，幂等，无需在每个错误路径手动释放
+ │
+ ├─ 切换 SSE + 心跳
+ └─ Run
+    ├─ Pre-Run     压缩上下文 → 重建窗口与 Prompt
+    ├─ 执行        构建 Agent → 流式推 Chunk → sink
+    └─ 收口        终态裁决 → 落库 → 回写用量 → 首轮异步标题
+```
+
+**关键设计**：`Begin`/`Run`/`Close` 取代了旧版的 `Prepare`/`Run`/`Release`。
+旧版的 `Release` 要求 handler 在每条错误路径手动调用（实际有 3 处），是泄漏 API；
+新版靠 `defer` 兜住所有路径。
+
+### 依赖方向
+
+```
+cmd/server → api → {chat, auth} → {config, infra, response}
+                 ↘ log
+```
+
+规则三条：
+
+1. **模块之间不互相 import**。`chat` 不知道 `auth` 存在——当前用户 id 由
+   `api` 注入的 `UserID func(*gin.Context) string` 提供。
+2. **配置不嵌入模块**。`chat` 只接收拍平后的 `chat.Config` 值对象，
+   import 列表里没有 `internal/config`，对配置文件与数据库连接零知识。
+3. **存储细节不上浮**。GORM 行类型（`sessionRow` / `messageRow`）只在
+   `store.go` 内可见，对外一律 `Session` / `Message`。
+
+### 上下文压缩的水位线
 
 压缩后的 `context_tokens` 不能简单用「本地估算的 system + 摘要 + 保留原文」。
 eino 会在真实 prompt 里注入**工具 Schema 与技能清单**，这部分固定开销实测约
@@ -87,74 +119,30 @@ eino 会在真实 prompt 里注入**工具 Schema 与技能清单**，这部分�
 若直接用估算值当新基线（实测算出 3612，真实 6803），下一轮立刻又超阈值，
 于是反复压缩却始终降不下来。正确做法是从真实基线里**剥离可压缩部分**
 （旧摘要 + 被压缩的原文），保留固定开销，再加上压缩后的新内容。
-日志里的 `fixed_overhead` 字段就是这项诊断值。
+日志里的 `fixed_overhead` 字段就是这项诊断值，对应 `compress.go` 的 `newBaseline`。
 
-### 为什么压缩与记忆提取要前置
+### 终态裁决的顺序陷阱
 
-在构建上下文阶段先检查阈值，达到条件就先完成记忆提取和滚动压缩，
-**再用更新后的摘要、记忆和剩余历史重建上下文**，最后才创建 Agent。
-这样当轮模型拿到的记忆与上下文永远是最新的，也不会超限。
+`turn.go` 的 `resolveOutcome` 必须**先判 ctx 是否取消，再判 streamErr 是否为 nil**。
 
-顺序不可交换：先提取记忆，才能在压缩丢弃原文前保住长期信息。
+客户端断开时，写失败发生在传输层，`Stream` 本身可能正常返回 `nil` 错误，
+但 ctx 已被调用方取消。若顺序反了，这一轮会被误记为 `completed`——
+用户看到的是「回答完整」，实际只收到半截。
+`TestResolveOutcomeCtxCancelledWithoutError` 是这个 bug 的回归测试。
 
-### 新增一个工具只需一行
-
-```go
-caps := capability.NewRegistry(
-    capability.Memory(adapters),   // remember：主动记录学生信息
-    // 新增能力在此追加，未启用时返回 nil 会被自动跳过
-)
-agentBuilder := agent.NewBuilder(model, skillsDir, caps.Tools())
-```
-
-旧实现里工具在 router 硬编码后作为可变参数传下去，加一个要改三处且无法按环境开关。
-
-## 目录结构
+### 目录
 
 ```
+cmd/server/main.go
 internal/
-  dialogue/              # 领域模型：Message / Session / 状态常量
-  turn/                  # ★ 编排者：Prepare / Run / Commit
-    turn.go              # 事件、状态、对外错误
-    orchestrator.go      # 四阶段编排 + 三步上下文管线
-    lock.go              # store.Lock → turn.Lock 适配
-  window/                # 纯计算：预算裁剪 + 压缩窗口切分 + token 估算
-  memory/                # 长期记忆与会话摘要（跨轮、跨会话）
-    consolidator.go      # 阈值判断 + 长期记忆整合
-    digest.go            # 阈值判断 + 滚动压缩 + Prompt 拼装
-    store.go             # Markdown 读写、去围栏、空小节剔除、待整合小节
-    adapter.go           # chat/memory 仓储 → Transcript/Store/Recorder
-    service.go           # 记忆管理面 + 异步标题生成
-    prompts/{summarize,consolidate}.md
-  chat/                  # 会话与消息存储 + 会话管理面
-    model.go             # sessionRow / messageRow / MessageMeta
-    repo.go              # 仓储（对外只返回 dialogue 类型）
-    service.go           # 创建/列表/重命名/删除/历史分页
-  identity/              # 用户、注册登录、账号状态回查
-  capability/            # 能力注册表
-  agent/                 # 无状态 Agent（不碰 DB/Redis/Gin/SSE）
-    prompt.go            # 静态底座(embed) + 唯一的 Prompt 拼装实现
-    sandbox.go           # filesystem.Backend，三挂载点 + 越界防护
-    tools.go             # remember 工具
-    builder.go           # 按轮创建 adk.ChatModelAgent + Runner
-    stream.go            # 流式消费、reset、用量捕获
-    prompts/tutor.md
-  httpapi/               # 唯一知道 HTTP/SSE 的地方
-    chat.go              # 会话接口 + SSE 编码
-    convert.go           # 领域类型 → dto
-    dto/
-  platform/
-    config/ logger/ llm/ auth/
-    store/               # MySQL/Redis 连接与分布式锁
-  middleware/            # 请求 ID、访问日志、恢复、CORS
-pkg/sse/sse.go           # SSE 帧与心跳
-skills/modern-diagram/   # Mermaid 绘图技能
-scripts/fake_llm.py      # 本地假模型，用于离线端到端验证
+  chat/       entity store service turn window compress agent prompt sandbox handler dto route doc
+  auth/       user store service jwt handler middleware dto route
+  config/     config.go  config.yaml
+  log/        logger.go
+  infra/      database.go  llm.go  lock.go
+  response/   response.go
+  api/        router.go  middleware.go  health.go
 ```
-
-**依赖方向**：`httpapi → turn → {memory, window, agent, capability} → {chat, dialogue}`。
-`agent` 不依赖 `memory`/`chat`/`gin`/`sse`；`turn` 只发出领域事件，
-`httpapi` 才把它编码成 SSE。所有装配集中在 `router`。
 
 ## 配置
 
@@ -179,7 +167,7 @@ LLM_API_KEY=...
 > 带了就变成 `/v2/chat/completions/chat/completions` 并 404。
 > 代码里 `normalizeBaseURL` 会提前拦下并给出正确写法。
 
-### 记忆与压缩阈值
+### 压缩阈值
 
 见 `internal/config/config.yaml` 的 `chat` 段。默认值面向真实使用：
 
@@ -188,9 +176,7 @@ LLM_API_KEY=...
 | `compress_trigger_tokens` | 6000 | 上下文达此 token 数触发压缩 |
 | `compress_trigger_messages` | 16 | 未压缩消息达此条数触发压缩 |
 | `keep_recent_turns` | 2 | 压缩时保留最近几轮原文 |
-| `memory_min_turns` | 4 | 未提取 user 轮数达此值提取记忆 |
-| `memory_min_tokens` | 4000 | 未提取消息达此 token 数提取记忆 |
-| `memory_max_chars` | 2000 | 长期记忆文档上限 |
+| `compress_source_max_chars` | 8000 | 单次送入压缩的原文上限（按整轮截断） |
 | `llm.timeout` | 480s | 单次模型调用超时，须 ≥ `run_timeout` 的一半 |
 
 > **`llm.timeout` 必须足够大**：它是单次模型调用的 HTTP 上限，而
@@ -198,15 +184,15 @@ LLM_API_KEY=...
 > 长回答实测需要 3~4 分钟，120s 会在流式传输中途被掐断，
 > 表现为整轮 `cancelled` 且 `prompt_tokens` 为空。启动期会校验两者关系。
 
-调低这些值可以让压缩与记忆提取在几轮对话内就被触发，便于验证。
+调低这些值可以让压缩在几轮对话内就被触发，便于验证。
 
 ## 数据库
 
 | 表 | 说明 |
 | --- | --- |
-| `chat_sessions` | 会话；`summary` 与两个游标直接挂在行上，不存 system 消息 |
+| `users` | 账号；`status` 为 0 时登录与鉴权都拒绝 |
+| `chat_sessions` | 会话；`summary` 与 `summary_cursor` 直接挂在行上，不存 system 消息 |
 | `chat_messages` | 消息；自增 id 作为游标依据，`meta` 存真实 usage |
-| `user_memories` | 每用户一份 Markdown 记忆，`version` 做乐观锁 |
 
 游标推进用条件更新（`WHERE summary_cursor < ?`），防止并发回退。
 
@@ -222,9 +208,6 @@ LLM_API_KEY=...
 | DELETE | `/api/v1/chat/sessions/:id` | 软删除 |
 | GET | `/api/v1/chat/sessions/:id/messages?before_id=&limit=` | 游标分页历史 |
 | POST | `/api/v1/chat/sessions/:id/messages` | **SSE 流式对话** |
-| GET | `/api/v1/chat/memory` | 查看长期记忆 |
-| PUT | `/api/v1/chat/memory` | 手动编辑（上限为 `memory_max_chars` 的 2 倍） |
-| DELETE | `/api/v1/chat/memory` | 清空记忆 |
 
 认证接口：`POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`GET /api/v1/profile`。
 
@@ -344,16 +327,17 @@ go test ./... -race
 
 单测不依赖数据库与网络：
 
-- `window`：预算裁剪（交替规则、user 开头、跳过 failed、预算紧张时回补 user 锚点）、
+- `chat` / 窗口裁剪：预算裁剪（交替规则、user 开头、跳过 failed、预算紧张时回补锚点）、
   压缩窗口切分（按整轮截断、cutoff 正确性）、token 估算器
-- `memory`：Markdown 结构校验（去围栏/缺标题保护/空小节剔除/待整合小节）
-- `agent`：沙箱 `../` 逃逸、符号链接逃逸、`/skills` 只读、读写落盘；
-  用伪造 `adk.Agent` 验证 reset、最终回答提取、用量捕获、ctx 取消；prompt 条件拼装
-- `turn`：**终态判定**（ctx 已取消但 streamErr 为 nil 必须记 cancelled，
-  而非 completed——这个 bug 就是被这条测试抓出来的）、错误翻译、内部错误不泄露
-- `capability`：nil 能力自动跳过、nil 注册表安全、能力名正确
-- `sse`：`httptest` 验证帧格式、心跳、断连回调
-- `llm`：BaseURL 归一化（含 `/chat/completions` 拒绝）
+- `chat` / 压缩基线：`newBaseline` 剥离固定开销（对应实测 3612 vs 6803）
+- `chat` / 终态判定：**ctx 已取消但 streamErr 为 nil 必须记 cancelled**，
+  而非 completed——这个 bug 就是被这条测试抓出来的
+- `chat` / Turn 生命周期：`Close` 幂等、nil 安全、错误路径不泄锁
+- `chat` / 沙箱：`../` 逃逸、符号链接逃逸、`/skills` 只读、读写落盘
+- `chat` / 流式消费：reset 语义、最终回答提取、用量捕获、ctx 取消
+- `auth`：JWT 签发解析、中间件四种状态（active/missing/disabled/checker 出错）
+- `config`：加载、缺失环境变量、短密钥拒绝、超时一致性
+- `infra`：BaseURL 归一化（含 `/chat/completions` 拒绝）
 
 ## 常用命令
 

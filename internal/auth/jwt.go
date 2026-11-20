@@ -1,4 +1,3 @@
-// Package auth 提供 JWT 签发与校验，以及 Gin 的认证中间件。
 package auth
 
 import (
