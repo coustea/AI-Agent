@@ -7,7 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"mentorly/pkg/response"
+	"mentorly/internal/response"
 )
 
 // 上下文键名，handler 通过它们取当前登录用户。

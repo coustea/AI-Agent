@@ -13,7 +13,7 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
-	"mentorly/internal/platform/auth"
+	"mentorly/internal/auth"
 )
 
 var (

@@ -8,7 +8,7 @@ import (
 	"github.com/google/uuid"
 	"go.uber.org/zap"
 
-	"mentorly/pkg/response"
+	"mentorly/internal/response"
 )
 
 // 上下文键名

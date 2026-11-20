@@ -1,5 +1,5 @@
-// Package dao 是数据访问层，负责数据库连接与仓储实现。
-package store
+// Package infra 提供基础设施：数据库连接、缓存与分布式锁。
+package infra
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 
-	"mentorly/internal/platform/config"
+	"mentorly/internal/config"
 )
 
 // InitMySQL 建立 GORM MySQL 连接并配置连接池。

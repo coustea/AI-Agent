@@ -11,7 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"mentorly/internal/platform/auth"
+	"mentorly/internal/auth"
 )
 
 // stubChecker 用固定返回值模拟用户状态回查。

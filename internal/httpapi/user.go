@@ -5,10 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"mentorly/internal/auth"
 	"mentorly/internal/httpapi/dto"
 	"mentorly/internal/identity"
-	"mentorly/internal/platform/auth"
-	"mentorly/pkg/response"
+	"mentorly/internal/response"
 )
 
 // UserHandler 用户相关接口

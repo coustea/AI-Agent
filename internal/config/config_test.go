@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"mentorly/internal/platform/config"
+	"mentorly/internal/config"
 )
 
 // setupEnv 为配置测试准备环境变量，避免依赖开发者本地 .env。
@@ -42,7 +42,7 @@ func setupEnv(t *testing.T) {
 func TestLoad(t *testing.T) {
 	setupEnv(t)
 	// Load 使用相对路径，测试时切回项目根目录
-	t.Chdir("../../..")
+	t.Chdir("../..")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -92,7 +92,7 @@ func TestLoadMissingEnv(t *testing.T) {
 	if err := os.Unsetenv("JWT_ISSUER"); err != nil {
 		t.Fatalf("Unsetenv: %v", err)
 	}
-	t.Chdir("../../..")
+	t.Chdir("../..")
 
 	_, err := config.Load()
 	if err == nil {
@@ -106,7 +106,7 @@ func TestLoadMissingEnv(t *testing.T) {
 func TestLoadRejectsShortJWTSecret(t *testing.T) {
 	setupEnv(t)
 	t.Setenv("JWT_SECRET", "too-short")
-	t.Chdir("../../..")
+	t.Chdir("../..")
 
 	_, err := config.Load()
 	if err == nil {
@@ -128,7 +128,7 @@ func TestBuildDSNPrefersExplicitDSN(t *testing.T) {
 // 表现为整轮 cancelled 且 prompt_tokens 为空，排查成本很高。
 func TestTimeoutConsistency(t *testing.T) {
 	setupEnv(t)
-	t.Chdir("../../..")
+	t.Chdir("../..")
 
 	// 当前配置应通过校验
 	cfg, err := config.Load()
@@ -147,7 +147,7 @@ func TestShortLLMTimeoutRejected(t *testing.T) {
 
 	// 用一个临时配置文件，把 llm.timeout 改小
 	dir := t.TempDir()
-	orig, err := os.ReadFile("internal/platform/config/config.yaml")
+	orig, err := os.ReadFile("internal/config/config.yaml")
 	if err != nil {
 		t.Skipf("读取原始配置失败: %v", err)
 	}

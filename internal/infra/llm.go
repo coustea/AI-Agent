@@ -1,6 +1,6 @@
-// Package llm 负责 eino ChatModel 的初始化与供应商适配。
+// 本文件负责 eino ChatModel 的初始化与供应商适配。
 // 供应商差异收敛在本包内，不向上层（service / handler）泄露。
-package llm
+package infra
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 
-	"mentorly/internal/platform/config"
+	"mentorly/internal/config"
 )
 
 // Provider 模型供应商

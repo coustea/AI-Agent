@@ -5,19 +5,19 @@ import (
 	"errors"
 	"time"
 
-	"mentorly/internal/platform/store"
+	"mentorly/internal/infra"
 )
 
-// redisLock 把 store.Lock 适配成编排层需要的 Lock 接口。
+// redisLock 把 infra.Lock 适配成编排层需要的 Lock 接口。
 //
 // 适配放在 turn 包而不是 store 包：store 不知道编排层的抽象，
 // 由使用方承担适配职责，依赖方向才保持单向。
 type redisLock struct {
-	lock *store.Lock
+	lock *infra.Lock
 }
 
 // NewRedisLock 构造适配器。
-func NewRedisLock(l *store.Lock) Lock {
+func NewRedisLock(l *infra.Lock) Lock {
 	if l == nil {
 		return nil
 	}
@@ -28,7 +28,7 @@ func NewRedisLock(l *store.Lock) Lock {
 func (l *redisLock) Acquire(ctx context.Context, key string, ttl time.Duration) (func(), error) {
 	release, err := l.lock.Acquire(ctx, key, ttl)
 	if err != nil {
-		if errors.Is(err, store.ErrLockBusy) {
+		if errors.Is(err, infra.ErrLockBusy) {
 			return nil, ErrLockBusy
 		}
 		return nil, err

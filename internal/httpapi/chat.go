@@ -9,12 +9,12 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"mentorly/internal/auth"
 	"mentorly/internal/chat"
 	"mentorly/internal/httpapi/dto"
 	"mentorly/internal/memory"
-	"mentorly/internal/platform/auth"
+	"mentorly/internal/response"
 	"mentorly/internal/turn"
-	"mentorly/pkg/response"
 	"mentorly/pkg/sse"
 )
 

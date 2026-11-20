@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"mentorly/internal/platform/auth"
-	"mentorly/internal/platform/config"
+	"mentorly/internal/auth"
+	"mentorly/internal/config"
 )
 
 func newTestJWT(expire time.Duration) *auth.Jwt {

@@ -13,8 +13,8 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
-	"mentorly/internal/platform/auth"
-	"mentorly/internal/platform/config"
+	"mentorly/internal/auth"
+	"mentorly/internal/config"
 )
 
 // TestGinUsable 确认 gin 引擎可创建并注册路由。

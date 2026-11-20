@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"mentorly/pkg/response"
+	"mentorly/internal/response"
 )
 
 // CORS 跨域配置，供前端本地联调。

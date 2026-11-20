@@ -1,4 +1,4 @@
-// Package config 负责读取 internal/config/config.yaml 中的参数。
+// Package config 负责读取 config.yaml 中的参数。
 //
 // 加载顺序：gotenv 加载 .env → 读取 config.yaml → os.ExpandEnv 展开 ${ENV}
 // → viper 解析 → Unmarshal 到结构体 → 业务级校验。
@@ -15,7 +15,7 @@ import (
 )
 
 // ConfigPath 是配置文件的默认路径，可通过 APP_CONFIG_PATH 覆盖。
-const ConfigPath = "internal/platform/config/config.yaml"
+const ConfigPath = "internal/config/config.yaml"
 
 // Config 是 config.yaml 的根对象
 type Config struct {

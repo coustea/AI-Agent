@@ -9,7 +9,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"mentorly/internal/platform/config"
+	"mentorly/internal/config"
 )
 
 var (

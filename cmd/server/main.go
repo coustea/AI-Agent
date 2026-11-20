@@ -13,14 +13,13 @@ import (
 	"github.com/subosito/gotenv"
 	"go.uber.org/zap"
 
+	"mentorly/internal/auth"
 	"mentorly/internal/chat"
+	"mentorly/internal/config"
 	"mentorly/internal/identity"
+	"mentorly/internal/infra"
+	"mentorly/internal/log"
 	"mentorly/internal/memory"
-	"mentorly/internal/platform/auth"
-	"mentorly/internal/platform/config"
-	"mentorly/internal/platform/llm"
-	"mentorly/internal/platform/logger"
-	"mentorly/internal/platform/store"
 
 	"mentorly/router"
 )
@@ -39,7 +38,7 @@ func main() {
 	}
 
 	// 3. 初始化日志。注意：日志组件依赖配置，所以必须放在配置加载之后。
-	log, closer, err := logger.Init(logger.Options{
+	log, closer, err := log.Init(log.Options{
 		Dir:       cfg.Log.Dir,
 		Level:     cfg.Log.Level,
 		MaxSize:   cfg.Log.MaxSize,
@@ -69,32 +68,32 @@ func main() {
 
 func run(cfg *config.Config) error {
 	// 4. 初始化 MySQL
-	db, err := store.InitMySQL(cfg)
+	db, err := infra.InitMySQL(cfg)
 	if err != nil {
 		return fmt.Errorf("初始化 MySQL 失败: %w", err)
 	}
-	defer func() { _ = store.CloseMySQL(db) }()
+	defer func() { _ = infra.CloseMySQL(db) }()
 	zap.L().Info("MySQL 初始化成功", zap.String("database", cfg.Database.MySQL.Database))
 
 	// 5. 自动迁移
 	// 各存储包自己声明拥有的表，main 不需要知道表结构细节。
-	if err := store.AutoMigrate(db,
+	if err := infra.AutoMigrate(db,
 		append(append(identity.Schema(), chat.Schema()...), memory.Schema()...)...,
 	); err != nil {
 		return err
 	}
 
 	// 6. 初始化 Redis
-	rdb, err := store.InitRedis(cfg)
+	rdb, err := infra.InitRedis(cfg)
 	if err != nil {
 		return fmt.Errorf("初始化 Redis 失败: %w", err)
 	}
-	defer func() { _ = store.CloseRedis(rdb) }()
+	defer func() { _ = infra.CloseRedis(rdb) }()
 	zap.L().Info("Redis 初始化成功", zap.String("addr", cfg.Database.Redis.Addr))
 
 	// 7. 初始化 eino ChatModel。未配置 key 时返回 nil，服务照常启动。
 	ctx := context.Background()
-	cm, err := llm.NewModel(ctx, cfg.LLM)
+	cm, err := infra.NewModel(ctx, cfg.LLM)
 	if err != nil {
 		return fmt.Errorf("初始化 LLM 失败: %w", err)
 	}

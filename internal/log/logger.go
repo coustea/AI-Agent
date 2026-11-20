@@ -1,6 +1,6 @@
-// Package logger 提供基于 zap 的日志组件：
+// Package log 提供基于 zap 的日志组件：
 // 终端输出带颜色的可读格式，文件输出 JSON 并按日期分目录归档。
-package logger
+package log
 
 import (
 	"io"

@@ -12,16 +12,15 @@ import (
 	"gorm.io/gorm"
 
 	"mentorly/internal/agent"
+	"mentorly/internal/auth"
 	"mentorly/internal/capability"
 	"mentorly/internal/chat"
+	"mentorly/internal/config"
 	"mentorly/internal/httpapi"
 	"mentorly/internal/identity"
+	"mentorly/internal/infra"
 	"mentorly/internal/memory"
 	"mentorly/internal/middleware"
-	"mentorly/internal/platform/auth"
-	"mentorly/internal/platform/config"
-	"mentorly/internal/platform/llm"
-	"mentorly/internal/platform/store"
 	"mentorly/internal/turn"
 )
 
@@ -57,7 +56,7 @@ func New(d Deps) *App {
 	// ---------- 存储层 ----------
 	chatRepo := chat.NewRepo(d.DB)
 	memoryRepo := memory.NewRepo(d.DB)
-	lock := store.NewLock(d.Redis)
+	lock := infra.NewLock(d.Redis)
 	userRepo := identity.NewRepo(d.DB)
 
 	// ---------- 域内适配 ----------
@@ -71,7 +70,7 @@ func New(d Deps) *App {
 		titleGen     *memory.TitleGenerator
 	)
 
-	completer := llm.NewCompleter(d.LLM)
+	completer := infra.NewCompleter(d.LLM)
 	if completer != nil {
 		digest := memory.NewDigest(completer, adapters, memory.DigestConfig{
 			TriggerTokens:   cfg.Chat.CompressTriggerTokens,

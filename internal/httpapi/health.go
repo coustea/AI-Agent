@@ -9,7 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
-	"mentorly/pkg/response"
+	"mentorly/internal/response"
 )
 
 // HealthHandler 健康检查接口
