@@ -71,17 +71,17 @@ func TestLoad(t *testing.T) {
 		t.Errorf("BuildDSN() = %q, want %q", got, want)
 	}
 
-	// llm 的超时支持 "480s" 这类带单位写法。
-	// 该值需明显大于 chat.run_timeout 的一半，否则长回答会被截断。
-	if cfg.LLM.Timeout != 480*time.Second {
-		t.Errorf("llm.timeout = %v, want 480s", cfg.LLM.Timeout)
+	// llm 的超时支持 "300s" 这类带单位写法。
+	// 该值需 >= chat.run_timeout 的一半，并为重试/降级留足余量。
+	if cfg.LLM.Timeout != 300*time.Second {
+		t.Errorf("llm.timeout = %v, want 300s", cfg.LLM.Timeout)
 	}
 	if cfg.LLM.Timeout < cfg.Chat.RunTimeout/2 {
 		t.Errorf("llm.timeout(%v) 应 >= run_timeout(%v) 的一半",
 			cfg.LLM.Timeout, cfg.Chat.RunTimeout)
 	}
-	if cfg.LLM.MaxToken != 8192 {
-		t.Errorf("llm.max_token = %d, want 8192", cfg.LLM.MaxToken)
+	if cfg.LLM.MaxToken != 32768 {
+		t.Errorf("llm.max_token = %d, want 32768", cfg.LLM.MaxToken)
 	}
 	if cfg.LLM.ExtraFields["temperature"] != 0.7 {
 		t.Errorf("llm.extra_fields = %v", cfg.LLM.ExtraFields)
@@ -155,7 +155,7 @@ func TestShortLLMTimeoutRejected(t *testing.T) {
 	if err != nil {
 		t.Skipf("读取原始配置失败: %v", err)
 	}
-	broken := strings.Replace(string(orig), "timeout: 480s", "timeout: 10s", 1)
+	broken := strings.Replace(string(orig), "timeout: 300s", "timeout: 10s", 1)
 	path := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(path, []byte(broken), 0o644); err != nil {
 		t.Fatalf("写入临时配置: %v", err)
@@ -169,5 +169,25 @@ func TestShortLLMTimeoutRejected(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "llm.timeout") {
 		t.Errorf("错误信息应点明 llm.timeout，实际: %v", err)
+	}
+}
+
+func TestReduceThresholdMustBeLowerThanSummary(t *testing.T) {
+	setupEnv(t)
+	orig, err := os.ReadFile("internal/config/config.yaml")
+	if err != nil {
+		t.Skipf("读取原始配置失败: %v", err)
+	}
+	broken := strings.Replace(string(orig), "reduce_trigger_tokens: 24000", "reduce_trigger_tokens: 48000", 1)
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(broken), 0o644); err != nil {
+		t.Fatalf("写入临时配置: %v", err)
+	}
+	t.Setenv("APP_CONFIG_PATH", path)
+
+	if _, err := config.Load(); err == nil {
+		t.Fatal("reduce_trigger_tokens >= summary_trigger_tokens 应启动失败")
+	} else if !strings.Contains(err.Error(), "reduce_trigger_tokens") {
+		t.Errorf("错误信息应点明 reduce_trigger_tokens, 实际: %v", err)
 	}
 }

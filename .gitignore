@@ -19,7 +19,9 @@ vendor/
 __pycache__/
 *.pyc
 
-# 编辑器
+# 编辑器与本地工具
 .idea/
 .vscode/
+.apifox/
+.claude/
 .DS_Store

@@ -1,0 +1,11 @@
+defusedxml
+lxml
+python-pptx
+python-docx
+pypdf
+pdfplumber
+openpyxl
+pillow
+reportlab
+pandas
+cairosvg

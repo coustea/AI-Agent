@@ -39,17 +39,14 @@ llm:
   model: ${LLM_MODEL}
   # OpenAI 兼容接口的 BaseURL
   base_url: ${LLM_BASE_URL}
-  # API Key，留空则不启用 AI 能力（/api/v1/chat 返回 503）
+  # API Key，留空则不启用 AI 能力（发送消息接口返回 503）
   api_key: ${LLM_API_KEY}
-  # 最大输出 Token，0 表示使用服务端默认值
-  max_token: 8192
-  # 单次模型调用的 HTTP 超时。必须明显大于 chat.run_timeout 之外的余量，
-  # 否则「详细讲解」这类长回答会在流式传输中途被掐断（实测 120s 不够）。
-  # 注意：这是单次调用上限，整轮上限见 chat.run_timeout。
-  timeout: 480s
-  # 是否支持图片原生输入（多模态）。开启后用户上传的图片会直接内联进消息。
-  # 若所用模型不支持图片，必须设为 false，否则请求会被供应商拒绝。
-  vision: true
+  # 最大输出 Token，0 表示使用服务端默认值。
+  # 实测 spark-x2.6 将思考 token 计入 max_tokens，设 32768 为复杂课件/脚本留足余量。
+  max_token: 32768
+  # 单次模型调用的 HTTP 超时。与 chat.run_timeout(600s) 保持 1:2 配比，
+  # 既满足 >= run_timeout/2 校验，也为单次重试/降级留足时间余量。
+  timeout: 300s
   # 供应商扩展参数，原样透传
   extra_fields:
     temperature: 0.7
@@ -66,60 +63,37 @@ database:
     max_open_conns: 100
     conn_max_lifetime: 1h
 
-  redis:
-    addr: ${REDIS_ADDR}
-    password: ${REDIS_PASSWORD}
-    db: ${REDIS_DB}
-    pool_size: 100
-
 #===============================TutorAgent 配置===============================
 chat:
-  # 会话工作目录根路径，实际为 {workspace_dir}/{user_id}/{conversation_id}
-  workspace_dir: workspace/chat
-  # 工具结果卸载根目录，与工作目录分开以保持会话目录干净
-  offload_dir: workspace/.offload
-  # 技能目录，只读挂载为 Agent 的 /skills
-  skills_dir: skills
-  # Agent 单轮最大 ReAct 迭代步数
-  max_steps: 12
+  # 单条 shell 命令超时
+  shell_timeout: 120s
+  # Agent 单轮最大 ReAct 迭代步数。
+  # 复杂任务（多产物 + 反复调试）实测需要 25-40 步，
+  # 12 步会在真正产出前被截断。
+  max_steps: 40
   # 单轮生成总超时
   run_timeout: 600s
   # SSE 心跳间隔
   heartbeat: 15s
+  # 官方 Reduction Clear 阶段保留最近几轮工具调用，更早轮次触发清理时自动卸载
+  history_tool_turns: 2
+  # 官方 Reduction Clear 的触发阈值，必须低于 summary_trigger_tokens
+  reduce_trigger_tokens: 24000
   # 官方 Summarization Middleware 的触发阈值。
-  # 达到任一阈值即把旧对话压成摘要，原始消息仍完整保留在数据库。
-  summary_trigger_tokens: 60000
-  summary_trigger_messages: 40
-  # 异步生成标题的 worker 数
-  title_workers: 4
-  # 单次标题生成超时。慢模型首包可能要十几秒，30s 实测不够。
-  title_timeout: 120s
+  # 达到任一阈值即把旧对话压成摘要并持久化检查点，原始消息仍完整保留在数据库。
+  summary_trigger_tokens: 48000
+  summary_trigger_messages: 30
+
 
 #===============================附件配置===============================
 attachments:
-  # 附件存储根目录，实际为 {dir}/{user_id}/{attachment_id}{ext}
-  dir: workspace/attachments
-  # 单文件大小上限（字节），默认 32MB
-  max_bytes: 33554432
-  # 送入模型前，单个附件提取文本的最大字符数
-  max_extract_chars: 20000
-
-#===============================产物与异步任务配置===============================
-artifacts:
-  # 产物存储根目录，实际为 {dir}/{user_id}/{artifact_id}{ext}
-  dir: workspace/artifacts
-  # 异步生成任务的并发 worker 数
-  job_workers: 2
-  # 单个生成任务的总超时
-  job_timeout: 600s
-  # ffmpeg 可执行文件路径。视频能力依赖它做 H.264 编码。
-  ffmpeg_path: ffmpeg
-  # 渲染用字体路径。留空则按平台常见路径自动探测。
-  font_path: ""
-  # 视频分辨率与帧率。宽高必须为偶数，否则 libx264 编码失败。
-  video_width: 1280
-  video_height: 720
-  video_fps: 30
+  # 附件直接存放在默认会话工作区 workspace/chat/{user_id}/{conversation_id}/{attachment_id}{ext}
+  # 单文件大小上限（字节），默认 5MB，优先支持一次性读取直传 Agent
+  max_bytes: 5242880
+  # 单文件提取文本上限（字符），超限上传时直接拒绝，保证可一次性完整读入
+  max_extract_chars: 12000
+  # 单条消息允许附带的最多附件数
+  max_per_message: 3
 
 #===============================联网搜索配置（可选）===============================
 search:

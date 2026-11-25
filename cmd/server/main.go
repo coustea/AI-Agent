@@ -10,35 +10,39 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/subosito/gotenv"
 	"go.uber.org/zap"
 
-	"mentorly/internal/agents/tutor"
-	"mentorly/internal/app"
-	"mentorly/internal/auth"
-	"mentorly/internal/capabilities/artifacts"
-	"mentorly/internal/capabilities/attachments"
-	"mentorly/internal/capabilities/memory"
+	"mentorly/internal/agent"
+	"mentorly/internal/agent/tools"
 	"mentorly/internal/config"
-	"mentorly/internal/infra"
-	"mentorly/internal/log"
-	"mentorly/internal/runtime"
+	"mentorly/internal/handlers"
+	"mentorly/internal/middleware"
+	"mentorly/internal/repository/attachments"
+	"mentorly/internal/repository/conversations"
+	"mentorly/internal/repository/infra"
+	"mentorly/internal/repository/users"
+	"mentorly/internal/router"
+	"mentorly/internal/service"
+	"mentorly/internal/service/auth"
+	"mentorly/internal/utils/log"
 )
 
 func main() {
-	// 1. 加载 .env（不存在也继续，使用系统环境变量）
+	// 加载 .env（不存在也继续，使用系统环境变量）
 	if err := gotenv.Load(); err != nil {
 		fmt.Fprintln(os.Stderr, "未找到 .env 文件，将使用系统环境变量")
 	}
 
-	// 2. 加载配置。配置有问题必须立刻退出，不能带病启动。
+	// 加载配置。配置有问题必须立刻退出，不能带病启动。
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "加载配置失败: %v\n", err)
 		os.Exit(1)
 	}
 
-	// 3. 初始化日志。日志依赖配置，因此必须在配置之后。
+	// 初始化日志。日志依赖配置，因此必须在配置之后。
 	lg, closer, err := log.Init(log.Options{
 		Dir:       cfg.Log.Dir,
 		Level:     cfg.Log.Level,
@@ -69,34 +73,24 @@ func main() {
 }
 
 func run(cfg *config.Config, lg *zap.Logger) error {
-	// 4. 连接 MySQL（硬依赖）
+	// 连接 MySQL（硬依赖）
 	db, err := infra.InitMySQL(cfg.Database.MySQL, lg)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = infra.CloseMySQL(db) }()
 
-	// 5. 连接 Redis（软依赖，失败降级为 nil）
-	rdb, err := infra.InitRedis(cfg.Database.Redis, lg)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = infra.CloseRedis(rdb) }()
-
-	// 6. 建表。破坏性变更不在此处执行，见 migrations/。
-	models := []any{}
-	models = append(models, auth.Schema()...)
-	models = append(models, tutor.NewStore(db).Schema()...)
-	models = append(models, memory.NewStore(db).Schema()...)
-	models = append(models, (&attachments.Store{}).Schema()...)
-	models = append(models, (&artifacts.Store{}).Schema()...)
+	// 新数据库建表；启动过程不执行旧数据迁移或删表。
+	models := []any{&users.User{}}
+	models = append(models, conversations.Schema()...)
+	models = append(models, attachments.Schema()...)
 
 	if err := infra.AutoMigrate(db, models, lg); err != nil {
 		return err
 	}
 
-	// 7. 装配模型。未配置 api_key 时返回 nil，AI 能力关闭但不阻塞启动。
-	cm, err := runtime.NewModel(context.Background(), runtime.ModelConfig{
+	// 装配模型。未配置 api_key 时返回 nil，AI 能力关闭但不阻塞启动。
+	cm, err := agent.NewModel(context.Background(), agent.ModelConfig{
 		Provider: cfg.LLM.Provider,
 		Model:    cfg.LLM.Model,
 		BaseURL:  cfg.LLM.BaseURL,
@@ -104,28 +98,73 @@ func run(cfg *config.Config, lg *zap.Logger) error {
 		MaxToken: cfg.LLM.MaxToken,
 		Timeout:  int64(cfg.LLM.Timeout.Seconds()),
 		Extra:    cfg.LLM.ExtraFields,
-		Vision:   cfg.LLM.Vision,
 	})
 	if err != nil {
 		return fmt.Errorf("初始化模型失败: %w", err)
 	}
 
-	// 8. 装配应用
-	application, err := app.New(context.Background(), app.Deps{
-		Config: cfg,
-		DB:     db,
-		JWT:    auth.New(cfg.JWT),
-		LLM:    cm,
-		Log:    lg,
+	// 装配仓储、Agent、业务服务和 HTTP 路由。
+	if cfg.APP.IsProd() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	convStore := conversations.NewStore(db)
+	attStore, err := attachments.NewStore(db, attachments.Config{Dir: agent.DefaultWorkspaceDir, MaxBytes: cfg.Attachments.MaxBytes, MaxExtractChars: cfg.Attachments.MaxExtractChars})
+	if err != nil {
+		return err
+	}
+	agentCfg := agent.Config{
+		ModelProvider: cfg.LLM.Provider, ModelExtra: cfg.LLM.ExtraFields,
+		MaxSteps: cfg.Chat.MaxSteps, HistoryToolTurns: cfg.Chat.HistoryToolTurns,
+		ReduceTriggerTokens: cfg.Chat.ReduceTriggerTokens, SummaryTriggerTokens: cfg.Chat.SummaryTriggerTokens,
+		SummaryTriggerMessages: cfg.Chat.SummaryTriggerMessages,
+	}
+	agentTools, searchEnabled, err := tools.Build(tools.Config{
+		Attachments:    attStore,
+		Conversations:  convStore,
+		MountWorkspace: agent.MountWorkspace,
+		Principal:      agent.PrincipalIDs,
+		Shell: tools.ShellConfig{
+			Timeout:     cfg.Chat.ShellTimeout,
+			SkillsDir:   agent.DefaultSkillsDir,
+			WorkspaceOf: agent.WorkspaceDir,
+		},
+		Search: tools.SearchConfig{Provider: cfg.Search.Provider, APIKey: cfg.Search.APIKey, BaseURL: cfg.Search.BaseURL},
 	})
 	if err != nil {
 		return err
 	}
+	if searchEnabled {
+		lg.Info("联网搜索能力已启用", zap.String("provider", cfg.Search.Provider))
+	}
+	tutor, err := agent.New(context.Background(), agent.AgentDeps{Model: cm, Tools: agentTools, Config: agentCfg, Log: lg})
+	if err != nil {
+		return err
+	}
+	harness := agent.NewHarness(agent.HarnessDeps{Attachments: attStore, Conversations: convStore, Config: agentCfg})
+	chat := service.NewChat(convStore, attStore, cfg.Attachments.MaxPerMessage, lg)
 
-	// 9. 启动 HTTP 服务
+	jwt := auth.New(cfg.JWT)
+	authService := auth.NewService(users.NewStore(db), jwt)
+	authHandler := handlers.NewAuthHandler(authService)
+	chatHandler := handlers.NewChatHandler(handlers.ChatDeps{Service: chat, Harness: harness, Agent: tutor, Heartbeat: cfg.Chat.Heartbeat, RunTimeout: cfg.Chat.RunTimeout, Log: lg})
+	fileHandler := handlers.NewFileHandler(service.NewAttachments(attStore, convStore))
+	workspaceHandler := handlers.NewWorkspaceHandler(service.NewWorkspace(agent.DefaultWorkspaceDir, convStore))
+	healthHandler := handlers.NewHealthHandler(func(ctx context.Context) error {
+		sqlDB, err := db.DB()
+		if err != nil {
+			return err
+		}
+		return sqlDB.PingContext(ctx)
+	})
+
+	engine := gin.New()
+	engine.Use(middleware.RequestID(), middleware.Logger(lg), middleware.Recovery(lg), middleware.CORS(nil))
+	engine.NoRoute(middleware.NoRoute())
+	router.Register(engine, middleware.Auth(jwt, authService), authHandler, chatHandler, fileHandler, workspaceHandler, healthHandler)
+	// 启动 HTTP 服务
 	srv := &http.Server{
 		Addr:              cfg.APP.Addr(),
-		Handler:           application.Engine,
+		Handler:           engine,
 		ReadHeaderTimeout: 10 * time.Second,
 		// 不设 WriteTimeout：SSE 长连接会被它强制中断。
 		// 单轮超时由 chat.run_timeout 在业务层控制。
@@ -140,14 +179,12 @@ func run(cfg *config.Config, lg *zap.Logger) error {
 		}
 	}()
 
-	// 10. 优雅退出
+	// 优雅退出
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	select {
 	case err := <-errCh:
-		application.Jobs.Close(5 * time.Second)
-		application.Titles.Close(5 * time.Second)
 		return fmt.Errorf("HTTP 服务异常退出: %w", err)
 	case sig := <-quit:
 		lg.Info("收到退出信号，开始优雅关闭", zap.String("signal", sig.String()))
@@ -159,10 +196,6 @@ func run(cfg *config.Config, lg *zap.Logger) error {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		lg.Warn("HTTP 服务关闭超时", zap.Error(err))
 	}
-
-	// 等待在途的异步任务收尾，避免产物生成到一半被强杀。
-	application.Jobs.Close(10 * time.Second)
-	application.Titles.Close(5 * time.Second)
 
 	lg.Info("服务已退出")
 	return nil

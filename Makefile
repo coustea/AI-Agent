@@ -8,19 +8,24 @@ help: ## 显示可用命令
 .PHONY: env
 env: ## 从模板生成本地 .env（已存在则不覆盖）
 	@test -f .env || cp .env.example .env
-	@echo ".env 已就绪，按需修改 MySQL / Redis / LLM 配置"
+	@echo ".env 已就绪，按需修改 MySQL / LLM 配置"
 
 .PHONY: deps
 deps: ## 下载并校验依赖
 	go mod download
 	go mod verify
 
+.PHONY: skills-deps
+skills-deps: ## 安装官方文档技能所需 Python 环境
+	@test -x "$(HOME)/.local/share/mentorly/skills-python/bin/python3" || uv venv "$(HOME)/.local/share/mentorly/skills-python" --python 3.12
+	uv pip install --python "$(HOME)/.local/share/mentorly/skills-python/bin/python" -r internal/agent/skills/requirements.txt
+
 .PHONY: run
 run: ## 本地启动 HTTP 服务
 	go run ./cmd/server
 
 .PHONY: build
-build: ## 编译二进制到 bin/
+build: ## 编译服务二进制到 bin/
 	@mkdir -p bin
 	go build -trimpath -ldflags "-s -w" -o $(BINARY) ./cmd/server
 
@@ -43,10 +48,6 @@ test: ## 运行测试
 .PHONY: check
 check: fmt vet build ## 格式化 + 检查 + 编译
 
-.PHONY: migrate
-migrate: ## 执行数据库迁移（保留现有用户数据）
-	@mysql -u$${MYSQL_USERNAME:-root} -p$${MYSQL_PASSWORD} -D $${MYSQL_DATABASE:-mentorly} < migrations/001_agent_first.sql
-
 .PHONY: backup
 backup: ## 备份数据库到 /tmp
 	@mkdir -p /tmp/mentorly-backup
@@ -56,7 +57,9 @@ backup: ## 备份数据库到 /tmp
 
 .PHONY: doctor
 doctor: ## 检查运行时依赖（ffmpeg / 字体 / 数据库）
+	@echo "--- macOS Shell 沙箱 ---"; command -v sandbox-exec || echo "缺失（服务启动会失败）"
 	@echo "--- ffmpeg ---"; command -v ffmpeg || echo "缺失（视频能力不可用）"
+	@echo "--- pdftotext ---"; command -v pdftotext || echo "缺失（PDF 附件文本提取不可用）"
 	@echo "--- 字体 ---"; ls /Library/Fonts/Arial\ Unicode.ttf 2>/dev/null || \
 		ls /System/Library/Fonts/Supplemental/Songti.ttc 2>/dev/null || echo "缺失（视频能力不可用）"
 	@echo "--- MySQL ---"; command -v mysql >/dev/null && echo "ok" || echo "缺失"

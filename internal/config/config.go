@@ -25,58 +25,42 @@ type Config struct {
 	Database    DatabaseConfig    `mapstructure:"database"`
 	Chat        ChatConfig        `mapstructure:"chat"`
 	Attachments AttachmentsConfig `mapstructure:"attachments"`
-	Artifacts   ArtifactsConfig   `mapstructure:"artifacts"`
 	Search      SearchConfig      `mapstructure:"search"`
 }
 
 // ChatConfig 对应 config.yaml 中的 chat 段落，控制 Tutor Harness 与 Agent 行为。
 type ChatConfig struct {
-	// WorkspaceDir 会话工作目录根路径，实际路径为 {WorkspaceDir}/{user_id}/{conversation_id}
-	WorkspaceDir string `mapstructure:"workspace_dir"`
-	// OffloadRoot 工具结果卸载根目录，与工作目录分开以保持会话目录干净
-	OffloadRoot string `mapstructure:"offload_dir"`
-	// SkillsDir 技能目录，只读挂载为 Agent 的 /skills
-	SkillsDir string `mapstructure:"skills_dir"`
+	// ShellTimeout 单条 shell 命令超时
+	ShellTimeout time.Duration `mapstructure:"shell_timeout"`
 	// MaxSteps Agent 单轮最大 ReAct 迭代步数
 	MaxSteps int `mapstructure:"max_steps"`
 	// RunTimeout 单轮生成总超时
 	RunTimeout time.Duration `mapstructure:"run_timeout"`
 	// Heartbeat SSE 心跳间隔
 	Heartbeat time.Duration `mapstructure:"heartbeat"`
+	// HistoryToolTurns 官方 Reduction Clear 阶段保留最近几轮工具调用
+	HistoryToolTurns int `mapstructure:"history_tool_turns"`
+	// ReduceTriggerTokens 触发官方 Reduction Clear 的 token 阈值（必须小于 SummaryTriggerTokens）
+	ReduceTriggerTokens int `mapstructure:"reduce_trigger_tokens"`
 	// SummaryTriggerTokens 触发官方 Summarization Middleware 的 token 阈值
 	SummaryTriggerTokens int `mapstructure:"summary_trigger_tokens"`
 	// SummaryTriggerMessages 触发官方 Summarization Middleware 的消息条数阈值
 	SummaryTriggerMessages int `mapstructure:"summary_trigger_messages"`
-	// TitleWorkers 异步生成标题的 worker 数
-	TitleWorkers int `mapstructure:"title_workers"`
-	// TitleTimeout 单次标题生成超时
-	TitleTimeout time.Duration `mapstructure:"title_timeout"`
 }
 
-// AttachmentsConfig 控制附件上传与文本提取。
+// AttachmentsConfig 控制附件上传与文本提取（存储根目录直接复用默认会话工作区）。
 type AttachmentsConfig struct {
-	Dir             string `mapstructure:"dir"`
-	MaxBytes        int64  `mapstructure:"max_bytes"`
-	MaxExtractChars int    `mapstructure:"max_extract_chars"`
-}
-
-// ArtifactsConfig 控制 Artifact 存储与异步生成任务。
-type ArtifactsConfig struct {
-	Dir         string        `mapstructure:"dir"`
-	JobWorkers  int           `mapstructure:"job_workers"`
-	JobTimeout  time.Duration `mapstructure:"job_timeout"`
-	FFmpegPath  string        `mapstructure:"ffmpeg_path"`
-	FontPath    string        `mapstructure:"font_path"`
-	VideoWidth  int           `mapstructure:"video_width"`
-	VideoHeight int           `mapstructure:"video_height"`
-	VideoFPS    int           `mapstructure:"video_fps"`
+	MaxBytes        int64 `mapstructure:"max_bytes"`
+	MaxExtractChars int   `mapstructure:"max_extract_chars"`
+	MaxPerMessage   int   `mapstructure:"max_per_message"`
 }
 
 // SearchConfig 是可选联网搜索能力。api_key 为空时不注册搜索工具。
 type SearchConfig struct {
 	Provider string `mapstructure:"provider"`
 	APIKey   string `mapstructure:"api_key"`
-	BaseURL  string `mapstructure:"base_url"`
+	// BaseURL 可填写服务根地址或完整的 /search 地址。
+	BaseURL string `mapstructure:"base_url"`
 }
 
 // APPConfig 对应 config.yaml 中的 app 段落
@@ -130,15 +114,11 @@ type LLMConfig struct {
 	MaxToken    int            `mapstructure:"max_token"`
 	Timeout     time.Duration  `mapstructure:"timeout"`
 	ExtraFields map[string]any `mapstructure:"extra_fields"`
-	// Vision 表示当前模型是否支持图片原生输入。
-	// 为 false 时不会把图片内联进消息，而是提示模型改用文本途径。
-	Vision bool `mapstructure:"vision"`
 }
 
 // DatabaseConfig 对应 config.yaml 中的 database 段落
 type DatabaseConfig struct {
 	MySQL MySQLConfig `mapstructure:"mysql"`
-	Redis RedisConfig `mapstructure:"redis"`
 }
 
 type MySQLConfig struct {
@@ -163,16 +143,7 @@ func (m MySQLConfig) BuildDSN() string {
 	)
 }
 
-type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
-	PoolSize int    `mapstructure:"pool_size"`
-}
-
-var cfg *Config
-
-// Load 读取并解析配置文件，成功后可通过 Get 获取全局实例。
+// Load 读取并解析配置文件。
 func Load() (*Config, error) {
 	path := ConfigPath
 	if p := strings.TrimSpace(os.Getenv("APP_CONFIG_PATH")); p != "" {
@@ -188,7 +159,7 @@ func Load() (*Config, error) {
 	// 2. 展开配置文件中的 ${ENV} 环境变量。
 	// os.ExpandEnv 会把未设置的变量静默替换成空串，这里先把「未定义」和
 	// 「显式留空」区分开：未定义多半是配置漏填，应当启动失败并报出变量名；
-	// 显式留空（如本机 Redis 无密码）是合法场景，不能拦。
+	// 显式留空（如可选的搜索密钥）是合法场景，不能拦。
 	content := stripYAMLComments(string(rawContent))
 	if undefined := undefinedEnvKeys(content); len(undefined) > 0 {
 		return nil, fmt.Errorf("配置引用了未定义的环境变量: %s", strings.Join(undefined, ", "))
@@ -213,13 +184,7 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
-	cfg = &c
-	return cfg, nil
-}
-
-// Get 获取全局配置实例，需先调用 Load。
-func Get() *Config {
-	return cfg
+	return &c, nil
 }
 
 // undefinedEnvKeys 找出文本中形如 ${KEY}、但当前环境中完全没有定义的变量名。
@@ -282,17 +247,11 @@ func stripYAMLComments(content string) string {
 func (c *Config) applyDefaults() {
 	ch := &c.Chat
 
-	if strings.TrimSpace(ch.WorkspaceDir) == "" {
-		ch.WorkspaceDir = "workspace/chat"
-	}
-	if strings.TrimSpace(ch.OffloadRoot) == "" {
-		ch.OffloadRoot = "workspace/.offload"
-	}
-	if strings.TrimSpace(ch.SkillsDir) == "" {
-		ch.SkillsDir = "skills"
+	if ch.ShellTimeout <= 0 {
+		ch.ShellTimeout = 120 * time.Second
 	}
 	if ch.MaxSteps <= 0 {
-		ch.MaxSteps = 8
+		ch.MaxSteps = 40
 	}
 	if ch.RunTimeout <= 0 {
 		ch.RunTimeout = 600 * time.Second
@@ -300,52 +259,30 @@ func (c *Config) applyDefaults() {
 	if ch.Heartbeat <= 0 {
 		ch.Heartbeat = 15 * time.Second
 	}
+	if ch.HistoryToolTurns <= 0 {
+		ch.HistoryToolTurns = 2
+	}
 	if ch.SummaryTriggerTokens <= 0 {
-		ch.SummaryTriggerTokens = 60000
+		ch.SummaryTriggerTokens = 48000
 	}
 	if ch.SummaryTriggerMessages <= 0 {
-		ch.SummaryTriggerMessages = 40
+		ch.SummaryTriggerMessages = 30
 	}
-	if ch.TitleWorkers <= 0 {
-		ch.TitleWorkers = 4
-	}
-	if ch.TitleTimeout <= 0 {
-		ch.TitleTimeout = 120 * time.Second
+	if ch.ReduceTriggerTokens <= 0 {
+		ch.ReduceTriggerTokens = min(24000, ch.SummaryTriggerTokens/2)
 	}
 
 	at := &c.Attachments
-	if strings.TrimSpace(at.Dir) == "" {
-		at.Dir = "workspace/attachments"
-	}
 	if at.MaxBytes <= 0 {
-		at.MaxBytes = 32 << 20
+		at.MaxBytes = 5 << 20
 	}
 	if at.MaxExtractChars <= 0 {
-		at.MaxExtractChars = 20000
+		at.MaxExtractChars = 12000
+	}
+	if at.MaxPerMessage <= 0 {
+		at.MaxPerMessage = 3
 	}
 
-	ar := &c.Artifacts
-	if strings.TrimSpace(ar.Dir) == "" {
-		ar.Dir = "workspace/artifacts"
-	}
-	if ar.JobWorkers <= 0 {
-		ar.JobWorkers = 2
-	}
-	if ar.JobTimeout <= 0 {
-		ar.JobTimeout = 10 * time.Minute
-	}
-	if strings.TrimSpace(ar.FFmpegPath) == "" {
-		ar.FFmpegPath = "ffmpeg"
-	}
-	if ar.VideoWidth <= 0 {
-		ar.VideoWidth = 1280
-	}
-	if ar.VideoHeight <= 0 {
-		ar.VideoHeight = 720
-	}
-	if ar.VideoFPS <= 0 {
-		ar.VideoFPS = 30
-	}
 }
 
 // validate 做启动期的业务校验：能在这里发现的问题，不要留到运行时才暴露。
@@ -378,6 +315,13 @@ func (c *Config) validate() error {
 			"llm.timeout(%s) 过小：应至少为 chat.run_timeout(%s) 的一半，"+
 				"否则长回答会被单次调用超时截断",
 			c.LLM.Timeout, c.Chat.RunTimeout,
+		)
+	}
+
+	if c.Chat.ReduceTriggerTokens >= c.Chat.SummaryTriggerTokens {
+		return fmt.Errorf(
+			"chat.reduce_trigger_tokens(%d) 必须小于 chat.summary_trigger_tokens(%d)，否则历史工具清理永远不会先于压缩触发",
+			c.Chat.ReduceTriggerTokens, c.Chat.SummaryTriggerTokens,
 		)
 	}
 
