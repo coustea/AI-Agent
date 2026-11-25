@@ -1,106 +1,269 @@
 # Mentorly
 
-Mentorly 是基于 Go、Eino DeepAgent 和 MySQL 的单 TutorAgent 服务。TutorAgent 负责教学对话、附件理解与联网搜索；它通过官方 Skills、基础文件工具和受控 Shell 创建文档、图解、PPT 与视频。项目没有独立的 ResourceAgent 或 `generate_*` 业务工具。
+基于 **Go 1.26**、**CloudWeGo Eino (`v0.9.23`) DeepAgent**、**Gin** 与 **MySQL** 构建的单 TutorAgent 学习智能体后端服务。
 
-## 运行环境与依赖
+TutorAgent 负责教学讲解、文档附件理解与联网检索，并通过官方 Skills、虚拟文件系统与跨平台 Shell 工具直接产出 Word 文档、PDF、表格、Excalidraw 图解、PPT 课件与 HyperFrames 动画讲解视频（无独立 `ResourceAgent` 或硬编码 `generate_*` 工具）。
 
-Agent 运行期间不主动探测宿主机工具链，请在部署或本机开发环境中预先安装所需依赖：
+---
 
-### 1. 基础必需依赖
+## 目录
 
-| 依赖 | 用途 | 安装 / 说明 |
+- [核心特性](#核心特性)
+- [系统架构](#系统架构)
+- [中间件、工具与 Skills](#中间件工具与-skills)
+- [项目结构](#项目结构)
+- [快速开始](#快速开始)
+- [配置说明](#配置说明)
+- [API 与 SSE 协议](#api-与-sse-协议)
+- [安全与隔离](#安全与隔离)
+- [开发与测试](#开发与测试)
+
+---
+
+## 核心特性
+
+- **单智能体统一编排**：基于 Eino DeepAgent，通过按需加载只读 `SKILL.md` 完成多模态教学产物创作，遵循「理解需求 → 规划 → 动手做 → 自检 → 交付」。
+- **Eino 官方上下文治理链路**：优先复用 Eino 官方 `Skill`、`PatchToolCalls`、`Reduction`（超长输出卸载 + 旧轮次工具清理）与 `Summarization`（超阈值中文摘要 + 检查点持久化），无重复造轮子。
+- **System Prompt 前缀缓存友好**：静态系统提示词在启动期构建一次长期复用（含宿主机 OS/Shell 感知）；日期、工作区文件与本轮附件通过每轮 `<turn_context>` 注入，避免逐轮破坏上游 Prompt Cache。
+- **多租户工作区与跨平台执行**：每个会话隔离在 `workspace/chat/{user_id}/{conversation_id}`；虚拟文件系统阻断路径穿越与软链接逃逸；自研单文件跨平台 `execute` 工具支持 macOS / Linux / Windows，并由 `ToolGuard` 中间件统一拦截高危命令与技能目录写入。
+- **完整流式体验与可观测性**：原生 SSE 实时推送正文、工具状态与错误事件；内置瞬时故障退避重试与 `finish_reason=length` 推理降级重试；结构化 JSON 日志完整追踪模型耗时、Token 用量与工具调用。
+
+---
+
+## 系统架构
+
+```mermaid
+flowchart LR
+    Client["Client (HTTP / SSE)"] --> Router["Gin Router & Auth/CORS/Recovery"]
+    Router --> Handler["Handlers"]
+    Handler --> Service["Service (归属校验 / 会话锁 / 持久化)"]
+    Handler --> Harness["Harness (检查点 + 完整历史 + <turn_context>)"]
+    Handler --> Agent["TutorAgent (Eino DeepAgent)"]
+
+    subgraph AgentCore["internal/agent/"]
+        Agent --> MW["middlewares/ (skill / patchtoolcalls / reduction / summarization / ToolGuard)"]
+        Agent --> Tools["tools/ (execute / list_attachments / read_attachment / web_search)"]
+        Agent --> FS["workspace.go (/workspace 读写 + /skills 只读)"]
+    end
+
+    Service --> Repo["MySQL (GORM) & Local Workspace"]
+    Harness --> Repo
+    Tools --> Repo
+```
+
+### 单轮对话执行流水线
+
+Handler 严格按以下顺序编排（`Service` 不持有 `Harness` 或 `Agent` 实例，`Agent` 不持有数据库依赖，统一在 [`cmd/server/main.go`](cmd/server/main.go) 装配）：
+
+```text
+Service.Prepare（校验归属 + 获取会话锁）
+  → Harness.Prepare（读取最新压缩检查点 + 完整历史 + 补齐历史 <attachment_ref> + 组装 <turn_context>）
+  → Service.SaveUser（落库用户消息；首轮自动截取前 20 字符作为会话标题）
+  → Agent.Run（流式执行 ReAct 循环，实时推送 SSE，捕获压缩检查点）
+  → Service.SaveResult（保存最终回答、工具调用记录与压缩检查点，发送 done 事件并释放锁）
+```
+
+---
+
+## 中间件、工具与 Skills
+
+### 1. Agent 中间件链路（[`internal/agent/middlewares/`](internal/agent/middlewares)）
+
+按注册顺序生效（`BeforeModelRewriteState` 正序执行，`Wrap*` 钩子按洋葱模型外层优先）：
+
+| 顺序 | 名称 | 来源 | 职责 |
+|---|---|---|---|
+| 内置 | `write_todos` | Eino DeepAgent | 注入任务规划工具 `write_todos` |
+| 内置 | `filesystem` | Eino DeepAgent | 注入 `ls`/`read_file`/`write_file`/`edit_file`/`glob`/`grep`（绑定虚拟文件系统） |
+| 内置 | `task` | Eino DeepAgent | 注入通用子代理工具 |
+| `0` | `skill` | Eino 官方 | 注入 `skill` 工具与 `/skills` 发现协议 |
+| `1` | `patchtoolcalls` | Eino 官方 | 调模型前补齐历史中断留下的悬空 `tool_calls` |
+| `2` | `reduction` | Eino 官方 | 外层卸载 `>24KB` 工具输出至 `/workspace/.offload`；调模型前超阈值清理早于近 `N` 轮的工具结果及 `write_file`/`edit_file` 大入参 |
+| `3` | `summarization` | Eino 官方 | 达到 Token 或消息数阈值时生成中文摘要、保留已加载技能（`PreserveSkills`）并产出可持久化检查点 |
+| `4` | `ToolGuard` | 自定义（[toolguard.go](internal/agent/middlewares/toolguard.go)） | 最内层工具包装：拦截跨平台高危命令与技能目录写入；将可恢复工具错误转为脱敏文本反馈，原样透传取消/超时/身份缺失等致命错误 |
+
+### 2. 工具清单（[`internal/agent/tools/`](internal/agent/tools)）
+
+- **Eino 内置工具**：`write_todos`、`ls`、`read_file`、`write_file`、`edit_file`、`glob`、`grep`、`task`、`skill`。
+- **外部独立工具**（由 `tools.Build` 统一装配，禁用 Eino 内置 `execute`）：
+
+| 工具名 | 实现文件 | 说明 |
 |---|---|---|
-| Go `1.26+` | 编译与运行服务端 | [go.dev](https://go.dev/dl/) |
-| MySQL `8.0+` | 用户、会话、消息、压缩检查点与附件元数据存储 | 启动时 AutoMigrate 自动建表，请使用空库 |
-| macOS `sandbox-exec` | Agent `execute` 命令的内核级沙箱隔离 | macOS 系统内置 |
-| ripgrep (`rg`) | Eino 文件工具 `grep` 的底层检索引擎 | `brew install ripgrep` |
+| `execute` | [shell.go](internal/agent/tools/shell.go) | 跨平台通用命令执行器（macOS/Linux 用 `bash`/`sh`，Windows 用 `cmd`），在会话工作区执行，自动过滤 `.env` 密钥、注入 `WORKSPACE`/`SKILLS_DIR`/`TMPDIR`、支持超时与 `50000` 字符截断 |
+| `list_attachments` | [list_attachments.go](internal/agent/tools/list_attachments.go) | 按消息顺序列出当前会话实际引用的历史附件（含消息 ID、时间、问题摘要、路径与状态），上下文压缩后可快速回溯 |
+| `read_attachment` | [read_attachment.go](internal/agent/tools/read_attachment.go) | 零信任校验用户与会话归属后，按 Unicode 字符 `offset`/`limit` 分页读取附件全文 |
+| `web_search` | [web_search.go](internal/agent/tools/web_search.go) | 可选 Tavily 联网搜索工具，未配置凭据时自动跳过注册 |
 
-### 2. 文档、课件与视频 Skills 依赖
+### 3. 内置只读 Skills（[`internal/agent/skills/`](internal/agent/skills)）
 
-Agent 通过只读挂载的 [`internal/agent/skills/`](internal/agent/skills) 调用以下宿主机命令工具链；服务端代码不硬编码任何编译器或运行时路径，直接透传宿主机 `PATH`（以及已设置的 `NODE_PATH`、`DYLD_FALLBACK_LIBRARY_PATH`、`XDG_CACHE_HOME`），由 Agent 通过 bash 自行定位并执行：
+| Skill | 用途 |
+|---|---|
+| `docx` / `pdf` / `pptx` / `xlsx` | Word、PDF、PowerPoint 课件与电子表格的创建、编辑与分析 |
+| `excalidraw-diagram` | 流程图、架构图、概念图（`.excalidraw`）生成与校验 |
+| `hyperframes` / `hyperframes-cli` / `media-use` | 官方 HyperFrames 动画与讲解视频（`.mp4`）制作与渲染 |
 
-- **Python `3.12` + `uv`**（运行 `make skills-deps` 安装到 `~/.local/share/mentorly/skills-python`，并将其 `bin` 加入 `PATH`）：
-  - 安装清单见 [`internal/agent/skills/requirements.txt`](internal/agent/skills/requirements.txt)：`python-pptx`、`python-docx`、`openpyxl`、`pypdf`、`pdfplumber`、`reportlab`、`pandas`、`pillow`、`defusedxml`、`lxml`、`cairosvg`
-- **Node.js + 全局 npm 包**（供 `pptx`/`docx` 脚本及 HyperFrames 视频渲染调用，建议在环境中配置 `NODE_PATH=$(npm root -g)`）：
+---
+
+## 项目结构
+
+```text
+.
+├── cmd/server/                   # 服务入口、依赖装配、优雅退出
+├── internal/
+│   ├── agent/                    # TutorAgent 核心装配、流式执行与 Harness
+│   │   ├── agent.go              # 模型构造、静态 System Prompt、DeepAgent 装配与重试策略
+│   │   ├── chat.go               # Runner 流式消费、SSE 事件转换、错误分类与 Token 指标
+│   │   ├── harness.go            # 检查点 + 完整历史加载、历史附件引用、<turn_context>
+│   │   ├── workspace.go          # 虚拟文件系统（/workspace 读写隔离、/skills 只读）
+│   │   ├── prompt.md             # 静态基础系统提示词
+│   │   ├── middlewares/          # 中间件装配（build / reduction / summarization / toolguard）
+│   │   ├── tools/                # 外部业务工具（build / shell / list_attachments / read_attachment / web_search）
+│   │   └── skills/               # 只读官方 Skills 目录（运行时严禁修改）
+│   ├── config/                   # config.yaml 解析、${ENV} 展开与启动期一致性校验
+│   ├── dto/                      # HTTP 请求与响应 DTO
+│   ├── handlers/                 # 认证、会话/SSE、附件、工作区下载、健康检查 Handler
+│   ├── middleware/               # Gin 中间件（RequestID / Logger / Recovery / CORS / JWT Auth）
+│   ├── repository/               # MySQL 仓储（users / conversations / attachments）与工作区文件读取
+│   ├── router/                   # HTTP 路由注册
+│   ├── service/                  # 业务服务与 JWT 认证服务
+│   └── utils/                    # 安全路径拼接与 zap + lumberjack 日志初始化
+├── .env.example                  # 环境变量模板
+├── Makefile                      # 常用开发、依赖安装、测试与构建命令
+└── README.md
+```
+
+---
+
+## 快速开始
+
+### 1. 环境依赖
+
+#### 基础必需依赖
+
+| 依赖 | 版本 / 说明 | 安装方式 |
+|---|---|---|
+| Go | `1.26+` | [go.dev](https://go.dev/dl/) |
+| MySQL | `8.0+`（推荐使用空库，启动时 AutoMigrate 自动建表） | 本地或 Docker |
+| ripgrep (`rg`) | Eino 文件工具 `grep` 底层检索引擎 | `brew install ripgrep` / 系统包管理器 |
+
+#### Skills 可选工具链（按需预装至宿主机 `PATH`）
+
+服务端不在代码中硬编码编译器或运行时路径，直接继承宿主机环境，由 Agent 按当前系统命令自行定位并调用：
+
+- **Python `3.12` + `uv`**（供 `docx`/`pdf`/`pptx`/`xlsx` 脚本使用）：
+  ```bash
+  make skills-deps
+  # 安装到 ~/.local/share/mentorly/skills-python，请将其 bin 目录加入 PATH
+  ```
+  完整依赖清单见 [`internal/agent/skills/requirements.txt`](internal/agent/skills/requirements.txt)。
+- **Node.js + 全局 npm 包**（供 `pptx`/`docx` 与 HyperFrames 视频渲染使用，建议配置 `NODE_PATH=$(npm root -g)`）：
   ```bash
   npm install -g pptxgenjs docx react-icons react react-dom sharp hyperframes
   ```
-- **文档转换、视频与视觉自检 CLI**（供 LibreOffice 转 PDF/图片、SVG 渲染、音视频处理与格式转换）：
+- **文档转换与音视频 CLI**（macOS 示例）：
   ```bash
   brew install libreoffice poppler pandoc cairo ffmpeg
   ```
-  提供 `soffice`、`pdftoppm`、`pdftotext`、`pandoc`、`ffmpeg` 及 Homebrew `libcairo`（使用 `cairosvg` 时在环境中设置 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`）。
+  - 提供 `soffice`、`pdftoppm`、`pdftotext`（PDF 附件提取必需）、`pandoc`、`ffmpeg` 及 `libcairo`（使用 `cairosvg` 时建议配置 `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib`）。
+  - 附件仅支持 `.doc`、`.docx`、`.pdf`、`.md`（`.doc` 在 macOS 上使用系统内置 `textutil`，`.docx` 使用 Eino 官方解析器）。
 
-### 3. 附件解析与可选能力
-
-- **附件解析**（仅支持 `.doc`、`.docx`、`.pdf`、`.md`）：`.pdf` 依赖 `pdftotext`（随 `poppler` 安装）；`.doc` 依赖 macOS 内置 `textutil`；`.docx` 使用 Eino 官方解析扩展；`.md` 直接读取。
-- **联网搜索（可选）**：在 `.env` 配置 Tavily 凭据（`SEARCH_PROVIDER=tavily`、`SEARCH_API_KEY`），未配置时不注册 `web_search`。
-- **模型凭据**：未配置 `LLM_API_KEY` 时服务仍可启动，对话接口返回 `503`。
-
-## 启动
-
-1. 将 `.env.example` 复制为 `.env`，配置 MySQL、JWT 和模型。使用新的空数据库；启动时 AutoMigrate 建立 `users`、`conversations`、`messages`、`attachments`，不会删除旧数据，也不负责旧表迁移。
-2. 安装上方依赖并按需将工具目录加入 `PATH`（可用 `make doctor` 与 `hyperframes doctor` 快速核对基础命令）。
-3. 运行 `make run` 启动 HTTP 服务；`GET /readyz` 检查数据库。
-
-## 分层
-
-```text
-cmd/server/                    启动、依赖装配、优雅退出
-internal/router/               HTTP 路径注册
-internal/handlers/             请求解析、响应编码、SSE、文件下载
-internal/dto/                  HTTP 请求与响应数据结构
-internal/middleware/           Gin 认证、请求日志、恢复、CORS
-internal/service/              会话与认证流程、附件、工作区、首问截取标题
-internal/agent/                DeepAgent、Harness、自定义工具、Shell、Skills
-internal/repository/           MySQL 仓储与文件存储
-internal/config/               配置
-internal/utils/                安全路径与日志初始化
-```
-
-Handler 顺序调用 `Service.Prepare → Harness.Prepare → Service.SaveUser → Agent.Run → Service.SaveResult`。Service 校验会话与附件归属并持有会话锁；Harness 独立读取历史、组装上下文；读取历史后才保存本轮用户消息。SSE 在准备成功后开启，工具与文本事件写入失败会取消运行；结果落库后发送 `done`，最后释放锁。首轮用户消息保存后，以问题前 20 个字符作为标题，不调用模型。Service 不持有 Harness 或 Agent 实例。
-
-**System Prompt 与每轮状态严格分离。** System Prompt 在 `agent.New` 时构建一次并长期复用，只写启动后不变的内容：行为约束、挂载点（`/workspace`、`/skills`）、沙箱命令规范与支持的文档格式。日期、工作区文件列表、本轮附件路径每轮都在变，它们随用户消息以 `<turn_context>` 送入，本轮附件带有 ID、文件名、路径及最多 12000 字的提取文本；历史附件只在原用户消息中保留引用。这样后续轮次新上传的附件只需追加到当轮消息，System Prompt 保持稳定，上游前缀缓存不会被逐轮破坏。
-
-附件关联以 `messages.attachment_ids` 为准。`list_attachments` 查询本用户、本会话中实际引用附件的用户消息，按消息顺序返回消息 ID、时间、问题摘要和附件引用；上下文压缩后也能重新定位。仅上传而未发送的文件不进入该列表。`read_attachment` 从运行上下文取得身份，校验用户与会话，再读取原件、提取并按字符分页返回文本。原件缺失、提取失败或元数据不可用时保留引用并返回明确状态，不增加关联表或向量检索。
-
-会话消息接口按消息记录的 `attachment_ids` 顺序返回 `attachments` 数组（文件名、类别、大小、下载地址），一次请求即可按顺序渲染，不需要为每条消息再查一次附件。附件摘要用一次 `IN` 查询批量取回后在内存中分发，避免 N+1。
-
-Agent 使用 Eino 官方 `Skill`、`PatchToolCalls`、`Reduction`、`Summarization` 中间件，以及自定义 `toolGuard` 中间件和 Eino DeepAgent 提供的文件工具。`internal/agent/skills/` 包含官方 `docx`、`pdf`、`pptx`、`xlsx` Skills、Excalidraw 图解 Skill 以及 HyperFrames 官方视频 Skills（`hyperframes`、`hyperframes-cli`、`media-use`）。会话工作区默认固定在 `workspace/chat/{user_id}/{conversation_id}`，附件与工具大结果卸载（`/workspace/.offload`）统一落在该目录下，Agent 通过 `/workspace/` 直接读写。Skills 默认固定在 `internal/agent/skills` 且严格只读，Shell 受 macOS 沙箱约束并直接通过 bash 调用宿主机环境中的渲染与脚本命令。
-
-## HTTP 与数据
-
-- `/api/v1/auth/register`、`/api/v1/auth/login`、`/api/v1/profile`：认证。
-- `/api/v1/conversations` 及 `/:id/messages`：会话管理与 SSE 对话。
-- `/api/v1/attachments`：上传、查看和下载附件。
-- `/api/v1/workspaces/:id/files`：列出和下载本会话生成的文件。
-
-SSE 事件为 `message`、`tool_start`、`tool_end`、`error`、`done`。MySQL 历史记录保留 ToolCall 与 ToolResult 的关联字段；对用户展示的消息列表只包含问答。Agent 执行器不持有数据库依赖；Harness 通过 Repository 读取历史，Service 负责业务校验和持久化。附件工具从运行上下文取得身份后访问 Repository。
-
-认证通过后中间件把 `user_id` 与 `username` 合成一个 `middleware.Identity` 写入 `gin.Context`，handler 用 `middleware.MustUser(c)` 一次取全。未挂认证中间件的路由调用 `MustUser` 会 panic 并由 Recovery 转成 500，而不是带着空 `user_id` 继续写库。`username` 来自 token 载荷，用户改名后会落后于 `users` 表，需要权威资料时仍以 `UserID` 回查（`/api/v1/profile` 即如此）。访问日志在认证之后记录，因此会带上 `user_id`。
-
-## 开发检查
+### 2. 配置并启动
 
 ```bash
-make build
-make vet
-make test
+# 1. 生成本地 .env 并填写 MySQL、JWT_SECRET（>=32 字节）与 LLM 凭据
+make env
+
+# 2. 创建数据库（需本机安装 mysql 客户端，也可手动建库）
+make db
+
+# 3. 启动 HTTP 服务（默认监听 0.0.0.0:8080）
+make run
 ```
 
-`make test` 运行 Go 测试；文档、图解、PPT、视频的真实生成效果需要配置外部依赖后另行调试。
+启动后验证服务与数据库连接：
 
-Agent 输入、最终回答及 Transcript 使用 Eino `schema.Message`；Repository 在持久化边界转换记录。`messages.model_message` 是新增的可空 JSON 列，随 AutoMigrate 创建，保存原生消息字段，包括推理、扩展与模型元信息；既有消息仍可从原列恢复。消息 ID、状态、附件关联和 HTTP/SSE 契约保持原状。
+```bash
+curl http://127.0.0.1:8080/healthz
+curl http://127.0.0.1:8080/readyz
+```
 
-文件操作委托给 Eino 官方 Local Backend；本地适配层管理身份、虚拟路径（`/workspace`、`/skills`）、只读挂载及返回路径映射。Shell 继续使用 macOS 隔离实现。文件默认按 2000 行分页读取，长文件用 offset/limit 继续读取。
+> 未配置 `LLM_API_KEY` 时服务仍可正常启动，发送对话接口返回 `503`；未配置 `SEARCH_PROVIDER` / `SEARCH_API_KEY` 时自动跳过注册 `web_search`。
 
-工具调用中出现路径不存在、越界、只读写入或非致命工具报错时，`toolGuard` 中间件与 `UnknownToolsHandler` 会将脱敏原因作为工具结果交回模型，使模型能够自愈继续；取消、超时、身份缺失与中断信号原样透传。
+---
 
-## Agent 调试日志
+## 配置说明
 
-日志沿用终端输出与 `logs/YYYY-MM-DD/app.log` JSON 文件，默认 `info` 级别即可看到完整调用过程：用户输入、本轮上下文（含附件引用与预览）、模型调用、模型响应统计、Agent 输出、工具名称与模型参数、工具返回、上下文压缩摘要、保存结果和 SSE 错误。日志以 `conversation_id` 关联会话；`[模型响应统计]` 记录 `finish_reason`、耗时、Token 用量与推理字符长度，不记录模型推理原文。
+应用启动按 `.env` → `internal/config/config.yaml`（`${ENV}` 展开）→ 默认值填充 → 启动期强校验顺序加载，可通过 `APP_CONFIG_PATH` 覆盖配置文件路径。
 
-正文来自实际消息与框架事件，阶段名称是固定标签。流式文本合并后记录；中断文本标记为 `[Agent 输出中断]`。工具返回记录的是经过 Eino Middleware 后送给模型的结果，可能包含 `/workspace/.offload` 卸载文件的引用；不把返回内容改写成“成功”。Skills 的读取、Shell 命令及其结果都通过同一工具日志展示。
+### 环境变量（[`.env.example`](.env.example)）
 
-模型无可用输出（包括空流、仅空白或仅推理内容）时，通过 Eino 原生重试机制按策略处理：429/瞬时故障按剩余 deadline 退避重试；`finish_reason=length` 推理耗尽时对 `spark` 仅单次关闭思考降级重试，避免盲目原样重试耗死超时；非 `length` 的偶发空响应允许原样重试 1 次。日志记录 `[模型空响应]`、`[模型降级重试]`、`[模型输出截断]` 与 `[模型重试失败]`。
+| 变量 | 说明 | 示例 / 备注 |
+|---|---|---|
+| `APP_NAME` / `APP_ENV` / `APP_HOST` / `APP_PORT` | 服务名、环境（`development`/`production`）与监听地址 | `0.0.0.0:8080` |
+| `JWT_SECRET` / `JWT_ISSUER` / `JWT_EXPIRE` | HS256 签名密钥、签发者与有效期 | `JWT_SECRET` 至少 32 字节；有效期需带单位如 `168h` |
+| `LLM_PROVIDER` / `LLM_MODEL` / `LLM_BASE_URL` / `LLM_API_KEY` | OpenAI 兼容模型配置（支持 `spark` / `openai`） | `BaseURL` 不含 `/chat/completions` |
+| `MYSQL_USERNAME` / `MYSQL_PASSWORD` / `MYSQL_DATABASE` / `DB_DSN` | MySQL 连接配置 | 显式 `DB_DSN` 优先 |
+| `SEARCH_PROVIDER` / `SEARCH_API_KEY` / `SEARCH_BASE_URL` | 可选联网搜索配置（支持 `tavily`） | 留空即禁用 |
 
-每段内容最多记录 16000 个字符，超出时明确标记 `[日志已截断]`；常见凭据字段脱敏。日志仍可能包含用户问题和文档正文，仅供有权限的开发人员排查。HTTP/SSE 协议与数据库字段保持不变。
+### 核心运行参数（[`internal/config/config.yaml`](internal/config/config.yaml)）
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `llm.max_token` | `32768` | 单次模型最大输出 Token（含思考 Token） |
+| `llm.timeout` | `300s` | 单次模型调用超时（校验要求 `>= chat.run_timeout / 2`） |
+| `chat.max_steps` | `40` | 单轮最大 ReAct 迭代步数 |
+| `chat.shell_timeout` | `120s` | 单条 `execute` 命令超时 |
+| `chat.run_timeout` | `600s` | 单轮对话总超时 |
+| `chat.history_tool_turns` | `2` | 官方 `reduction` Clear 阶段保留的最近工具轮次数 |
+| `chat.reduce_trigger_tokens` | `24000` | 触发官方 `reduction` 清理的 Token 阈值（必须 `< summary_trigger_tokens`） |
+| `chat.summary_trigger_tokens` / `summary_trigger_messages` | `48000` / `30` | 触发官方 `summarization` 压缩的 Token / 消息数阈值 |
+| `attachments.max_bytes` / `max_extract_chars` / `max_per_message` | `5MB` / `12000` / `3` | 单文件体积、文本直传上限与单消息最大附件数 |
+
+---
+
+## API 与 SSE 协议
+
+路由定义见 [`internal/router/router.go`](internal/router/router.go)，除健康检查和注册/登录外均需 `Authorization: Bearer <token>`：
+
+| 分组 | 方法与路径 | 说明 |
+|---|---|---|
+| 健康检查 | `GET /healthz`、`GET /readyz` | 存活探测与 MySQL 就绪探测 |
+| 认证 | `POST /api/v1/auth/register`、`POST /api/v1/auth/login`、`GET /api/v1/profile` | 注册、登录、获取当前用户资料 |
+| 会话 | `POST /api/v1/conversations`、`GET /api/v1/conversations`、`PATCH /api/v1/conversations/:id`、`DELETE /api/v1/conversations/:id` | 创建、分页列表、重命名、删除会话 |
+| 对话 | `GET /api/v1/conversations/:id/messages`、`POST /api/v1/conversations/:id/messages` | 查询历史问答（内联附件摘要）、发起流式对话（SSE） |
+| 附件 | `POST /api/v1/attachments`、`GET /api/v1/attachments/:id`、`GET /api/v1/attachments/:id/download` | 上传、查询元数据与下载附件原件 |
+| 工作区 | `GET /api/v1/workspaces/:id/files`、`GET /api/v1/workspaces/:id/files/*name` | 列出与下载当前会话工作区产物 |
+
+### SSE 事件类型（`POST /api/v1/conversations/:id/messages`）
+
+- `message`：流式回答分片（`reset: true` 时通知前端清空工具调用前的过渡文本或重试前的半截文本）。
+- `tool_start` / `tool_end`：工具名称、`call_id`、参数摘要、截断后的结果预览与执行耗时。
+- `error`：面向用户的脱敏错误信息及 `retryable` 标记。
+- `done`：本轮持久化完成后推送 `message_id`、`status`（`completed` / `failed` / `cancelled`）、总耗时与工具调用列表。
+
+---
+
+## 安全与隔离
+
+- **零信任身份边界**：认证中间件写入 `middleware.Identity`，工具与文件系统后端一律从运行期 `context` 提取 `userID` / `conversationID` / `workspace`，绝不信任模型参数。
+- **虚拟文件系统隔离**：文件工具仅允许访问 `/workspace`（读写）与 `/skills`（只读 `ErrReadOnly`），严格阻断路径穿越与软链接逃逸（`ErrPathDenied`）。
+- **命令执行防护**：
+  - `ToolGuard` 中间件在执行前解析 `command`，拦截跨平台破坏性命令（如 `rm -rf /`、`sudo`、`> /dev/`、Windows 删盘/格式化等）与写入 `/skills` / `$SKILLS_DIR` 操作。
+  - `execute` 工具自动剔除 `.env` 敏感应用密钥（`LLM_*`、`JWT_*`、`MYSQL_*`、`DB_DSN`、`*SECRET*`、`*PASSWORD*`、`*TOKEN*`、`*API_KEY*`），防止泄露给子进程。
+  - 跨平台 `execute` 直接调用宿主机本地 Shell（无 OS 内核级沙箱）；**多租户生产环境建议配合 Docker / 容器隔离部署**。
+
+---
+
+## 开发与测试
+
+```bash
+make vet      # 静态检查（go vet ./...）
+make test     # 全量竞态测试（go test ./... -race -count=1，覆盖 13 个测试包）
+make build    # 编译服务端二进制至 bin/mentorly
+make check    # 一键格式化 + 静态检查 + 编译
+make clean    # 清理 bin/ 与 logs/（保留 workspace/ 产物）
+```
+
+### 调试日志
+
+服务同时输出控制台日志与按天滚动的 JSON 日志 `logs/YYYY-MM-DD/app.log`（默认 `info` 级别），以 `conversation_id` 串联完整单轮轨迹：`[本轮上下文]`、`[模型调用]`、`[模型响应统计]`（含 `finish_reason`、耗时、Token 用量与推理字符数，不落盘推理原文）、`[Agent 输出]`、`[Agent 工具调用：...]`、`[工具返回：...]`、`[上下文压缩]` 与重试事件；单段超 `16000` 字符自动截断并对常见凭据脱敏。
