@@ -2,17 +2,13 @@ package conversations
 
 import (
 	"encoding/json"
-	"github.com/cloudwego/eino/schema"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/cloudwego/eino/schema"
 )
 
-// TestStoreMessageFiltering 空的失败消息必须被过滤掉。
-//
-// 这类消息对模型没有信息量，还会破坏 user/assistant 交替结构。
-// 这里直接断言被测函数本身，而不是在测试里复制一份过滤逻辑——
-// 复制品不会随着实现变化而失败，等于没有测试。
 func TestStoreMessageFiltering(t *testing.T) {
 	history := []Message{
 		{Role: RoleUser, Content: "问题一", Status: StatusCompleted},
@@ -32,12 +28,9 @@ func TestStoreMessageFiltering(t *testing.T) {
 	}
 }
 
-// TestToSchemaMessagesKeepsToolCalls 带工具调用但没有正文的消息不能被过滤。
-//
-// 这类消息是工具配对的一半，丢掉它会让 tool 结果失去对应的调用。
 func TestToSchemaMessagesKeepsToolCalls(t *testing.T) {
 	history := []Message{
-		{Role: RoleAssistant, ToolCalls: []schema.ToolCall{{ID: "call-1"}}},
+		FromModel(schema.AssistantMessage("", []schema.ToolCall{{ID: "call-1"}}), StatusCompleted, false),
 	}
 
 	kept := ModelMessages(history)
@@ -50,14 +43,17 @@ func TestToSchemaMessagesKeepsToolCalls(t *testing.T) {
 }
 
 func TestModelMessageRoundTrip(t *testing.T) {
-	original := &schema.Message{Role: schema.Assistant, Content: "回答", ReasoningContent: "reasoning",
-		Extra:        map[string]any{"signature": "opaque"},
-		ToolCalls:    []schema.ToolCall{{ID: "call-1", Function: schema.FunctionCall{Name: "read_attachment", Arguments: `{}`}}},
-		ResponseMeta: &schema.ResponseMeta{Usage: &schema.TokenUsage{CompletionTokens: 12}},
+	original := &schema.Message{
+		Role:             schema.Assistant,
+		Content:          "回答",
+		ReasoningContent: "reasoning",
+		Extra:            map[string]any{"signature": "opaque"},
+		ToolCalls:        []schema.ToolCall{{ID: "call-1", Function: schema.FunctionCall{Name: "read_attachment", Arguments: `{}`}}},
+		ResponseMeta:     &schema.ResponseMeta{Usage: &schema.TokenUsage{CompletionTokens: 12}},
 	}
-	record := FromModel(original, StatusCompleted)
+	record := FromModel(original, StatusCompleted, true)
 	record.ID, record.AttachmentIDs = 7, []string{"attachment-1"}
-	// 数据库侧保留完整原生字段（含推理过程），多轮恢复时剥离 ReasoningContent。
+
 	data, err := json.Marshal(record.ModelMessage)
 	if err != nil {
 		t.Fatal(err)
@@ -75,7 +71,7 @@ func TestModelMessageRoundTrip(t *testing.T) {
 	if len(restored) != 1 || !reflect.DeepEqual(&want, restored[0]) {
 		t.Fatalf("消息恢复错误: got=%+v want=%+v", restored, &want)
 	}
-	if record.ID != 7 || record.Tokens != 12 || record.AttachmentIDs[0] != "attachment-1" {
+	if record.ID != 7 || record.Tokens != 12 || !record.Visible || record.AttachmentIDs[0] != "attachment-1" {
 		t.Fatal("业务字段丢失")
 	}
 	record.Content += "\n附件引用"

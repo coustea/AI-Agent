@@ -41,12 +41,18 @@ llm:
   base_url: ${LLM_BASE_URL}
   # API Key，留空则不启用 AI 能力（发送消息接口返回 503）
   api_key: ${LLM_API_KEY}
-  # 最大输出 Token，0 表示使用服务端默认值。
-  # 实测 spark-x2.6 将思考 token 计入 max_tokens，设 32768 为复杂课件/脚本留足余量。
-  max_token: 32768
-  # 单次模型调用的 HTTP 超时。与 chat.run_timeout(600s) 保持 1:2 配比，
-  # 既满足 >= run_timeout/2 校验，也为单次重试/降级留足时间余量。
-  timeout: 300s
+  # 总上下文窗口，按接入模型的实际能力配置。
+  context_window: 1000000
+  # 最大输出 Token（含思考），调用时按剩余窗口和安全余量限制。
+  max_token: 131072
+  # 模型请求建连与首包响应头超时（整轮流式总时长由 chat.run_timeout 管控）。
+  timeout: 60s
+  # 思考模式调度策略（由 ThinkingMiddleware 按用户消息轮次控制）：
+  # - first_call_only: 每条用户消息仅第 1 次模型调用开启思考，后续迭代关闭思考（默认）
+  # - always: 每次模型调用均开启思考
+  # - disabled: 每次模型调用均关闭思考
+  # - off: 中间件不接管，沿用 extra_fields 或模型服务端默认行为
+  thinking_mode: first_call_only
   # 供应商扩展参数，原样透传
   extra_fields:
     temperature: 0.7
@@ -75,14 +81,6 @@ chat:
   run_timeout: 600s
   # SSE 心跳间隔
   heartbeat: 15s
-  # 官方 Reduction Clear 阶段保留最近几轮工具调用，更早轮次触发清理时自动卸载
-  history_tool_turns: 2
-  # 官方 Reduction Clear 的触发阈值，必须低于 summary_trigger_tokens
-  reduce_trigger_tokens: 24000
-  # 官方 Summarization Middleware 的触发阈值。
-  # 达到任一阈值即把旧对话压成摘要并持久化检查点，原始消息仍完整保留在数据库。
-  summary_trigger_tokens: 48000
-  summary_trigger_messages: 30
 
 
 #===============================附件配置===============================

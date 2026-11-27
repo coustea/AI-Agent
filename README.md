@@ -41,7 +41,7 @@ flowchart LR
     Handler --> Agent["TutorAgent (Eino DeepAgent)"]
 
     subgraph AgentCore["internal/agent/"]
-        Agent --> MW["middlewares/ (skill / patchtoolcalls / reduction / summarization / ToolGuard)"]
+        Agent --> MW["middleware/ (skill / patchtoolcalls / reduction / tokenBudget / contextCompaction / ToolGuard)"]
         Agent --> Tools["tools/ (execute / list_attachments / read_attachment / web_search)"]
         Agent --> FS["workspace.go (/workspace 读写 + /skills 只读)"]
     end
@@ -67,31 +67,33 @@ Service.Prepare（校验归属 + 获取会话锁）
 
 ## 中间件、工具与 Skills
 
-### 1. Agent 中间件链路（[`internal/agent/middlewares/`](internal/agent/middlewares)）
+### 1. Agent 中间件链路（[`middleware/`](internal/agent/middleware)）
+
+每个项目中间件对应一个实现文件，配置、提示词和辅助函数放在所属文件内；Token 用量统计归入 `token.go`。装配顺序由 `agent.go` 声明，官方 Skills 与 PatchToolCalls 直接复用，不新增转发文件。
 
 按注册顺序生效（`BeforeModelRewriteState` 正序执行，`Wrap*` 钩子按洋葱模型外层优先）：
 
 | 顺序 | 名称 | 来源 | 职责 |
 |---|---|---|---|
-| 内置 | `write_todos` | Eino DeepAgent | 注入任务规划工具 `write_todos` |
-| 内置 | `filesystem` | Eino DeepAgent | 注入 `ls`/`read_file`/`write_file`/`edit_file`/`glob`/`grep`（绑定虚拟文件系统） |
-| 内置 | `task` | Eino DeepAgent | 注入通用子代理工具 |
-| `0` | `skill` | Eino 官方 | 注入 `skill` 工具与 `/skills` 发现协议 |
-| `1` | `patchtoolcalls` | Eino 官方 | 调模型前补齐历史中断留下的悬空 `tool_calls` |
-| `2` | `reduction` | Eino 官方 | 外层卸载 `>24KB` 工具输出至 `/workspace/.offload`；调模型前超阈值清理早于近 `N` 轮的工具结果及 `write_file`/`edit_file` 大入参 |
-| `3` | `summarization` | Eino 官方 | 达到 Token 或消息数阈值时生成中文摘要、保留已加载技能（`PreserveSkills`）并产出可持久化检查点 |
-| `4` | `ToolGuard` | 自定义（[toolguard.go](internal/agent/middlewares/toolguard.go)） | 最内层工具包装：拦截跨平台高危命令与技能目录写入；将可恢复工具错误转为脱敏文本反馈，原样透传取消/超时/身份缺失等致命错误 |
+| 内置 | `task` | Eino DeepAgent | 注入独立上下文的 explorer / worker 子代理工具 |
+| 最外层 | `ToolGuard` | [toolguard.go](internal/agent/middleware/toolguard.go) | 拦截高危命令与技能目录写入，将可恢复工具错误转为脱敏文本反馈，透传取消等致命错误 |
+| `0` | `filesystem` → `skill` | Eino 官方 | 装配文件、Shell 和 Skills 工具，发现 `/skills` 下的技能 |
+| `1` | `patchtoolcalls` | Eino 官方 | 调用前补齐历史中断留下的悬空工具结果 |
+| `2` | `reduction` | Eino 官方 | 每次调用前成对删除旧工具记录，保留最近一批结果、技能及有效正文，关闭立即截断和卸载 |
+| `3` | `todo` | 项目中间件 | 管理任务规划工具及待办提醒 |
+| `4` | `tokenBudget` → `contextCompaction` | Eino 摘要与项目策略 | 裁剪后计数，80% 触发、20% 目标、每轮最多一次摘要，校验后保存检查点 |
+| `5` | `thinking` | 项目中间件 | 控制供应商思考开关，输出上限由 Token 预算统一决定 |
 
 ### 2. 工具清单（[`internal/agent/tools/`](internal/agent/tools)）
 
 - **Eino 内置工具**：`write_todos`、`ls`、`read_file`、`write_file`、`edit_file`、`glob`、`grep`、`task`、`skill`。
-- **外部独立工具**（由 `tools.Build` 统一装配，禁用 Eino 内置 `execute`）：
+- **文件和 Shell 工具**由 Eino filesystem 装配，附件与搜索工具由 `tools.Build` 装配：
 
 | 工具名 | 实现文件 | 说明 |
 |---|---|---|
-| `execute` | [shell.go](internal/agent/tools/shell.go) | 跨平台通用命令执行器（macOS/Linux 用 `bash`/`sh`，Windows 用 `cmd`），在会话工作区执行，自动过滤 `.env` 密钥、注入 `WORKSPACE`/`SKILLS_DIR`/`TMPDIR`、支持超时与 `50000` 字符截断 |
-| `list_attachments` | [list_attachments.go](internal/agent/tools/list_attachments.go) | 按消息顺序列出当前会话实际引用的历史附件（含消息 ID、时间、问题摘要、路径与状态），上下文压缩后可快速回溯 |
-| `read_attachment` | [read_attachment.go](internal/agent/tools/read_attachment.go) | 零信任校验用户与会话归属后，按 Unicode 字符 `offset`/`limit` 分页读取附件全文 |
+| `execute` | [shell.go](internal/agent/tools/shell.go) | 跨平台通用命令执行器（macOS/Linux 用 `bash`/`sh`，Windows 用 `cmd`），在会话工作区执行，自动过滤 `.env` 密钥、注入 `WORKSPACE`/`SKILLS_DIR`、支持超时，保留完整命令输出 |
+| `list_attachments` | [attachments.go](internal/agent/tools/attachments.go) | 按消息顺序列出当前会话实际引用的历史附件（含消息 ID、时间、问题摘要、路径与状态），上下文压缩后可快速回溯 |
+| `read_attachment` | [attachments.go](internal/agent/tools/attachments.go) | 零信任校验用户与会话归属后，按 Unicode 字符 `offset`/`limit` 分页读取附件全文 |
 | `web_search` | [web_search.go](internal/agent/tools/web_search.go) | 可选 Tavily 联网搜索工具，未配置凭据时自动跳过注册 |
 
 ### 3. 内置只读 Skills（[`internal/agent/skills/`](internal/agent/skills)）
@@ -116,7 +118,14 @@ Service.Prepare（校验归属 + 获取会话锁）
 │   │   ├── harness.go            # 检查点 + 完整历史加载、历史附件引用、<turn_context>
 │   │   ├── workspace.go          # 虚拟文件系统（/workspace 读写隔离、/skills 只读）
 │   │   ├── prompt.md             # 静态基础系统提示词
-│   │   ├── middlewares/          # 中间件装配（build / reduction / summarization / toolguard）
+│   │   ├── middleware/           # Agent 中间件实现及单元测试
+│   │   │   ├── filesystem.go     # 文件工具说明与官方 filesystem 配置
+│   │   │   ├── reduction.go      # 官方 Reduction 历史工具记录裁剪
+│   │   │   ├── token.go          # Token 估算、输出预算、校准与实际 Usage 统计
+│   │   │   ├── compaction.go     # 阈值摘要、校验与活动 Skills 保留
+│   │   │   ├── thinking.go       # 模型思考模式调度
+│   │   │   ├── todo.go           # 待办规划与进度提醒
+│   │   │   └── toolguard.go      # 工具校验与错误恢复
 │   │   ├── tools/                # 外部业务工具（build / shell / list_attachments / read_attachment / web_search）
 │   │   └── skills/               # 只读官方 Skills 目录（运行时严禁修改）
 │   ├── config/                   # config.yaml 解析、${ENV} 展开与启动期一致性校验
@@ -209,15 +218,15 @@ curl http://127.0.0.1:8080/readyz
 
 | 配置项 | 默认值 | 说明 |
 |---|---|---|
-| `llm.max_token` | `32768` | 单次模型最大输出 Token（含思考 Token） |
-| `llm.timeout` | `300s` | 单次模型调用超时（校验要求 `>= chat.run_timeout / 2`） |
+| `llm.context_window` | `1000000` | 模型总上下文窗口，按接入模型能力配置 |
+| `llm.max_token` | `131072` | 最大输出 Token（含思考），每次调用按剩余窗口扣除安全余量后限制 |
+| `llm.timeout` | `60s` | 模型响应头等待上限，整轮总超时由 chat.run_timeout 控制 |
 | `chat.max_steps` | `40` | 单轮最大 ReAct 迭代步数 |
 | `chat.shell_timeout` | `120s` | 单条 `execute` 命令超时 |
 | `chat.run_timeout` | `600s` | 单轮对话总超时 |
-| `chat.history_tool_turns` | `2` | 官方 `reduction` Clear 阶段保留的最近工具轮次数 |
-| `chat.reduce_trigger_tokens` | `24000` | 触发官方 `reduction` 清理的 Token 阈值（必须 `< summary_trigger_tokens`） |
-| `chat.summary_trigger_tokens` / `summary_trigger_messages` | `48000` / `30` | 触发官方 `summarization` 压缩的 Token / 消息数阈值 |
 | `attachments.max_bytes` / `max_extract_chars` / `max_per_message` | `5MB` / `12000` / `3` | 单文件体积、文本直传上限与单消息最大附件数 |
+
+每次模型调用前通过 Eino Reduction 成对删除旧工具记录，保留最近一批工具结果与已加载 Skills，不再对长工具结果立即截断。主代理在裁剪后输入估算达到窗口 80% 时自动摘要，每轮用户请求最多一次，摘要正文上限 8192 tokens，压缩后总输入目标不超过窗口 20%。摘要使用固定 Markdown 字段，并与活动 Skills、当前请求及必要的最新结果一起保存检查点。子代理只裁剪和统计，超出容量返回预算错误。请求前估算包含工具定义与协议开销，实际 Usage 按主代理、子代理、摘要分别记录，并用于校准估算。
 
 ---
 

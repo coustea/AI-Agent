@@ -1,40 +1,37 @@
 // Package log 提供基于 zap 的日志组件：
-// 终端输出带颜色的可读格式，文件输出 JSON 并按日期分目录归档。
+// 终端输出带颜色的可读格式，文件输出 JSON 并按日期分目录归档，支持上下文传递与凭据脱敏。
 package log
 
 import (
+	"context"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strings"
 	"sync"
 	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
+
+	"mentorly/internal/utils"
 )
 
-// Options 控制日志组件的输出行为。
 type Options struct {
-	// Dir 日志根目录，每天一个子目录
-	Dir string
-	// Level debug / info / warn / error
-	Level string
-	// MaxSize 单文件最大体积（MB）
-	MaxSize int
-	// MaxBackup 每个日期目录保留的备份数
+	Dir       string
+	Level     string
+	MaxSize   int
 	MaxBackup int
-	// Compress 是否压缩历史备份
-	Compress bool
+	Compress  bool
 }
 
-// dailyWriter 按日期切换日志目录，跨天时自动新建文件。
 type dailyWriter struct {
-	mu      sync.Mutex
-	dir     string
-	day     string
-	current *lumberjack.Logger
-
+	mu        sync.Mutex
+	dir       string
+	day       string
+	current   *lumberjack.Logger
 	maxSize   int
 	maxBackup int
 	compress  bool
@@ -45,20 +42,16 @@ func (w *dailyWriter) Write(p []byte) (int, error) {
 	defer w.mu.Unlock()
 
 	today := time.Now().Format("2006-01-02")
-
-	// 日期变化时，创建新的日志目录与文件
 	if today != w.day {
 		dir := filepath.Join(w.dir, today)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return 0, err
 		}
-
 		if w.current != nil {
 			if err := w.current.Close(); err != nil {
 				return 0, err
 			}
 		}
-
 		w.current = &lumberjack.Logger{
 			Filename:   filepath.Join(dir, "app.log"),
 			MaxSize:    w.maxSize,
@@ -68,15 +61,12 @@ func (w *dailyWriter) Write(p []byte) (int, error) {
 		}
 		w.day = today
 	}
-
 	return w.current.Write(p)
 }
 
-// Close 关闭当前文件句柄，供进程退出前调用。
 func (w *dailyWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-
 	if w.current != nil {
 		return w.current.Close()
 	}
@@ -94,7 +84,6 @@ func Init(opt Options) (*zap.Logger, io.Closer, error) {
 	if opt.MaxBackup <= 0 {
 		opt.MaxBackup = 5
 	}
-
 	if err := os.MkdirAll(opt.Dir, 0o755); err != nil {
 		return nil, nil, err
 	}
@@ -105,37 +94,23 @@ func Init(opt Options) (*zap.Logger, io.Closer, error) {
 		maxBackup: opt.MaxBackup,
 		compress:  opt.Compress,
 	}
-
 	level := parseLevel(opt.Level)
 
-	// 终端：带颜色的可读格式
 	consoleCfg := zap.NewDevelopmentEncoderConfig()
 	consoleCfg.EncodeTime = zapcore.ISO8601TimeEncoder
 	consoleCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+	consoleCore := zapcore.NewCore(zapcore.NewConsoleEncoder(consoleCfg), zapcore.AddSync(os.Stdout), level)
 
-	consoleCore := zapcore.NewCore(
-		zapcore.NewConsoleEncoder(consoleCfg),
-		zapcore.AddSync(os.Stdout),
-		level,
-	)
-
-	// 文件：JSON 格式，便于后续采集
 	fileCfg := zap.NewProductionEncoderConfig()
 	fileCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+	fileCore := zapcore.NewCore(zapcore.NewJSONEncoder(fileCfg), zapcore.AddSync(writer), level)
 
-	fileCore := zapcore.NewCore(
-		zapcore.NewJSONEncoder(fileCfg),
-		zapcore.AddSync(writer),
-		level,
-	)
-
-	log := zap.New(
+	lg := zap.New(
 		zapcore.NewTee(consoleCore, fileCore),
 		zap.AddCaller(),
 		zap.AddStacktrace(zap.ErrorLevel),
 	)
-
-	return log, writer, nil
+	return lg, writer, nil
 }
 
 func parseLevel(level string) zapcore.Level {
@@ -149,4 +124,38 @@ func parseLevel(level string) zapcore.Level {
 	default:
 		return zap.InfoLevel
 	}
+}
+
+type contextKey struct{}
+
+func WithContext(ctx context.Context, logger *zap.Logger) context.Context {
+	return context.WithValue(ctx, contextKey{}, logger)
+}
+
+func FromContext(ctx context.Context, fallback *zap.Logger) *zap.Logger {
+	if logger, ok := ctx.Value(contextKey{}).(*zap.Logger); ok && logger != nil {
+		return logger
+	}
+	if fallback != nil {
+		return fallback
+	}
+	return zap.NewNop()
+}
+
+var credentials = regexp.MustCompile(`(?i)((?:api[_-]?key|access[_-]?token|authorization|password|secret)["']?\s*[:=]\s*["']?)(?:Bearer\s+)?[^\s"',}]+`)
+
+// Content 只做凭据脱敏、截断与控制符清理，不改写业务输出。
+func Content(key, value string) zap.Field {
+	value = credentials.ReplaceAllString(value, "${1}[REDACTED]")
+	const limit = 16000
+	if clipped := utils.ClipRunes(value, limit); len(clipped) < len(value) {
+		value = clipped + "\n[日志已截断]"
+	}
+	value = strings.Map(func(r rune) rune {
+		if r < 32 && r != '\n' && r != '\t' {
+			return -1
+		}
+		return r
+	}, value)
+	return zap.String(key, value)
 }

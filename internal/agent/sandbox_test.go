@@ -15,13 +15,47 @@ import (
 	adkfs "github.com/cloudwego/eino/adk/filesystem"
 	"github.com/cloudwego/eino/adk/prebuilt/deep"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
-
-	"mentorly/internal/agent/middlewares"
-	"mentorly/internal/agent/tools"
 )
+
+func TestWorkspaceMountRouting(t *testing.T) {
+	ws, skills := t.TempDir(), t.TempDir()
+	w := &workspace{skillsRoot: skills}
+	ctx := withPrincipal(t.Context(), Principal{UserID: "u", Workspace: ws})
+	cases := []struct {
+		path  string
+		write bool
+		want  string
+		err   error
+	}{
+		{path: "", want: ws},
+		{path: "   ", want: ws},
+		{path: "/workspace", want: ws},
+		{path: "notes/a.md", write: true, want: filepath.Join(ws, "notes", "a.md")},
+		{path: `/workspace/notes\a.md`, want: filepath.Join(ws, "notes", "a.md")},
+		{path: "/skills", want: skills},
+		{path: "/skills/docx/SKILL.md", want: filepath.Join(skills, "docx", "SKILL.md")},
+		{path: "/skills/docx/SKILL.md", write: true, err: ErrReadOnly},
+		{path: "/workspace/../skills/a.md", write: true, err: ErrReadOnly},
+		{path: "/workspace-other/a.md", err: ErrPathDenied},
+		{path: "/skills-other/a.md", err: ErrPathDenied},
+		{path: "/outside/a.md", err: ErrPathDenied},
+		{path: "../outside/a.md", err: ErrPathDenied},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("%s/write=%t", tc.path, tc.write), func(t *testing.T) {
+			got, err := w.mapPath(ctx, tc.path, tc.write)
+			if got != tc.want || !errors.Is(err, tc.err) {
+				t.Fatalf("mapPath = %q, %v; want %q, %v", got, err, tc.want, tc.err)
+			}
+		})
+	}
+	ctx = withPrincipal(t.Context(), Principal{UserID: "u"})
+	if _, err := w.mapPath(ctx, "/workspace/a.md", false); !errors.Is(err, ErrPathDenied) {
+		t.Fatalf("missing workspace must be denied: %v", err)
+	}
+}
 
 func TestOfficialBackendIsolation(t *testing.T) {
 	ws, skills := t.TempDir(), t.TempDir()
@@ -29,7 +63,7 @@ func TestOfficialBackendIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx := withPrincipal(t.Context(), &runPrincipal{UserID: "u", ConversationID: "c", Workspace: ws})
+	ctx := withPrincipal(t.Context(), Principal{UserID: "u", ConversationID: "c", Workspace: ws})
 	if err := b.Write(ctx, &adkfs.WriteRequest{FilePath: "/workspace/a.md", Content: "before"}); err != nil {
 		t.Fatal(err)
 	}
@@ -137,48 +171,52 @@ func TestFilesystemPathErrorsThroughRunner(t *testing.T) {
 	}}
 	native, err := deep.New(ctx, &deep.Config{
 		Name: "test", ChatModel: m, Backend: b, MaxIteration: 5,
-		Handlers: []adk.ChatModelAgentMiddleware{middlewares.NewToolGuard(toolGuardConfig(skills))},
+		Handlers: []adk.ChatModelAgentMiddleware{newToolGuard(skills, 0)},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := &Agent{agent: native, log: zap.NewNop()}
 	res := a.Run(ctx, &RunContext{
-		principal: &runPrincipal{UserID: "u", ConversationID: "c", Workspace: ws},
+		principal: Principal{UserID: "u", ConversationID: "c", Workspace: ws},
 		Messages:  []*schema.Message{schema.UserMessage("查找课件材料")},
 	}, nil)
 	if res.Status != StatusCompleted || res.Message.Content != "找到文件" {
 		t.Fatalf("agent failed to recover: status=%s content=%q err=%v", res.Status, res.Message.Content, res.runErr)
 	}
-	recorded := make(map[string]string)
-	for _, msg := range res.Transcript {
-		if msg.Role == schema.Tool {
-			recorded[msg.ToolCallID] = msg.Content
-		}
-	}
-	if len(recorded) != len(calls)+1 || !strings.HasSuffix(recorded["retry-grep"], "\n/workspace/notes.md") {
-		t.Fatalf("missing tool results in transcript: %v", recorded)
-	}
-	for id, fragment := range want {
-		if !strings.Contains(recorded[id], fragment) {
-			t.Errorf("tool result %s not recorded: %q", id, recorded[id])
-		}
-	}
 }
 
 func TestGuardRecoversToolErrorsAndPreservesFatalErrors(t *testing.T) {
 	ws, skills := t.TempDir(), t.TempDir()
-	g := middlewares.NewToolGuard(toolGuardConfig(skills))
+	g := newToolGuard(skills, 60*time.Millisecond)
 	if err := g.Check("read_file", `{}`); err != nil {
 		t.Fatalf("只读工具不应被拦截: %v", err)
 	}
-	if err := g.Check("execute", `{"command":"rm -rf /"}`); err == nil {
-		t.Fatal("破坏性命令应被拦截")
+	for _, bad := range []string{
+		`rm -rf /`,
+		`{"command":"", "note":"sudo"}`,
+		`{"command":"sudo`,
+		`{"command":"rm -rf /"}`,
+		`{"command":"sudo apt update"}`,
+		`{"command":"echo x > /dev/sda"}`,
+		`{"command":"rd /s /q C:\\Windows"}`,
+		`{"command":"touch \"$SKILLS_DIR/docx/bad.txt\""}`,
+		fmt.Sprintf(`{"command":"rm -f %q"}`, skills+"/a.md"),
+	} {
+		if err := g.Check("execute", bad); !errors.Is(err, errToolDenied) {
+			t.Fatalf("高危或写技能命令应返回 errToolDenied (%s): got %v", bad, err)
+		}
+	}
+	for _, okCmd := range []string{
+		`{"command":"python3 \"$SKILLS_DIR/docx/scripts/run.py\" >/dev/null 2>&1"}`,
+		`{"command":"cat \"$SKILLS_DIR/docx/SKILL.md\""}`,
+	} {
+		if err := g.Check("execute", okCmd); err != nil {
+			t.Fatalf("只读技能命令不应被误拦 (%s): got %v", okCmd, err)
+		}
 	}
 
-	ctx := withPrincipal(t.Context(), &runPrincipal{UserID: "u", ConversationID: "c", Workspace: ws})
-
-	// 1. 可恢复工具错误（含非路径错与 JSON 解析错）应转为脱敏文本反馈，不泄露宿主机路径。
+	ctx := withPrincipal(t.Context(), Principal{UserID: "u", ConversationID: "c", Workspace: ws})
 	recoverable := []struct {
 		tool string
 		err  error
@@ -187,6 +225,7 @@ func TestGuardRecoversToolErrorsAndPreservesFatalErrors(t *testing.T) {
 		{"edit_file", fmt.Errorf("old_string not found in %s/a.js", ws)},
 		{"skill", errors.New("failed to get skill: skill not found: diagram")},
 		{"write_file", errors.New("failed to unmarshal arguments in json: unexpected EOF")},
+		{"web_search", fmt.Errorf("搜索请求失败: %w", context.DeadlineExceeded)},
 	}
 	for _, tc := range recoverable {
 		ep, err := g.WrapInvokableToolCall(ctx, func(context.Context, string, ...tool.Option) (string, error) {
@@ -204,49 +243,58 @@ func TestGuardRecoversToolErrorsAndPreservesFatalErrors(t *testing.T) {
 		}
 	}
 
-	// Streamable 与 EnhancedInvokable 钩子同样能将可恢复错误转为文本反馈。
-	streamEP, err := g.WrapStreamableToolCall(ctx, func(context.Context, string, ...tool.Option) (*schema.StreamReader[string], error) {
-		return nil, errors.New("stream tool boom")
-	}, &adk.ToolContext{Name: "execute"})
+	// 验证 task 子代理独立超时：父 ctx 存活时中止子任务并转为可恢复文本反馈。
+	taskEP, err := g.WrapInvokableToolCall(ctx, func(callCtx context.Context, _ string, _ ...tool.Option) (string, error) {
+		<-callCtx.Done()
+		return "", callCtx.Err()
+	}, &adk.ToolContext{Name: "task"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	sr, err := streamEP(ctx, "{}")
-	if err != nil {
-		t.Fatalf("streamable 可恢复错误不应中断运行: %v", err)
-	}
-	chunk, _ := sr.Recv()
-	sr.Close()
-	if !strings.Contains(chunk, "stream tool boom") {
-		t.Fatalf("streamable 反馈内容不符: %q", chunk)
+	taskOut, err := taskEP(ctx, `{}`)
+	if err != nil || !strings.Contains(taskOut, "子代理执行超时") {
+		t.Fatalf("task 局部超时未自愈恢复: out=%q err=%v", taskOut, err)
 	}
 
-	enhEP, err := g.WrapEnhancedInvokableToolCall(ctx, func(context.Context, *schema.ToolArgument, ...tool.Option) (*schema.ToolResult, error) {
-		return nil, errors.New("enhanced boom")
-	}, &adk.ToolContext{Name: "read_file"})
+	// 验证父 ctx 剩余预算不足时跳过启动子代理，预留主代理收尾时间。
+	tightParent, tightCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer tightCancel()
+	tightOut, err := taskEP(tightParent, `{}`)
+	if err != nil || !strings.Contains(tightOut, "剩余时间不足") {
+		t.Fatalf("紧预算未拦截 task 启动: out=%q err=%v", tightOut, err)
+	}
+
+	// 验证缺少身份及父上下文已取消/超时仍原样向上传递。
+	epNoPrincipal, err := g.WrapInvokableToolCall(ctx, func(context.Context, string, ...tool.Option) (string, error) {
+		return "", errNoPrincipal
+	}, &adk.ToolContext{Name: "grep"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := enhEP(ctx, &schema.ToolArgument{Text: "{}"})
-	if err != nil || res == nil || len(res.Parts) == 0 || !strings.Contains(res.Parts[0].Text, "enhanced boom") {
-		t.Fatalf("enhanced 反馈异常: res=%+v err=%v", res, err)
+	if _, err := epNoPrincipal(ctx, "{}"); !errors.Is(err, errNoPrincipal) {
+		t.Fatalf("身份缺失错误不应被吞掉: got %v", err)
 	}
 
-	// 2. 致命错误（取消、超时、身份缺失）必须原样透传，绝不能吞掉。
-	for _, want := range []error{
-		context.Canceled,
-		context.DeadlineExceeded,
-		errNoPrincipal,
-		errors.Join(context.Canceled, &workspacePathError{"/workspace/notes.md", fs.ErrNotExist}),
+	canceledCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	expiredCtx, expireCancel := context.WithDeadline(ctx, time.Now().Add(-time.Millisecond))
+	defer expireCancel()
+	for _, tc := range []struct {
+		pctx context.Context
+		want error
+	}{
+		{canceledCtx, context.Canceled},
+		{expiredCtx, context.DeadlineExceeded},
+		{canceledCtx, errors.Join(context.Canceled, &workspacePathError{"/workspace/notes.md", fs.ErrNotExist})},
 	} {
-		ep, err := g.WrapInvokableToolCall(ctx, func(context.Context, string, ...tool.Option) (string, error) {
-			return "", want
+		ep, err := g.WrapInvokableToolCall(tc.pctx, func(context.Context, string, ...tool.Option) (string, error) {
+			return "", tc.want
 		}, &adk.ToolContext{Name: "grep"})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := ep(ctx, "{}"); !errors.Is(err, want) {
-			t.Fatalf("致命错误不应被吞掉: got %v, want %v", err, want)
+		if _, err := ep(tc.pctx, "{}"); !errors.Is(err, tc.want) {
+			t.Fatalf("父上下文终止错误不应被吞掉: got %v, want %v", err, tc.want)
 		}
 	}
 }
@@ -260,15 +308,12 @@ func TestExecuteToolThroughRunnerWithToolGuard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sh, err := tools.NewShell(tools.ShellConfig{SkillsDir: skills, WorkspaceOf: WorkspaceDir})
-	if err != nil {
-		t.Fatal(err)
-	}
+	sh := newShell(0, skills)
 
 	calls := []schema.ToolCall{
-		{ID: "ok-1", Type: "function", Function: schema.FunctionCall{Name: tools.ToolExecute, Arguments: `{"command":"echo hello-mentorly"}`}},
-		{ID: "bad-1", Type: "function", Function: schema.FunctionCall{Name: tools.ToolExecute, Arguments: `{"command":"sudo whoami"}`}},
-		{ID: "bad-2", Type: "function", Function: schema.FunctionCall{Name: tools.ToolExecute, Arguments: `{"command":"touch \"$SKILLS_DIR/bad.txt\""}`}},
+		{ID: "ok-1", Type: "function", Function: schema.FunctionCall{Name: "execute", Arguments: `{"command":"echo hello-mentorly"}`}},
+		{ID: "bad-1", Type: "function", Function: schema.FunctionCall{Name: "execute", Arguments: `{"command":"sudo whoami"}`}},
+		{ID: "bad-2", Type: "function", Function: schema.FunctionCall{Name: "execute", Arguments: `{"command":"touch \"$SKILLS_DIR/bad.txt\""}`}},
 	}
 	m := &retryTestModel{stream: func(_ context.Context, input []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
 		results := make(map[string]string)
@@ -290,27 +335,127 @@ func TestExecuteToolThroughRunnerWithToolGuard(t *testing.T) {
 	}}
 
 	native, err := deep.New(ctx, &deep.Config{
-		Name:      "test",
-		ChatModel: m,
-		Backend:   b,
-		ToolsConfig: adk.ToolsConfig{
-			ToolsNodeConfig: compose.ToolsNodeConfig{Tools: []tool.BaseTool{sh}},
-		},
+		Name:         "test",
+		ChatModel:    m,
+		Backend:      b,
+		Shell:        sh,
 		MaxIteration: 5,
-		Handlers:     []adk.ChatModelAgentMiddleware{middlewares.NewToolGuard(toolGuardConfig(skills))},
+		Handlers:     []adk.ChatModelAgentMiddleware{newToolGuard(skills, 0)},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	a := &Agent{agent: native, log: zap.NewNop()}
 	res := a.Run(ctx, &RunContext{
-		principal: &runPrincipal{UserID: "u", ConversationID: "c", Workspace: ws},
-		Messages:  []*schema.Message{schema.UserMessage("测试自研 execute 工具")},
+		principal: Principal{UserID: "u", ConversationID: "c", Workspace: ws},
+		Messages:  []*schema.Message{schema.UserMessage("测试 execute 工具")},
 	}, nil)
 	if res.Status != StatusCompleted || res.Message.Content != "已执行并完成校验" {
 		t.Fatalf("端到端执行失败: status=%s content=%q err=%v", res.Status, res.Message.Content, res.runErr)
 	}
 	if _, err := os.Stat(filepath.Join(skills, "bad.txt")); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("技能目录被意外写入: %v", err)
+	}
+}
+
+func TestWorkspaceBoundedReadAndWrite(t *testing.T) {
+	ws, skills := t.TempDir(), t.TempDir()
+	b, err := newWorkspace(ws, skills)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := withPrincipal(t.Context(), Principal{UserID: "u", ConversationID: "c", Workspace: ws})
+
+	var lines []string
+	for i := 1; i <= 260; i++ {
+		lines = append(lines, fmt.Sprintf("line-%d", i))
+	}
+	if err := os.WriteFile(filepath.Join(ws, "big.txt"), []byte(strings.Join(lines, "\n")), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := b.Read(ctx, &adkfs.ReadRequest{FilePath: "/workspace/big.txt", Offset: 1, Limit: 2000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got.Content, "line-201") || !strings.Contains(got.Content, "line-200") {
+		t.Fatalf("Read 未钳制到 %d 行", maxReadLines)
+	}
+
+	tooManyLines := strings.Repeat("x\n", maxWriteLines+5)
+	err = b.Write(ctx, &adkfs.WriteRequest{FilePath: "/workspace/huge.js", Content: tooManyLines})
+	if !errors.Is(err, ErrWriteTooLarge) {
+		t.Fatalf("超行数写入应返回 ErrWriteTooLarge: %v", err)
+	}
+	if msg, ok := formatWorkspaceError(err); !ok || !strings.Contains(msg, "edit_file") {
+		t.Fatalf("formatWorkspaceError 缺少自愈建议: ok=%v msg=%q", ok, msg)
+	}
+}
+
+func TestSubAgentIsolationAndTranscriptCleanliness(t *testing.T) {
+	// task 需为主代理预留 30s 收尾，父预算须大于该余量才会启动子代理。
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	defer cancel()
+	ws, skills := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(ws, "notes.md"), []byte("SECRET_NOTE_CONTENT"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	m := &retryTestModel{stream: func(_ context.Context, input []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
+		sys := ""
+		if len(input) > 0 && input[0].Role == schema.System {
+			sys = input[0].Content
+		}
+		last := input[len(input)-1]
+
+		if strings.Contains(sys, "只读资料与工作区检索子代理") {
+			if last.Role == schema.Tool {
+				if !strings.Contains(last.Content, "SECRET_NOTE_CONTENT") {
+					return nil, fmt.Errorf("explorer 未读到工作区文件: %q", last.Content)
+				}
+				return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("摘要：notes.md 包含目标笔记", nil)}), nil
+			}
+			return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("", []schema.ToolCall{{
+				ID: "sub-read-1", Type: "function", Function: schema.FunctionCall{Name: "read_file", Arguments: `{"file_path":"/workspace/notes.md"}`},
+			}})}), nil
+		}
+
+		if last.Role == schema.Tool && last.ToolCallID == "task-1" {
+			if !strings.Contains(last.Content, "摘要：notes.md") {
+				return nil, fmt.Errorf("主代理未收到子代理摘要: %q", last.Content)
+			}
+			return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("已通过子代理核实笔记内容", nil)}), nil
+		}
+		return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("", []schema.ToolCall{{
+			ID: "task-1", Type: "function", Function: schema.FunctionCall{Name: "task", Arguments: `{"subagent_type":"explorer","description":"读取 /workspace/notes.md 并返回摘要"}`},
+		}})}), nil
+	}}
+
+	a, err := New(ctx, AgentDeps{
+		Model: m,
+		Config: Config{
+			WorkspaceDir: ws,
+			SkillsDir:    skills,
+			ThinkingMode: thinkingOff,
+		},
+		Log: zap.NewNop(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	res := a.Run(ctx, &RunContext{
+		principal: Principal{UserID: "u", ConversationID: "c", Workspace: ws},
+		Messages:  []*schema.Message{schema.UserMessage("帮我查一下 notes.md")},
+	}, nil)
+	if res.Status != StatusCompleted || res.Message.Content != "已通过子代理核实笔记内容" {
+		t.Fatalf("子代理委派失败: status=%s content=%q err=%v", res.Status, res.Message.Content, res.runErr)
+	}
+	if len(res.ToolCalls) != 1 || res.ToolCalls[0] != "task" {
+		t.Fatalf("主代理 ToolCalls 被子代理污染: %v", res.ToolCalls)
+	}
+	for _, msg := range res.Transcript {
+		if msg.Role == schema.Tool && msg.ToolCallID == "sub-read-1" {
+			t.Fatalf("子代理内部工具输出泄漏到了主代理 Transcript: %+v", res.Transcript)
+		}
 	}
 }

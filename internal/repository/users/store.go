@@ -1,41 +1,55 @@
+// Package users 负责 users 表模型与仓储查询。
 package users
 
 import (
+	"context"
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
 
-// ErrDuplicateUser 表示唯一键冲突，即该邮箱已被注册。
-// 把驱动底层错误翻译成哨兵错误，避免上层直接依赖 gorm 或 MySQL 错误码。
-var ErrDuplicateUser = errors.New("duplicate user")
+const (
+	UserStateDisabled int8 = 0
+	UserStateActive   int8 = 1
+)
 
-// ErrUserNotFound 用户不存在。
-var ErrUserNotFound = errors.New("user not found")
+var (
+	ErrDuplicateUser = errors.New("duplicate user")
+	ErrUserNotFound  = errors.New("user not found")
+)
 
-// Store 用户仓储。
+type User struct {
+	ID           string    `gorm:"column:id;type:varchar(36);primaryKey"`
+	CreatedAt    time.Time `gorm:"column:created_at;type:datetime(3);not null;default:CURRENT_TIMESTAMP(3);autoCreateTime"`
+	UpdatedAt    time.Time `gorm:"column:updated_at;type:datetime(3);not null;default:CURRENT_TIMESTAMP(3);autoUpdateTime"`
+	Email        string    `gorm:"column:email;type:varchar(191);not null;uniqueIndex:uk_users_email"`
+	PasswordHash string    `gorm:"column:password_hash;type:varchar(255);not null"`
+	Username     string    `gorm:"column:username;type:varchar(100);not null;index:idx_users_username"`
+	Status       int8      `gorm:"column:status;type:tinyint;not null;default:1;index:idx_users_status"`
+}
+
+func (User) TableName() string { return "users" }
+
+func (u *User) IsActive() bool { return u.Status == UserStateActive }
+
 type Store struct {
 	db *gorm.DB
 }
 
-func NewStore(db *gorm.DB) *Store {
-	return &Store{db: db}
-}
+func NewStore(db *gorm.DB) *Store { return &Store{db: db} }
 
-// Create 创建用户。依赖 InitMySQL 开启的 TranslateError，
-// 唯一键冲突会被翻译成 gorm.ErrDuplicatedKey。
-func (s *Store) Create(user *User) error {
-	err := s.db.Create(user).Error
+func (s *Store) Create(ctx context.Context, user *User) error {
+	err := s.db.WithContext(ctx).Create(user).Error
 	if errors.Is(err, gorm.ErrDuplicatedKey) {
 		return ErrDuplicateUser
 	}
 	return err
 }
 
-// GetByID 按主键查询
-func (s *Store) GetByID(id string) (*User, error) {
+func (s *Store) GetByID(ctx context.Context, id string) (*User, error) {
 	var user User
-	if err := s.db.First(&user, "id = ?", id).Error; err != nil {
+	if err := s.db.WithContext(ctx).First(&user, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}
@@ -44,10 +58,9 @@ func (s *Store) GetByID(id string) (*User, error) {
 	return &user, nil
 }
 
-// GetByEmail 按邮箱查询，登录时使用。
-func (s *Store) GetByEmail(email string) (*User, error) {
+func (s *Store) GetByEmail(ctx context.Context, email string) (*User, error) {
 	var user User
-	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
+	if err := s.db.WithContext(ctx).Where("email = ?", email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrUserNotFound
 		}

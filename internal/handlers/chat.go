@@ -1,8 +1,4 @@
-// Package handlers 是 HTTP 入口：解析请求、把业务事件编码成 SSE、下载文件。
-//
-// 鉴权由 middleware 完成，这里只通过 middleware.MustUser 读取已认证身份，
-// 不自行解析 Token。它也不含业务判断：会话归属校验与对话流程由 service 负责，
-// Handler 按顺序调用 Service、Harness 和 Agent，并处理 HTTP/SSE。
+// Package handlers 是 HTTP 入口：解析请求、编码 SSE 事件帧、处理文件上传与下载。
 package handlers
 
 import (
@@ -26,7 +22,6 @@ import (
 	logutil "mentorly/internal/utils/log"
 )
 
-// ChatHandler 处理 HTTP/SSE，并顺序调用本轮各阶段。
 type ChatHandler struct {
 	harness    *agent.Harness
 	agent      *agent.Agent
@@ -54,18 +49,14 @@ func NewChatHandler(d ChatDeps) *ChatHandler {
 	if rt <= 0 {
 		rt = 600 * time.Second
 	}
-	log := d.Log
-	if log == nil {
-		log = zap.NewNop()
+	lg := d.Log
+	if lg == nil {
+		lg = zap.NewNop()
 	}
-	return &ChatHandler{service: d.Service, harness: d.Harness, agent: d.Agent, heartbeat: hb, runTimeout: rt, log: log}
+	return &ChatHandler{service: d.Service, harness: d.Harness, agent: d.Agent, heartbeat: hb, runTimeout: rt, log: lg}
 }
 
-// ---------- 会话 CRUD ----------
-
-// CreateConversation 创建会话。
 func (h *ChatHandler) CreateConversation(c *gin.Context) {
-	// 允许空 body：等价于用默认标题创建。
 	var req dto.CreateConversationReq
 	if c.Request.ContentLength != 0 {
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -83,27 +74,27 @@ func (h *ChatHandler) CreateConversation(c *gin.Context) {
 	response.OK(c, toConversationResp(conv))
 }
 
-// ListConversations 会话列表。
 func (h *ChatHandler) ListConversations(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
-
 	list, err := h.service.ListConversations(c.Request.Context(), middleware.MustUser(c).UserID, limit)
 	if err != nil {
 		h.log.Error("查询会话列表失败", zap.Error(err))
 		response.ServerError(c, "查询会话列表失败")
 		return
 	}
-	response.OK(c, toConversationList(list))
+	out := make([]dto.ConversationResp, 0, len(list))
+	for i := range list {
+		out = append(out, toConversationResp(&list[i]))
+	}
+	response.OK(c, out)
 }
 
-// RenameConversation 重命名会话。
 func (h *ChatHandler) RenameConversation(c *gin.Context) {
 	var req dto.RenameConversationReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.BadRequest(c, err.Error())
 		return
 	}
-
 	err := h.service.RenameConversation(c.Request.Context(), c.Param("id"), middleware.MustUser(c).UserID, req.Title)
 	if err != nil {
 		if errors.Is(err, service.ErrConversationNotFound) {
@@ -117,26 +108,23 @@ func (h *ChatHandler) RenameConversation(c *gin.Context) {
 	response.OK(c, gin.H{"ok": true})
 }
 
-// DeleteConversation 删除会话。
 func (h *ChatHandler) DeleteConversation(c *gin.Context) {
 	err := h.service.DeleteConversation(c.Request.Context(), c.Param("id"), middleware.MustUser(c).UserID)
 	if err != nil {
-		if errors.Is(err, service.ErrConversationBusy) {
+		switch {
+		case errors.Is(err, service.ErrConversationBusy):
 			response.Conflict(c, err.Error())
-			return
-		}
-		if errors.Is(err, service.ErrConversationNotFound) {
+		case errors.Is(err, service.ErrConversationNotFound):
 			response.NotFound(c, "会话不存在")
-			return
+		default:
+			h.log.Error("删除会话失败", zap.Error(err))
+			response.ServerError(c, "删除会话失败")
 		}
-		h.log.Error("删除会话失败", zap.Error(err))
-		response.ServerError(c, "删除会话失败")
 		return
 	}
 	response.OK(c, gin.H{"ok": true})
 }
 
-// ListMessages 列出会话消息。
 func (h *ChatHandler) ListMessages(c *gin.Context) {
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "0"))
 	msgs, err := h.service.ListMessages(c.Request.Context(), c.Param("id"), middleware.MustUser(c).UserID, limit)
@@ -152,13 +140,7 @@ func (h *ChatHandler) ListMessages(c *gin.Context) {
 	response.OK(c, toMessageList(msgs))
 }
 
-// ---------- 发送消息（SSE） ----------
-
-// SendMessage 发送消息并以 SSE 流式返回。
-//
-// 关键顺序：所有可能失败的检查（会话归属、参数、Agent 可用性）
-// 必须在写出 SSE 响应头之前完成。一旦写出 200 与 text/event-stream，
-// 就再也无法改成 404 / 409 / 503。
+// SendMessage 按固定顺序执行：Service.Prepare -> Harness.Prepare -> Service.SaveUser -> Agent.Run -> Service.SaveResult。
 func (h *ChatHandler) SendMessage(c *gin.Context) {
 	if h.agent == nil || !h.agent.Enabled() {
 		response.Unavailable(c, "对话能力未启用")
@@ -178,8 +160,6 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 	logger.Info("[用户输入]", logutil.Content("内容", req.Content), zap.Strings("附件", req.AttachmentIDs))
 	logger.Info("[校验会话与附件]")
 
-	// 先校验并锁定会话，再由 Harness 独立装配上下文。
-	// 这一步失败时还没有写出响应头，可以正常返回状态码。
 	runCtx, err := h.service.Prepare(ctx, userID, conversationID, req.Content, req.AttachmentIDs)
 	if err != nil {
 		logger.Warn("[校验失败]", logutil.Content("错误", err.Error()))
@@ -215,7 +195,6 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 		return
 	}
 
-	// 单轮总超时：超时后取消 Agent，但落库走 WithoutCancel。
 	runCtxTimeout, cancel := context.WithTimeout(ctx, h.runTimeout)
 	defer cancel()
 
@@ -225,35 +204,47 @@ func (h *ChatHandler) SendMessage(c *gin.Context) {
 	})
 	defer w.close()
 
-	// sink 把业务事件编码成 SSE 帧。
-	//
-	// 写失败通常意味着客户端断开，返回 error 让 Chat 停止执行，
-	// 避免继续消耗模型与渲染算力。
 	sink := func(ev service.Event) error {
-		err := w.writeEvent(ev)
-		if err != nil {
+		if err := w.writeEvent(ev); err != nil {
 			logger.Warn("[SSE 写入失败]", zap.String("事件", ev.Type), logutil.Content("错误", err.Error()))
 			cancel()
+			return err
 		}
-		return err
+		return nil
 	}
 
 	res := h.agent.Run(runCtxTimeout, rc, sink)
 	h.service.SaveResult(runCtxTimeout, runCtx, res, sink)
 }
 
+func toConversationResp(c *service.Conversation) dto.ConversationResp {
+	return dto.ConversationResp{ID: c.ID, Title: c.Title, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt}
+}
+
+func toMessageList(rows []service.MessageView) []dto.MessageResp {
+	out := make([]dto.MessageResp, 0, len(rows))
+	for i := range rows {
+		m := &rows[i]
+		resp := dto.MessageResp{
+			ID: m.ID, Role: m.Role, Content: m.Content, Status: m.Status,
+			Tokens: m.Tokens, AttachmentIDs: m.AttachmentIDs, CreatedAt: m.CreatedAt,
+		}
+		if len(m.Attachments) > 0 {
+			resp.Attachments = make([]dto.AttachmentBrief, 0, len(m.Attachments))
+			for _, a := range m.Attachments {
+				resp.Attachments = append(resp.Attachments, dto.AttachmentBrief{
+					ID: a.ID, Filename: a.Filename, Kind: a.Kind, MIME: a.MIME, Size: a.Size,
+					DownloadURL: "/api/v1/attachments/" + a.ID + "/download",
+				})
+			}
+		}
+		out = append(out, resp)
+	}
+	return out
+}
+
 // ---------- SSE writer ----------
 
-// sseWriter 是 SSE 帧编码器。
-//
-// 帧契约（与前端约定，变更需同步）：
-//
-//	event: message    data: {"text":"...","reset":false}
-//	event: tool_start data: {"name":"...","call_id":"..."}
-//	event: tool_end   data: {"name":"...","result":"...","elapsed_ms":123}
-//	event: error      data: {"message":"..."}
-//	event: done       data: {"message_id":1,"status":"completed","elapsed_ms":1234}
-//	: ping            心跳注释行
 type sseWriter struct {
 	gin              *gin.Context
 	flusher          http.Flusher
@@ -264,12 +255,10 @@ type sseWriter struct {
 	onHeartbeatError func(error)
 }
 
-// newSSEWriter 写出响应头并启动心跳。
 func newSSEWriter(c *gin.Context, heartbeat time.Duration, onHeartbeatError func(error)) *sseWriter {
 	c.Header("Content-Type", "text/event-stream; charset=utf-8")
 	c.Header("Cache-Control", "no-cache")
 	c.Header("Connection", "keep-alive")
-	// 关闭 nginx 等反向代理的缓冲，否则流式会被攒成一整块。
 	c.Header("X-Accel-Buffering", "no")
 	c.Status(http.StatusOK)
 
@@ -285,7 +274,6 @@ func newSSEWriter(c *gin.Context, heartbeat time.Duration, onHeartbeatError func
 	return w
 }
 
-// heartbeatLoop 定期发送注释行，防止中间代理因空闲断开连接。
 func (w *sseWriter) heartbeatLoop(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -313,7 +301,6 @@ func (w *sseWriter) heartbeatLoop(interval time.Duration) {
 	}
 }
 
-// writeEvent 把业务事件编码为 SSE 帧。
 func (w *sseWriter) writeEvent(ev service.Event) error {
 	payload, err := json.Marshal(ev.Data)
 	if err != nil {
@@ -326,7 +313,6 @@ func (w *sseWriter) writeEvent(ev service.Event) error {
 	if w.closed {
 		return fmt.Errorf("SSE 连接已关闭")
 	}
-
 	if _, err := fmt.Fprintf(w.gin.Writer, "event: %s\ndata: %s\n\n", ev.Type, payload); err != nil {
 		return fmt.Errorf("写入 SSE 帧失败: %w", err)
 	}
@@ -336,7 +322,6 @@ func (w *sseWriter) writeEvent(ev service.Event) error {
 	return nil
 }
 
-// close 停止心跳并标记关闭。
 func (w *sseWriter) close() {
 	w.once.Do(func() {
 		close(w.stopHB)

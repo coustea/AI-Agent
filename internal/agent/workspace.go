@@ -1,6 +1,17 @@
+// Package agent 的零信任虚拟文件系统后端（实现 Eino adk/filesystem.Backend）。
+//
+// 职责：
+//   - 在 Eino 官方 local.Backend 外提供多租户虚拟路径映射：
+//     /workspace -> 当前会话物理目录（可读写），/skills -> 全局技能目录（严格只读）；
+//   - 统一执行四重安全校验：Principal 身份检查、路径清洗与挂载前缀精确匹配、目录包含判断、符号链接防逃逸；
+//   - 强制小步读写配额（读上限 200 行，写上限 220 行 / 12 KB，grep 上限 200 条），并对外脱敏宿主机物理路径。
+//
+// 并发安全：workspace 实例仅保存不可变的 skillsRoot 与官方无状态 local.Backend，可跨并发会话共享；
+// 每次操作通过 ctx 中的 Principal 动态解析当前会话的物理根目录。
 package agent
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -15,25 +26,28 @@ import (
 	adkfs "github.com/cloudwego/eino/adk/filesystem"
 )
 
-// Agent 视角的两个虚拟挂载点。
 const (
+	// 模型文件工具只见虚拟路径，物理目录在每次操作时由 Principal 动态解析。
 	MountWorkspace = "/workspace"
 	MountSkills    = "/skills"
+
+	maxReadLines  = 200
+	maxWriteLines = 220
+	maxWriteBytes = 12 << 10 // 12 KB
 )
 
-// 虚拟文件系统边界哨兵错误。
 var (
-	ErrPathDenied = errors.New("path is outside the allowed sandbox")
-	ErrReadOnly   = errors.New("挂载点只读")
+	ErrPathDenied    = errors.New("path is outside the allowed sandbox")
+	ErrReadOnly      = errors.New("挂载点只读")
+	ErrWriteTooLarge = errors.New("单次写入超出体积上限")
 )
 
-// workspacePathError 包装带虚拟路径的文件错误，供 toolGuard 识别并转为模型可读反馈。
+// workspacePathError 对外展示虚拟路径，并通过 Unwrap 保留底层哨兵错误供 errors.Is 分类。
 type workspacePathError struct {
 	path string
 	err  error
 }
 
-// Error 返回以虚拟路径为前缀的错误文本，不暴露宿主机路径。
 func (e *workspacePathError) Error() string {
 	if e.path == "" {
 		return e.err.Error()
@@ -41,10 +55,9 @@ func (e *workspacePathError) Error() string {
 	return fmt.Sprintf("%s: %v", e.path, e.err)
 }
 
-// Unwrap 暴露底层哨兵错误（如 ErrPathDenied、ErrReadOnly、fs.ErrNotExist）。
 func (e *workspacePathError) Unwrap() error { return e.err }
 
-// formatWorkspaceError 将虚拟文件系统路径错误转为模型可读提示，供 ToolGuard 复用。
+// formatWorkspaceError 为 toolGuard 提供面向模型的自愈修复建议，且绝不泄露物理路径。
 func formatWorkspaceError(err error) (string, bool) {
 	var pathErr *workspacePathError
 	if !errors.As(err, &pathErr) {
@@ -55,26 +68,23 @@ func formatWorkspaceError(err error) (string, bool) {
 		return "路径不可访问：" + pathErr.Error() + "。请使用 /workspace 或 /skills 中的路径。", true
 	case errors.Is(pathErr, ErrReadOnly):
 		return "目录只读，禁止修改：" + pathErr.Error() + "。/skills 目录严格只读，如需修改请先复制到 /workspace。", true
+	case errors.Is(pathErr, ErrWriteTooLarge):
+		return "写入被拒绝：" + pathErr.Error() + "。请将内容拆分为多个职责单一的小模块文件，或先写入框架再使用 edit_file 分段补充。", true
 	default:
 		return "文件操作未完成：" + pathErr.Error() + "。请检查路径后继续。", true
 	}
 }
 
-// workspace 实现 Eino adkfs.Backend：按 runPrincipal 将虚拟路径映射到宿主机隔离目录并防逃逸，
-// 真实文件 IO 委托给官方 eino-ext local.Backend。
 type workspace struct {
 	backend    adkfs.Backend
 	skillsRoot string
 }
 
-// newWorkspace 初始化工作区根目录与只读技能根路径，并构造底层官方 local.Backend。
+// newWorkspace 初始化共享文件系统后端；此处仅确保总根目录存在，具体会话目录由 Harness.Prepare 创建。
 func newWorkspace(workspaceRoot, skillsRoot string) (adkfs.Backend, error) {
-	if strings.TrimSpace(workspaceRoot) == "" {
-		workspaceRoot = DefaultWorkspaceDir
-	}
-	if strings.TrimSpace(skillsRoot) == "" {
-		skillsRoot = DefaultSkillsDir
-	}
+	workspaceRoot = cmp.Or(strings.TrimSpace(workspaceRoot), DefaultWorkspaceDir)
+	skillsRoot = cmp.Or(strings.TrimSpace(skillsRoot), DefaultSkillsDir)
+
 	absWS, err := filepath.Abs(workspaceRoot)
 	if err != nil {
 		return nil, fmt.Errorf("解析目录失败: %w", err)
@@ -86,6 +96,7 @@ func newWorkspace(workspaceRoot, skillsRoot string) (adkfs.Backend, error) {
 	if err != nil {
 		return nil, fmt.Errorf("解析技能目录失败: %w", err)
 	}
+	// 官方 local.Backend 直接操作物理路径，因此所有方法必须先经 mapPath 校验后才能委托。
 	backend, err := local.NewBackend(context.Background(), &local.Config{})
 	if err != nil {
 		return nil, err
@@ -93,69 +104,56 @@ func newWorkspace(workspaceRoot, skillsRoot string) (adkfs.Backend, error) {
 	return &workspace{backend: backend, skillsRoot: absSkills}, nil
 }
 
-// mapPath 将虚拟路径解析为宿主机安全路径，校验挂载边界、只读限制与软链接逃逸。
+// mapPath 将虚拟路径解析为宿主机安全物理路径，依次校验身份、挂载前缀、只读权限、目录包含与软链接目标。
 func (w *workspace) mapPath(ctx context.Context, virtual string, needWrite bool) (string, error) {
 	if strings.TrimSpace(virtual) == "" {
 		virtual = MountWorkspace
 	}
-	run, err := mustPrincipal(ctx)
+	run, err := PrincipalFrom(ctx)
 	if err != nil {
 		return "", err
 	}
 
+	// 虚拟路径统一使用 POSIX 斜杠，先 Clean 再拦截 ".." 穿越。
 	cleaned := path.Clean(strings.ReplaceAll(virtual, "\\", "/"))
 	if strings.HasPrefix(cleaned, "..") {
 		return "", &workspacePathError{path: virtual, err: ErrPathDenied}
 	}
 	if !strings.HasPrefix(cleaned, "/") {
+		// 相对路径一律锚定到当前会话 /workspace，避免受服务进程 cwd 影响。
 		cleaned = path.Join(MountWorkspace, cleaned)
 	}
 
-	mounts := []struct {
-		prefix   string
-		root     string
-		readOnly bool
-	}{
-		{MountWorkspace, run.Workspace, false},
-		{MountSkills, w.skillsRoot, true},
-	}
-	for _, m := range mounts {
-		if cleaned != m.prefix && !strings.HasPrefix(cleaned, m.prefix+"/") {
-			continue
-		}
-		if m.root == "" {
-			return "", &workspacePathError{path: cleaned, err: ErrPathDenied}
-		}
-		rel := strings.TrimPrefix(strings.TrimPrefix(cleaned, m.prefix), "/")
-		return resolveUnder(m.root, rel, cleaned, m.readOnly, needWrite)
-	}
-	return "", &workspacePathError{path: virtual, err: ErrPathDenied}
-}
-
-// resolveUnder 在指定挂载根下拼接相对路径，强制校验只读、目录穿越与软链接目标。
-func resolveUnder(root, rel, virtual string, readOnly, needWrite bool) (string, error) {
-	if needWrite && readOnly {
-		return "", &workspacePathError{path: virtual, err: ErrReadOnly}
-	}
-	if rel != "" {
-		normalized := path.Clean("/" + rel)
-		if normalized == "/.." || strings.HasPrefix(normalized, "/../") {
-			return "", &workspacePathError{path: virtual, err: ErrPathDenied}
-		}
-	}
-	host := filepath.Join(root, filepath.FromSlash(rel))
-	if inside, err := isInside(root, host); err != nil {
-		return "", &workspacePathError{path: virtual, err: err}
-	} else if !inside {
+	// 挂载点必须精确相等或紧跟斜杠，防止 /workspace-evil 绕过前缀检查。
+	prefix, root := MountWorkspace, run.Workspace
+	switch {
+	case cleaned == MountWorkspace || strings.HasPrefix(cleaned, MountWorkspace+"/"):
+	case cleaned == MountSkills || strings.HasPrefix(cleaned, MountSkills+"/"):
+		prefix, root = MountSkills, w.skillsRoot
+	default:
 		return "", &workspacePathError{path: virtual, err: ErrPathDenied}
 	}
+	if root == "" {
+		return "", &workspacePathError{path: cleaned, err: ErrPathDenied}
+	}
+	if needWrite && prefix == MountSkills {
+		return "", &workspacePathError{path: cleaned, err: ErrReadOnly}
+	}
+
+	rel := strings.TrimPrefix(strings.TrimPrefix(cleaned, prefix), "/")
+	host := filepath.Join(root, filepath.FromSlash(rel))
+	if inside, err := isInside(root, host); err != nil {
+		return "", &workspacePathError{path: cleaned, err: err}
+	} else if !inside {
+		return "", &workspacePathError{path: cleaned, err: ErrPathDenied}
+	}
 	if err := checkSymlink(root, host); err != nil {
-		return "", &workspacePathError{path: virtual, err: err}
+		return "", &workspacePathError{path: cleaned, err: err}
 	}
 	return host, nil
 }
 
-// isInside 判断 target 是否严格位于 root 目录内（含 root 自身）。
+// isInside 以路径段而非字符串前缀判断包含关系，防止 /a/b-other 被误判在 /a/b 内。
 func isInside(root, target string) (bool, error) {
 	rel, err := filepath.Rel(root, target)
 	if err != nil {
@@ -164,7 +162,7 @@ func isInside(root, target string) (bool, error) {
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))), nil
 }
 
-// checkSymlink 向上找到最近存在的祖先并解析软链接，防止通过软链接或悬空软链接逃逸沙箱。
+// checkSymlink 沿目标路径向上找到最近已存在的节点，解析符号链接后校验真实目标仍落在沙箱根内。
 func checkSymlink(root, host string) error {
 	probe := host
 	var probeInfo os.FileInfo
@@ -181,7 +179,6 @@ func checkSymlink(root, host string) error {
 	}
 	resolved, err := filepath.EvalSymlinks(probe)
 	if err != nil {
-		// 悬空软链接必须拒绝写入，避免沿其目标在沙箱外建文件。
 		if probeInfo != nil && probeInfo.Mode()&os.ModeSymlink != 0 {
 			if errors.Is(err, fs.ErrNotExist) {
 				return fs.ErrNotExist
@@ -193,6 +190,7 @@ func checkSymlink(root, host string) error {
 		}
 		return fmt.Errorf("%w: %v", ErrPathDenied, err)
 	}
+	// 根目录本身也可能位于软链接之下（如 macOS /var -> /private/var），双方均取真实路径再比较。
 	realRoot := root
 	if r, err := filepath.EvalSymlinks(root); err == nil {
 		realRoot = r
@@ -205,7 +203,7 @@ func checkSymlink(root, host string) error {
 	return nil
 }
 
-// LsInfo 列出虚拟目录（默认 /workspace）或单个文件的元信息，并将返回路径还原为虚拟路径。
+// LsInfo 列出目录或单个文件元数据，全部路径转换为虚拟挂载路径返回。
 func (w *workspace) LsInfo(ctx context.Context, req *adkfs.LsInfoRequest) ([]adkfs.FileInfo, error) {
 	target := MountWorkspace
 	if req != nil && strings.TrimSpace(req.Path) != "" {
@@ -229,6 +227,7 @@ func (w *workspace) LsInfo(ctx context.Context, req *adkfs.LsInfoRequest) ([]adk
 	for i := range rows {
 		name := rows[i].Path
 		rows[i].Path = path.Join(target, name)
+		// 官方 local.LsInfo 仅返回文件名，这里补齐目录标记、大小与修改时间。
 		if st, err := os.Lstat(filepath.Join(host, name)); err == nil {
 			rows[i].IsDir, rows[i].Size, rows[i].ModifiedAt = st.IsDir(), st.Size(), st.ModTime().Format(time.RFC3339)
 		}
@@ -236,7 +235,7 @@ func (w *workspace) LsInfo(ctx context.Context, req *adkfs.LsInfoRequest) ([]adk
 	return rows, nil
 }
 
-// Read 只读校验后委托官方 local.Backend 读取文件内容。
+// Read 按行分页读取文件，强制收紧单次读取上限为 maxReadLines（200 行）。
 func (w *workspace) Read(ctx context.Context, req *adkfs.ReadRequest) (*adkfs.FileContent, error) {
 	if req == nil {
 		return nil, fmt.Errorf("Read: 请求为空")
@@ -245,16 +244,19 @@ func (w *workspace) Read(ctx context.Context, req *adkfs.ReadRequest) (*adkfs.Fi
 	if err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(host); err != nil {
-		return nil, wrapPathError(err, host, req.FilePath)
-	}
 	mapped := *req
 	mapped.FilePath = host
+	if mapped.Offset <= 0 {
+		mapped.Offset = 1
+	}
+	if mapped.Limit <= 0 || mapped.Limit > maxReadLines {
+		mapped.Limit = maxReadLines
+	}
 	out, err := w.backend.Read(ctx, &mapped)
 	return out, wrapPathError(err, host, req.FilePath)
 }
 
-// Write 校验写权限（拒绝 /skills）后委托官方 local.Backend 写出文件。
+// Write 校验可写挂载与单次体积上限（220 行 / 12 KB），倒逼模型采用小步模块化落盘。
 func (w *workspace) Write(ctx context.Context, req *adkfs.WriteRequest) error {
 	if req == nil {
 		return fmt.Errorf("Write: 请求为空")
@@ -263,12 +265,20 @@ func (w *workspace) Write(ctx context.Context, req *adkfs.WriteRequest) error {
 	if err != nil {
 		return err
 	}
+	lines := strings.Count(req.Content, "\n") + 1
+	if len(req.Content) > maxWriteBytes || lines > maxWriteLines {
+		return &workspacePathError{
+			path: req.FilePath,
+			err: fmt.Errorf("%w（当前 %d 行 / %d 字节，单次上限 %d 行 / %d 字节）",
+				ErrWriteTooLarge, lines, len(req.Content), maxWriteLines, maxWriteBytes),
+		}
+	}
 	mapped := *req
 	mapped.FilePath = host
 	return wrapPathError(w.backend.Write(ctx, &mapped), host, req.FilePath)
 }
 
-// Edit 校验写权限（拒绝 /skills）后委托官方 local.Backend 执行局部替换。
+// Edit 复用官方精确局部替换语义，仅补充写权限校验与错误路径脱敏。
 func (w *workspace) Edit(ctx context.Context, req *adkfs.EditRequest) error {
 	if req == nil {
 		return fmt.Errorf("Edit: 请求为空")
@@ -282,15 +292,12 @@ func (w *workspace) Edit(ctx context.Context, req *adkfs.EditRequest) error {
 	return wrapPathError(w.backend.Edit(ctx, &mapped), host, req.FilePath)
 }
 
-// GrepRaw 在虚拟目录下搜索内容，最多返回 200 条匹配并将宿主机路径还原为虚拟路径。
+// GrepRaw 委托官方正则检索，截断至最多 200 条命中并将结果路径还原为虚拟路径。
 func (w *workspace) GrepRaw(ctx context.Context, req *adkfs.GrepRequest) ([]adkfs.GrepMatch, error) {
 	if req == nil || req.Pattern == "" {
 		return nil, fmt.Errorf("Grep: pattern 不能为空")
 	}
-	root := req.Path
-	if root == "" {
-		root = MountWorkspace
-	}
+	root := cmp.Or(req.Path, MountWorkspace)
 	host, err := w.mapPath(ctx, root, false)
 	if err != nil {
 		return nil, err
@@ -321,16 +328,12 @@ func (w *workspace) GrepRaw(ctx context.Context, req *adkfs.GrepRequest) ([]adkf
 	return rows, nil
 }
 
-// GlobInfo 按 glob 模式枚举匹配文件，逐条复检软链接边界并跳过目录。
+// GlobInfo 委托官方通配匹配，并对每个命中项重新过一遍 mapPath 以防符号链接越界。
 func (w *workspace) GlobInfo(ctx context.Context, req *adkfs.GlobInfoRequest) ([]adkfs.FileInfo, error) {
 	if req == nil || req.Pattern == "" {
 		return nil, fmt.Errorf("Glob: pattern 不能为空")
 	}
-	root := req.Path
-	if root == "" {
-		root = MountWorkspace
-	}
-	root = path.Clean(root)
+	root := path.Clean(cmp.Or(req.Path, MountWorkspace))
 	host, err := w.mapPath(ctx, root, false)
 	if err != nil {
 		return nil, err
@@ -372,7 +375,7 @@ func (w *workspace) GlobInfo(ctx context.Context, req *adkfs.GlobInfoRequest) ([
 	return out, nil
 }
 
-// wrapPathError 将宿主机文件错误转换为虚拟路径错误，避免宿主机绝对路径进入模型上下文。
+// wrapPathError 保留常见标准文件错误语义，并将错误文本中的物理根目录替换为虚拟路径。
 func wrapPathError(err error, host, virtual string) error {
 	if err == nil {
 		return nil

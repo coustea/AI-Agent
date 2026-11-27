@@ -50,3 +50,21 @@ func SafeJoin(root string, names ...string) (string, error) {
 	}
 	return target, nil
 }
+
+// ClipRunes 按 Unicode 字符数截断字符串（不追加省略号）。
+func ClipRunes(s string, maxRunes int) string {
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	return string(r[:maxRunes])
+}
+
+// Truncate 按 Unicode 字符数截断字符串，超长时追加省略号。
+func Truncate(s string, maxRunes int) string {
+	r := []rune(s)
+	if len(r) <= maxRunes {
+		return s
+	}
+	return string(r[:maxRunes]) + "…"
+}

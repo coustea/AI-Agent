@@ -1,0 +1,196 @@
+@import "tailwindcss";
+@import "katex/dist/katex.min.css";
+@plugin "@tailwindcss/typography";
+
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+@source "../node_modules/@streamdown/math/dist/*.js";
+@source "../node_modules/@streamdown/cjk/dist/*.js";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* 纯黑白双主题语义 Token（语义色仅留给代码语法高亮与文件格式图标） */
+:root {
+  color-scheme: light;
+  --background: #ffffff;
+  --foreground: #0a0a0b;
+  --sidebar: #f8f8f9;
+  --card: #ffffff;
+  --elevated: #ffffff;
+  --file-card: #f4f4f5;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0b;
+  --primary: #0a0a0b;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f3f5;
+  --secondary-foreground: #0a0a0b;
+  --muted: #f3f3f5;
+  --muted-foreground: #52525b;
+  --destructive: #b91c1c;
+  --destructive-foreground: #ffffff;
+  --destructive-subtle: #fef2f2;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --ring: #0a0a0b;
+  --composer-shadow: 0 2px 14px -2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.04);
+  --radius: 0.625rem;
+  --scrollbar-thumb: #a1a1aa;
+  --scrollbar-track: transparent;
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #0d0d0e;
+  --foreground: #fafafa;
+  --sidebar: #141416;
+  --card: #18181b;
+  --elevated: #1c1c1f;
+  --file-card: #1e1f20;
+  --popover: #18181b;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #0a0a0b;
+  --secondary: #202024;
+  --secondary-foreground: #fafafa;
+  --muted: #202024;
+  --muted-foreground: #a1a1aa;
+  --destructive: #f87171;
+  --destructive-foreground: #0a0a0b;
+  --destructive-subtle: #2a1215;
+  --border: #27272a;
+  --input: #3f3f46;
+  --ring: #fafafa;
+  --composer-shadow: 0 6px 24px -4px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --scrollbar-thumb: #52525b;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar);
+  --color-card: var(--card);
+  --color-elevated: var(--elevated);
+  --color-file-card: var(--file-card);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-subtle: var(--destructive-subtle);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    accent-color: var(--primary);
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: var(--background);
+    color: var(--foreground);
+    caret-color: var(--foreground);
+  }
+
+  ::selection {
+    background-color: var(--primary);
+    color: var(--primary-foreground);
+  }
+
+  a {
+    text-underline-offset: 3px;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  input:user-invalid,
+  textarea:user-invalid {
+    border-color: var(--destructive);
+  }
+}
+
+.composer-surface {
+  box-shadow: var(--composer-shadow);
+}
+
+/* 消除 Streamdown 代码块双层圆角边框套娃，保留单层克制卡片与顶部分隔线 */
+[data-streamdown="code-block"] {
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+[data-streamdown="code-block-header"] {
+  height: 2.25rem;
+  padding: 0 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+[data-streamdown="code-block-actions"] {
+  top: 0.25rem;
+  right: 0.5rem;
+  border: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+[data-streamdown="code-block-body"] {
+  border: 0;
+  border-radius: 0;
+  padding: 0.875rem 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :root,
+  .dark {
+    --background: Canvas;
+    --foreground: CanvasText;
+    --sidebar: Canvas;
+    --card: Canvas;
+    --elevated: Canvas;
+    --file-card: Canvas;
+    --primary: ButtonText;
+    --primary-foreground: ButtonFace;
+    --border: CanvasText;
+    --input: CanvasText;
+    --ring: Highlight;
+  }
+}

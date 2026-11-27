@@ -11,17 +11,14 @@ import (
 	"mentorly/internal/service/auth"
 )
 
-// Handler 是认证模块的 HTTP 入口。
 type AuthHandler struct {
 	svc *auth.Service
 }
 
-// NewHandler 构造 handler。
 func NewAuthHandler(svc *auth.Service) *AuthHandler {
 	return &AuthHandler{svc: svc}
 }
 
-// Register 用户注册
 func (h *AuthHandler) Register(c *gin.Context) {
 	var req dto.RegisterReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -31,7 +28,6 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 	cred, err := h.svc.Register(c.Request.Context(), req.Username, req.Email, req.Password)
 	if err != nil {
-		// 唯一键冲突说明邮箱已被占用，属于客户端可修正的错误，返回 409。
 		if errors.Is(err, auth.ErrEmailTaken) {
 			response.Conflict(c, auth.ErrEmailTaken.Error())
 			return
@@ -39,10 +35,9 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		response.ServerError(c, "注册失败，请稍后重试")
 		return
 	}
-	response.OK(c, toCredentialResp(cred))
+	response.OK(c, dto.LoginResp{Token: cred.Token, User: toUserResp(cred.User)})
 }
 
-// Login 用户登录
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req dto.LoginReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -52,25 +47,19 @@ func (h *AuthHandler) Login(c *gin.Context) {
 
 	cred, err := h.svc.Login(c.Request.Context(), req.Email, req.Password)
 	if err != nil {
-		if errors.Is(err, auth.ErrInvalidCredentials) {
+		switch {
+		case errors.Is(err, auth.ErrInvalidCredentials):
 			response.Unauthorized(c, auth.ErrInvalidCredentials.Error())
-			return
-		}
-		// 账号被禁用属于「凭证本身有效但无权使用」，用 403 区分于密码错误。
-		if errors.Is(err, auth.ErrDisabled) {
+		case errors.Is(err, auth.ErrDisabled):
 			response.Forbidden(c, auth.ErrDisabled.Error())
-			return
+		default:
+			response.ServerError(c, "登录失败，请稍后重试")
 		}
-		response.ServerError(c, "登录失败，请稍后重试")
 		return
 	}
-	response.OK(c, toCredentialResp(cred))
+	response.OK(c, dto.LoginResp{Token: cred.Token, User: toUserResp(cred.User)})
 }
 
-// Profile 获取当前登录用户信息。
-//
-// token 里的 username 只用于展示，改名后会过期，
-// 因此这里用 UserID 回查数据库拿权威资料。
 func (h *AuthHandler) Profile(c *gin.Context) {
 	user, err := h.svc.Profile(c.Request.Context(), middleware.MustUser(c).UserID)
 	if err != nil {
@@ -82,4 +71,8 @@ func (h *AuthHandler) Profile(c *gin.Context) {
 		return
 	}
 	response.OK(c, toUserResp(user))
+}
+
+func toUserResp(u *auth.User) dto.UserResp {
+	return dto.UserResp{ID: u.ID, Username: u.Username, Email: u.Email}
 }

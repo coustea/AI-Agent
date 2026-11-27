@@ -14,16 +14,18 @@ import (
 	"mentorly/internal/agent"
 	"mentorly/internal/repository/attachments"
 	"mentorly/internal/repository/conversations"
+	"mentorly/internal/utils"
 	logutil "mentorly/internal/utils/log"
 )
 
-var ErrConversationBusy = errors.New("会话正在运行，请等待本轮结束")
-var ErrEmptyQuestion = errors.New("问题内容不能为空")
+var (
+	ErrConversationBusy     = errors.New("会话正在运行，请等待本轮结束")
+	ErrEmptyQuestion        = errors.New("问题内容不能为空")
+	ErrConversationNotFound = conversations.ErrConversationNotFound
+)
 
 type Conversation = conversations.Conversation
 type Event = agent.Event
-
-var ErrConversationNotFound = conversations.ErrConversationNotFound
 
 // Chat 负责业务校验、会话互斥、消息持久化和自动标题。
 type Chat struct {
@@ -66,20 +68,12 @@ func (s *Chat) DeleteConversation(ctx context.Context, id, userID string) error 
 	return s.store.DeleteConversation(ctx, id, userID)
 }
 
-// MessageView 是一条消息及其附件，供接口直接渲染。
-//
-// 附件按消息记录的 AttachmentIDs 顺序排列：那个顺序是用户上传的顺序，
-// 也是模型看到的顺序，前端不能按附件表主键或时间自行重排。
+// MessageView 是一条消息及其按上传顺序排列的附件。
 type MessageView struct {
 	conversations.Message
-	// Attachments 按 AttachmentIDs 顺序排列的附件摘要
 	Attachments []*attachments.Attachment
 }
 
-// ListMessages 返回会话内面向用户的消息，并批量补全附件摘要。
-//
-// 附件用一次 IN 查询取回，再在内存里按每条消息的顺序分发：
-// 逐条消息查询会退化成 N+1，历史长时会明显变慢。
 func (s *Chat) ListMessages(ctx context.Context, id, userID string, limit int) ([]MessageView, error) {
 	if _, err := s.store.GetConversation(ctx, id, userID); err != nil {
 		return nil, err
@@ -89,16 +83,14 @@ func (s *Chat) ListMessages(ctx context.Context, id, userID string, limit int) (
 		return nil, err
 	}
 
-	// 汇总全部附件 ID，去重后一次查回。
 	allIDs := make([]string, 0, len(msgs))
 	seen := make(map[string]struct{}, len(msgs))
 	for i := range msgs {
 		for _, aid := range msgs[i].AttachmentIDs {
-			if _, dup := seen[aid]; dup {
-				continue
+			if _, dup := seen[aid]; !dup {
+				seen[aid] = struct{}{}
+				allIDs = append(allIDs, aid)
 			}
-			seen[aid] = struct{}{}
-			allIDs = append(allIDs, aid)
 		}
 	}
 
@@ -106,8 +98,6 @@ func (s *Chat) ListMessages(ctx context.Context, id, userID string, limit int) (
 	if len(allIDs) > 0 {
 		rows, err := s.attachments.FindMany(ctx, userID, id, allIDs)
 		if err != nil {
-			// 附件摘要缺失不该让历史消息整体不可见：
-			// 正文与角色仍然有意义，前端可以退化成只显示附件数量。
 			s.log.Warn("加载消息附件失败", zap.Error(err), zap.String("conversation_id", id))
 		}
 		for _, a := range rows {
@@ -122,10 +112,6 @@ func (s *Chat) ListMessages(ctx context.Context, id, userID string, limit int) (
 	return out, nil
 }
 
-// attachmentIDsOf 提取已校验附件的 ID，保持入参顺序。
-//
-// 落库用它而不是原始请求：原始请求可能含空串、重复项，
-// 顺序也未必等于模型看到的顺序，而前端按落库顺序渲染。
 func attachmentIDsOf(items []*attachments.Attachment) []string {
 	if len(items) == 0 {
 		return nil
@@ -142,10 +128,6 @@ func attachmentIDsOf(items []*attachments.Attachment) []string {
 	return out
 }
 
-// orderedAttachments 按消息记录的 ID 顺序取出附件。//
-// 顺序是语义的一部分：它等于用户上传的顺序，也等于模型在消息里看到的顺序。
-// 因此这里绝不能用 map 遍历或数据库排序结果，必须严格跟随 ids。
-// 缺失的附件直接跳过——附件记录被清理后，历史消息仍应正常展示。
 func orderedAttachments(ids []string, byID map[string]*attachments.Attachment) []*attachments.Attachment {
 	if len(ids) == 0 {
 		return nil
@@ -178,7 +160,6 @@ func (p *PreparedRun) Close() {
 	}
 }
 
-// Prepare 校验会话、附件并持有会话锁，调用方在整轮结束后 Close。
 func (s *Chat) Prepare(ctx context.Context, userID, conversationID, question string, attachmentIDs []string) (_ *PreparedRun, err error) {
 	if strings.TrimSpace(question) == "" {
 		return nil, ErrEmptyQuestion
@@ -217,10 +198,8 @@ func countUniqueAttachmentIDs(ids []string) int {
 
 // SaveUser 必须在 Harness 读取历史之后调用。
 func (s *Chat) SaveUser(ctx context.Context, p *PreparedRun, firstTurn bool) error {
-	// 落库的 ID 顺序取自已校验的 items，而不是原始请求：
-	// 原始请求可能含空串、重复项或顺序与模型实际看到的不同，
-	// 而前端按这个顺序渲染附件，两边必须完全一致。
 	msg := &conversations.Message{
+		Visible:       true,
 		Role:          conversations.RoleUser,
 		Content:       p.Question,
 		Status:        conversations.StatusCompleted,
@@ -230,18 +209,20 @@ func (s *Chat) SaveUser(ctx context.Context, p *PreparedRun, firstTurn bool) err
 		return fmt.Errorf("保存用户消息失败: %w", err)
 	}
 	p.UserMessageID = msg.ID
-	logutil.FromContext(ctx, s.log).Info("[用户消息已保存]")
+	logger := logutil.FromContext(ctx, s.log)
+	logger.Info("[用户消息已保存]")
+
 	if firstTurn {
-		title := []rune(strings.Join(strings.Fields(p.Question), " "))
-		if len(title) > 20 {
-			title = title[:20]
-		}
-		if err := s.store.UpdateTitle(ctx, p.ConversationID, string(title)); err != nil {
-			logutil.FromContext(ctx, s.log).Warn("更新会话标题失败", zap.Error(err))
+		title := utils.ClipRunes(strings.Join(strings.Fields(p.Question), " "), 20)
+		if title != "" {
+			if err := s.store.UpdateTitle(ctx, p.ConversationID, title); err != nil {
+				logger.Warn("更新会话标题失败", zap.Error(err))
+			}
+			return nil
 		}
 	}
-	if touchErr := s.store.TouchConversation(ctx, p.ConversationID); touchErr != nil {
-		logutil.FromContext(ctx, s.log).Warn("更新会话时间失败", zap.Error(touchErr))
+	if err := s.store.TouchConversation(ctx, p.ConversationID); err != nil {
+		logger.Warn("更新会话时间失败", zap.Error(err))
 	}
 	return nil
 }
@@ -250,54 +231,49 @@ func (s *Chat) SaveUser(ctx context.Context, p *PreparedRun, firstTurn bool) err
 func (s *Chat) SaveResult(ctx context.Context, p *PreparedRun, res agent.Result, sink agent.Emitter) agent.Result {
 	saveCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
-	msg := conversations.FromModel(res.Message, res.Status)
+	msg := conversations.FromModel(res.Message, res.Status, true)
 
-	folded := 0
+	covered := 0
 	if res.Compaction != nil {
-		folded = res.Compaction.FoldedTranscriptCount
+		covered = res.Compaction.CoveredTranscriptCount
 	}
-	paired, mappedFolded, foldedValid := completedToolPairsWithBoundary(res.Transcript, folded)
-	var transcript []conversations.Message
+	paired, mappedCovered, coveredValid := completedToolPairs(res.Transcript, covered)
+	transcript := make([]conversations.Message, 0, len(paired))
 	for _, m := range paired {
-		transcript = append(transcript, conversations.FromModel(m, conversations.StatusCompleted))
+		transcript = append(transcript, conversations.FromModel(m, conversations.StatusCompleted, false))
 	}
 
 	var compaction *conversations.CompactionUpdate
-	if res.Compaction != nil && len(res.Compaction.Messages) > 0 && foldedValid && (mappedFolded > 0 || p.UserMessageID > 0) {
+	if res.Compaction != nil && len(res.Compaction.Messages) > 0 && coveredValid && (mappedCovered > 0 || p.UserMessageID > 0) {
 		compaction = &conversations.CompactionUpdate{
-			Messages:              res.Compaction.Messages,
-			UserMessageID:         p.UserMessageID,
-			FoldedTranscriptCount: mappedFolded,
+			Messages:               res.Compaction.Messages,
+			UserMessageID:          p.UserMessageID,
+			CoveredTranscriptCount: mappedCovered,
 		}
 	}
 
+	logger := logutil.FromContext(ctx, s.log)
 	if err := s.store.SaveRun(saveCtx, p.ConversationID, transcript, &msg, compaction); err != nil {
-		logutil.FromContext(ctx, s.log).Error("[保存结果失败]", logutil.Content("错误", err.Error()))
+		logger.Error("[保存结果失败]", logutil.Content("错误", err.Error()))
 		res.Status = conversations.StatusFailed
 		if sink != nil {
 			_ = sink(agent.Event{Type: agent.EventError, Data: agent.ErrorData{Message: "保存对话结果失败"}})
 		}
 	} else {
 		res.MessageID = msg.ID
-		logutil.FromContext(ctx, s.log).Info("[结果已保存]")
+		logger.Info("[结果已保存]")
 	}
 	if sink != nil {
 		if err := sink(agent.Event{Type: agent.EventDone, Data: agent.DoneData{MessageID: res.MessageID, Status: res.Status, ElapsedMS: res.Elapsed.Milliseconds(), ToolCalls: res.ToolCalls}}); err == nil {
-			logutil.FromContext(ctx, s.log).Info("[结束事件已发送]")
+			logger.Info("[结束事件已发送]")
 		}
 	}
 	return res
 }
 
-// completedToolPairs 只保存完整的 assistant 调用与 tool 结果组。
-func completedToolPairs(transcript []*schema.Message) []*schema.Message {
-	out, _, _ := completedToolPairsWithBoundary(transcript, 0)
-	return out
-}
-
-// completedToolPairsWithBoundary 过滤不完整工具对，并把压缩边界映射到过滤后的切片位置。
-func completedToolPairsWithBoundary(transcript []*schema.Message, foldedCount int) (out []*schema.Message, mappedFolded int, boundaryValid bool) {
-	if foldedCount == 0 {
+// completedToolPairs 过滤不完整工具对，并把压缩边界映射到过滤后的切片位置。
+func completedToolPairs(transcript []*schema.Message, coveredCount int) (out []*schema.Message, mappedCovered int, boundaryValid bool) {
+	if coveredCount == 0 {
 		boundaryValid = true
 	}
 	for i := 0; i < len(transcript); {
@@ -337,14 +313,14 @@ func completedToolPairsWithBoundary(transcript []*schema.Message, foldedCount in
 		}
 		if valid {
 			out = append(out, group...)
-			if foldedCount > 0 && j == foldedCount {
-				mappedFolded = len(out)
+			if coveredCount > 0 && j == coveredCount {
+				mappedCovered = len(out)
 				boundaryValid = true
 			}
 		}
 		i = j
 	}
-	return out, mappedFolded, boundaryValid
+	return out, mappedCovered, boundaryValid
 }
 
 func (s *Chat) acquire(key string) bool {

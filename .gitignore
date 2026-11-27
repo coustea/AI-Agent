@@ -9,11 +9,15 @@ bin/
 .env.local
 
 # 运行时产物
-logs/
-workspace/
+/logs/
+/workspace/
 
 # Go
 vendor/
+
+# 前端产物（web/）
+web/node_modules/
+web/dist/
 
 # Python 缓存（scripts/fake_llm.py）
 __pycache__/

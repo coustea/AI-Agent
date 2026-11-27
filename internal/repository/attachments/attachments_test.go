@@ -138,34 +138,6 @@ func TestExtractDocxInvalid(t *testing.T) {
 	}
 }
 
-// TestFullTextIgnoresStoredTruncation 校验 FullText 回到原始文件重新解析。
-//
-// 入库的 Text 是按 MaxExtractChars 截断的副本，只够内联进消息。
-// FullText 必须绕开它，否则 read_attachment 永远读不到截断点之后的内容。
-func TestFullTextIgnoresStoredTruncation(t *testing.T) {
-	dir := t.TempDir()
-	st := &Store{cfg: Config{Dir: dir}}
-
-	body := "第一段内容。\n第二段内容。\n第三段内容。\n"
-	if err := os.MkdirAll(dir+"/u1", 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(dir+"/u1/a.txt", []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// 模拟入库时被截断的 Text：只剩第一段。
-	a := &Attachment{Stored: "u1/a.txt", Ext: ".md", Text: "第一段内容。", Truncated: true}
-
-	got, err := st.FullText(t.Context(), a)
-	if err != nil {
-		t.Fatalf("FullText 失败: %v", err)
-	}
-	if got != body {
-		t.Errorf("FullText = %q, 期望完整正文 %q", got, body)
-	}
-}
-
 // TestAttachmentRelDir 附件目录必须按「用户/会话」分层。
 //
 // 附件与 Agent 工作区同根，会话隔离靠这两段目录名实现。
@@ -256,9 +228,6 @@ func TestOriginalStatusAndMissingRead(t *testing.T) {
 	a := &Attachment{ID: "a", Stored: "a.txt", Ext: ".md", Text: "缓存预览"}
 	if got := s.Status(a); got != "original_missing" {
 		t.Fatal(got)
-	}
-	if _, err := s.FullText(t.Context(), a); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("缺失原件不应返回缓存: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("完整原件"), 0600); err != nil {
 		t.Fatal(err)

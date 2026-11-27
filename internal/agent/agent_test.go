@@ -3,6 +3,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -12,38 +16,30 @@ import (
 	"github.com/cloudwego/eino/adk"
 	"github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/components/tool"
-	"github.com/cloudwego/eino/components/tool/utils"
+	toolutils "github.com/cloudwego/eino/components/tool/utils"
 	"github.com/cloudwego/eino/compose"
 	"github.com/cloudwego/eino/schema"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
 
+	"mentorly/internal/utils"
 	logutil "mentorly/internal/utils/log"
 )
 
 // ---------- Principal & Model ----------
 
 func TestPrincipalRoundTripAndMissing(t *testing.T) {
-	p := &runPrincipal{UserID: "u1", ConversationID: "c1", Workspace: "/tmp/ws"}
+	p := Principal{UserID: "u1", ConversationID: "c1", Workspace: "/tmp/ws"}
 	ctx := withPrincipal(context.Background(), p)
-	got, ok := principalFrom(ctx)
-	if !ok || got.UserID != "u1" || got.ConversationID != "c1" {
-		t.Fatalf("身份读取失败: %+v ok=%v", got, ok)
+	got, err := PrincipalFrom(ctx)
+	if err != nil || got.UserID != "u1" || got.ConversationID != "c1" {
+		t.Fatalf("身份读取失败: %+v err=%v", got, err)
 	}
-	if _, ok := principalFrom(context.Background()); ok {
-		t.Error("空 context 不应有身份")
-	}
-	if _, ok := principalFrom(withPrincipal(context.Background(), &runPrincipal{ConversationID: "c1"})); ok {
-		t.Error("空 UserID 不应视为有效身份")
-	}
-	if _, ok := principalFrom(withPrincipal(context.Background(), nil)); ok {
-		t.Error("nil 身份不应有效")
-	}
-	if _, err := mustPrincipal(context.Background()); !errors.Is(err, errNoPrincipal) {
+	if _, err := PrincipalFrom(context.Background()); !errors.Is(err, errNoPrincipal) {
 		t.Errorf("错误 = %v, 期望 errNoPrincipal", err)
 	}
-	if _, err := mustPrincipal(ctx); err != nil {
-		t.Errorf("意外错误: %v", err)
+	if _, err := PrincipalFrom(withPrincipal(context.Background(), Principal{ConversationID: "c1"})); !errors.Is(err, errNoPrincipal) {
+		t.Error("空 UserID 不应视为有效身份")
 	}
 }
 
@@ -86,7 +82,7 @@ func TestResolveStatus(t *testing.T) {
 		{"取消但保留半截文本", "半截回答", context.Canceled, cancelledCtx, StatusCancelled, "半截回答"},
 		{"取消且无文本", "", context.Canceled, cancelledCtx, StatusCancelled, "[本轮生成已停止]"},
 		{"ctx 已取消但 runErr 为 nil", "部分文本", nil, cancelledCtx, StatusCancelled, "部分文本"},
-		{"超时", "", context.DeadlineExceeded, context.Background(), StatusCancelled, "[本轮生成已停止]"},
+		{"超时", "", context.DeadlineExceeded, context.Background(), StatusFailed, "本轮生成超时，请重试"},
 		{"真实错误", "", errors.New("模型故障"), context.Background(), StatusFailed, "生成失败，请稍后重试"},
 		{"工具参数错误", "", errors.New("failed to stream tool call: failed to unmarshal arguments"), context.Background(), StatusFailed, "工具参数格式有误，请重试（通常是内容过长或含特殊字符）"},
 	}
@@ -102,15 +98,14 @@ func TestResolveStatus(t *testing.T) {
 
 func TestUserFacingErrorAndTransient(t *testing.T) {
 	cases := map[error]string{
-		nil:                                                                "",
-		context.DeadlineExceeded:                                           "本轮生成超时，请重试",
-		context.Canceled:                                                   "生成已取消",
-		ErrUnavailable:                                                  "对话能力未启用",
-		errOutputTruncated:                                              "模型单次思考或输出超过长度上限，请缩小单次需求范围或重试",
-		errors.New("内部栈信息"):                                            "生成失败，请稍后重试",
-		errors.New("failed to unmarshal arguments in json, toolName=x"):    "工具参数格式有误，请重试（通常是内容过长或含特殊字符）",
-		errors.New("failed to stream tool call abc"):                       "工具调用失败，请重试",
-		errors.New("connection reset by peer"):                             "上游服务暂时不可用，请重试",
+		nil:                      "",
+		context.DeadlineExceeded: "本轮生成超时，请重试",
+		context.Canceled:         "生成已取消",
+		ErrUnavailable:           "对话能力未启用",
+		errors.New("内部栈信息"):      "生成失败，请稍后重试",
+		errors.New("failed to unmarshal arguments in json, toolName=x"): "工具参数格式有误，请重试（通常是内容过长或含特殊字符）",
+		errors.New("failed to stream tool call abc"):                    "工具调用失败，请重试",
+		errors.New("connection reset by peer"):                          "上游服务暂时不可用，请重试",
 	}
 	for err, want := range cases {
 		if got := userFacingError(err); got != want {
@@ -136,13 +131,16 @@ func TestUserFacingErrorAndTransient(t *testing.T) {
 }
 
 func TestTruncateEmitAndEventTypes(t *testing.T) {
-	if got := truncate("abcdef", 3); got != "abc…" {
-		t.Errorf("truncate = %q", got)
+	if got := utils.Truncate("abcdef", 3); got != "abc…" {
+		t.Errorf("Truncate = %q", got)
 	}
-	if got := truncate("中文测试", 2); got != "中文…" {
-		t.Errorf("truncate 中文 = %q", got)
+	if got := utils.Truncate("中文测试", 2); got != "中文…" {
+		t.Errorf("Truncate 中文 = %q", got)
 	}
-	if got := truncate("ab", 10); got != "ab" {
+	if got := utils.ClipRunes("中文测试", 2); got != "中文" {
+		t.Errorf("ClipRunes 中文 = %q", got)
+	}
+	if got := utils.Truncate("ab", 10); got != "ab" {
 		t.Errorf("短文本不应截断: %q", got)
 	}
 	if err := emit(nil, Event{Type: EventMessage}); err != nil {
@@ -166,28 +164,30 @@ func TestTruncateEmitAndEventTypes(t *testing.T) {
 func TestStreamPreservesNativeMessageAndLogs(t *testing.T) {
 	for _, disconnect := range []bool{false, true} {
 		msg := &schema.Message{Role: schema.Assistant, Content: "正文", ReasoningContent: "推理", Extra: map[string]any{"source": "model"}, ResponseMeta: &schema.ResponseMeta{Usage: &schema.TokenUsage{TotalTokens: 9}}}
-		var buf strings.Builder
-		res := &Result{}
 		writeErr := errors.New("disconnected")
-		err := consumeStream(t.Context(), schema.StreamReaderFromArray([]*schema.Message{msg}), &buf, func(Event) error {
-			if disconnect {
-				return writeErr
-			}
-			return nil
-		}, res, map[string]time.Time{}, func() error { return nil }, nil)
+		session := &runSession{
+			logger: zap.NewNop(),
+			sink: func(Event) error {
+				if disconnect {
+					return writeErr
+				}
+				return nil
+			},
+			toolStarts: make(map[string]time.Time),
+		}
+		err := session.consumeStream(t.Context(), schema.StreamReaderFromArray([]*schema.Message{msg}))
 		if disconnect && !errors.Is(err, writeErr) || !disconnect && err != nil {
 			t.Fatalf("stream error: %v", err)
 		}
-		if res.Message == nil || res.Message.ReasoningContent != "推理" || res.Message.Extra["source"] != "model" || res.Message.ResponseMeta.Usage.TotalTokens != 9 {
-			t.Fatalf("native fields lost: %+v", res.Message)
+		if session.res.Message == nil || session.res.Message.ReasoningContent != "推理" || session.res.Message.Extra["source"] != "model" || session.res.Message.ResponseMeta.Usage.TotalTokens != 9 {
+			t.Fatalf("native fields lost: %+v", session.res.Message)
 		}
 	}
 
 	// 验证流式日志合并、Token/推理统计（仅长度不含原文）、断连标记与工具参数脱敏
 	core, logs := observer.New(zap.InfoLevel)
 	ctx := logutil.WithContext(t.Context(), zap.New(core))
-	var buf strings.Builder
-	res := &Result{}
+	session := &runSession{logger: zap.New(core), toolStarts: make(map[string]time.Time)}
 	chunks := []*schema.Message{
 		{Role: schema.Assistant, Content: "真实", ReasoningContent: "不要记录推理"},
 		{Role: schema.Assistant, Content: "回答", ResponseMeta: &schema.ResponseMeta{
@@ -200,7 +200,7 @@ func TestStreamPreservesNativeMessageAndLogs(t *testing.T) {
 			},
 		}},
 	}
-	if err := consumeStream(ctx, schema.StreamReaderFromArray(chunks), &buf, nil, res, map[string]time.Time{}, func() error { return nil }, &runMetrics{}); err != nil {
+	if err := session.consumeStream(ctx, schema.StreamReaderFromArray(chunks)); err != nil {
 		t.Fatal(err)
 	}
 	if logs.Len() != 2 || logs.All()[0].Message != "[模型响应统计]" || logs.All()[1].Message != "[Agent 输出]" || logs.All()[1].ContextMap()["内容"] != "真实回答" {
@@ -221,9 +221,12 @@ func TestStreamPreservesNativeMessageAndLogs(t *testing.T) {
 	core2, logs2 := observer.New(zap.InfoLevel)
 	ctx2 := logutil.WithContext(t.Context(), zap.New(core2))
 	disconnect := errors.New("disconnected")
-	var buf2 strings.Builder
-	if err := consumeStream(ctx2, schema.StreamReaderFromArray([]*schema.Message{{Content: "已生成部分"}}), &buf2,
-		func(Event) error { return disconnect }, &Result{}, map[string]time.Time{}, func() error { return nil }, nil); !errors.Is(err, disconnect) {
+	session2 := &runSession{
+		logger:     zap.New(core2),
+		sink:       func(Event) error { return disconnect },
+		toolStarts: make(map[string]time.Time),
+	}
+	if err := session2.consumeStream(ctx2, schema.StreamReaderFromArray([]*schema.Message{{Content: "已生成部分"}})); !errors.Is(err, disconnect) {
 		t.Fatalf("error: %v", err)
 	}
 	if logs2.Len() != 1 || logs2.All()[0].Message != "[Agent 输出中断]" {
@@ -231,7 +234,7 @@ func TestStreamPreservesNativeMessageAndLogs(t *testing.T) {
 	}
 
 	core3, logs3 := observer.New(zap.InfoLevel)
-	logAssistant(logutil.WithContext(t.Context(), zap.New(core3)), schema.AssistantMessage("", []schema.ToolCall{{ID: "hidden-call-id", Function: schema.FunctionCall{Name: "read_attachment", Arguments: `{"id":"attachment-1","offset":10}`}}}), false, 0)
+	logAssistant(logutil.WithContext(t.Context(), zap.New(core3)), schema.AssistantMessage("", []schema.ToolCall{{ID: "hidden-call-id", Function: schema.FunctionCall{Name: "read_attachment", Arguments: `{"id":"attachment-1","offset":10}`}}}), false)
 	if logs3.Len() != 1 || logs3.All()[0].Message != "[Agent 工具调用：read_attachment]" || len(logs3.All()[0].Context) != 1 {
 		t.Fatalf("tool log unexpected: %+v", logs3.All())
 	}
@@ -242,18 +245,21 @@ func TestEventWriteFailureStopsConsumption(t *testing.T) {
 	reader, writer := schema.Pipe[*schema.Message](1)
 	writer.Send(&schema.Message{Content: "部分回答"}, nil)
 	writer.Close()
-	var answer strings.Builder
-	err := consumeStream(t.Context(), reader, &answer, func(Event) error { return writeErr }, &Result{}, map[string]time.Time{}, func() error { return nil }, nil)
-	if !errors.Is(err, writeErr) || answer.String() != "部分回答" {
-		t.Fatalf("流式写入错误未中止消费: answer=%q err=%v", answer.String(), err)
+	session := &runSession{
+		logger:     zap.NewNop(),
+		sink:       func(Event) error { return writeErr },
+		toolStarts: make(map[string]time.Time),
+	}
+	err := session.consumeStream(t.Context(), reader)
+	if !errors.Is(err, writeErr) || session.buf.String() != "部分回答" {
+		t.Fatalf("流式写入错误未中止消费: answer=%q err=%v", session.buf.String(), err)
 	}
 
-	result := &Result{}
-	err = startTools(func(Event) error { return writeErr }, result, map[string]time.Time{}, []schema.ToolCall{{ID: "call-1", Function: schema.FunctionCall{Name: "read_file"}}})
+	err = session.handleAssistantMessage(t.Context(), schema.AssistantMessage("", []schema.ToolCall{{ID: "call-1", Function: schema.FunctionCall{Name: "read_file"}}}), false)
 	if !errors.Is(err, writeErr) {
 		t.Fatalf("工具事件写入错误未传播: %v", err)
 	}
-	if status, _ := resolveStatus(answer.String(), err, t.Context()); status == StatusCompleted {
+	if status, _ := resolveStatus(session.buf.String(), err, t.Context()); status == StatusCompleted {
 		t.Fatal("SSE 写入失败不能判为成功")
 	}
 }
@@ -280,7 +286,7 @@ func TestEmptyResponseRecoveryThroughRunner(t *testing.T) {
 			var calls, executions atomic.Int32
 			var previous []*schema.Message
 			var sameInput atomic.Bool
-			probe, err := utils.InferTool("probe", "probe environment", func(context.Context, struct{}) (string, error) {
+			probe, err := toolutils.InferTool("probe", "probe environment", func(context.Context, struct{}) (string, error) {
 				executions.Add(1)
 				return "available", nil
 			})
@@ -307,7 +313,7 @@ func TestEmptyResponseRecoveryThroughRunner(t *testing.T) {
 			native, err := adk.NewChatModelAgent(ctx, &adk.ChatModelAgentConfig{
 				Name: "test", Model: m,
 				ToolsConfig:      adk.ToolsConfig{ToolsNodeConfig: compose.ToolsNodeConfig{Tools: []tool.BaseTool{probe}}},
-				ModelRetryConfig: &adk.ModelRetryConfig{MaxRetries: 2, ShouldRetry: newRetryDecision("openai", nil), BackoffFunc: func(context.Context, int) time.Duration { return 0 }},
+				ModelRetryConfig: &adk.ModelRetryConfig{MaxRetries: 1, ShouldRetry: retryOnEmptyOutput, BackoffFunc: func(context.Context, int) time.Duration { return 0 }},
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -344,74 +350,54 @@ func TestEmptyResponseRecoveryThroughRunner(t *testing.T) {
 	}
 }
 
-func TestRetryDecisionEmptyAndCancellation(t *testing.T) {
-	sparkRetry := newRetryDecision("spark", map[string]any{"temperature": 0.7})
-	openaiRetry := newRetryDecision("openai", nil)
+func TestRetryDecisionEmptyOnly(t *testing.T) {
+	decide := retryOnEmptyOutput
 
+	// 无错误且返回为空：允许重试 1 次，二次仍为空则终止报错。
 	for _, msg := range []*schema.Message{nil, {Content: "  "}, {ReasoningContent: "thinking"}} {
 		rc := &adk.RetryContext{OutputMessage: msg, RetryAttempt: 1}
-		if !sparkRetry(t.Context(), rc).Retry {
-			t.Fatal("empty response not retried")
+		if d := decide(t.Context(), rc); !d.Retry {
+			t.Fatalf("empty response should retry once: %+v", d)
 		}
 		rc.RetryAttempt = 2
-		d := sparkRetry(t.Context(), rc)
+		d := decide(t.Context(), rc)
 		if d.Retry || !errors.Is(d.RewriteError, errEmptyAgentOutput) {
 			t.Fatalf("unexpected exhausted decision: %+v", d)
 		}
 	}
+
+	// 任意有效输出不重试。
 	for _, msg := range []*schema.Message{{Content: "ok"}, {ToolCalls: []schema.ToolCall{{ID: "x"}}}, {AssistantGenMultiContent: []schema.MessageOutputPart{{}}}} {
-		if sparkRetry(t.Context(), &adk.RetryContext{OutputMessage: msg, RetryAttempt: 1}).Retry {
-			t.Fatal("valid output retried")
+		if decide(t.Context(), &adk.RetryContext{OutputMessage: msg, RetryAttempt: 1}).Retry {
+			t.Fatal("valid output must not be retried")
 		}
 	}
+
+	// 上下文已取消：直接终止不重试。
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if d := sparkRetry(ctx, &adk.RetryContext{RetryAttempt: 1}); d.Retry || !errors.Is(d.RewriteError, context.Canceled) {
+	if d := decide(ctx, &adk.RetryContext{RetryAttempt: 1}); d.Retry || !errors.Is(d.RewriteError, context.Canceled) {
 		t.Fatalf("cancellation ignored: %+v", d)
 	}
-	for _, err := range []error{context.Canceled, context.DeadlineExceeded} {
-		if sparkRetry(t.Context(), &adk.RetryContext{Err: err, RetryAttempt: 1}).Retry {
-			t.Fatal("cancelled call retried")
+
+	// 任何模型报错（429、5xx、网络故障、取消、超时）一律不自动重试。
+	for _, err := range []error{
+		context.Canceled,
+		context.DeadlineExceeded,
+		errors.New("status code: 429, request frequency limit exceeded"),
+		errors.New("503 Service Unavailable"),
+		errors.New("connection reset by peer"),
+	} {
+		if d := decide(t.Context(), &adk.RetryContext{Err: err, RetryAttempt: 1}); d.Retry {
+			t.Fatalf("error %v must not be retried: %+v", err, d)
 		}
 	}
-	if d := sparkRetry(t.Context(), &adk.RetryContext{Err: errors.New("status code: 429, request frequency limit exceeded"), RetryAttempt: 1}); !d.Retry || d.Backoff < 3*time.Second {
-		t.Fatalf("429 应退避重试: %+v", d)
-	}
 
-	// finish_reason=length：spark 有推理时首次降级关闭思考重试 1 次；二次、无推理或非 spark 立即失败不盲目重跑。
-	lengthWithReasoning := &schema.Message{
-		ReasoningContent: "很长的思考",
-		ResponseMeta: &schema.ResponseMeta{
-			FinishReason: "length",
-			Usage:        &schema.TokenUsage{CompletionTokens: 16384, CompletionTokensDetails: schema.CompletionTokensDetails{ReasoningTokens: 16384}},
-		},
-	}
-	d1 := sparkRetry(t.Context(), &adk.RetryContext{OutputMessage: lengthWithReasoning, RetryAttempt: 1})
-	if !d1.Retry || len(d1.AdditionalOptions) != 1 {
-		t.Fatalf("spark 推理吃满 length 应降级重试 1 次: %+v", d1)
-	}
-	d2 := sparkRetry(t.Context(), &adk.RetryContext{OutputMessage: lengthWithReasoning, RetryAttempt: 2})
-	if d2.Retry || !errors.Is(d2.RewriteError, errOutputTruncated) {
-		t.Fatalf("length 二次截断不应再重试: %+v", d2)
-	}
-	lengthNoReasoning := &schema.Message{ResponseMeta: &schema.ResponseMeta{FinishReason: "length"}}
-	if d := sparkRetry(t.Context(), &adk.RetryContext{OutputMessage: lengthNoReasoning, RetryAttempt: 1}); d.Retry || !errors.Is(d.RewriteError, errOutputTruncated) {
-		t.Fatalf("无推理 length 截断不应盲目重试: %+v", d)
-	}
-	if d := openaiRetry(t.Context(), &adk.RetryContext{OutputMessage: lengthWithReasoning, RetryAttempt: 1}); d.Retry || !errors.Is(d.RewriteError, errOutputTruncated) {
-		t.Fatalf("非 spark length 截断不应盲目重试: %+v", d)
-	}
-
-	// 剩余 deadline 不足时禁止发起重试。
-	shortFallbackCtx, cancelFallback := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancelFallback()
-	if d := sparkRetry(shortFallbackCtx, &adk.RetryContext{OutputMessage: lengthWithReasoning, RetryAttempt: 1}); d.Retry || !errors.Is(d.RewriteError, errOutputTruncated) {
-		t.Fatalf("剩余时间不足不应降级重试: %+v", d)
-	}
+	// 剩余 deadline 不足时禁止发起空响应重试。
 	tightCtx, tightCancel := context.WithTimeout(t.Context(), 1*time.Second)
 	defer tightCancel()
-	if d := sparkRetry(tightCtx, &adk.RetryContext{Err: errors.New("status code: 429"), RetryAttempt: 1}); d.Retry {
-		t.Fatalf("剩余时间不足不应 429 重试: %+v", d)
+	if d := decide(tightCtx, &adk.RetryContext{OutputMessage: &schema.Message{}, RetryAttempt: 1}); d.Retry || !errors.Is(d.RewriteError, errEmptyAgentOutput) {
+		t.Fatalf("tight deadline should not retry: %+v", d)
 	}
 }
 
@@ -420,7 +406,7 @@ func TestUnknownToolsHandlerRecoversThroughRunner(t *testing.T) {
 	defer cancel()
 
 	var sawFeedback atomic.Bool
-	dummy, err := utils.InferTool("noop", "noop tool", func(context.Context, struct{}) (string, error) {
+	dummy, err := toolutils.InferTool("noop", "noop tool", func(context.Context, struct{}) (string, error) {
 		return "ok", nil
 	})
 	if err != nil {
@@ -466,23 +452,25 @@ func TestRejectedStreamDiscardAndSSEFailure(t *testing.T) {
 		writer.Send(&schema.Message{Content: "rejected"}, nil)
 		writer.Send(nil, &adk.WillRetryError{ErrStr: "retrying"})
 		writer.Close()
-		var buf strings.Builder
-		res := &Result{}
 		writeErr := errors.New("SSE disconnected")
-		reset := func() error {
-			buf.Reset()
-			res.Message = nil
-			if disconnect {
-				return writeErr
-			}
-			return nil
+		session := &runSession{
+			logger: zap.NewNop(),
+			sink: func(ev Event) error {
+				if disconnect && ev.Type == EventMessage {
+					if md, ok := ev.Data.(MessageData); ok && md.Reset {
+						return writeErr
+					}
+				}
+				return nil
+			},
+			toolStarts: make(map[string]time.Time),
 		}
-		err := consumeStream(t.Context(), reader, &buf, nil, res, map[string]time.Time{}, reset, nil)
+		err := session.consumeStream(t.Context(), reader)
 		if disconnect && !errors.Is(err, writeErr) || !disconnect && err != nil {
 			t.Fatalf("error=%v", err)
 		}
-		if res.Message != nil || buf.Len() != 0 || len(res.Transcript) != 0 {
-			t.Fatalf("rejected output retained: %+v", res)
+		if session.res.Message != nil || session.buf.Len() != 0 || len(session.res.Transcript) != 0 {
+			t.Fatalf("rejected output retained: %+v", session.res)
 		}
 	}
 }
@@ -498,7 +486,7 @@ func (m *summaryTestModel) WithTools([]*schema.ToolInfo) (model.ToolCallingChatM
 }
 func (m *summaryTestModel) Generate(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.Message, error) {
 	m.genCalls.Add(1)
-	return schema.AssistantMessage("<analysis>ok</analysis><summary>已总结历史\n<all_user_messages>\n- u\n</all_user_messages></summary>", nil), nil
+	return schema.AssistantMessage("## 当前目标\n无\n## 用户约束\n无\n## 已确认事实\n无\n## 执行进度\n无\n## 文件附件\n无\n## 下一步\n已总结历史", nil), nil
 }
 func (m *summaryTestModel) Stream(_ context.Context, _ []*schema.Message, _ ...model.Option) (*schema.StreamReader[*schema.Message], error) {
 	return schema.StreamReaderFromArray([]*schema.Message{schema.AssistantMessage("继续讲解", nil)}), nil
@@ -513,10 +501,9 @@ func TestSummarizationCapturesCompactionAndPreservesSkills(t *testing.T) {
 	a, err := New(ctx, AgentDeps{
 		Model: m,
 		Config: Config{
-			SkillsDir:              "skills",
-			WorkspaceDir:           ws,
-			SummaryTriggerTokens:   60000,
-			SummaryTriggerMessages: 2,
+			SkillsDir:     "skills",
+			WorkspaceDir:  ws,
+			ContextWindow: 100000,
 		},
 		Log: zap.NewNop(),
 	})
@@ -525,7 +512,7 @@ func TestSummarizationCapturesCompactionAndPreservesSkills(t *testing.T) {
 	}
 
 	history := []*schema.Message{
-		schema.UserMessage("做一份课件"),
+		schema.UserMessage("做一份课件" + strings.Repeat("旧", 40000)),
 		schema.AssistantMessage("", []schema.ToolCall{{ID: "sk-1", Type: "function", Function: schema.FunctionCall{Name: "skill", Arguments: `{"skill":"pptx"}`}}}),
 		schema.ToolMessage("PPTX 制作规范正文", "sk-1", schema.WithToolName("skill")),
 		schema.AssistantMessage("好的，先定大纲", nil),
@@ -533,13 +520,13 @@ func TestSummarizationCapturesCompactionAndPreservesSkills(t *testing.T) {
 	}
 
 	res := a.Run(ctx, &RunContext{
-		principal: &runPrincipal{UserID: "u1", ConversationID: "c1", Workspace: ws},
+		principal: Principal{UserID: "u1", ConversationID: "c1", Workspace: ws},
 		Messages:  history,
 	}, nil)
 	if res.Status != StatusCompleted || m.genCalls.Load() != 1 {
 		t.Fatalf("压缩未按预期完成: status=%s genCalls=%d", res.Status, m.genCalls.Load())
 	}
-	if res.Compaction == nil || len(res.Compaction.Messages) < 2 || res.Compaction.FoldedTranscriptCount != 0 {
+	if res.Compaction == nil || len(res.Compaction.Messages) < 2 || res.Compaction.CoveredTranscriptCount != 0 {
 		t.Fatalf("未捕获压缩检查点或缺失 PreserveSkills: %+v", res.Compaction)
 	}
 	var sawSkill, sawSummary bool
@@ -557,4 +544,100 @@ func TestSummarizationCapturesCompactionAndPreservesSkills(t *testing.T) {
 	if !sawSkill || !sawSummary {
 		t.Fatalf("检查点缺少技能或摘要内容: %+v", res.Compaction.Messages)
 	}
+}
+
+func TestModelStreamIdleTimeout(t *testing.T) {
+	t.Run("hang_after_headers", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprint(w, "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"首段\"}}]}\n\n")
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+			<-r.Context().Done()
+		}))
+		defer srv.Close()
+
+		cm, err := NewModel(t.Context(), ModelConfig{
+			Provider: "openai",
+			Model:    "test-model",
+			BaseURL:  srv.URL,
+			APIKey:   "sk-test",
+			Timeout:  80 * time.Millisecond,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sr, err := cm.Stream(t.Context(), []*schema.Message{schema.UserMessage("hi")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer sr.Close()
+
+		var streamErr error
+		for {
+			_, err := sr.Recv()
+			if err != nil {
+				streamErr = err
+				break
+			}
+		}
+		if !errors.Is(streamErr, ErrStreamIdleTimeout) || !isTransient(streamErr) {
+			t.Fatalf("期望返回瞬时流空闲超时 ErrStreamIdleTimeout，实际: %v", streamErr)
+		}
+	})
+
+	t.Run("active_long_stream", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			flusher, _ := w.(http.Flusher)
+			for i := 0; i < 4; i++ {
+				time.Sleep(35 * time.Millisecond)
+				_, _ = fmt.Fprintf(w, "data: {\"id\":\"1\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"段%d\"}}]}\n\n", i)
+				if flusher != nil {
+					flusher.Flush()
+				}
+			}
+			_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}))
+		defer srv.Close()
+
+		cm, err := NewModel(t.Context(), ModelConfig{
+			Provider: "openai",
+			Model:    "test-model",
+			BaseURL:  srv.URL,
+			APIKey:   "sk-test",
+			Timeout:  90 * time.Millisecond,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		sr, err := cm.Stream(t.Context(), []*schema.Message{schema.UserMessage("hi")})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer sr.Close()
+
+		var out strings.Builder
+		for {
+			msg, err := sr.Recv()
+			if errors.Is(err, io.EOF) {
+				break
+			}
+			if err != nil {
+				t.Fatalf("持续吐字的长流不应被空闲超时误杀: %v", err)
+			}
+			if msg != nil {
+				out.WriteString(msg.Content)
+			}
+		}
+		if out.String() != "段0段1段2段3" {
+			t.Fatalf("拼接结果异常: %q", out.String())
+		}
+	})
 }

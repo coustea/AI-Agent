@@ -18,7 +18,7 @@
 
 - 严禁任何 Agent 修改、删改或向 `internal/agent/skills/` 下的任何文件追加本地补丁（包括但不限于 `SKILL.md` 和附带脚本）。
 - 宿主机运行依赖统一在 `README.md` 中声明并在部署环境中预装，不得侵入或修改官方 Skill 文件。
-- 运行期 TutorAgent 对 `/skills` 与 `$SKILLS_DIR` 必须保持严格只读（文件工具层 `ErrReadOnly` + Shell 沙箱内核级只读）。
+- 运行期 TutorAgent 对 `/skills` 与 `$SKILLS_DIR` 必须保持严格只读（文件工具层 `ErrReadOnly`；Shell 固定在会话工作区执行，写入技能目录由 ToolGuard 拦截）。
 
 ## 官方文档核对
 

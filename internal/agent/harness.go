@@ -1,6 +1,18 @@
+// Package agent 的单轮运行上下文装配器（Harness）。
+//
+// 职责：
+//   - 在 Service 校验会话归属并取得会话互斥锁之后、保存当前用户消息之前调用 Prepare()；
+//   - 按“最新摘要检查点 + 检查点边界后的增量历史 + 本轮用户消息”顺序还原 Eino 原生消息序列；
+//   - 为本轮会话创建物理工作区目录，并生成包含日期、工作区概览与本轮附件正文的 <turn_context>。
+//
+// 关键不变量：
+//   - 必须在 Service.SaveUser 之前调用，否则历史查询会把本轮刚写入的用户消息重复拼入上下文；
+//   - 历史消息仅附加轻量 <attachment_ref> 索引，绝不反复注入历史附件全文；
+//   - 从检查点恢复的消息必须浅拷贝后再交给 Agent，防止运行期中间件修改缓存对象。
 package agent
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -15,46 +27,36 @@ import (
 	logutil "mentorly/internal/utils/log"
 )
 
-// 单轮上下文装配流水线（最终送入 Eino Runner.Run 的消息结构）：
-//   1. [System Prompt]          由 Eino deep.New 启动期装配，不存数据库
-//   2. [Compacted Summary...]   数据库最近一次 summarization 检查点（剔除 system）
-//   3. [Full History...]        检查点之后的完整历史（历史用户消息附加 <attachment_ref>；旧工具清理由官方 reduction 中间件统一负责）
-//   4. [Current User Message]   <turn_context>（日期/工作区文件/本轮附件路径）+ 问题 + 本轮附件正文
-
-// RunContext 包含一次 Agent 运行所需的隔离身份与消息序列，不持有数据库连接。
+// RunContext 封装单次 Agent.Run 所需的隔离身份与完整输入消息序列。
 type RunContext struct {
-	principal *runPrincipal
+	principal Principal
 	Messages  []*schema.Message
 }
 
-// Harness 负责单轮运行准备：读取历史、准备隔离工作区、装配本轮上下文消息。
-// 按分层约束独立于 Agent 之外，确保 Agent 不依赖数据库且在 Service.SaveUser 之前读取历史。
+// Harness 只持有只读依赖，不持有 Agent 实例或跨请求对话状态。
 type Harness struct {
-	attachments   *attachments.Store
+	workspaceDir  string
 	conversations *conversations.Store
-	cfg           Config
+	attachments   *attachments.Store
 }
 
-// HarnessDeps 是构造 Harness 所需的依赖与配置。
-type HarnessDeps struct {
-	Attachments   *attachments.Store
-	Conversations *conversations.Store
-	Config        Config
+// NewHarness 构造上下文装配器；workspaceDir 为空时回落至 DefaultWorkspaceDir。
+func NewHarness(workspaceDir string, convs *conversations.Store, atts *attachments.Store) *Harness {
+	return &Harness{
+		workspaceDir:  cmp.Or(strings.TrimSpace(workspaceDir), DefaultWorkspaceDir),
+		conversations: convs,
+		attachments:   atts,
+	}
 }
 
-// NewHarness 构造单轮上下文准备器。
-func NewHarness(d HarnessDeps) *Harness {
-	return &Harness{attachments: d.Attachments, conversations: d.Conversations, cfg: d.Config}
-}
-
-// attachmentVirtualPath 返回附件在 Agent 虚拟文件系统中的路径（/workspace/<id><ext>）。
+// attachmentVirtualPath 是全包唯一的附件虚拟路径规则：以稳定附件 ID 定位原件，原始文件名仅作展示。
 func attachmentVirtualPath(a *attachments.Attachment) string {
 	return MountWorkspace + "/" + a.ID + a.Ext
 }
 
-// Prepare 按 4 步准备本轮运行上下文并返回是否为首轮对话（用于决定是否自动生成会话标题）。
+// Prepare 装配单轮运行上下文，并返回该会话是否首次对话（供 Service 决定是否自动生成标题）。
 func (h *Harness) Prepare(ctx context.Context, userID, conversationID, question string, current []*attachments.Attachment) (*RunContext, bool, error) {
-	// 1. 读取压缩检查点与检查点之后的历史消息。
+	// 1. 先加载摘要检查点，再只查边界后的增量历史，避免把已被摘要覆盖的旧消息重复送入窗口。
 	compaction, err := h.conversations.GetCompaction(ctx, conversationID)
 	if err != nil {
 		return nil, false, fmt.Errorf("加载压缩检查点失败: %w", err)
@@ -65,12 +67,8 @@ func (h *Harness) Prepare(ctx context.Context, userID, conversationID, question 
 	}
 	firstTurn := compaction.UntilMessageID == 0 && len(history) == 0
 
-	// 2. 准备当前会话的隔离工作区。
-	wsRoot := h.cfg.WorkspaceDir
-	if strings.TrimSpace(wsRoot) == "" {
-		wsRoot = DefaultWorkspaceDir
-	}
-	workspace, err := utils.SafeJoin(wsRoot, userID, conversationID)
+	// 2. 按 (userID, conversationID) 派生并创建隔离工作区，模型无法通过参数指定目录。
+	workspace, err := utils.SafeJoin(h.workspaceDir, userID, conversationID)
 	if err != nil {
 		return nil, false, fmt.Errorf("解析工作目录失败: %w", err)
 	}
@@ -78,34 +76,33 @@ func (h *Harness) Prepare(ctx context.Context, userID, conversationID, question 
 		return nil, false, fmt.Errorf("创建工作目录失败: %w", err)
 	}
 
-	// 3. 装配历史上下文：为检查点之后的完整历史补齐附件引用标记（旧工具清理由官方 reduction 中间件执行）。
-	withRefs, err := attachHistoryRefs(ctx, h.attachments, userID, conversationID, history)
+	// 3. 为历史用户消息补齐附件索引标签，再还原为 Eino 原生消息序列（保留 ToolCall/ToolResult 关联）。
+	history, err = attachHistoryRefs(ctx, h.attachments, userID, conversationID, history)
 	if err != nil {
 		return nil, false, err
 	}
 
-	// 4. 拼接完整消息序列：[压缩摘要] + [历史消息] + [本轮用户消息]。
-	// 浅拷贝检查点消息并过滤 schema.System，避免污染缓存对象或重复注入系统提示词。
-	msgs := make([]*schema.Message, 0, len(compaction.Messages)+len(withRefs)+1)
+	msgs := make([]*schema.Message, 0, len(compaction.Messages)+len(history)+1)
 	for _, m := range compaction.Messages {
 		if m != nil && m.Role != schema.System {
 			cp := *m
 			msgs = append(msgs, &cp)
 		}
 	}
-	msgs = append(msgs, conversations.ModelMessages(withRefs)...)
+	msgs = append(msgs, conversations.ModelMessages(history)...)
 
+	// 4. 追加本轮用户输入；主 System 提示词由 Agent Instruction 装配，不在此重复注入。
 	userMsg := formatUserMessage(time.Now().Format("2006-01-02"), listWorkspaceFiles(workspace), question, current, h.attachments)
 	msgs = append(msgs, userMsg)
 	logutil.FromContext(ctx, nil).Info("[本轮上下文]", logutil.Content("内容", userMsg.Content))
 
 	return &RunContext{
-		principal: &runPrincipal{UserID: userID, ConversationID: conversationID, Workspace: workspace},
+		principal: Principal{UserID: userID, ConversationID: conversationID, Workspace: workspace},
 		Messages:  msgs,
 	}, firstTurn, nil
 }
 
-// listWorkspaceFiles 列出工作区顶层可见条目供 <turn_context> 展示；跳过隐藏目录（如 .tmp/.offload），最多 40 项。
+// listWorkspaceFiles 列出工作区顶层最多 40 个非隐藏条目作为概览，不递归扫描也不预读正文。
 func listWorkspaceFiles(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -113,22 +110,23 @@ func listWorkspaceFiles(dir string) []string {
 	}
 	out := make([]string, 0, min(len(entries), 40))
 	for _, e := range entries {
-		if strings.HasPrefix(e.Name(), ".") {
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
 			continue
 		}
 		if len(out) >= 40 {
 			break
 		}
 		if e.IsDir() {
-			out = append(out, e.Name()+"/")
-		} else {
-			out = append(out, e.Name())
+			name += "/"
 		}
+		out = append(out, name)
 	}
 	return out
 }
 
-// attachHistoryRefs 在历史用户消息末尾附加 <attachment_ref> 索引（不复制正文，需要时由 read_attachment 按需读取）。
+// attachHistoryRefs 批量查询历史消息关联的附件并拼装 <attachment_ref> 索引标签，
+// 同时按 userID + conversationID 过滤以防止跨会话引用泄露。
 func attachHistoryRefs(ctx context.Context, s *attachments.Store, userID, conversationID string, history []conversations.Message) ([]conversations.Message, error) {
 	var ids []string
 	for _, m := range history {
@@ -147,7 +145,6 @@ func attachHistoryRefs(ctx context.Context, s *attachments.Store, userID, conver
 		}
 	}
 
-	// 拷贝切片，避免直接修改调用方传入的 history。
 	out := append([]conversations.Message(nil), history...)
 	for i := range out {
 		if out[i].Role != conversations.RoleUser {
@@ -164,7 +161,7 @@ func attachHistoryRefs(ctx context.Context, s *attachments.Store, userID, conver
 	return out, nil
 }
 
-// formatUserMessage 一次遍历 current，拼出 <turn_context> + 用户问题 + 本轮附件正文块。
+// formatUserMessage 将日期、工作区概览、用户原问题与本轮附件正文组合为单条 User 消息。
 func formatUserMessage(now string, wsFiles []string, question string, current []*attachments.Attachment, s *attachments.Store) *schema.Message {
 	var ctxAttLines, docBlocks []string
 	for _, a := range current {
@@ -180,6 +177,7 @@ func formatUserMessage(now string, wsFiles []string, question string, current []
 		} else if a.ExtractError != "" {
 			status = "extraction_failed"
 		}
+		// 仅状态可用时注入提取正文；不可用时置空并提示模型改用 read_attachment 核实错误原因。
 		body := a.Text
 		if status != "available" {
 			body = ""
@@ -214,5 +212,5 @@ func formatUserMessage(now string, wsFiles []string, question string, current []
 		sb.WriteString("\n\n以下是用户随本条消息上传的文档内容：\n\n")
 		sb.WriteString(strings.Join(docBlocks, "\n\n"))
 	}
-	return &schema.Message{Role: schema.User, Content: sb.String()}
+	return schema.UserMessage(sb.String())
 }

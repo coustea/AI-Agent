@@ -56,18 +56,38 @@ backup: ## 备份数据库到 /tmp
 	@echo "备份完成: /tmp/mentorly-backup/"
 
 .PHONY: doctor
-doctor: ## 检查运行时依赖（ffmpeg / 字体 / 数据库）
-	@echo "--- macOS Shell 沙箱 ---"; command -v sandbox-exec || echo "缺失（服务启动会失败）"
-	@echo "--- ffmpeg ---"; command -v ffmpeg || echo "缺失（视频能力不可用）"
-	@echo "--- pdftotext ---"; command -v pdftotext || echo "缺失（PDF 附件文本提取不可用）"
-	@echo "--- 字体 ---"; ls /Library/Fonts/Arial\ Unicode.ttf 2>/dev/null || \
-		ls /System/Library/Fonts/Supplemental/Songti.ttc 2>/dev/null || echo "缺失（视频能力不可用）"
+doctor: ## 检查运行时与 Skills 工具链依赖
+	@echo "--- ripgrep (rg) ---"; command -v rg || echo "缺失（grep 文件工具不可用）"
+	@echo "--- skills-python ---"; \
+		PY="$(HOME)/.local/share/mentorly/skills-python/bin/python"; \
+		if [ -x "$$PY" ]; then echo "$$PY"; "$$PY" -c "import pptx, defusedxml, lxml, PIL; print('python-pptx/defusedxml/lxml/PIL ok')" || echo "依赖不全，请运行 make skills-deps"; \
+		else echo "未安装，请运行 make skills-deps"; fi
+	@echo "--- node & 全局 Skills 包 ---"; \
+		if command -v node >/dev/null 2>&1; then \
+			node -v; \
+			NODE_PATH="$$(npm root -g 2>/dev/null)" node -e "for (const m of ['pptxgenjs','docx','react','react-dom','react-icons','sharp']) { try { require.resolve(m); console.log('  ' + m + ': ok'); } catch { console.log('  ' + m + ': 缺失'); } }"; \
+		else echo "node 缺失"; fi
+	@echo "--- LibreOffice (soffice) ---"; command -v soffice || echo "缺失（PPT/DOCX 转 PDF 视觉自检不可用，可 brew install --cask libreoffice）"
+	@echo "--- Poppler (pdftoppm / pdftotext) ---"; command -v pdftoppm || echo "pdftoppm 缺失"; command -v pdftotext || echo "pdftotext 缺失（PDF 附件提取不可用）"
+	@echo "--- ffmpeg ---"; command -v ffmpeg || echo "缺失（视频渲染不可用）"
 	@echo "--- MySQL ---"; command -v mysql >/dev/null && echo "ok" || echo "缺失"
 
 .PHONY: clean
 clean: ## 清理构建产物与日志
 	rm -rf bin logs
 	@echo "注意：workspace/ 下的会话文件与产物未删除，如需清理请手动执行"
+
+.PHONY: web-install
+web-install: ## 安装前端依赖（web/）
+	pnpm --dir web install
+
+.PHONY: web-dev
+web-dev: ## 启动前端开发服务（代理 /api 到 :8080）
+	pnpm --dir web dev
+
+.PHONY: web-build
+web-build: ## 类型检查并构建前端生产包
+	pnpm --dir web build
 
 .PHONY: db
 db: ## 创建本地数据库（需 mysql 客户端与 MySQL 凭据）
